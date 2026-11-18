@@ -1,14 +1,16 @@
 import { GroupEventType, GroupRole, Prisma } from "@openbeacon/database";
-import { tryCatch } from "@openbeacon/shared";
+import { resolveHistoryShare, tryCatch } from "@openbeacon/shared";
 import {
   confirmGroupImageUploadSchema,
   createGroupSchema,
   presignImageUploadInputSchema,
+  setGroupHistoryShareSchema,
 } from "@openbeacon/schemas";
 import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
 import { env } from "../../env.ts";
 import { recordGroupEvent } from "../../lib/groupHistory.ts";
+import { deleteHistoryOutsideShare } from "../../lib/historyShare.ts";
 import {
   assertActiveDevices,
   assertLatestGroupEpoch,
@@ -26,6 +28,59 @@ import { protectedProcedure } from "../../procedures/auth/runtime.ts";
 import { groupMemberProcedure, groupAdminProcedure } from "../../procedures/auth/group.ts";
 
 export const groupSettingsRouter = {
+  setHistoryShare: groupMemberProcedure
+    .meta({ rateLimit: { limit: 30, windowMs: 60_000 } })
+    .input(setGroupHistoryShareSchema)
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+      return ctx.db.$transaction(async (tx) => {
+        await tx.$queryRaw(
+          Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR NO KEY UPDATE`,
+        );
+        const previous = await tx.groupMember.findUnique({
+          where: { userId_groupId: { userId, groupId: input.groupId } },
+          select: { historyShare: true, user: { select: { historyShare: true } } },
+        });
+        if (!previous) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "You are not a member of this group" });
+        }
+        const deletedBefore = await deleteHistoryOutsideShare({
+          db: tx,
+          groupIds: [input.groupId],
+          historyShare: resolveHistoryShare({
+            account: previous.user.historyShare,
+            group: previous.historyShare,
+          }),
+          userId,
+        });
+        const member = await tx.groupMember.update({
+          where: { userId_groupId: { userId, groupId: input.groupId } },
+          data: { historyShare: input.historyShare },
+          select: { historyShare: true, user: { select: { historyShare: true } } },
+        });
+        await tx.user.update({
+          where: { id: userId },
+          data: { historyShareChangedAt: new Date() },
+        });
+        const historyShare = resolveHistoryShare({
+          account: member.user.historyShare,
+          group: member.historyShare,
+        });
+        const deletedPoints = await deleteHistoryOutsideShare({
+          db: tx,
+          groupIds: [input.groupId],
+          historyShare,
+          userId,
+        });
+        return {
+          groupId: input.groupId,
+          override: member.historyShare,
+          historyShare,
+          deletedPoints: deletedBefore + deletedPoints,
+        };
+      });
+    }),
+
   rename: groupMemberProcedure
     .input(createGroupSchema.extend({ groupId: z.string().min(1).max(128) }))
     .mutation(async ({ ctx, input }) => {

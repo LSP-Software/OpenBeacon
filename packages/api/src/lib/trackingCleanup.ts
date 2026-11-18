@@ -3,12 +3,14 @@ import { Prisma } from "@openbeacon/database";
 export const deleteTrackingPointsInBatches = async ({
   db,
   streams,
+  streamJoins = Prisma.empty,
   points = Prisma.sql`TRUE`,
   batchSize = 5_000,
   limit = Number.POSITIVE_INFINITY,
 }: {
   db: Pick<Prisma.TransactionClient, "$queryRaw">;
   streams: Prisma.Sql;
+  streamJoins?: Prisma.Sql;
   points?: Prisma.Sql;
   batchSize?: number;
   limit?: number;
@@ -22,11 +24,12 @@ export const deleteTrackingPointsInBatches = async ({
       WHERE ("streamId", "pointId") IN (
         SELECT "batch"."streamId", "batch"."pointId"
         FROM "TrackingStream" AS "stream"
+        ${streamJoins}
         CROSS JOIN LATERAL (
           SELECT "point"."streamId", "point"."pointId"
           FROM "TrackingPoint" AS "point"
           WHERE "point"."streamId" = "stream"."id" AND (${points})
-          ORDER BY "point"."receivedAt"
+          ORDER BY "point"."capturedHour"
           LIMIT ${take}
           FOR UPDATE SKIP LOCKED
         ) AS "batch"

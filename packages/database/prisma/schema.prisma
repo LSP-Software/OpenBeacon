@@ -28,6 +28,8 @@ model User {
   sharingChangedAt DateTime?
   sharingRevision Int            @default(0)
   sharingRequestId String?
+  historyShare   HistoryShare    @default(MAXIMUM)
+  historyShareChangedAt DateTime?
   sessions       Session[]
   accounts       Account[]
   pendingUploads PendingUpload[]
@@ -52,6 +54,14 @@ model User {
 
   @@index([pendingDeletion, deletionDate])
   @@index([image])
+}
+
+enum HistoryShare {
+  LAST_LOCATION
+  HOURS_6
+  DAY_1
+  WEEK_1
+  MAXIMUM
 }
 
 enum NotificationType {
@@ -385,6 +395,7 @@ model GroupMember {
 
   role GroupRole
   joinedEpochNumber Int
+  historyShare HistoryShare?
   imageKeyEpochId        String?
   imageKeySenderDeviceId String?
   imageKeyAlgorithm      String?
@@ -572,12 +583,13 @@ model TrackingStream {
 model TrackingPoint {
   streamId   BigInt
   stream     TrackingStream @relation(fields: [streamId], references: [id], onDelete: Cascade)
-  pointId    BigInt
-  receivedAt DateTime       @default(now())
-  payload    Bytes
+  pointId      BigInt
+  receivedHour Int
+  capturedHour Int
+  payload      Bytes
 
   @@id([streamId, pointId])
-  @@index([streamId, receivedAt])
+  @@index([streamId, capturedHour])
 }
 
 model TrackingLatestPoint {

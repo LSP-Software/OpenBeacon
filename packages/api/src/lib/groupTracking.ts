@@ -1,12 +1,25 @@
-import { Prisma } from "@openbeacon/database";
+import { Prisma, readDatabaseTime } from "@openbeacon/database";
 import { decodeBase64, encodeBase64, XCHACHA20_NONCE_LENGTH } from "@openbeacon/encryption";
 import type { groupTrackingPointSchema, TRACKING_POINT_ROLES } from "@openbeacon/schemas";
-import type { GroupDeviceSharingState } from "@openbeacon/shared";
+import {
+  historyShareFirstHour,
+  type GroupDeviceSharingState,
+  type HistoryShare,
+} from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import type z from "zod";
 import type { GroupWriteChecksDb } from "./groupWriteChecks.ts";
 import { assertActiveDevices, findGroupEpochs } from "./groupWriteChecks.ts";
 import { getGroupSharingStates } from "./locationSharing.ts";
+import {
+  effectiveHistoryShareSql,
+  historyFirstHourSql,
+  readUploaderHistoryWindow,
+} from "./historyShare.ts";
+import { HISTORY_RETENTION_MS } from "./placeTransitions.ts";
+
+const HOUR_MS = 3_600_000;
+const HISTORY_RETENTION_HOURS = HISTORY_RETENTION_MS / HOUR_MS;
 
 type GroupTrackingDb = GroupWriteChecksDb & {
   userDevice: {
@@ -68,11 +81,18 @@ export const uploadGroupTrackingBatch = async ({
   const current = points
     .filter((point) => foundEpochIds.has(point.epochId))
     .map((point) => ({ ...point, ...parseClientPointId(point.clientPointId) }));
+  const { firstHour, nowHour } = await readUploaderHistoryWindow(db, { groupId, userId });
   const discarded = current.filter((point) => {
     const state = sharing.find(
       (device) => device.deviceId === point.senderDeviceId && device.userId === userId,
     );
-    return !state || state.paused || point.revisionPrefix !== state.revisionPrefix;
+    if (!state || state.paused || point.revisionPrefix !== state.revisionPrefix) return true;
+    if (point.role === "LIVE") return false;
+    const capturedHour = Math.min(
+      Math.max(point.capturedHour ?? nowHour, nowHour - HISTORY_RETENTION_HOURS),
+      nowHour + 1,
+    );
+    return capturedHour < firstHour;
   });
   const kept = current.filter((point) => !discarded.includes(point));
 
@@ -161,15 +181,18 @@ export const uploadGroupTrackingBatch = async ({
     const rows = insertOrder.filter((point) => point.role === role);
     if (rows.length === 0) return [];
     return db.$queryRaw<Array<{ inserted: boolean; pointId: string; streamId: string }>>(Prisma.sql`
-      INSERT INTO "TrackingPoint" ("streamId", "pointId", "receivedAt", "payload")
-      SELECT "streamId"::bigint, "pointId"::bigint, (now() AT TIME ZONE 'UTC'),
+      INSERT INTO "TrackingPoint" ("streamId", "pointId", "receivedHour", "capturedHour", "payload")
+      SELECT "streamId"::bigint, "pointId"::bigint, "now"."hour",
+        LEAST(GREATEST(COALESCE("capturedHour", "now"."hour"), "now"."hour" - ${HISTORY_RETENTION_HOURS}), "now"."hour" + 1),
         decode("nonce", 'base64') || decode("ciphertext", 'base64')
       FROM unnest(
         ${rows.map(({ streamId }) => streamId)}::text[],
         ${rows.map(({ pointId }) => pointId.toString())}::text[],
+        ${rows.map(({ capturedHour }) => capturedHour ?? null)}::int4[],
         ${rows.map(({ nonce }) => nonce)}::text[],
         ${rows.map(({ ciphertext }) => ciphertext)}::text[]
-      ) AS "row"("streamId", "pointId", "nonce", "ciphertext")
+      ) AS "row"("streamId", "pointId", "capturedHour", "nonce", "ciphertext")
+      CROSS JOIN (SELECT floor(extract(epoch FROM now()) / 3600)::int4 AS "hour") AS "now"
       ON CONFLICT ("streamId", "pointId") ${
         role === "STAY"
           ? Prisma.sql`DO UPDATE SET "payload" = EXCLUDED."payload"`
@@ -279,12 +302,13 @@ const readLatestPoints = async ({
     ORDER BY "latest"."updatedAt", "latest"."senderDeviceId"
     ${limit === null ? Prisma.empty : Prisma.sql`LIMIT ${limit}`}
   `);
-  return rows.map(({ payload, ...row }) => ({
-    ...row,
-    ciphertext: encodeBase64(payload.subarray(XCHACHA20_NONCE_LENGTH)),
-    nonce: encodeBase64(payload.subarray(0, XCHACHA20_NONCE_LENGTH)),
-  }));
+  return rows.map(({ payload, ...row }) => ({ ...row, ...splitPayload(payload) }));
 };
+
+const splitPayload = (payload: Uint8Array) => ({
+  ciphertext: encodeBase64(payload.subarray(XCHACHA20_NONCE_LENGTH)),
+  nonce: encodeBase64(payload.subarray(0, XCHACHA20_NONCE_LENGTH)),
+});
 
 export const pollGroupTrackingPoints = async ({
   cursor,
@@ -351,3 +375,205 @@ const filterSharedPoints = <
         point.revisionPrefix === device.revisionPrefix,
     ),
   );
+
+type HistoryDb = Pick<Prisma.TransactionClient, "$queryRaw">;
+
+const readHistoryHours = async (db: HistoryDb) => {
+  const nowHour = Math.floor((await readDatabaseTime(db)).getTime() / HOUR_MS);
+  return { nowHour, windowHour: nowHour - HISTORY_RETENTION_HOURS };
+};
+
+const historyStreams = (
+  groupId: string,
+  joinedEpochNumber: number,
+  { nowHour, windowHour }: { nowHour: number; windowHour: number },
+) => Prisma.sql`
+  SELECT "stream"."id", "stream"."senderUserId", "stream"."senderDeviceId", "stream"."epochId",
+    "epoch"."epochNumber", "stream"."revisionPrefix",
+    ${historyFirstHourSql(nowHour, windowHour - HISTORY_RETENTION_HOURS)} AS "firstHour"
+  FROM "TrackingStream" AS "stream"
+  JOIN "GroupEpoch" AS "epoch" ON "epoch"."id" = "stream"."epochId"
+  JOIN "GroupMember" AS "member"
+    ON "member"."groupId" = "stream"."groupId" AND "member"."userId" = "stream"."senderUserId"
+  JOIN "User" AS "account" ON "account"."id" = "stream"."senderUserId"
+  JOIN "UserDevice" AS "device"
+    ON "device"."id" = "stream"."senderDeviceId" AND "device"."userId" = "stream"."senderUserId"
+  WHERE "stream"."groupId" = ${groupId}
+    AND "epoch"."epochNumber" >= ${joinedEpochNumber}
+    AND "device"."revokedAt" IS NULL AND "device"."activatedAt" IS NOT NULL
+    AND ${effectiveHistoryShareSql} <> 'LAST_LOCATION'
+`;
+
+export const readGroupTrackingHistoryDays = async ({
+  db,
+  groupId,
+  joinedEpochNumber,
+}: {
+  db: HistoryDb;
+  groupId: string;
+  joinedEpochNumber: number;
+}) => {
+  const hours = await readHistoryHours(db);
+  const { nowHour, windowHour } = hours;
+  const [rows, senders] = await Promise.all([
+    db.$queryRaw<
+      Array<{ count: number; hour: number; senderDeviceId: string; senderUserId: string }>
+    >(Prisma.sql`
+    WITH "stream" AS MATERIALIZED (${historyStreams(groupId, joinedEpochNumber, hours)})
+    SELECT "stream"."senderUserId", "stream"."senderDeviceId",
+      "point"."capturedHour" AS "hour", COUNT(*)::int AS "count"
+    FROM "stream"
+    JOIN "TrackingPoint" AS "point" ON "point"."streamId" = "stream"."id"
+    WHERE "point"."capturedHour" >= "stream"."firstHour"
+      AND "point"."receivedHour" >= ${windowHour}
+    GROUP BY "stream"."senderUserId", "stream"."senderDeviceId", "point"."capturedHour"
+    ORDER BY "stream"."senderUserId", "stream"."senderDeviceId", "point"."capturedHour"
+  `),
+    db.$queryRaw<Array<{ historyShare: HistoryShare; userId: string }>>(Prisma.sql`
+      SELECT "member"."userId", ${effectiveHistoryShareSql}::text AS "historyShare"
+      FROM "GroupMember" AS "member"
+      JOIN "User" AS "account" ON "account"."id" = "member"."userId"
+      WHERE "member"."groupId" = ${groupId}
+      ORDER BY "member"."userId"
+    `),
+  ]);
+  const devices = new Map<
+    string,
+    {
+      firstHour: number;
+      hours: Array<{ count: number; hour: number }>;
+      senderDeviceId: string;
+      senderUserId: string;
+    }
+  >();
+  for (const { count, hour, senderDeviceId, senderUserId } of rows) {
+    const key = JSON.stringify([senderUserId, senderDeviceId]);
+    const device = devices.get(key) ?? { firstHour: hour, hours: [], senderDeviceId, senderUserId };
+    device.hours.push({ count, hour });
+    devices.set(key, device);
+  }
+  return {
+    devices: [...devices.values()],
+    senders: senders.map(({ historyShare, userId }) => ({
+      userId,
+      historyShare,
+      firstHour: historyShareFirstHour(historyShare, nowHour),
+    })),
+    windowStart: new Date(windowHour * HOUR_MS),
+  };
+};
+
+export const readGroupTrackingHistoryRange = async ({
+  cursor,
+  db,
+  fromHour,
+  groupId,
+  joinedEpochNumber,
+  limit,
+  toHour,
+}: {
+  cursor: { capturedHour: number; pointId: string; streamId: string } | undefined;
+  db: HistoryDb;
+  fromHour: number;
+  groupId: string;
+  joinedEpochNumber: number;
+  limit: number;
+  toHour: number;
+}) => {
+  const hours = await readHistoryHours(db);
+  const { windowHour } = hours;
+  const streams = historyStreams(groupId, joinedEpochNumber, hours);
+  type Row = {
+    capturedHour: number;
+    epochId: string;
+    epochNumber: number;
+    payload: Uint8Array;
+    pointId: string;
+    revisionPrefix: string;
+    senderDeviceId: string;
+    senderUserId: string;
+    streamId: string;
+  };
+  const columns = Prisma.sql`"stream"."id"::text AS "streamId", "stream"."senderUserId",
+    "stream"."senderDeviceId", "stream"."epochId", "stream"."epochNumber", "stream"."revisionPrefix",
+    "point"."pointId"::text AS "pointId", "point"."capturedHour", "point"."payload"`;
+  const [rows, lookbackRows] = await Promise.all([
+    db.$queryRaw<Row[]>(Prisma.sql`
+      WITH "stream" AS MATERIALIZED (${streams})
+      SELECT ${columns}
+      FROM "stream"
+      JOIN "TrackingPoint" AS "point" ON "point"."streamId" = "stream"."id"
+      WHERE "point"."capturedHour" >= ${cursor && cursor.capturedHour > fromHour ? cursor.capturedHour : fromHour}
+        AND "point"."capturedHour" < ${toHour}
+        AND "point"."capturedHour" >= "stream"."firstHour"
+        AND "point"."receivedHour" >= ${windowHour}
+        ${
+          cursor
+            ? Prisma.sql`AND ("point"."capturedHour", "point"."streamId", "point"."pointId")
+                > (${cursor.capturedHour}::int4, ${cursor.streamId}::bigint, ${cursor.pointId}::bigint)`
+            : Prisma.empty
+        }
+      ORDER BY "point"."capturedHour", "point"."streamId", "point"."pointId"
+      LIMIT ${limit}
+    `),
+    cursor
+      ? []
+      : db.$queryRaw<Row[]>(Prisma.sql`
+          WITH "stream" AS MATERIALIZED (${streams}),
+          "lastHour" AS (
+            SELECT "stream"."senderUserId", "stream"."senderDeviceId",
+              max("last"."capturedHour") AS "capturedHour"
+            FROM "stream"
+            CROSS JOIN LATERAL (
+              SELECT "capturedHour"
+              FROM "TrackingPoint"
+              WHERE "TrackingPoint"."streamId" = "stream"."id"
+                AND "TrackingPoint"."capturedHour" >= "stream"."firstHour"
+                AND "TrackingPoint"."capturedHour" < ${fromHour}
+                AND "TrackingPoint"."receivedHour" >= ${windowHour}
+              ORDER BY "TrackingPoint"."capturedHour" DESC
+              LIMIT 1
+            ) AS "last"
+            GROUP BY "stream"."senderUserId", "stream"."senderDeviceId"
+          )
+          SELECT "batch".*
+          FROM "lastHour"
+          CROSS JOIN LATERAL (
+            SELECT ${columns}
+            FROM "stream"
+            JOIN "TrackingPoint" AS "point"
+              ON "point"."streamId" = "stream"."id" AND "point"."capturedHour" = "lastHour"."capturedHour"
+            WHERE "stream"."senderUserId" = "lastHour"."senderUserId"
+              AND "stream"."senderDeviceId" = "lastHour"."senderDeviceId"
+              AND "point"."receivedHour" >= ${windowHour}
+            ORDER BY "stream"."id", "point"."pointId"
+            LIMIT 100
+          ) AS "batch"
+          ORDER BY "batch"."senderUserId", "batch"."senderDeviceId", "batch"."streamId", "batch"."pointId"
+        `),
+  ]);
+  const toPoint = ({ capturedHour, payload, pointId, streamId }: Row) => ({
+    capturedHour,
+    pointId,
+    streamId,
+    ...splitPayload(payload),
+  });
+  const involved = new Map(
+    [...lookbackRows, ...rows].map(
+      ({ epochId, epochNumber, revisionPrefix, senderDeviceId, senderUserId, streamId }) => [
+        streamId,
+        { id: streamId, senderUserId, senderDeviceId, epochId, epochNumber, revisionPrefix },
+      ],
+    ),
+  );
+  const last = rows.at(-1);
+  return {
+    streams: [...involved.values()],
+    points: rows.map(toPoint),
+    lookback: lookbackRows.map(toPoint),
+    cursor: last
+      ? { capturedHour: last.capturedHour, pointId: last.pointId, streamId: last.streamId }
+      : null,
+    hasMore: rows.length === limit,
+  };
+};

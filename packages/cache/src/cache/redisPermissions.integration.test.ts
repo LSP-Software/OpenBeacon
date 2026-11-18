@@ -32,6 +32,7 @@ test.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       "on",
       `>${password}`,
       `~${keyPrefix}:*`,
+      "+select",
       "+ping",
       "+eval",
       "+hmget",

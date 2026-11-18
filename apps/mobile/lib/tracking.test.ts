@@ -40,7 +40,7 @@ let placeGroups: string[] | null = [];
 const requeued: Array<{ ids: number[]; error: string | null | undefined }> = [];
 const uploadCalls: Array<{
   groupId: string;
-  points: unknown[];
+  points: Array<Record<string, unknown>>;
   placeTransitions?: { clientId: string }[];
   placeAlertsCursor?: string | null;
   noticesCursor?: string | null;
@@ -98,6 +98,7 @@ let pendingCiphertexts: Array<{
   nonce: string;
   ciphertext: string;
   role: "POINT" | "STAY" | "LIVE";
+  capturedHour: number | null;
   queuedAt: number;
   attemptCount: number;
   lastAttemptAt: number | null;
@@ -349,6 +350,7 @@ mock.module("./api.ts", () => ({
             userId: currentUserId,
             deviceId: "device-1",
             serverTime: new Date(),
+            historyShare: { account: "MAXIMUM" as const, changedAt: null, groups: [] },
             paused: false,
             pausedUntil: null,
             resumeAfter: null,
@@ -516,7 +518,7 @@ mock.module("./api.ts", () => ({
       uploadBatch: {
         mutate: async (input: {
           groupId: string;
-          points: unknown[];
+          points: Array<Record<string, unknown>>;
           placeTransitions?: { clientId: string }[];
           placeAlertsCursor?: string | null;
           noticesCursor?: string | null;
@@ -537,6 +539,7 @@ mock.module("../modules/openbeacon-tracking/index.ts", () => ({
       sharingStates.push({ owner, deviceId, prefix, paused });
       return true;
     },
+    setHistoryShare: () => true,
     setQueueOwner: () => {},
     countUnassignedCiphertexts: async () => unassignedCount,
     assignUnassignedCiphertexts: async (deviceId: string, owner: string) => {
@@ -639,12 +642,14 @@ const queuedNonce = encodeBase64(new Uint8Array(24).fill(2));
 const queuedCiphertext = encodeBase64(new Uint8Array(39).fill(1));
 
 const createQueueItem = ({
+  capturedHour = null,
   clientPointId,
   groupId,
   id,
   role = "POINT",
   senderDeviceId = "device-1",
 }: {
+  capturedHour?: number | null;
   clientPointId: string;
   groupId: string;
   id: number;
@@ -662,6 +667,7 @@ const createQueueItem = ({
   nonce: queuedNonce,
   ciphertext: queuedCiphertext,
   role,
+  capturedHour,
   queuedAt: id,
   attemptCount: 0,
   lastAttemptAt: null,
@@ -1130,6 +1136,31 @@ describe("tracking service", () => {
     await flushPendingTrackingPoints();
     expect(requestedOwners).toEqual([JSON.stringify(["https://api.example.test", "user-1"])]);
     expect(deleted).toEqual([[1]]);
+  });
+
+  test("sends each point's recorded hour, and none for live rows or rows queued before it existed", async () => {
+    const owner = JSON.stringify(["https://api.example.test", "user-1"]);
+    pendingCiphertexts = [
+      { capturedHour: 498_600, clientPointId: "point", id: 1, role: "POINT" as const },
+      { capturedHour: 498_590, clientPointId: "stay", id: 2, role: "STAY" as const },
+      { capturedHour: null, clientPointId: "live", id: 3, role: "LIVE" as const },
+      { capturedHour: null, clientPointId: "old-point", id: 4, role: "POINT" as const },
+    ].map((item) => ({ ...createQueueItem({ ...item, groupId: "group-1" }), owner }));
+    await flushPendingTrackingPoints();
+    expect(
+      uploadCalls
+        .flatMap(({ points }) => points)
+        .map(({ capturedHour, clientPointId, role }) => [clientPointId, role, capturedHour]),
+    ).toEqual([
+      [pointId("point"), "POINT", 498_600],
+      [pointId("stay"), "STAY", 498_590],
+      [pointId("live"), "LIVE", undefined],
+      [pointId("old-point"), "POINT", undefined],
+    ]);
+    expect(
+      uploadCalls.flatMap(({ points }) => points).filter((point) => "capturedHour" in point),
+    ).toHaveLength(2);
+    expect(deleted.flat().sort()).toEqual([1, 2, 3, 4]);
   });
 
   test("sends only the newest queued copy of a stay and drops the older ones", async () => {

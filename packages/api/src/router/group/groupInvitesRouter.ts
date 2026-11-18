@@ -1,7 +1,11 @@
 import { logRateLimit } from "@openbeacon/shared";
 import { createHash, randomBytes } from "node:crypto";
 import { GroupEventType, GroupRole, Prisma, readDatabaseTime } from "@openbeacon/database";
-import { groupEpochBundleSchema, inviteMemberToGroupSchema } from "@openbeacon/schemas";
+import {
+  groupEpochBundleSchema,
+  historyShareSchema,
+  inviteMemberToGroupSchema,
+} from "@openbeacon/schemas";
 import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
 import {
@@ -199,7 +203,11 @@ export const groupInvitesRouter = {
       rateLimit: { limit: 40, namespace: "groupInvites.redeem", windowMs: 60_000 },
     })
     .input(
-      z.object({ code: z.string().regex(/^[A-Fa-f0-9]{32}$/), nextEpoch: groupEpochBundleSchema }),
+      z.object({
+        code: z.string().regex(/^[A-Fa-f0-9]{32}$/),
+        nextEpoch: groupEpochBundleSchema,
+        historyShare: historyShareSchema.nullable().optional(),
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       const codeHash = sharedCodeHash(input.code);
@@ -231,6 +239,7 @@ export const groupInvitesRouter = {
             joinedEpochNumber: input.nextEpoch.epochNumber,
             role: GroupRole.MEMBER,
             userId: ctx.session.user.id,
+            historyShare: input.historyShare ?? null,
             createdAt: await readDatabaseTime(tx),
           },
           select: { createdAt: true },
@@ -299,6 +308,7 @@ export const groupInvitesRouter = {
       z.object({
         inviteId: z.string().min(1).max(128),
         nextEpoch: groupEpochBundleSchema,
+        historyShare: historyShareSchema.nullable().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -344,6 +354,7 @@ export const groupInvitesRouter = {
             groupId: currentInvite.groupId,
             role: currentInvite.role,
             joinedEpochNumber: input.nextEpoch.epochNumber,
+            historyShare: input.historyShare ?? null,
             createdAt: await readDatabaseTime(tx),
           },
           select: {

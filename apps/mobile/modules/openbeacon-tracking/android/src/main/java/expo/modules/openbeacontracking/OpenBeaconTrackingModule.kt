@@ -33,6 +33,10 @@ class OpenBeaconTrackingModule : Module() {
         TrackingRuntime.applySharingState(requireContext(), owner, deviceId, SharingCaptureState(prefix, paused, until?.toLong(), after?.toLong() ?: 0L))
       }
 
+      Function("setHistoryShare") { owner: String, deviceId: String, account: String, groups: Map<String, String> ->
+        TrackingRuntime.setHistoryShare(requireContext(), owner, deviceId, account, groups)
+      }
+
       Function("isQueueOwner") { owner: String, deviceId: String ->
         TrackingRuntime.queueOwner(requireContext()) == owner && TrackingRuntime.queueDeviceId(requireContext()) == deviceId
       }
@@ -298,6 +302,7 @@ class OpenBeaconTrackingModule : Module() {
       "nonce" to nonce,
       "ciphertext" to ciphertext,
       "role" to role,
+      "capturedHour" to capturedHour?.toDouble(),
       "queuedAt" to queuedAt.toDouble(),
       "attemptCount" to attemptCount.toDouble(),
       "lastAttemptAt" to lastAttemptAt?.toDouble(),

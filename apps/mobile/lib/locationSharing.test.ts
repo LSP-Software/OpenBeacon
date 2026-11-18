@@ -15,6 +15,8 @@ const nativeStates: {
   pausedUntil: number | null;
   resumeAfter: number | null;
 }[] = [];
+const nativeHistoryShares: { owner: string; account: string; groups: Record<string, string> }[] =
+  [];
 const changes: Change[] = [];
 let offline = false;
 let knownOffline = false;
@@ -44,6 +46,14 @@ const sharingState = () => ({
   deviceId: registeredDeviceId,
   userId: "alex",
   serverTime: new Date(serverTime()),
+  historyShare: {
+    account: "WEEK_1" as const,
+    changedAt: null,
+    groups: [
+      { groupId: "club", historyShare: "LAST_LOCATION" as const },
+      { groupId: "family", historyShare: null },
+    ],
+  },
   ...resolveLocationSharing(server.account, server.device, serverTime()),
 });
 const applyChange = (change: Change) => {
@@ -116,6 +126,15 @@ mock.module("../modules/openbeacon-tracking/index.ts", () => ({
       return true;
     },
     isQueueOwner: () => nativeOwnerSet,
+    setHistoryShare: (
+      owner: string,
+      _deviceId: string,
+      account: string,
+      groups: Record<string, string>,
+    ) => {
+      nativeHistoryShares.push({ owner, account, groups });
+      return true;
+    },
   },
 }));
 mock.module("./api.ts", () => ({
@@ -153,6 +172,7 @@ beforeEach(() => {
   stored.clear();
   nextRequestId = 0;
   nativeStates.length = 0;
+  nativeHistoryShares.length = 0;
   changes.length = 0;
   offline = false;
   knownOffline = false;
@@ -167,6 +187,17 @@ beforeEach(() => {
   onNativePause = () => {};
   server = { account: scope(), device: scope() };
   query = async () => sharingState();
+});
+
+test("account sync gives the capture module the history setting and each group's override", async () => {
+  await syncLocationSharing();
+  expect(nativeHistoryShares).toEqual([
+    {
+      owner: JSON.stringify(["https://server.test", "alex"]),
+      account: "WEEK_1",
+      groups: { club: "LAST_LOCATION" },
+    },
+  ]);
 });
 
 test("stops locally while offline and retries the pause before applying server state", async () => {

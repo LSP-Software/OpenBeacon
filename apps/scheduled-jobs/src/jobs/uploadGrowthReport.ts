@@ -2,14 +2,14 @@ import { getDatabaseTime } from "../databaseTime.ts";
 import { services } from "../services.ts";
 
 export const findTopUploadGrowth = async ({ limit = 10 }: { limit?: number } = {}) => {
-  const dayAgo = new Date((await getDatabaseTime()).getTime() - 24 * 60 * 60_000).toISOString();
+  const dayAgoHour = Math.floor((await getDatabaseTime()).getTime() / 3_600_000) - 24;
   return services.db.$queryRaw<Array<{ userId: string; groups: number; points: number }>>`
     SELECT "stream"."senderUserId" AS "userId",
       COUNT(DISTINCT "stream"."groupId")::int AS groups,
       COUNT(*)::int AS points
     FROM "TrackingStream" AS "stream"
     JOIN "TrackingPoint" AS "point" ON "point"."streamId" = "stream"."id"
-    WHERE "point"."receivedAt" >= (${dayAgo}::timestamptz AT TIME ZONE 'UTC')
+    WHERE "point"."receivedHour" >= ${dayAgoHour}
     GROUP BY "stream"."senderUserId"
     ORDER BY points DESC, "stream"."senderUserId"
     LIMIT ${limit}

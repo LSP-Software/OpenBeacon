@@ -163,12 +163,14 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
       points,
     });
   const storedPoints = () =>
-    prisma.$queryRaw<Array<{ payload: Uint8Array; pointId: bigint; receivedAt: Date }>>`
-      SELECT "point"."payload", "point"."pointId", "point"."receivedAt"
+    prisma.$queryRaw<
+      Array<{ capturedHour: number; payload: Uint8Array; pointId: bigint; receivedHour: number }>
+    >`
+      SELECT "point"."payload", "point"."pointId", "point"."receivedHour", "point"."capturedHour"
       FROM "TrackingPoint" AS "point"
       JOIN "TrackingStream" AS "stream" ON "stream"."id" = "point"."streamId"
       WHERE "stream"."groupId" = ${groupId}
-      ORDER BY "point"."receivedAt", "point"."pointId"
+      ORDER BY "point"."capturedHour", "point"."pointId"
     `;
   const clearPoints = () => prisma.trackingStream.deleteMany({ where: { groupId } });
 
@@ -274,12 +276,47 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
     await clearPoints();
   });
 
+  test("files each point under its recorded hour, clamped to the arrival window", async () => {
+    const nowHour = Math.floor(Date.now() / 3_600_000);
+    const sent = [
+      point("hour-missing"),
+      point("hour-late", { capturedHour: nowHour - 30 }),
+      point("hour-too-old", { capturedHour: nowHour - 400 }),
+      point("hour-ahead", { capturedHour: nowHour + 1 }),
+      point("hour-too-far-ahead", { capturedHour: nowHour + 5 }),
+      point("hour-stay-too-old", { capturedHour: nowHour - 500, role: "STAY" }),
+    ];
+    expect((await upload(sent)).accepted).toHaveLength(sent.length);
+    const stored = new Map(
+      (await storedPoints()).map((row) => [
+        row.pointId.toString(),
+        { offset: row.capturedHour - row.receivedHour, receivedHour: row.receivedHour },
+      ]),
+    );
+    const offsetOf = (sentPoint: (typeof sent)[number]) =>
+      stored.get(pointIdOf(sentPoint.clientPointId))?.offset;
+    expect(sent.map(offsetOf)).toEqual([0, -30, -336, 1, 1, -336]);
+    for (const { receivedHour } of stored.values()) {
+      expect(Math.abs(receivedHour - nowHour)).toBeLessThanOrEqual(1);
+    }
+    await expect(
+      upload([point("hour-not-whole", { capturedHour: nowHour + 0.5 })]),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await clearPoints();
+  });
+
   test("stays update their point in place and live rows only move the latest point", async () => {
-    const stay = (marker: number) =>
-      point("stay", { role: "STAY", payload: new Uint8Array(23).fill(marker) });
-    const firstStay = stay(1);
+    const arrivalHour = Math.floor(Date.now() / 3_600_000) - 3;
+    const stay = (marker: number, capturedHour = arrivalHour + marker) =>
+      point("stay", { capturedHour, role: "STAY", payload: new Uint8Array(23).fill(marker) });
+    const firstStay = stay(1, arrivalHour);
     expect((await upload([firstStay])).accepted).toEqual([firstStay.clientPointId]);
+    await prisma.$executeRaw`
+      UPDATE "TrackingPoint" SET "receivedHour" = "receivedHour" - 2
+      WHERE "streamId" IN (SELECT id FROM "TrackingStream" WHERE "groupId" = ${groupId})
+    `;
     const [arrival] = await storedPoints();
+    expect(arrival!.capturedHour).toBe(arrivalHour);
     expect(
       await caller(memberId, memberDeviceId).groupTracking.getLatest({
         groupId,
@@ -295,7 +332,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
     expect(Buffer.from(updated!.payload).subarray(0, 24)).toEqual(
       Buffer.from(update.nonce, "base64"),
     );
-    expect(updated!.receivedAt).toEqual(arrival!.receivedAt);
+    expect(updated!.receivedHour).toBe(arrival!.receivedHour);
+    expect(updated!.capturedHour).toBe(arrivalHour);
     expect(updated!.pointId).toBe(arrival!.pointId);
 
     const live = point("live", { role: "LIVE" });
@@ -368,8 +406,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
     const release = Promise.withResolvers<void>();
     const otherUpload = prisma.$transaction(async (tx) => {
       await tx.$executeRaw`
-        INSERT INTO "TrackingPoint" ("streamId", "pointId", "receivedAt", "payload")
-        VALUES (${streamId}, ${pointIdOf(raced.clientPointId)}::bigint, (now() AT TIME ZONE 'UTC'), '\\x00'::bytea)
+        INSERT INTO "TrackingPoint" ("streamId", "pointId", "receivedHour", "capturedHour", "payload")
+        VALUES (${streamId}, ${pointIdOf(raced.clientPointId)}::bigint, 0, 0, '\\x00'::bytea)
       `;
       inserted.resolve();
       await release.promise;

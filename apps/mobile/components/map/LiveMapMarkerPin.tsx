@@ -59,6 +59,7 @@ export const LiveMapMarkerPin = ({
   deviceCount,
   deviceIcon,
   devicePlatform,
+  fillColor,
   hasUnreadableUpdate = false,
   headingDegrees = null,
   image,
@@ -73,6 +74,7 @@ export const LiveMapMarkerPin = ({
   deviceCount?: number | undefined;
   deviceIcon?: DeviceIcon | undefined;
   devicePlatform?: string | null | undefined;
+  fillColor?: string | undefined;
   hasUnreadableUpdate?: boolean;
   headingDegrees?: number | null;
   image: string | null;
@@ -183,7 +185,10 @@ export const LiveMapMarkerPin = ({
                 onBitmapContentChange?.();
               }}
             />
-            <AvatarFallback className={status ? "bg-neutral-500" : ""}>
+            <AvatarFallback
+              className={status ? "bg-neutral-500" : ""}
+              style={fillColor && !status ? { backgroundColor: fillColor } : undefined}
+            >
               <Text className="font-bold">{initials}</Text>
             </AvatarFallback>
           </Avatar>

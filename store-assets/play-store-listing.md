@@ -26,6 +26,7 @@ FEATURES
 • Live map of everyone in your groups
 • Places such as home, school or work, with arrival and departure alerts
 • Pause sharing for 15 minutes, a few hours or until you turn it back on
+• Timeline: play back your group's day. Each person chooses how much of their history to share, from only their location now up to 14 days
 • See who can see your location now, and who could in the last 14 days
 • Several groups, such as family and close friends, with owner, admin and member roles
 • Invite by email, link or QR code, and see what you're joining before you join
@@ -35,7 +36,7 @@ FEATURES
 • Light and dark themes
 
 SHARING IS ALWAYS YOUR CHOICE
-OpenBeacon only shares your location with groups you've joined. While it's sharing, your phone shows a notification that says so. You can pause sharing, leave a group or delete your account at any time, and nobody else can stop you. Removing the app stops sharing.
+OpenBeacon only shares your location with groups you've joined. While it's sharing, your phone shows a notification that says so. You choose how much of your location history each group can see. You can pause sharing, leave a group or delete your account at any time, and nobody else can stop you. Removing the app stops sharing.
 
 OPEN SOURCE AND SELF-HOSTABLE
 OpenBeacon's code is public on GitHub, so anyone can check how it works. Use our hosted server, or run the same server on your own hardware with Docker and keep your family's data at home.

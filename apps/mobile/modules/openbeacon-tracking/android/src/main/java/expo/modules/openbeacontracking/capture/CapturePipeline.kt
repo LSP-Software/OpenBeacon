@@ -22,6 +22,7 @@ class CapturePipeline(
   private val queueOwner: () -> String? = { null },
   private val bootId: String? = null,
   private val sharingState: () -> SharingCaptureState = { SharingCaptureState() },
+  private val historyShare: () -> CaptureHistoryShare = { CaptureHistoryShare() },
   private val historySettings: HistoryFilterSettings = HistoryFilterSettings(),
   private val loadAllowance: (List<String>) -> HistoryAllowance? = { null },
   private val saveAllowance: (List<String>, HistoryAllowance) -> Unit = { _, _ -> },
@@ -71,8 +72,9 @@ class CapturePipeline(
     val (sharing, planned) = synchronized(captureLock) {
       val sharing = sharingState()
       if (!sharing.canCapture(timestampMillis, queuedAt)) return 0
+      val share = historyShare()
       val streams = keys.associateBy { key -> Stream(owner, key.groupId, key.epochId, key.senderDeviceId, key.kind, sharing.revisionPrefix) }
-      val closing = if (revocations != previousRevocations) emptyList() else previousStreams.filterKeys { it !in streams }.flatMap { (stream, key) ->
+      val closing = if (revocations != previousRevocations) emptyList() else previousStreams.filterKeys { it !in streams && !share.isLiveOnly(it.groupId) }.flatMap { (stream, key) ->
         val filter = filters[stream] ?: return@flatMap emptyList()
         val next = streams.keys.firstOrNull { it !in filters && it.copy(epochId = stream.epochId) == stream } ?: return@flatMap emptyList()
         val (carried, records) = filter.handOver { takeAllowance(listOf(owner, stream.groupId), queuedAt) }
@@ -81,11 +83,12 @@ class CapturePipeline(
       }
       previousStreams = streams
       previousRevocations = revocations
-      filters.keys.retainAll(streams.keys)
+      filters.keys.retainAll(streams.keys.filterNot { share.isLiveOnly(it.groupId) }.toSet())
       lastFixByKey.keys.retainAll(streams.keys)
       sharing to closing + streams.flatMap { (stream, key) ->
         if (fixId != null && lastFixByKey[stream] == fixId) return@flatMap emptyList()
         if (fixId != null) lastFixByKey[stream] = fixId
+        if (share.isLiveOnly(key.groupId)) return@flatMap if (live) listOf(Triple(key, HistoryRecord(fix), CiphertextQueueRow.ROLE_LIVE)) else emptyList()
         val records = filters.getOrPut(stream) { HistoryFilter(historySettings) }.onFix(fix) { takeAllowance(listOf(owner, key.groupId), queuedAt) }
         val rows = records.map { record -> Triple(key, record, if (record.stayUntil == null) CiphertextQueueRow.ROLE_POINT else CiphertextQueueRow.ROLE_STAY) }
         if (live && records.none { it.stayUntil == null && it.fix == fix }) rows + Triple(key, HistoryRecord(fix), CiphertextQueueRow.ROLE_LIVE) else rows
@@ -147,6 +150,7 @@ class CapturePipeline(
           queuedAt = queuedAt,
           status = CiphertextQueueRow.STATUS_PENDING,
           role = role,
+          capturedHour = if (role == CiphertextQueueRow.ROLE_LIVE) null else point.timestampMillis.floorDiv(HOUR_MILLIS).toInt(),
         )
       }
 
@@ -173,5 +177,6 @@ class CapturePipeline(
 
   private companion object {
     const val POINT_ID_BYTES = 8
+    const val HOUR_MILLIS = 3_600_000L
   }
 }

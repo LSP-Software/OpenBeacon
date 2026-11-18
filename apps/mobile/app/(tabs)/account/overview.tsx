@@ -68,6 +68,11 @@ const categories = [
         href: "/account/who-can-see-me",
       },
       {
+        label: "Location history",
+        icon: HistoryIcon,
+        href: "/account/location-history",
+      },
+      {
         label: "Notifications",
         icon: BellIcon,
         href: "/account/notifications",

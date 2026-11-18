@@ -17,6 +17,10 @@ public class OpenBeaconTrackingModule: Module {
       TrackingRuntime.setSyncListener(nil)
     }
 
+    Function("setHistoryShare") { (owner: String, deviceId: String, account: String, groups: [String: String]) -> Bool in
+      TrackingRuntime.setHistoryShare(owner: owner, deviceId: deviceId, account: account, groups: groups)
+    }
+
     Function("setSharingState") { (owner: String, deviceId: String, prefix: String, paused: Bool, until: Double?, after: Double?) -> Bool in
       TrackingRuntime.applySharingState(
         owner: owner,
@@ -216,6 +220,7 @@ public class OpenBeaconTrackingModule: Module {
             "lastError": row.lastError as Any? ?? NSNull(),
             "status": row.status,
             "role": row.role,
+            "capturedHour": row.capturedHour.map { Double($0) as Any } ?? NSNull(),
           ]
         }
     }

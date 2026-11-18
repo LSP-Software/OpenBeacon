@@ -23,7 +23,7 @@ export type MapHiddenPerson = MapPerson & {
   hiddenGroups: { id: string; name: string }[];
 };
 
-export type MapPausedPerson = MapPerson & { sharingPaused: true };
+export type MapPausedPerson = MapPerson & { sharingPaused: true; timelineGroupId: string };
 
 export type MapWaitingForLocationPerson = MapPerson & { waitingForLocation: true };
 

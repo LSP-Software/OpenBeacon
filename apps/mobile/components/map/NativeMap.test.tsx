@@ -161,6 +161,7 @@ mock.module("lucide-react-native", () => ({
   TagIcon: () => React.createElement("device-icon"),
   WatchIcon: () => React.createElement("device-icon"),
   EyeOffIcon: () => React.createElement("eye-off-icon"),
+  HistoryIcon: () => React.createElement("history-icon"),
   LayersIcon: () => React.createElement("layers-icon"),
   LocateFixedIcon: () => React.createElement("locate-fixed-icon"),
   MapPinIcon: () => React.createElement("map-pin-icon"),
@@ -208,6 +209,7 @@ mock.module("expo-file-system", () => ({
 }));
 
 mock.module("expo-router", () => ({
+  Link: ({ children }: { children: React.ReactNode }) => children,
   router: {
     replace: routerReplace,
   },

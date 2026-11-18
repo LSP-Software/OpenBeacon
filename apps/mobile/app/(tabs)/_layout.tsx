@@ -2,6 +2,7 @@ import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Redirect, Tabs } from "expo-router";
 import { useCallback, useEffect, useRef } from "react";
+import { HistoryShareNotice } from "../../components/HistoryShareNotice.tsx";
 import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
 import { TabBar } from "../../components/TabBar.tsx";
 import { useAppForeground } from "../../hooks/useAppForeground.ts";
@@ -74,23 +75,26 @@ export default function TabsLayout() {
   }
 
   return (
-    <Tabs
-      initialRouteName="groups/list"
-      tabBar={(props) => <TabBar {...props} groupsBadge={unseenGroupIds.size > 0} />}
-      screenOptions={{
-        headerShown: false,
-        sceneStyle: { backgroundColor: "transparent" },
-        tabBarStyle: {
-          position: "absolute",
-          backgroundColor: "transparent",
-          borderTopWidth: 0,
-          elevation: 0,
-        },
-      }}
-    >
-      <Tabs.Screen name="groups/list" />
-      <Tabs.Screen name="map/index" />
-      <Tabs.Screen name="account/overview" />
-    </Tabs>
+    <>
+      <Tabs
+        initialRouteName="groups/list"
+        tabBar={(props) => <TabBar {...props} groupsBadge={unseenGroupIds.size > 0} />}
+        screenOptions={{
+          headerShown: false,
+          sceneStyle: { backgroundColor: "transparent" },
+          tabBarStyle: {
+            position: "absolute",
+            backgroundColor: "transparent",
+            borderTopWidth: 0,
+            elevation: 0,
+          },
+        }}
+      >
+        <Tabs.Screen name="groups/list" />
+        <Tabs.Screen name="map/index" />
+        <Tabs.Screen name="account/overview" />
+      </Tabs>
+      <HistoryShareNotice userId={session.user.id} />
+    </>
   );
 }

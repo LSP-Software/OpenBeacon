@@ -14,6 +14,7 @@ const day = 24 * 60 * 60_000;
 let databaseNow = new Date();
 
 const ago = (days: number) => new Date(databaseNow.getTime() - days * day);
+const hourOf = (date: Date) => Math.floor(date.getTime() / 3_600_000);
 
 const createGroup = async (name: string, epochDaysAgo: number[]) => {
   const groupId = `${prefix}-${name}`;
@@ -73,15 +74,16 @@ const streamFor = async (
 
 const addPayloads = async (
   groupId: string,
-  payloads: Array<{ epoch: number; receivedAt: Date; name?: string }>,
+  payloads: Array<{ epoch: number; receivedAt: Date; capturedOffset?: number; name?: string }>,
 ) => {
-  for (const [index, { epoch, receivedAt, name }] of payloads.entries()) {
+  for (const [index, { capturedOffset = 0, epoch, receivedAt, name }] of payloads.entries()) {
     const streamId = await streamFor(prisma, groupId, epoch);
     nextPointId += 1;
     pointNames.set(String(nextPointId), name ?? `point-${index}`);
+    const receivedHour = hourOf(receivedAt);
     await prisma.$executeRaw`
-      INSERT INTO "TrackingPoint" ("streamId", "pointId", "receivedAt", "payload")
-      VALUES (${streamId}, ${nextPointId}, (${receivedAt.toISOString()}::timestamptz AT TIME ZONE 'UTC'), '\\x00'::bytea)
+      INSERT INTO "TrackingPoint" ("streamId", "pointId", "receivedHour", "capturedHour", "payload")
+      VALUES (${streamId}, ${nextPointId}, ${receivedHour}, ${receivedHour + capturedOffset}, '\\x00'::bytea)
     `;
   }
 };
@@ -139,8 +141,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history
       },
     });
     await prisma.$executeRaw`
-      DELETE FROM "TrackingPoint"
-      WHERE "receivedAt" < (${ago(14).toISOString()}::timestamptz AT TIME ZONE 'UTC')
+      DELETE FROM "TrackingPoint" WHERE "receivedHour" < ${hourOf(ago(14))}
     `;
     await prisma.group.deleteMany({ where: { id: { startsWith: leftover } } });
     await prisma.user.deleteMany({ where: { id: { startsWith: leftover } } });
@@ -188,6 +189,29 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history
     expect(await payloadNames(otherGroupId)).toEqual(["recent"]);
   });
 
+  test("deletes late points by when they arrived and never keeps one past 14 days and 1 hour", async () => {
+    const groupId = await createGroup("late", [200]);
+    const cutoffHour = hourOf(ago(14));
+    const atHour = (hour: number) => new Date(hour * 3_600_000 + 1_000);
+    await addPayloads(groupId, [
+      { epoch: 1, receivedAt: atHour(cutoffHour - 2), capturedOffset: -336, name: "lateAndOld" },
+      { epoch: 1, receivedAt: atHour(cutoffHour - 1), capturedOffset: 1, name: "aheadAndOld" },
+      { epoch: 1, receivedAt: atHour(cutoffHour), capturedOffset: 1, name: "lastKeptHour" },
+      { epoch: 1, receivedAt: ago(1), capturedOffset: -336, name: "lateButRecent" },
+    ]);
+    await createLocationHistoryCleanup()();
+    expect(await payloadNames(groupId)).toEqual(["lastKeptHour", "lateButRecent"]);
+    const [oldest] = await prisma.$queryRaw<Array<{ receivedHour: number }>>`
+      SELECT min("point"."receivedHour") AS "receivedHour"
+      FROM "TrackingPoint" AS "point"
+      JOIN "TrackingStream" AS "stream" ON "stream"."id" = "point"."streamId"
+      WHERE "stream"."groupId" = ${groupId}
+    `;
+    expect(databaseNow.getTime() - oldest!.receivedHour * 3_600_000).toBeLessThan(
+      14 * day + 3_600_000,
+    );
+  });
+
   test("deletes latest points more than 14 days old and streams left with no point and no latest point", async () => {
     const staleGroupId = await createGroup("stale-latest", [200, 100, 50]);
     await addLatest(staleGroupId, 1, ago(15));
@@ -210,8 +234,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history
       await tx.$queryRaw`SELECT id FROM "TrackingStream" WHERE id = ${streamId} FOR SHARE`;
       await createLocationHistoryCleanup()();
       await tx.$executeRaw`
-        INSERT INTO "TrackingPoint" ("streamId", "pointId", "receivedAt", "payload")
-        VALUES (${streamId}, 1, (now() AT TIME ZONE 'UTC'), '\\x00'::bytea)
+        INSERT INTO "TrackingPoint" ("streamId", "pointId", "receivedHour", "capturedHour", "payload")
+        VALUES (${streamId}, 1, ${hourOf(databaseNow)}, ${hourOf(databaseNow)}, '\\x00'::bytea)
       `;
     });
     expect(await streamEpochs(groupId)).toEqual([1]);
@@ -390,5 +414,43 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history
     expect(await streamEpochs(groupId)).toEqual([]);
     await createEpochCleanup()();
     expect(await epochNumbers(groupId)).toEqual([2]);
+  });
+  test("deletes points past each sender's chosen window, through group overrides, and keeps the latest point", async () => {
+    const followsAccount = await createGroup("share-account", [200]);
+    const overridden = await createGroup("share-override", [200]);
+    const maximum = await createGroup("share-maximum", [200]);
+    await prisma.user.update({ where: { id: userId }, data: { historyShare: "DAY_1" } });
+    await prisma.groupMember.createMany({
+      data: [
+        { groupId: followsAccount, userId, role: "OWNER", joinedEpochNumber: 1 },
+        {
+          groupId: overridden,
+          userId,
+          role: "OWNER",
+          joinedEpochNumber: 1,
+          historyShare: "HOURS_6",
+        },
+        { groupId: maximum, userId, role: "OWNER", joinedEpochNumber: 1, historyShare: "MAXIMUM" },
+      ],
+    });
+    for (const groupId of [followsAccount, overridden, maximum]) {
+      await addPayloads(
+        groupId,
+        [3, 5, 6, 23, 24, 30].map((hours) => ({
+          epoch: 1,
+          receivedAt: ago(hours / 24),
+          name: `${hours}h`,
+        })),
+      );
+    }
+    await addLatest(overridden, 1, ago(1 / 24));
+
+    await createLocationHistoryCleanup({ batchSize: 2 })();
+
+    expect(await payloadNames(followsAccount)).toEqual(["23h", "3h", "5h", "6h"]);
+    expect(await payloadNames(overridden)).toEqual(["3h", "5h"]);
+    expect(await payloadNames(maximum)).toEqual(["23h", "24h", "30h", "3h", "5h", "6h"]);
+    expect(await prisma.trackingLatestPoint.count({ where: { groupId: overridden } })).toBe(1);
+    await prisma.user.update({ where: { id: userId }, data: { historyShare: "MAXIMUM" } });
   });
 });

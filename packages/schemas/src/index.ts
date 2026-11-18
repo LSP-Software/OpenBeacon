@@ -1,5 +1,10 @@
 import { optionalEnvString, serverNameSchema } from "./env.ts";
 export {
+  historyShareSchema,
+  setGroupHistoryShareSchema,
+  setHistoryShareSchema,
+} from "./schemas/account/historyShare.ts";
+export {
   locationSharingChangeInputSchema,
   setLocationSharingSchema,
 } from "./schemas/account/locationSharing.ts";
@@ -70,6 +75,8 @@ import {
 import { removeGroupMemberSchema } from "./schemas/group/removeMember.ts";
 import {
   groupTrackingGetLatestSchema,
+  groupTrackingHistoryDaysSchema,
+  groupTrackingHistoryRangeSchema,
   groupTrackingPointSchema,
   groupTrackingPollSchema,
   groupTrackingUploadBatchSchema,
@@ -126,6 +133,8 @@ export {
   newGroupIdSchema,
   groupEpochBundleSchema,
   groupTrackingGetLatestSchema,
+  groupTrackingHistoryDaysSchema,
+  groupTrackingHistoryRangeSchema,
   groupTrackingPointSchema,
   groupTrackingPollSchema,
   groupTrackingUploadBatchSchema,

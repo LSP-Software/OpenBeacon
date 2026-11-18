@@ -28,6 +28,7 @@ export type CiphertextQueueItem = {
   nonce: string;
   ciphertext: string;
   role: (typeof TRACKING_POINT_ROLES)[number];
+  capturedHour: number | null;
   queuedAt: number;
   attemptCount: number;
   lastAttemptAt: number | null;
@@ -78,6 +79,12 @@ declare class OpenBeaconTrackingModule extends NativeModule<{
     paused: boolean,
     pausedUntil: number | null,
     resumeAfter: number | null,
+  ): boolean;
+  setHistoryShare(
+    owner: string,
+    deviceId: string,
+    account: string,
+    groups: Record<string, string>,
   ): boolean;
   isQueueOwner(owner: string, deviceId: string): boolean;
   setQueueOwner(owner: string, deviceId: string): void;

@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
   entities = [CiphertextQueueEntity::class, CiphertextQueueEvictionEntity::class],
-  version = 4,
+  version = 5,
   exportSchema = false,
 )
 abstract class CiphertextQueueDatabase : RoomDatabase() {
@@ -50,7 +50,13 @@ abstract class CiphertextQueueDatabase : RoomDatabase() {
       }
     }
 
-    val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+    val MIGRATION_4_5 = object : Migration(4, 5) {
+      override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE ciphertext_queue ADD COLUMN capturedHour INTEGER")
+      }
+    }
+
+    val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
 
     val BOUND_WAL = object : Callback() {
       override fun onOpen(db: SupportSQLiteDatabase) {

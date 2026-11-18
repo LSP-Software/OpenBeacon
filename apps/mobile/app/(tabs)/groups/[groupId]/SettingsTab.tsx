@@ -4,14 +4,17 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { TextInput, View } from "react-native";
+import { HistoryShareChoices } from "../../../../components/HistoryShareChoices.tsx";
 import { GroupMapColorPicker } from "../../../../components/map/GroupMapColorPicker.tsx";
 import { Button } from "../../../../components/ui/Button.tsx";
 import { Switch } from "../../../../components/ui/Switch.tsx";
 import { Text } from "../../../../components/ui/Text.tsx";
 import { useCachedGroup } from "../../../../hooks/useCachedGroup.ts";
+import { useHistoryShare } from "../../../../hooks/useHistoryShare.ts";
 import { useHiddenMapGroupIds } from "../../../../hooks/useHiddenMapGroupIds.ts";
 import { trpc } from "../../../../lib/api.ts";
 import { authClient } from "../../../../lib/auth-client.ts";
+import { groupHistoryShare } from "../../../../lib/historyShare.ts";
 import { forgetHiddenMapGroup, setMapGroupHidden } from "../../../../lib/hiddenMapGroups.ts";
 import { canHideMapGroups } from "../../../../lib/mapGroupVisibility.ts";
 import { requestTrackingSync } from "../../../../lib/trackingEvents.ts";
@@ -26,6 +29,7 @@ const SettingsTab = ({ groupId }: { groupId: string }) => {
   const router = useRouter();
   const rename = useMutation(trpc.groupSettings.rename.mutationOptions());
   const deleteGroup = useMutation(trpc.groupLifecycle.delete.mutationOptions());
+  const historyShare = useHistoryShare();
   const role = group?.members.find((member) => member.userId === session?.user.id)?.role;
 
   return (
@@ -59,6 +63,21 @@ const SettingsTab = ({ groupId }: { groupId: string }) => {
           </Button>
         </View>
       )}
+      {historyShare.setting ? (
+        <View className="gap-2">
+          <Text className="text-lg font-medium text-muted-foreground">Your location history</Text>
+          <Text className="text-muted-foreground text-sm">
+            How much of your history members of {group?.name ?? "this group"} can play back in
+            Timeline. Only you can change this.
+          </Text>
+          <HistoryShareChoices
+            accountShare={historyShare.setting.account}
+            value={groupHistoryShare(historyShare.setting, groupId).override}
+            disabled={historyShare.saving}
+            onChange={(override) => void historyShare.change({ groupId, override })}
+          />
+        </View>
+      ) : null}
       <Text className="mb-1 text-lg font-medium text-muted-foreground">Appearance</Text>
       <GroupMapColorPicker groupId={groupId} />
       {session && canHideMapGroups(groupCount) && (

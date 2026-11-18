@@ -311,6 +311,79 @@ class CapturePipelineTest {
   }
 
   @Test
+  fun historyRowsCarryTheUtcHourTheyWereRecordedInAndALongStayIsSplitAtTheHour() {
+    val keys = InMemoryEpochKeyStore()
+    keys.replaceAll(listOf(ProvisionedEpochKey("group_a", "epoch_a", ByteArray(32), "device_1", "trackingPoint")))
+    val queue = InMemoryCiphertextQueue()
+    val pipeline = CapturePipeline(epochKeyStore = keys, ciphertextQueue = queue, queueOwner = { "owner" }, bootId = "boot")
+    val start = at("2026-07-13T18:50:00.000Z")
+    val hour = 3_600_000L
+    for (minute in 0L..20L) {
+      pipeline.onFix(51.5 + minute * 0.003, -0.1, start + minute * 60_000L, 5.0, 80, false, fixId = minute + 1, accuracyMeters = 5.0, live = false)
+    }
+    for (minute in 21L..80L) {
+      pipeline.onFix(51.56, -0.1, start + minute * 60_000L, 0.0, 80, false, fixId = minute + 1, accuracyMeters = 5.0, live = minute == 80L)
+    }
+
+    val rows = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 100)
+    val points = rows.filter { it.role == CiphertextQueueRow.ROLE_POINT }
+    assertEquals(points.map { (decrypt(it).first / hour).toInt() }, points.map { it.capturedHour })
+    assertTrue(points.mapNotNull { it.capturedHour }.toSet().size == 2)
+    val stays = rows.filter { it.role == CiphertextQueueRow.ROLE_STAY }.map { it to decrypt(it) }
+    assertEquals(2, stays.size)
+    val (before, after) = stays
+    assertEquals(after.second.first, before.second.second)
+    assertEquals(0L, after.second.first % hour)
+    assertTrue(stays.all { (row, times) -> row.capturedHour == (times.first / hour).toInt() })
+    assertTrue(after.first.capturedHour!! > before.first.capturedHour!!)
+    assertEquals(listOf<Int?>(null), rows.filter { it.role == CiphertextQueueRow.ROLE_LIVE }.map { it.capturedHour })
+  }
+
+  @Test
+  fun aLastLocationOnlyGroupQueuesOnlyLiveRowsWhileOtherGroupsKeepHistory() {
+    val keys = InMemoryEpochKeyStore()
+    keys.replaceAll(
+      listOf(
+        ProvisionedEpochKey("family", "epoch_f", ByteArray(32), "device_1", "trackingPoint"),
+        ProvisionedEpochKey("club", "epoch_c", ByteArray(32), "device_1", "trackingPoint"),
+      ),
+    )
+    val queue = InMemoryCiphertextQueue()
+    var share = CaptureHistoryShare(account = "WEEK_1", groups = mapOf("club" to "LAST_LOCATION"))
+    val pipeline = CapturePipeline(epochKeyStore = keys, ciphertextQueue = queue, queueOwner = { "owner" }, bootId = "boot", historyShare = { share })
+    val start = at("2026-07-13T18:50:00.000Z")
+    fun move(minute: Long, live: Boolean) =
+      pipeline.onFix(51.5 + minute * 0.003, -0.1, start + minute * 60_000L, 5.0, 80, false, fixId = minute + 1, accuracyMeters = 5.0, live = live)
+    fun rolesFor(groupId: String) = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 200).filter { it.groupId == groupId }.map { it.role }
+
+    for (minute in 0L..20L) move(minute, live = minute % 5L == 0L)
+    for (minute in 21L..60L) {
+      pipeline.onFix(51.56, -0.1, start + minute * 60_000L, 0.0, 80, false, fixId = minute + 1, accuracyMeters = 5.0, live = false)
+    }
+
+    assertEquals(listOf(CiphertextQueueRow.ROLE_LIVE), rolesFor("club"))
+    assertTrue(queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 200).filter { it.groupId == "club" }.all { it.capturedHour == null })
+    assertTrue(CiphertextQueueRow.ROLE_POINT in rolesFor("family"))
+    assertTrue(CiphertextQueueRow.ROLE_STAY in rolesFor("family"))
+
+    share = CaptureHistoryShare(account = "LAST_LOCATION", groups = mapOf("club" to "HOURS_6"))
+    val clubPointsBefore = rolesFor("club").count { it == CiphertextQueueRow.ROLE_POINT }
+    val familyRowsBefore = rolesFor("family").size
+    for (minute in 61L..70L) move(minute, live = false)
+    assertTrue(rolesFor("club").count { it == CiphertextQueueRow.ROLE_POINT } > clubPointsBefore)
+    assertEquals(familyRowsBefore, rolesFor("family").size)
+  }
+
+  @Test
+  fun captureHistoryShareUsesTheGroupChoiceBeforeTheAccountSetting() {
+    val share = CaptureHistoryShare(account = "LAST_LOCATION", groups = mapOf("family" to "MAXIMUM", "club" to "LAST_LOCATION"))
+    assertEquals(false, share.isLiveOnly("family"))
+    assertEquals(true, share.isLiveOnly("club"))
+    assertEquals(true, share.isLiveOnly("new-group"))
+    assertEquals(false, CaptureHistoryShare().isLiveOnly("new-group"))
+  }
+
+  @Test
   fun stayUpdatesReuseTheArrivalIdAndReplaceOnlyPendingRows() {
     val keys = InMemoryEpochKeyStore()
     keys.replaceAll(listOf(ProvisionedEpochKey("group_a", "epoch_a", ByteArray(32), "device_1", "trackingPoint")))

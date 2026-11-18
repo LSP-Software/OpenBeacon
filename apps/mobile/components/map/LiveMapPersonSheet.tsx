@@ -1,4 +1,5 @@
 import { Link } from "expo-router";
+import { HistoryIcon } from "lucide-react-native";
 import { Pressable, View } from "react-native";
 import { useTimeSince } from "../../hooks/useTimeSince.ts";
 import { getBatteryVisual } from "../../lib/batteryVisual.ts";
@@ -6,6 +7,7 @@ import { type DeviceIcon, deviceIconFor } from "../../lib/deviceIcons.ts";
 import { locationStaleAt } from "../../lib/locationStaleAt.ts";
 import { DecryptedAvatarImage } from "../image/DecryptedAvatarImage.tsx";
 import { Avatar, AvatarFallback } from "../ui/Avatar.tsx";
+import { Button } from "../ui/Button.tsx";
 import { Icon } from "../ui/Icon.tsx";
 import { Text } from "../ui/Text.tsx";
 import { LiveMapBottomSheet } from "./LiveMapBottomSheet.tsx";
@@ -33,6 +35,7 @@ export const LiveMapPersonSheet = ({
   onHeightChange,
   onSelectDevice,
   otherSharedGroupNames,
+  timeline,
   timestamp,
   unreadableGroup,
 }: {
@@ -46,6 +49,7 @@ export const LiveMapPersonSheet = ({
   onHeightChange?: (height: number) => void;
   onSelectDevice?: (deviceId: string) => void;
   otherSharedGroupNames: readonly string[];
+  timeline?: { groupId: string; userId: string } | undefined;
   timestamp: string | null;
   unreadableGroup?: { id: string; name: string } | undefined;
 }) => {
@@ -115,6 +119,14 @@ export const LiveMapPersonSheet = ({
             <Text className="text-muted-foreground mt-2 text-sm">
               Also in {otherSharedGroupNames.join(", ")}
             </Text>
+          ) : null}
+          {timeline ? (
+            <Link href={{ pathname: "/timeline", params: timeline }} asChild>
+              <Button className="mt-3" accessibilityRole="link">
+                <Icon as={HistoryIcon} size={18} className="text-primary-foreground" />
+                <Text>See today’s route</Text>
+              </Button>
+            </Link>
           ) : null}
         </>
       }

@@ -3,11 +3,13 @@ import type { Prisma } from "@openbeacon/database";
 
 const databaseNow = new Date("2001-03-02T00:00:00.000Z");
 const cutoff = "2001-02-16T00:00:00.000Z";
+const cutoffHour = 272_856;
 let backlog = 0;
 let failures: unknown[] = [];
 let epochs: Array<{ id: string; createdAt: Date }> = [];
 const payloadDeletes: Array<{
-  cutoff: unknown;
+  capturedCutoff: unknown;
+  receivedCutoff: unknown;
   fromStream: unknown;
   limit: number;
   streamCutoff: unknown;
@@ -18,6 +20,7 @@ const epochDeletes: string[][] = [];
 let historyBacklog = { PlaceTransition: 0, GroupEvent: 0 };
 const historyDeletes: Array<{ table: string; cutoff: unknown; limit: number }> = [];
 let emptyStreams: string[] = [];
+const windowDeletes: Array<{ values: unknown[] }> = [];
 const streamLocks: Array<{ after: unknown; limit: unknown }> = [];
 
 const queryRaw = mock(async (query: TemplateStringsArray | Prisma.Sql, ...args: unknown[]) => {
@@ -33,12 +36,20 @@ const queryRaw = mock(async (query: TemplateStringsArray | Prisma.Sql, ...args: 
       .slice(0, Number(limit))
       .map((id) => ({ id }));
   }
+  if (
+    strings.join("?").trimStart().startsWith('DELETE FROM "TrackingPoint"') &&
+    strings.join("?").includes('"member"."historyShare"')
+  ) {
+    windowDeletes.push({ values });
+    return [];
+  }
   if (strings.join("?").trimStart().startsWith('DELETE FROM "TrackingPoint"')) {
     const failure = failures.shift();
     if (failure) throw failure;
-    const [pointCutoff, limit, streamCutoff, fromStream] = values;
+    const [capturedCutoff, receivedCutoff, limit, streamCutoff, fromStream] = values;
     payloadDeletes.push({
-      cutoff: pointCutoff,
+      capturedCutoff,
+      receivedCutoff,
       fromStream,
       limit: Number(limit),
       streamCutoff,
@@ -119,17 +130,24 @@ beforeEach(() => {
   historyDeletes.length = 0;
   emptyStreams = [];
   streamLocks.length = 0;
+  windowDeletes.length = 0;
 });
 
 test("deletes location points older than database time minus exactly 14 days in batches, then stale latest points and empty streams", async () => {
   backlog = 2_500;
   await createLocationHistoryCleanup()();
   expect(payloadDeletes).toEqual([
-    { cutoff, fromStream: "0", limit: 1000, streamCutoff: cutoff },
-    { cutoff, fromStream: "1000", limit: 1000, streamCutoff: cutoff },
-    { cutoff, fromStream: "1000", limit: 1000, streamCutoff: cutoff },
+    ...["0", "1000", "1000"].map((fromStream) => ({
+      capturedCutoff: cutoffHour,
+      receivedCutoff: cutoffHour,
+      fromStream,
+      limit: 1000,
+      streamCutoff: cutoff,
+    })),
   ]);
   expect(backlog).toBe(0);
+  expect(windowDeletes).toHaveLength(1);
+  expect(windowDeletes[0]?.values).toContain(272_856 + 14 * 24 - 5);
   expect(tidyDeletes).toEqual([{ table: "TrackingLatestPoint", values: [cutoff] }]);
   expect(streamLocks).toEqual([{ after: "0", limit: 1000 }]);
 });
@@ -156,6 +174,7 @@ test("stops at the run limit, logs it and leaves the rest for later runs", async
   const run = createLocationHistoryCleanup({ batchSize: 4, runLimit: 6 });
   await run();
   expect(payloadDeletes.map(({ limit }) => limit)).toEqual([4, 2]);
+  expect(windowDeletes).toEqual([]);
   expect(backlog).toBe(4);
   expect(warn.mock.calls).toEqual([
     [

@@ -609,7 +609,8 @@ type UploadableQueueItem = CiphertextQueueItem & {
 const isUploadableQueueItem = (item: CiphertextQueueItem): item is UploadableQueueItem =>
   item.algorithm === PAYLOAD_ENCRYPTION_ALGORITHM &&
   item.kind === TRACKING_POINT_KIND &&
-  groupTrackingPointSchema.safeParse(item).success;
+  groupTrackingPointSchema.safeParse({ ...item, capturedHour: item.capturedHour ?? undefined })
+    .success;
 
 const takePlaceAlertsCursor = (round: PlaceRound) => {
   const cursor = round.cursor;
@@ -761,7 +762,8 @@ const uploadClaimedItems = async (
         groupId,
         ...placeUploadFields(transitions, cursor),
         points: items.map(
-          ({ ciphertext, clientPointId, epochId, nonce, role, senderDeviceId }) => ({
+          ({ capturedHour, ciphertext, clientPointId, epochId, nonce, role, senderDeviceId }) => ({
+            ...(capturedHour === null ? {} : { capturedHour }),
             ciphertext,
             clientPointId,
             epochId,

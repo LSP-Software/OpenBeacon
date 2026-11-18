@@ -302,6 +302,34 @@ class OfflineTrackingQueueTest {
   }
 
   @Test
+  fun `migrates version 4 queues keeping their points, which have no recorded hour`() {
+    migrate(
+      4,
+      "CREATE TABLE ciphertext_queue (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, clientPointId TEXT NOT NULL, captureId TEXT NOT NULL, groupId TEXT NOT NULL, epochId TEXT NOT NULL, senderDeviceId TEXT NOT NULL, kind TEXT NOT NULL, algorithm TEXT NOT NULL, nonce TEXT NOT NULL, ciphertext TEXT NOT NULL, queuedAt INTEGER NOT NULL, attemptCount INTEGER NOT NULL, lastAttemptAt INTEGER, lastError TEXT, status TEXT NOT NULL, owner TEXT, role TEXT NOT NULL DEFAULT 'POINT')",
+      "CREATE TABLE ciphertext_queue_eviction (owner TEXT NOT NULL, pointCount INTEGER NOT NULL, oldestQueuedAt INTEGER NOT NULL, newestQueuedAt INTEGER NOT NULL, revision INTEGER NOT NULL, PRIMARY KEY(owner))",
+      "INSERT INTO ciphertext_queue (clientPointId, captureId, groupId, epochId, senderDeviceId, kind, algorithm, nonce, ciphertext, queuedAt, attemptCount, status, owner, role) VALUES ('point', 'capture', 'group', 'epoch', 'device', 'trackingPoint', 'algorithm', 'nonce', 'ciphertext', 1, 0, 'PENDING', 'server-a/user-a', 'POINT')",
+      "INSERT INTO ciphertext_queue (clientPointId, captureId, groupId, epochId, senderDeviceId, kind, algorithm, nonce, ciphertext, queuedAt, attemptCount, status, owner, role) VALUES ('stay', 'capture', 'group', 'epoch', 'device', 'trackingPoint', 'algorithm', 'nonce', 'ciphertext', 2, 0, 'PENDING', 'server-a/user-a', 'STAY')",
+    ) { dao ->
+      val pending = { dao.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, "server-a/user-a", 0) }
+      assertEquals(listOf<Pair<String, Int?>>("point" to null, "stay" to null), pending().map { it.clientPointId to it.capturedHour })
+      dao.insertAll(listOf(CiphertextQueueEntity(owner = "server-a/user-a", clientPointId = "new", captureId = "capture", groupId = "group", epochId = "epoch", senderDeviceId = "device", kind = "trackingPoint", algorithm = "algorithm", nonce = "nonce", ciphertext = "ciphertext", queuedAt = 3, status = CiphertextQueueRow.STATUS_PENDING, capturedHour = 498_600)))
+      assertEquals(498_600, pending().last().capturedHour)
+    }
+  }
+
+  @Test
+  fun `keeps the recorded hour of a queued point and of a replaced stay`() {
+    val owner = "server-a/user-a"
+    queue.insertAll(listOf(row("point", owner).copy(capturedHour = 498_600), row("live", owner).copy(role = CiphertextQueueRow.ROLE_LIVE)))
+    queue.insertAll(listOf(row("stay", owner).copy(role = CiphertextQueueRow.ROLE_STAY, capturedHour = 498_590)))
+    queue.insertAll(listOf(row("stay", owner).copy(role = CiphertextQueueRow.ROLE_STAY, capturedHour = 498_590, ciphertext = "update")))
+    assertEquals(
+      listOf<Pair<String, Int?>>("point" to 498_600, "live" to null, "stay" to 498_590),
+      queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, owner).map { it.clientPointId to it.capturedHour },
+    )
+  }
+
+  @Test
   fun `evicts the oldest pending points past the size limit`() {
     val limit = 256L * 1024
     val boundedQueue = RoomCiphertextQueue(database, maxDatabaseBytes = limit)
@@ -382,7 +410,7 @@ class OfflineTrackingQueueTest {
     file.parentFile?.mkdirs()
     SQLiteDatabase.openOrCreateDatabase(file, null).use { old ->
       statements.forEach(old::execSQL)
-      old.execSQL("CREATE UNIQUE INDEX index_ciphertext_queue_clientPointId ON ciphertext_queue (clientPointId)")
+      old.execSQL("CREATE ${if (version >= 4) "" else "UNIQUE "}INDEX index_ciphertext_queue_clientPointId ON ciphertext_queue (clientPointId)")
       old.execSQL("CREATE INDEX index_ciphertext_queue_status_id ON ciphertext_queue (status, id)")
       old.execSQL("CREATE INDEX index_ciphertext_queue_groupId_id ON ciphertext_queue (groupId, id)")
       old.version = version

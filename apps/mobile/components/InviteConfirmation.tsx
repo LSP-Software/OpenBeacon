@@ -1,9 +1,9 @@
-import { tryCatch } from "@openbeacon/shared";
+import { tryCatch, type HistoryShare } from "@openbeacon/shared";
 import { useQuery } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
 import { Link, router, useNavigation } from "expo-router";
 import { useState } from "react";
-import { ActivityIndicator, ScrollView, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, View } from "react-native";
 import { Alert } from "../lib/alert.ts";
 import { queryClient, trpc, trpcClient } from "../lib/api.ts";
 import {
@@ -12,13 +12,17 @@ import {
   submitEpochChange,
 } from "../lib/groupEncryption.ts";
 import { groupLimitAlert } from "../lib/groupLimitAlert.ts";
+import { historyShareAmount } from "../lib/historyShare.ts";
+import { useHistoryShare } from "../hooks/useHistoryShare.ts";
 import { storeOwnImageKeyInGroup } from "../lib/imageKeys.ts";
 import { initials } from "../lib/initials.ts";
 import type { InviteToConfirm } from "../lib/inviteTypes.ts";
 import { requestTrackingSync } from "../lib/trackingEvents.ts";
 import { useSingleFlight } from "../lib/useSingleFlight.ts";
+import { HistoryShareChoices } from "./HistoryShareChoices.tsx";
 import { Avatar, AvatarFallback } from "./ui/Avatar.tsx";
 import { Button } from "./ui/Button.tsx";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/Dialog.tsx";
 import { Text } from "./ui/Text.tsx";
 
 export const InviteConfirmation = ({
@@ -31,6 +35,9 @@ export const InviteConfirmation = ({
   const navigation = useNavigation();
   const [unavailable, setUnavailable] = useState(false);
   const action = useSingleFlight<"join" | "decline">();
+  const historyShare = useHistoryShare();
+  const [joinShare, setJoinShare] = useState<HistoryShare | null>(null);
+  const [choosingShare, setChoosingShare] = useState(false);
   const preview = useQuery({
     queryKey: ["invitePreview", invite],
     queryFn: () =>
@@ -54,11 +61,17 @@ export const InviteConfirmation = ({
       const result = await tryCatch(
         invite.kind === "code"
           ? submitEpochChange({
-              build: () => buildAcceptSharedInviteInput({ code: invite.code }),
+              build: async () => ({
+                ...(await buildAcceptSharedInviteInput({ code: invite.code })),
+                historyShare: joinShare,
+              }),
               submit: (input) => trpcClient.groupInvites.acceptShared.mutate(input),
             })
           : submitEpochChange({
-              build: () => buildAcceptInviteInput({ inviteId: invite.inviteId }),
+              build: async () => ({
+                ...(await buildAcceptInviteInput({ inviteId: invite.inviteId })),
+                historyShare: joinShare,
+              }),
               submit: (input) => trpcClient.groupInvites.accept.mutate(input),
             }),
       );
@@ -227,6 +240,39 @@ export const InviteConfirmation = ({
             <Text className="mt-1 text-center text-sm text-secondary">
               Members will be able to see your location.
             </Text>
+            {historyShare.setting ? (
+              <View className="mt-3 flex-row flex-wrap items-center justify-center">
+                <Text className="text-center text-sm text-secondary">
+                  You’ll share: {historyShareAmount(joinShare ?? historyShare.setting.account)} (
+                  {joinShare ? "this group only" : "your account setting"}) ·{" "}
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Change how much history you share with this group"
+                  hitSlop={12}
+                  onPress={() => setChoosingShare(true)}
+                >
+                  <Text className="text-sm font-semibold text-primary">Change</Text>
+                </Pressable>
+              </View>
+            ) : null}
+            <Dialog open={choosingShare} onOpenChange={setChoosingShare}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>History you’ll share with {group.name}</DialogTitle>
+                </DialogHeader>
+                {historyShare.setting ? (
+                  <HistoryShareChoices
+                    accountShare={historyShare.setting.account}
+                    value={joinShare}
+                    onChange={(value) => {
+                      setJoinShare(value);
+                      setChoosingShare(false);
+                    }}
+                  />
+                ) : null}
+              </DialogContent>
+            </Dialog>
           </>
         )}
       </View>
@@ -254,7 +300,7 @@ export const InviteConfirmation = ({
             <Button
               onPress={join}
               loading={action.pendingKey === "join"}
-              disabled={action.pendingKey === "decline"}
+              disabled={action.pendingKey === "decline" || historyShare.query.isPending}
             >
               <Text>Join Group</Text>
             </Button>

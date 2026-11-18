@@ -28,6 +28,7 @@ const sharingState = () => ({
   deviceId: "phone",
   userId: "alex",
   serverTime: new Date(),
+  historyShare: { account: "MAXIMUM" as const, changedAt: null, groups: [] },
   ...resolveLocationSharing(serverAccount, preference, Date.now()),
 });
 const Host = ({ children, ...props }: { children?: React.ReactNode; [key: string]: unknown }) =>
@@ -99,6 +100,7 @@ mock.module("../modules/openbeacon-tracking/index.ts", () => ({
       nativePauses.push(paused);
       return true;
     },
+    setHistoryShare: () => true,
   },
 }));
 mock.module("./ui/Button.tsx", () => ({
