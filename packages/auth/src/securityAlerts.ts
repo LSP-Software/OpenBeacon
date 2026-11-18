@@ -229,6 +229,8 @@ const accountNoticeTypes = {
   "other-sessions-signed-out": "OTHER_SESSIONS_SIGNED_OUT",
   "device-removed": "DEVICE_REMOVED",
   "deletion-scheduled": "DELETION_SCHEDULED",
+  "sign-in-codes-turned-on": "SIGN_IN_CODES_TURNED_ON",
+  "sign-in-codes-turned-off": "SIGN_IN_CODES_TURNED_OFF",
   "account-deleted": null,
   "alerts-turned-off": "ALERTS_TURNED_OFF",
 } as const satisfies Record<SecurityAlert["type"], AccountNoticeType | null>;

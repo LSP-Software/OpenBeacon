@@ -7,6 +7,8 @@ const purposes: EmailCodePurpose[] = [
   "email-verification",
   "password-reset",
   "recovery-reset",
+  "sign-in",
+  "turn-on-sign-in-codes",
 ];
 
 describe("renderCodeEmail", () => {
@@ -42,6 +44,8 @@ describe("renderCodeEmail", () => {
       "Your OpenBeacon email verification code",
       "Your OpenBeacon password reset code",
       "Your OpenBeacon recovery phrase reset code",
+      "Your OpenBeacon sign-in code",
+      "Your OpenBeacon code to turn on sign-in codes",
     ]);
   });
 });

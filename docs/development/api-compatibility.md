@@ -113,3 +113,12 @@ Level 11 adds notification settings, phone notices and push wake-ups (OPE-140):
 - Account notices and push tokens: the `accountNotices.sync` mutation needs a signed-in Active device but no group. It takes `cursor` (null on a phone's first call, which returns no notices and a starting cursor) and an optional `pushToken` (a string to store this device's Firebase token, or null to clear it), and returns `notices` (the account's security notices from other devices, created since this session signed in), the next `cursor` and `pushAvailable`, which says whether the server sends push wake-ups. Account notices follow the account's Phone switches when they are created, not when they are read, and the alerts-turned-off notice can't be switched off. A server only stores a token when push is on.
 
 The server minimum is 11 because the app calls `notificationSettings` and `accountNotices.sync`, which older servers don't have. The client minimum stays 10 because older apps never call them.
+
+Level 12 adds sign-in codes (OPE-188):
+
+- The `signInCodes` router: `status` returns `on` and `canTurnOn` (a password account on a server with email). `requestTurnOnCode`, `turnOn` (with the emailed code) and `turnOff` need a recent sign-in.
+- `/sign-in/email` answers 403 with code `SIGN_IN_CODE_REQUIRED` and `codeSent` when the password is right and the account has codes on, and emails a code when `codeSent` is true. The app then sends the same email and password to `/sign-in/email` again with the code in the `x-openbeacon-sign-in-code` header. A wrong, expired or used-up code answers 400 with code `INVALID_CODE` and sends no new code. There is no separate endpoint for checking a sign-in code, so a code is only checked after the right password. `/email-code/verify-password-reset-code` also returns `signInToken` when codes are on, and sending it in the `x-openbeacon-sign-in-token` header on the next `/sign-in/email` skips the code once. A request from a session linked to an Active device of the same account needs no code. With email off, the account's password sign-in fails with `SIGN_IN_CODES_UNAVAILABLE`.
+
+- `accountNotices.sync` can return two new types, `SIGN_IN_CODES_TURNED_ON` and `SIGN_IN_CODES_TURNED_OFF`.
+
+The server minimum is 12 because the app calls `signInCodes`, which older servers don't have. The client minimum is 12 because older apps can't enter a sign-in code and don't know the new account notice types, so this is a mandatory update.

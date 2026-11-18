@@ -1,6 +1,7 @@
 import { Alert } from "../lib/alert.ts";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { signInSchema } from "@openbeacon/schemas";
+import { tryCatch } from "@openbeacon/shared";
 import { useQuery } from "@tanstack/react-query";
 import { Link, router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
@@ -17,7 +18,13 @@ import { Text } from "../components/ui/Text.tsx";
 import { trpc } from "../lib/api.ts";
 import { completeAuthenticatedSessionSetup, isNativeGoogleSignInConfigured } from "../lib/auth.ts";
 import { authClient } from "../lib/auth-client.ts";
-import { emailCodeErrorMessage, emailCodes } from "../lib/emailCodes.ts";
+import {
+  emailCodeErrorMessage,
+  emailCodes,
+  readSignInError,
+  signInCodeEntryError,
+  signInWithPassword,
+} from "../lib/emailCodes.ts";
 import { finishAuthentication } from "../lib/finishAuthentication.ts";
 
 const resetFormSchema = signInSchema
@@ -32,7 +39,8 @@ const ForgotPassword = () => {
   const [step, setStep] = useState<
     | { name: "email" }
     | { name: "code"; email: string; notice: string | undefined }
-    | { name: "password"; email: string; resetToken: string }
+    | { name: "password"; email: string; resetToken: string; signInToken: string | undefined }
+    | { name: "signInCode"; email: string; password: string; notice: string | undefined }
   >({ name: "email" });
   const [loading, setLoading] = useState(false);
   const { data: providers } = useQuery(trpc.auth.providers.queryOptions());
@@ -82,22 +90,64 @@ const ForgotPassword = () => {
       return;
     }
 
-    const signedIn = await authClient.signIn.email({ email: step.email, password });
-    const sessionSetup = signedIn.error ? null : await completeAuthenticatedSessionSetup();
-    if (sessionSetup?.deviceRemoved) {
-      setLoading(false);
-      return;
+    const outcome = await signInWithNewPassword({
+      email: step.email,
+      password,
+      signInToken: step.signInToken,
+    });
+    if (outcome.kind !== "signedIn" && outcome.kind !== "codeRequired") backToSignIn(step.email);
+  };
+
+  const backToSignIn = (email: string) => {
+    Alert.alert("Password reset", "Your password has been reset. Sign in with your new password.");
+    router.replace({ pathname: "/signIn", params: { joinCode: params.joinCode, email } });
+  };
+
+  const signInWithNewPassword = async (details: {
+    email: string;
+    password: string;
+    signInToken?: string | undefined;
+    code?: string | undefined;
+  }) => {
+    setLoading(true);
+    const result = await tryCatch(signInWithPassword(details));
+    const outcome = readSignInError(result.error ?? result.data.error);
+    if (outcome.kind === "codeRequired") {
+      setStep({
+        name: "signInCode",
+        email: details.email,
+        password: details.password,
+        notice: outcome.notice,
+      });
     }
-    if (signedIn.error || sessionSetup?.error) {
+    if (outcome.kind !== "signedIn") {
       setLoading(false);
-      Alert.alert(
-        "Password reset",
-        "Your password has been reset. Sign in with your new password.",
-      );
-      router.replace({ pathname: "/signIn", params: { joinCode: params.joinCode } });
-      return;
+      return outcome;
+    }
+    const sessionSetup = await completeAuthenticatedSessionSetup();
+    if (sessionSetup.deviceRemoved) {
+      setLoading(false);
+      return outcome;
+    }
+    if (sessionSetup.error) {
+      setLoading(false);
+      backToSignIn(details.email);
+      return outcome;
     }
     await finishAuthentication({ joinCode: params.joinCode });
+    return outcome;
+  };
+
+  const continueWithCode = async (
+    signInCode: { email: string; password: string },
+    code?: string,
+  ) => {
+    const outcome = await signInWithNewPassword({ ...signInCode, code });
+    if (outcome.kind === "wrongPassword") {
+      backToSignIn(signInCode.email);
+      return undefined;
+    }
+    return signInCodeEntryError(outcome, code !== undefined);
   };
 
   return (
@@ -108,12 +158,14 @@ const ForgotPassword = () => {
             <ReturnToHomeHeader />
             <View className="gap-2">
               <Text className="font-bold text-5xl">
-                {step.name === "code" ? "Check your\nemail." : "Reset\npassword."}
+                {step.name === "code" || step.name === "signInCode"
+                  ? "Check your\nemail."
+                  : "Reset\npassword."}
               </Text>
               <Text className="text-lg text-muted">
                 {step.name === "email"
                   ? "We'll email you a code to reset it"
-                  : step.name === "code"
+                  : step.name === "code" || step.name === "signInCode"
                     ? "Enter the code from your email"
                     : "Choose a new password"}
               </Text>
@@ -166,6 +218,7 @@ const ForgotPassword = () => {
                         name: "password",
                         email: step.email,
                         resetToken: result.data.resetToken,
+                        signInToken: result.data.signInToken,
                       });
                       return undefined;
                     }}
@@ -181,6 +234,20 @@ const ForgotPassword = () => {
                   >
                     <Text className="text-secondary">Use a different email</Text>
                   </Pressable>
+                </>
+              ) : step.name === "signInCode" ? (
+                <>
+                  <Text className="text-muted">
+                    Your password has been reset. Your account also asks for a code when you sign
+                    in.
+                  </Text>
+                  <EmailCodeEntry
+                    email={step.email}
+                    notice={step.notice}
+                    submitLabel="Sign in"
+                    onSubmit={(code) => continueWithCode(step, code)}
+                    onResend={() => continueWithCode(step)}
+                  />
                 </>
               ) : (
                 <>

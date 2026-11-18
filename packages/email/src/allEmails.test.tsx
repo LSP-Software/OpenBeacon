@@ -14,6 +14,8 @@ const renderEveryEmail = async () => {
     "email-verification",
     "password-reset",
     "recovery-reset",
+    "sign-in",
+    "turn-on-sign-in-codes",
   ];
   const alerts: SecurityAlert[] = [
     { type: "password-changed" },
@@ -32,6 +34,8 @@ const renderEveryEmail = async () => {
         { type: "PLACE_ALERTS", channel: "phone" },
       ],
     },
+    { type: "sign-in-codes-turned-on" },
+    { type: "sign-in-codes-turned-off" },
     { type: "account-deleted" },
   ];
   return [

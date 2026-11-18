@@ -7,8 +7,10 @@ const {
   emailCodeErrorMessage,
   invalidCodeMessage,
   noCodeRejections,
+  readSignInError,
   recordCodeRejection,
   recordNewCode,
+  signInCodeEntryError,
 } = await import("./emailCodes.ts");
 
 describe("emailCodeErrorMessage", () => {
@@ -93,5 +95,87 @@ describe("codeEntryErrorMessage", () => {
     expect(codeEntryErrorMessage("Something went wrong. Please try again.", rejections, hint)).toBe(
       "Something went wrong. Please try again.",
     );
+  });
+});
+
+describe("readSignInError", () => {
+  test("treats no error as signed in", () => {
+    expect(readSignInError(null)).toEqual({ kind: "signedIn" });
+  });
+
+  test("asks for a code with no notice when the server sent one", () => {
+    expect(readSignInError({ status: 403, code: "SIGN_IN_CODE_REQUIRED", codeSent: true })).toEqual(
+      { kind: "codeRequired", notice: undefined },
+    );
+  });
+
+  test("asks for a code with a notice when the per-address limit stopped a new email", () => {
+    const outcome = readSignInError({
+      status: 403,
+      code: "SIGN_IN_CODE_REQUIRED",
+      codeSent: false,
+    });
+    expect(outcome.kind === "codeRequired" && outcome.notice).toContain("Use the last code");
+  });
+
+  test("tells a wrong code apart from a wrong password", () => {
+    expect(readSignInError({ status: 400, code: "INVALID_CODE" })).toEqual({
+      kind: "invalidCode",
+    });
+    expect(
+      readSignInError({
+        status: 401,
+        code: "INVALID_EMAIL_OR_PASSWORD",
+        message: "Invalid email or password",
+      }),
+    ).toEqual({ kind: "wrongPassword", message: "Invalid email or password" });
+  });
+
+  test("passes the server's message through for codes the server can't send", () => {
+    expect(
+      readSignInError({
+        status: 403,
+        code: "SIGN_IN_CODES_UNAVAILABLE",
+        message: "This server can't send email right now.",
+      }),
+    ).toEqual({
+      kind: "failed",
+      code: "SIGN_IN_CODES_UNAVAILABLE",
+      message: "This server can't send email right now.",
+    });
+  });
+
+  test("asks to check the connection when the request never reached the server", () => {
+    expect(readSignInError(new TypeError("Network request failed"))).toEqual({
+      kind: "failed",
+      code: undefined,
+      message: "Check your connection and try again.",
+    });
+  });
+});
+
+describe("signInCodeEntryError", () => {
+  test("reports a new code as sent after a resend only when one really was", () => {
+    expect(signInCodeEntryError({ kind: "codeRequired", notice: undefined }, false)).toBe(
+      undefined,
+    );
+    expect(signInCodeEntryError({ kind: "codeRequired", notice: "Limit" }, false)).toBe("Limit");
+  });
+
+  test("never treats a submitted code that needs replacing as a success", () => {
+    expect(signInCodeEntryError({ kind: "codeRequired", notice: undefined }, true)).toBe(
+      "We've emailed you a new code. Enter the new one.",
+    );
+    expect(signInCodeEntryError({ kind: "codeRequired", notice: "Limit" }, true)).toBe("Limit");
+  });
+
+  test("returns the shared invalid code message so repeated rejection hints work", () => {
+    expect(signInCodeEntryError({ kind: "invalidCode" }, true)).toBe(invalidCodeMessage);
+  });
+
+  test("shows other failures inline", () => {
+    expect(
+      signInCodeEntryError({ kind: "failed", code: undefined, message: "Offline" }, true),
+    ).toBe("Offline");
   });
 });

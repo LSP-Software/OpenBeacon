@@ -29,6 +29,20 @@ const content = {
     ignore:
       "If you didn't ask to reset your recovery phrase, don't enter this code. Change your password in the app, because someone else may be signed in to your account.",
   },
+  "sign-in": {
+    subject: "Your OpenBeacon sign-in code",
+    title: "Your sign-in code",
+    action: "finish signing in",
+    ignore:
+      "If you didn't just try to sign in, don't enter this code. Someone knows your password. Change it in the app in Account → Password and Security, or use Forgot password on the app's sign-in screen.",
+  },
+  "turn-on-sign-in-codes": {
+    subject: "Your OpenBeacon code to turn on sign-in codes",
+    title: "Turn on sign-in codes",
+    action: "turn on sign-in codes",
+    ignore:
+      "If you didn't ask for this, don't enter this code. Change your password in the app, because someone else may be signed in to your account.",
+  },
 } satisfies Record<
   EmailCodePurpose,
   { subject: string; title: string; action: string; ignore: string }

@@ -1,6 +1,7 @@
 import { Alert } from "../lib/alert.ts";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { signInSchema } from "@openbeacon/schemas";
+import { tryCatch } from "@openbeacon/shared";
 import { useQuery } from "@tanstack/react-query";
 import { Link, router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
@@ -17,11 +18,17 @@ import { Input } from "../components/ui/Input.tsx";
 import { Text } from "../components/ui/Text.tsx";
 import { trpc } from "../lib/api.ts";
 import { completeAuthenticatedSessionSetup, isNativeGoogleSignInConfigured } from "../lib/auth.ts";
-import { authClient } from "../lib/auth-client.ts";
-import { emailCodeErrorMessage, emailCodes } from "../lib/emailCodes.ts";
+import {
+  emailCodeErrorMessage,
+  emailCodes,
+  readSignInError,
+  signInCodeEntryError,
+  signInWithPassword,
+} from "../lib/emailCodes.ts";
 import { finishAuthentication } from "../lib/finishAuthentication.ts";
 import { performGoogleAuth } from "../lib/googleAuth.ts";
-import { passwordErrorMessage } from "../lib/passwordErrorMessage.ts";
+
+type PendingSignIn = z.infer<typeof signInSchema> & { notice: string | undefined };
 
 const SignIn = () => {
   const { joinCode, email: emailParam } = useLocalSearchParams<{
@@ -32,9 +39,8 @@ const SignIn = () => {
   const [emailLoading, setEmailLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const { data: providers } = useQuery(trpc.auth.providers.queryOptions());
-  const [unverified, setUnverified] = useState<
-    (z.infer<typeof signInSchema> & { notice: string | undefined }) | null
-  >(null);
+  const [unverified, setUnverified] = useState<PendingSignIn | null>(null);
+  const [signInCode, setSignInCode] = useState<PendingSignIn | null>(null);
 
   const form = useForm<z.infer<typeof signInSchema>>({
     resolver: zodResolver(signInSchema),
@@ -50,42 +56,80 @@ const SignIn = () => {
   const isGoogleEnabled = providers?.google === true && isNativeGoogleSignInConfigured;
   const enteredEmail = form.watch("email");
 
-  const handleLogin = async ({ email, password }: z.infer<typeof signInSchema>) => {
+  const handleLogin = async ({
+    email,
+    password,
+    code,
+  }: z.infer<typeof signInSchema> & { code?: string | undefined }) => {
     setEmailLoading(true);
 
-    const result = await authClient.signIn.email({ email, password });
-    if (result.error?.code === "EMAIL_NOT_VERIFIED") {
-      const requested = await emailCodes.requestEmailVerification(email, password);
+    const result = await tryCatch(signInWithPassword({ email, password, code }));
+    const outcome = readSignInError(result.error ?? result.data.error);
+    if (outcome.kind === "codeRequired") {
       setEmailLoading(false);
-      if (requested.error && requested.error.status !== 429) {
-        Alert.alert("Couldn't send a code", emailCodeErrorMessage(requested.error));
-        return;
-      }
-      setUnverified({
-        email,
-        password,
-        notice: requested.error ? emailCodeErrorMessage(requested.error) : undefined,
-      });
-      return;
+      setSignInCode({ email, password, notice: outcome.notice });
+      return outcome;
     }
-    if (result.error) {
-      Alert.alert("Sign in failed", passwordErrorMessage(result.error, "Please try again."));
+    if (outcome.kind !== "signedIn") {
       setEmailLoading(false);
-      return;
+      return outcome;
     }
 
     const sessionSetupResult = await completeAuthenticatedSessionSetup();
     if (sessionSetupResult.deviceRemoved) {
       setEmailLoading(false);
-      return;
+      return outcome;
     }
     if (sessionSetupResult.error) {
       Alert.alert("Unable to finish sign in", sessionSetupResult.error.message);
       setEmailLoading(false);
-      return;
+      return outcome;
     }
 
     await finishSignIn();
+    return outcome;
+  };
+
+  const askToVerifyEmail = async ({ email, password }: z.infer<typeof signInSchema>) => {
+    setEmailLoading(true);
+    const requested = await emailCodes.requestEmailVerification(email, password);
+    setEmailLoading(false);
+    if (requested.error && requested.error.status !== 429) {
+      Alert.alert("Couldn't send a code", emailCodeErrorMessage(requested.error));
+      return;
+    }
+    setSignInCode(null);
+    setUnverified({
+      email,
+      password,
+      notice: requested.error ? emailCodeErrorMessage(requested.error) : undefined,
+    });
+  };
+
+  const signInWithForm = async (values: z.infer<typeof signInSchema>) => {
+    const outcome = await handleLogin(values);
+    if (outcome.kind === "failed" && outcome.code === "EMAIL_NOT_VERIFIED") {
+      await askToVerifyEmail(values);
+      return;
+    }
+    if (outcome.kind === "wrongPassword" || outcome.kind === "failed") {
+      Alert.alert("Sign in failed", outcome.message);
+    }
+  };
+
+  const continueWithCode = async (pending: PendingSignIn, code?: string) => {
+    const outcome = await handleLogin({ email: pending.email, password: pending.password, code });
+    if (outcome.kind === "wrongPassword") {
+      setSignInCode(null);
+      form.setValue("password", "");
+      Alert.alert("Sign in failed", outcome.message);
+      return undefined;
+    }
+    if (outcome.kind === "failed" && outcome.code === "EMAIL_NOT_VERIFIED") {
+      await askToVerifyEmail(pending);
+      return undefined;
+    }
+    return signInCodeEntryError(outcome, code !== undefined);
   };
 
   const handleGoogleSignIn = async () => {
@@ -106,15 +150,38 @@ const SignIn = () => {
             <AnnouncementBanner />
             <View className="gap-2">
               <Text className="font-bold text-5xl">
-                {unverified ? "Verify your\nemail." : "Welcome\nback."}
+                {unverified
+                  ? "Verify your\nemail."
+                  : signInCode
+                    ? "Check your\nemail."
+                    : "Welcome\nback."}
               </Text>
               <Text className="text-lg text-muted">
                 {unverified
                   ? "Confirm your email address to finish signing in"
-                  : "Sign in to your account"}
+                  : signInCode
+                    ? "Your account asks for a code when you sign in"
+                    : "Sign in to your account"}
               </Text>
             </View>
-            {unverified ? (
+            {signInCode ? (
+              <View className="gap-4" {...formProps}>
+                <EmailCodeEntry
+                  email={signInCode.email}
+                  notice={signInCode.notice}
+                  submitLabel="Sign in"
+                  onSubmit={(code) => continueWithCode(signInCode, code)}
+                  onResend={() => continueWithCode(signInCode)}
+                />
+                <Pressable
+                  className="items-center py-1"
+                  onPress={() => setSignInCode(null)}
+                  accessibilityRole="button"
+                >
+                  <Text className="text-secondary">Back to sign in</Text>
+                </Pressable>
+              </View>
+            ) : unverified ? (
               <View className="gap-4" {...formProps}>
                 <EmailCodeEntry
                   email={unverified.email}
@@ -124,7 +191,7 @@ const SignIn = () => {
                   onSubmit={async (code) => {
                     const result = await emailCodes.verifyEmail(unverified.email, code);
                     if (result.error) return emailCodeErrorMessage(result.error);
-                    await handleLogin(unverified);
+                    await signInWithForm(unverified);
                     setUnverified(null);
                     return undefined;
                   }}
@@ -184,7 +251,7 @@ const SignIn = () => {
                   autoComplete="password"
                   textContentType="password"
                   returnKeyType="done"
-                  onSubmitEditing={isSubmitting ? undefined : form.handleSubmit(handleLogin)}
+                  onSubmitEditing={isSubmitting ? undefined : form.handleSubmit(signInWithForm)}
                 />
                 {providers?.email ? (
                   <Link
@@ -199,7 +266,7 @@ const SignIn = () => {
                     </Pressable>
                   </Link>
                 ) : null}
-                <Button onPress={form.handleSubmit(handleLogin)} disabled={isSubmitting}>
+                <Button onPress={form.handleSubmit(signInWithForm)} disabled={isSubmitting}>
                   <Text>{emailLoading ? "Signing in…" : "Sign In"}</Text>
                 </Button>
               </View>

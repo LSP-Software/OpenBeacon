@@ -24,6 +24,8 @@ export const errorReasons = [
   "EPOCH_NOT_LATEST",
   "EPOCH_ROTATION_PENDING",
   "IMAGE_CHANGED",
+  "SIGN_IN_CODE_REQUIRED",
+  "SIGN_IN_CODES_UNAVAILABLE",
 ] as const;
 
 export type ErrorReason = (typeof errorReasons)[number];

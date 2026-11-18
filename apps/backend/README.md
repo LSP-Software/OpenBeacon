@@ -14,6 +14,8 @@ It listens on http://localhost:3000 and reads the root `.env`. See [Run the app 
 
 For email in development, set `EMAIL_CONSOLE=true` instead of a provider. Each email is printed to the log as one line, such as `[email] to=alice@example.com type=password-reset code=123456`, instead of being sent. It's refused unless `NODE_ENV` is `development` or `test`; `bun run dev` sets `development`.
 
+Turning email off on a server locks accounts with sign-in codes on out of password sign-in until you run `turn-off-sign-in-codes` for each of them. See [Sign-in codes](../../docs/development/sign-in-codes.md).
+
 ## Health checks
 
 - `GET /health` returns the status, backend version and server name (`SERVER_NAME`), plus any announcements showing now. It never touches Redis or waits on PostgreSQL, so the app can always read it. Announcements are loaded from PostgreSQL every 30 seconds in the background.

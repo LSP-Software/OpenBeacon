@@ -6,6 +6,7 @@
     "dev": "NODE_ENV=development bun run --cwd ../.. --env-file=.env --watch apps/scheduled-jobs/src/index.ts",
     "start": "bun run src/index.ts",
     "delete-account": "bun run src/deleteAccount.ts",
+    "turn-off-sign-in-codes": "bun run src/turnOffSignInCodes.ts",
     "typecheck": "bun check",
     "test": "bun --env-file=../../.env.ci --env-file=../../.env test --isolate"
   },

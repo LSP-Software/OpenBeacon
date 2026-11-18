@@ -21,6 +21,7 @@ import { placeSharingRouter } from "./router/group/placeSharingRouter.ts";
 import { placeTransitionsRouter } from "./router/group/placeTransitionsRouter.ts";
 import { mapsRouter } from "./router/mapsRouter.ts";
 import { notificationSettingsRouter } from "./router/notificationSettingsRouter.ts";
+import { signInCodesRouter } from "./router/signInCodesRouter.ts";
 import { createTRPCRouter } from "./trpcRuntime.ts";
 
 export const appRouter = createTRPCRouter({
@@ -47,6 +48,7 @@ export const appRouter = createTRPCRouter({
   placeAlerts: placeAlertsRouter,
   placeSharing: placeSharingRouter,
   placeTransitions: placeTransitionsRouter,
+  signInCodes: signInCodesRouter,
 });
 
 export type AppRouter = typeof appRouter;

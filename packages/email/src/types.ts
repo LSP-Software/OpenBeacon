@@ -34,7 +34,12 @@ export type EmailTransport = {
 };
 
 export type EmailCodePurpose =
-  "sign-up" | "email-verification" | "password-reset" | "recovery-reset";
+  | "sign-up"
+  | "email-verification"
+  | "password-reset"
+  | "recovery-reset"
+  | "sign-in"
+  | "turn-on-sign-in-codes";
 
 export type AlertDevice = {
   name: string;
@@ -49,6 +54,8 @@ export type SecurityAlert =
         | "password-reset"
         | "recovery-phrase-changed"
         | "recovery-phrase-reset"
+        | "sign-in-codes-turned-on"
+        | "sign-in-codes-turned-off"
         | "account-deleted";
     }
   | { type: "other-sessions-signed-out"; device: AlertDevice | null }
@@ -74,6 +81,8 @@ export const securityAlertSettings = {
   "other-sessions-signed-out": "OTHER_SESSIONS_SIGNED_OUT",
   "device-removed": "DEVICE_REMOVED",
   "deletion-scheduled": "DELETION_SCHEDULED",
+  "sign-in-codes-turned-on": null,
+  "sign-in-codes-turned-off": null,
   "account-deleted": null,
   "alerts-turned-off": null,
 } as const satisfies Record<SecurityAlert["type"], TurnedOffNotification["type"] | null>;

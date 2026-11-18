@@ -23,8 +23,9 @@ export const emailCodeTokens = {
   // better-auth's /reset-password spends this token, looking it up by its own prefix.
   "password-reset": { prefix: "reset-password", lifetimeMs: 5 * 60 * 1000 },
   "recovery-reset": { prefix: "recovery-reset-token", lifetimeMs: 15 * 60 * 1000 },
+  "sign-in": { prefix: "sign-in-token", lifetimeMs: 15 * 60 * 1000 },
 } satisfies Record<
-  Exclude<EmailCodePurpose, "email-verification">,
+  Exclude<EmailCodePurpose, "email-verification" | "turn-on-sign-in-codes">,
   { prefix: string; lifetimeMs: number }
 >;
 export const emailCodeRequestLimits = {
@@ -57,7 +58,7 @@ export const createEmailCodes = ({
   now?: () => Date;
 }) => {
   const identifierFor = ({ purpose, subject }: CodeTarget) =>
-    `email-code:${purpose}:${purpose === "recovery-reset" ? subject : normalizeEmail(subject)}`;
+    `email-code:${purpose}:${userIdPurposes.has(purpose) ? subject : normalizeEmail(subject)}`;
 
   const hash = (identifier: string, code: string) =>
     createHmac("sha256", secret).update(`${identifier}:${code}`).digest();
@@ -137,10 +138,9 @@ export const createEmailCodes = ({
       if (!existing) return { valid: false, reason: "invalid" };
       const wrongGuessLimit = {
         namespace: `emailCode.check.${purpose}`,
-        identifier:
-          purpose === "recovery-reset"
-            ? { type: "userId" as const, value: subject }
-            : { type: "email" as const, value: normalizeEmail(subject) },
+        identifier: userIdPurposes.has(purpose)
+          ? { type: "userId" as const, value: subject }
+          : { type: "email" as const, value: normalizeEmail(subject) },
         ...emailCodeWrongGuessLimit,
       };
       return db.$transaction(async (tx) => {
@@ -196,10 +196,16 @@ export const createEmailCodes = ({
     hasToken: async (target: TokenTarget) =>
       (await db.verification.count({ where: tokenWhere(target) })) === 1,
 
+    hasSignInCodes: async (userId: string) =>
+      (await db.user.findUnique({ where: { id: userId }, select: { signInCodes: true } }))
+        ?.signInCodes === true,
+
     consumeToken: async ({ tx = db, ...target }: TokenTarget & { tx?: Prisma.TransactionClient }) =>
       (await tx.verification.deleteMany({ where: tokenWhere(target) })).count === 1,
   };
 };
+
+const userIdPurposes = new Set<EmailCodePurpose>(["recovery-reset", "turn-on-sign-in-codes"]);
 
 export const normalizeEmail = (email: string) => email.trim().toLowerCase();
 

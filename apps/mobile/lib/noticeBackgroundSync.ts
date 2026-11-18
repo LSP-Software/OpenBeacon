@@ -78,6 +78,18 @@ export const describeAccountNotice = (notice: AccountNotices["notices"][number])
         body: "Sign in within 7 days to cancel it.",
         link: accountLink("delete"),
       };
+    case "SIGN_IN_CODES_TURNED_ON":
+      return {
+        title: "Sign-in codes turned on",
+        body: "Signing in on a new phone now also needs a code from your email.",
+        link: accountLink("password"),
+      };
+    case "SIGN_IN_CODES_TURNED_OFF":
+      return {
+        title: "Sign-in codes turned off",
+        body: "Signing in now only needs your password. If this wasn’t you, change your password.",
+        link: accountLink("password"),
+      };
     case "ALERTS_TURNED_OFF": {
       const turnedOff = notice.turnedOff
         .map(({ type, channel }) => `${notificationTypes[type].label} (${channel})`)

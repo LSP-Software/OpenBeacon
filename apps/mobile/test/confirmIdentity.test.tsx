@@ -11,6 +11,15 @@ import { createRoot } from "test-renderer";
 const alerts: string[] = [];
 const events: string[] = [];
 let linkError: Error | null = null;
+const signInResponses: { error: Record<string, unknown> | null }[] = [];
+const signInHeaders: Record<string, string>[] = [];
+const codeEntry: {
+  props: {
+    onSubmit: (code: string) => Promise<string | undefined>;
+    onResend: () => Promise<string | undefined>;
+    notice: string | undefined;
+  } | null;
+} = { props: null };
 const phone: { hasLock: boolean; result: "confirmed" | "noScreenLock" | "lockedOut" | "failed" } = {
   hasLock: true,
   result: "confirmed",
@@ -39,6 +48,12 @@ mock.module("../lib/appLock.ts", () => ({
   },
 }));
 mock.module("../components/LoadingIndicator.tsx", () => ({ LoadingIndicator: () => null }));
+mock.module("../components/EmailCodeEntry.tsx", () => ({
+  EmailCodeEntry: (props: NonNullable<typeof codeEntry.props>) => {
+    codeEntry.props = props;
+    return null;
+  },
+}));
 mock.module("../components/ui/Button.tsx", () => ({
   Button: ({ children, onPress }: { children?: React.ReactNode; onPress?: () => void }) =>
     React.createElement("mock-button", { onPress }, children),
@@ -67,7 +82,13 @@ mock.module("../lib/auth-client.ts", () => ({
       data: { session: { token: "token-2" }, user: { id: "user-1" } },
     }),
     revokeSession: async () => ({}),
-    signIn: { email: async () => ({ data: {}, error: null }) },
+    signIn: {
+      email: async (input: { fetchOptions: { headers: Record<string, string> } }) => {
+        signInHeaders.push(input.fetchOptions.headers);
+        const response = signInResponses.shift() ?? { error: null };
+        return { data: response.error ? null : {}, error: response.error };
+      },
+    },
     signOut: async () => ({}),
     useSession: () => ({
       data: { session: { token: "token-1" }, user: { email: "a@example.com", id: "user-1" } },
@@ -112,6 +133,9 @@ beforeEach(() => {
   alerts.length = 0;
   events.length = 0;
   linkError = null;
+  signInResponses.length = 0;
+  signInHeaders.length = 0;
+  codeEntry.props = null;
   phone.hasLock = true;
   phone.result = "confirmed";
 });
@@ -215,4 +239,78 @@ test("a screen lock removed while confirming falls back to Google", async () => 
   await confirm("google");
 
   expect(events).toEqual(["phoneLock", "google", "confirmed"]);
+});
+
+test("a password that needs a code signs in again with the code and reports wrong codes", async () => {
+  signInResponses.push(
+    { error: { status: 403, code: "SIGN_IN_CODE_REQUIRED", codeSent: true } },
+    { error: { status: 400, code: "INVALID_CODE" } },
+    { error: { status: 403, code: "SIGN_IN_CODE_REQUIRED", codeSent: false } },
+  );
+  const root = createRoot();
+  await act(async () =>
+    root.render(<ConfirmIdentity onConfirmed={() => events.push("confirmed")} />),
+  );
+  const [passwordButton] = root.container.queryAll((item) => item.type === "mock-button");
+  if (!passwordButton) throw new Error("Missing password button");
+  await act(async () => (passwordButton.props as { onPress: () => Promise<void> }).onPress());
+  const entry = () => {
+    if (!codeEntry.props) throw new Error("Missing code entry");
+    return codeEntry.props;
+  };
+
+  let error: string | undefined;
+  await act(async () => {
+    error = await entry().onSubmit("111111");
+  });
+  expect(error).toBe("The code is wrong or has expired. Check it, or send a new code.");
+
+  await act(async () => {
+    error = await entry().onResend();
+  });
+  expect(error).toContain("Use the last code");
+
+  await act(async () => {
+    error = await entry().onSubmit("222222");
+  });
+  expect(error).toBeUndefined();
+  expect(signInHeaders.map((headers) => headers["x-openbeacon-sign-in-code"])).toEqual([
+    undefined,
+    "111111",
+    undefined,
+    "222222",
+  ]);
+  expect(events).toEqual(["confirmed"]);
+  expect(alerts).toEqual([]);
+  await act(async () => root.unmount());
+});
+
+test("a password changed elsewhere while entering a code goes back with an alert", async () => {
+  signInResponses.push(
+    { error: { status: 403, code: "SIGN_IN_CODE_REQUIRED", codeSent: true } },
+    {
+      error: {
+        status: 401,
+        code: "INVALID_EMAIL_OR_PASSWORD",
+        message: "Invalid email or password",
+      },
+    },
+  );
+  const root = createRoot();
+  await act(async () =>
+    root.render(<ConfirmIdentity onConfirmed={() => events.push("confirmed")} />),
+  );
+  const [passwordButton] = root.container.queryAll((item) => item.type === "mock-button");
+  if (!passwordButton) throw new Error("Missing password button");
+  await act(async () => (passwordButton.props as { onPress: () => Promise<void> }).onPress());
+  let error: string | undefined = "unset";
+  await act(async () => {
+    error = await codeEntry.props?.onSubmit("111111");
+  });
+
+  expect(error).toBeUndefined();
+  expect(alerts).toEqual(["Unable to confirm it’s you|Invalid email or password"]);
+  expect(root.container.queryAll((item) => item.type === "mock-button").length).toBe(2);
+  expect(events).toEqual([]);
+  await act(async () => root.unmount());
 });

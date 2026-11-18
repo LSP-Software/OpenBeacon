@@ -21,6 +21,7 @@ import {
 } from "./passwordAttempts.ts";
 import { getPublicUrl } from "./publicUrl.ts";
 import type { SecurityAlerts } from "./securityAlerts.ts";
+import { checkSignInCode } from "./signInCodeGate.ts";
 
 export const clientIpHeader = "x-openbeacon-client-ip";
 
@@ -138,6 +139,17 @@ export const createAuth = ({
       },
       session: {
         create: {
+          before: async (session, context) => {
+            if (context?.path !== "/sign-in/email") return;
+            await checkSignInCode({
+              db,
+              emailCodes,
+              userId: session.userId,
+              context,
+              runInBackground: (task) =>
+                runInBackground ? runInBackground(task) : context.context.runInBackground(task),
+            });
+          },
           after: async (session) => {
             const expired = await db.$transaction(async (tx) => {
               await tx.$queryRaw(
