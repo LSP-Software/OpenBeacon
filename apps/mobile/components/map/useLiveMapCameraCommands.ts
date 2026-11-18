@@ -14,6 +14,7 @@ export const useLiveMapCameraCommands = (cameraRef: RefObject<CameraRef | null>)
     clearReleaseTimer();
     releaseTimerRef.current = setTimeout(() => {
       releaseTimerRef.current = null;
+      // MapLibre keeps the last camera target and replays it when markers update, so an empty stop releases it once the animation ends.
       cameraRef.current?.setStop({ duration: 0 });
     }, animationDurationMs + 50);
   };

@@ -38,9 +38,14 @@ export const useLiveTrackingPositions = ({ groupId }: { groupId?: string } = {})
     const unsubscribe = session.subscribe(() => {
       setTracking({ positions: session.getLivePositions(), status: session.getStatus() });
     });
-    session.setActive(isFocusedRef.current && AppState.currentState === "active");
+    const syncActive = () => {
+      session.setActive(isFocusedRef.current && AppState.currentState === "active");
+    };
+    syncActive();
+    const appStateSubscription = AppState.addEventListener("change", syncActive);
 
     return () => {
+      appStateSubscription.remove();
       unsubscribe();
       session.destroy();
       sessionRef.current = null;
@@ -48,21 +53,7 @@ export const useLiveTrackingPositions = ({ groupId }: { groupId?: string } = {})
   }, [groupId]);
 
   useEffect(() => {
-    const session = sessionRef.current;
-    if (!session) {
-      return;
-    }
-
-    const syncActive = () => {
-      session.setActive(isFocused && AppState.currentState === "active");
-    };
-
-    syncActive();
-    const appStateSubscription = AppState.addEventListener("change", syncActive);
-
-    return () => {
-      appStateSubscription.remove();
-    };
+    sessionRef.current?.setActive(isFocused && AppState.currentState === "active");
   }, [isFocused]);
 
   const dropRemovedDevices = useCallback(

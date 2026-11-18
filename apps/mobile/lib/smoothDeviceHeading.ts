@@ -1,7 +1,7 @@
-export const HEADING_SAMPLE_SMOOTHING_ALPHA = 0.22;
-export const HEADING_CHASE_SPEED = 7;
+const HEADING_SAMPLE_SMOOTHING_ALPHA = 0.22;
+const HEADING_CHASE_SPEED = 7;
 export const HEADING_PUBLISH_INTERVAL_MS = 50;
-export const HEADING_SETTLED_DEGREES = 0.2;
+const HEADING_SETTLED_DEGREES = 0.2;
 
 const normalizeDegrees = (degrees: number) => ((degrees % 360) + 360) % 360;
 

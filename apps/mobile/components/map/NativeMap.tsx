@@ -394,7 +394,7 @@ export const NativeMap = ({
       >
         <ActivityIndicator />
         <Text className="text-center text-tertiary">
-          The server is still preparing the map. It will appear here when it's ready.
+          The server is still preparing the map. It will appear here when it’s ready.
         </Text>
       </View>
     );

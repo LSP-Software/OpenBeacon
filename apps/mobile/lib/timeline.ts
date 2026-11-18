@@ -140,6 +140,47 @@ export const buildTimeline = ({
   };
 };
 
+export const timelinePauseDetail = ({
+  clock,
+  from,
+  name,
+  segment,
+  to,
+}: {
+  clock: (time: number) => string;
+  from: number;
+  name: string;
+  segment: { end: number; start: number };
+  to: number;
+}) => {
+  const fromBefore = segment.start <= from;
+  const toAfter = segment.end >= to;
+  if (fromBefore && toAfter) return `${name} paused`;
+  if (fromBefore) return `${name} paused until ${clock(segment.end)}`;
+  if (toAfter) return `${name} paused from ${clock(segment.start)}`;
+  return `${name} paused from ${clock(segment.start)} to ${clock(segment.end)}`;
+};
+
+export const timelinePlayStart = ({
+  from,
+  located,
+  scrubbed,
+  time,
+  to,
+  today,
+}: {
+  from: number;
+  located: readonly { start: number }[];
+  scrubbed: boolean;
+  time: number;
+  to: number;
+  today: boolean;
+}) => {
+  if (time >= to) return from;
+  if (!today || scrubbed || located.length === 0) return time;
+  return Math.max(from, Math.min(to, ...located.map((segment) => segment.start)));
+};
+
 export const pickPersonDevices = <
   Device extends { deviceId: string; pointCount: number; userId: string },
 >(

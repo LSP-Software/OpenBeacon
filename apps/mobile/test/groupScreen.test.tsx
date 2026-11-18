@@ -431,13 +431,15 @@ test("keeps history unread after a failed load, then marks only displayed activi
   await act(async () => root.unmount());
 
   const hidden = createRoot();
-  await act(async () => hidden.render(<HistoryTab groupId="group-2" active={false} />));
+  await act(async () =>
+    hidden.render(<HistoryTab groupId="group-2" active={false} latestAt={null} />),
+  );
   expect(storedValues.get("groupHistory.seenAt.user-1.group-2")).toBeUndefined();
   isFocused = false;
-  await act(async () => hidden.render(<HistoryTab groupId="group-2" active />));
+  await act(async () => hidden.render(<HistoryTab groupId="group-2" active latestAt={null} />));
   expect(storedValues.get("groupHistory.seenAt.user-1.group-2")).toBeUndefined();
   isFocused = true;
-  await act(async () => hidden.render(<HistoryTab groupId="group-2" active />));
+  await act(async () => hidden.render(<HistoryTab groupId="group-2" active latestAt={null} />));
   expect(storedValues.get("groupHistory.seenAt.user-1.group-2")).toBe(displayedAt.getTime());
   await act(async () => hidden.unmount());
 });

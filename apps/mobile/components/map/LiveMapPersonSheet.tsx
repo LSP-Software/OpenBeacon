@@ -172,7 +172,7 @@ const PersonDeviceRow = ({ device, onPress }: { device: PersonDevice; onPress: (
     : device.unreadable
       ? "Newer location can’t be read"
       : updatedAge === null
-        ? "No location yet"
+        ? "No location sent yet"
         : `${device.isThisDevice ? "Location sent" : "Updated"} ${updatedAge}`;
   const batteryLevel = batteryVisual?.label ?? null;
 

@@ -116,6 +116,34 @@ afterEach(async () => {
 });
 
 describe("LiveMapMarkerPin", () => {
+  test("refreshes the annotation bitmap only when the pin's look changes", async () => {
+    let refreshes = 0;
+    const render = async (hasUnreadableUpdate: boolean) => {
+      await act(async () => {
+        root?.render(
+          <LiveMapMarkerPin
+            hasUnreadableUpdate={hasUnreadableUpdate}
+            image={null}
+            initials="AB"
+            name="Alice"
+            onBitmapContentChange={() => {
+              refreshes += 1;
+            }}
+            ringColor="#fff"
+            timestamp={null}
+          />,
+        );
+      });
+    };
+    root = createRoot();
+    await render(false);
+    await render(false);
+    await render(false);
+    expect(refreshes).toBe(1);
+    await render(true);
+    expect(refreshes).toBe(2);
+  });
+
   test("renders equal segments for two through nine distinct colors", async () => {
     root = createRoot();
     for (let count = 2; count <= 9; count++) {

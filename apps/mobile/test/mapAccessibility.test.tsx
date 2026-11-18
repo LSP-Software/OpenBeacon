@@ -9,6 +9,7 @@ import type { LiveMapMarker } from "../lib/buildLiveMapMarkers.ts";
 
 const Passthrough = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
 mock.module("react-native", () => ({
+  AppState: { currentState: "active", addEventListener: () => ({ remove: () => {} }) },
   Platform: { OS: "android" },
   Pressable: ({
     accessibilityLabel,
@@ -104,7 +105,7 @@ const marker = (overrides: Partial<LiveMapMarker>): LiveMapMarker => ({
   otherSharedGroupNames: [],
   ringColor: "red",
   sourceGroupId: "group-1",
-  timestamp: "2026-11-11T12:00:00.000Z",
+  timestamp: new Date().toISOString(),
   userId: "alice",
   ...overrides,
 });
@@ -115,6 +116,11 @@ test.each([
   [
     { deviceName: "Work phone", mergedDeviceIds: ["device-1", "device-2"] },
     "Alice, 2 devices here",
+  ],
+  [{ timestamp: "2026-11-11T12:00:00.000Z" }, "Alice, Location is over 10 minutes old"],
+  [
+    { deviceName: "Work phone", unreadableGroup: { id: "group-1", name: "Family" } },
+    "Alice, Work phone, Newer location can’t be read",
   ],
 ] satisfies [Partial<LiveMapMarker>, string][])(
   "map pin %p is announced as %p",

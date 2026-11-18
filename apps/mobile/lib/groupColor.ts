@@ -64,6 +64,7 @@ export const setGroupColor = (groupId: string, color: GroupColor) => {
   if (!isGroupColor(color)) {
     throw new Error("Group colour must be chosen from the palette");
   }
+  if (storage.getString(storageKey(groupId)) === color) return;
   storage.set(storageKey(groupId), color);
   notifyListeners();
 };

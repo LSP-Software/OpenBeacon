@@ -110,6 +110,28 @@ export const timelineRouteGradient = ({
 
 const MAX_ARROWS = 600;
 
+type ArrowViewport = {
+  bounds: [west: number, south: number, east: number, north: number];
+  zoom: number;
+};
+
+export const timelineArrowViewport = (current: ArrowViewport | null, next: ArrowViewport) => {
+  if (!current || Math.round(current.zoom * 4) !== Math.round(next.zoom * 4)) return next;
+  const [west, south, east, north] = current.bounds;
+  const topLeft = projected([west, north]);
+  const bottomRight = projected([east, south]);
+  const padX = (bottomRight.x - topLeft.x) / 2;
+  const padY = (bottomRight.y - topLeft.y) / 2;
+  const nextTopLeft = projected([next.bounds[0], next.bounds[3]]);
+  const nextBottomRight = projected([next.bounds[2], next.bounds[1]]);
+  const inside =
+    nextTopLeft.x >= topLeft.x - padX &&
+    nextBottomRight.x <= bottomRight.x + padX &&
+    nextTopLeft.y >= topLeft.y - padY &&
+    nextBottomRight.y <= bottomRight.y + padY;
+  return inside ? current : next;
+};
+
 export const timelineArrows = ({
   runs,
   sizePx,
@@ -119,7 +141,7 @@ export const timelineArrows = ({
   runs: ReadonlyArray<readonly Coordinate[]>;
   sizePx: number;
   spacingPx: number;
-  viewport: { bounds: [west: number, south: number, east: number, north: number]; zoom: number };
+  viewport: ArrowViewport;
 }) => {
   const worldSize = 512 * 2 ** viewport.zoom;
   const toPixel = (coordinate: Coordinate) => {
@@ -231,4 +253,23 @@ export const timelineLaneRuns = (segments: readonly TimelineSegment[]) => {
     runs.push({ end, kind, start });
   }
   return runs;
+};
+
+export const timelineFitKeys = ({
+  dayKey,
+  loaded,
+  personId,
+  ready,
+  routeIds,
+  shownUserIds,
+}: {
+  dayKey: string;
+  loaded: boolean;
+  personId: string | null;
+  ready: boolean;
+  routeIds: readonly string[];
+  shownUserIds: readonly string[];
+}) => {
+  const view = JSON.stringify([dayKey, personId, personId ? routeIds : shownUserIds, ready]);
+  return { key: JSON.stringify([view, routeIds.length > 0, loaded]), view };
 };

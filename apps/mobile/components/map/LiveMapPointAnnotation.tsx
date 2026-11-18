@@ -1,6 +1,7 @@
 import { Marker, ViewAnnotation, type ViewAnnotationRef } from "@maplibre/maplibre-react-native";
 import { useEffect, useRef } from "react";
 import { type GestureResponderEvent, Platform, Pressable } from "react-native";
+import { useLocationStale } from "../../hooks/useLocationStale.ts";
 import { useSelfDeviceHeading } from "../../hooks/useSelfDeviceHeading.ts";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
 import type { LiveMapPinOffset } from "../../lib/liveMapPinGroups.ts";
@@ -50,8 +51,9 @@ export const LiveMapPointAnnotation = ({
   onSelected: (event?: GestureResponderEvent) => void;
 }) => {
   const annotationRef = useRef<ViewAnnotationRef>(null);
+  const isStale = useLocationStale(marker.timestamp);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Android PointAnnotation bitmaps need an explicit refresh when chrome or heading changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: iOS ViewAnnotation bitmaps need an explicit refresh when chrome or heading changes
   useEffect(() => {
     annotationRef.current?.refresh();
   }, [
@@ -72,13 +74,19 @@ export const LiveMapPointAnnotation = ({
         <Pressable
           onPress={onSelected}
           accessibilityRole="button"
-          accessibilityLabel={
-            marker.mergedDeviceIds && marker.mergedDeviceIds.length > 1
-              ? `${marker.name}, ${marker.mergedDeviceIds.length} devices here`
+          accessibilityLabel={[
+            marker.name,
+            ...(marker.mergedDeviceIds && marker.mergedDeviceIds.length > 1
+              ? [`${marker.mergedDeviceIds.length} devices here`]
               : marker.deviceName
-                ? `${marker.name}, ${marker.deviceName}`
-                : marker.name
-          }
+                ? [marker.deviceName]
+                : []),
+            ...(marker.unreadableGroup !== undefined
+              ? ["Newer location can’t be read"]
+              : isStale
+                ? ["Location is over 10 minutes old"]
+                : []),
+          ].join(", ")}
           style={{ alignSelf: "flex-start" }}
         >
           <LiveMapPinMotion arrival={arrival} gatherTo={gatherTo}>

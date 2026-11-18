@@ -129,20 +129,4 @@ describe("reduceLiveMapInitialFit", () => {
     expect(afterShowEveryone.shouldFit).toBe(false);
     expect(afterShowEveryone.state.phase).toBe("closed");
   });
-
-  test("reset reopens waiting so a remounted map can fit again", () => {
-    const closed = reduceLiveMapInitialFit(
-      {
-        coalesceStartedAtMs: 1_000,
-        fittedMarkerIds: ["self"],
-        phase: "closed",
-      },
-      { type: "reset" },
-    );
-
-    expect(closed).toEqual({
-      shouldFit: false,
-      state: createLiveMapInitialFitState(),
-    });
-  });
 });

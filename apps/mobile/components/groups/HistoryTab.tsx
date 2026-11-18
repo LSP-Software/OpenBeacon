@@ -52,7 +52,15 @@ const filters = [
   { label: "Places", category: "places", empty: "No place changes in the last 14 days." },
 ] as const;
 
-const HistoryTab = ({ groupId, active }: { groupId: string; active: boolean }) => {
+const HistoryTab = ({
+  active,
+  groupId,
+  latestAt,
+}: {
+  active: boolean;
+  groupId: string;
+  latestAt: Date | null;
+}) => {
   const isFocused = useIsFocused();
   const { data: session } = authClient.useSession();
   const userId = session?.user.id;
@@ -75,14 +83,20 @@ const HistoryTab = ({ groupId, active }: { groupId: string; active: boolean }) =
     subscribed: isFocused,
   });
 
+  const loadedItems = history.data?.pages.flatMap((page) => page.items) ?? [];
+  const loadedLatestAt =
+    loadedItems.find(
+      (item) => item.kind === "group" && (item.actor?.userId ?? item.subject?.userId) !== userId,
+    )?.at ?? null;
+  const newestLoadedAt = loadedItems[0]?.at ?? null;
   const displayedLatestAt =
     category === null
-      ? (history.data?.pages
-          .flatMap((page) => page.items)
-          .find(
-            (item) =>
-              item.kind === "group" && (item.actor?.userId ?? item.subject?.userId) !== userId,
-          )?.at ?? null)
+      ? latestAt &&
+        newestLoadedAt &&
+        latestAt <= newestLoadedAt &&
+        (!loadedLatestAt || latestAt > loadedLatestAt)
+        ? latestAt
+        : loadedLatestAt
       : null;
 
   useEffect(() => {
@@ -177,7 +191,7 @@ const HistoryTab = ({ groupId, active }: { groupId: string; active: boolean }) =
             loading={history.isFetching}
             onPress={() => void history.refetch()}
           >
-            <Text>Retry</Text>
+            <Text>Try again</Text>
           </Button>
         </View>
       ) : null}

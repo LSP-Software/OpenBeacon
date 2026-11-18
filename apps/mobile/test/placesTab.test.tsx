@@ -14,14 +14,15 @@ let sharing = { enabled: true, arrivalsOff: [] as { userId: string; deviceId: st
 let sharingFailed = false;
 let placesFailedToRefresh = false;
 let notificationRequests = 0;
+let pendingSharingChange: { isPending: true; variables: { enabled: boolean } } | null = null;
 const storedFlags = new Set<string>();
 const passthrough = ({ children }: { children?: ReactNode }) =>
   React.createElement(React.Fragment, null, children);
 
 mock.module("@tanstack/react-query", () => ({
   skipToken: Symbol("skipToken"),
-  useMutation: () => ({ isPending: false, mutateAsync: async () => ({}) }),
-  useQueryClient: () => ({ invalidateQueries: async () => {} }),
+  useMutation: () => pendingSharingChange ?? { isPending: false, mutateAsync: async () => ({}) },
+  useQueryClient: () => ({ invalidateQueries: async () => {}, setQueryData: () => {} }),
   useQuery: (options: { queryKey?: unknown[]; select?: (groups: unknown[]) => unknown }) => {
     const key = options.queryKey?.[0];
     if (key === "groupPlaces") {
@@ -158,6 +159,7 @@ beforeEach(() => {
   sharingFailed = false;
   placesFailedToRefresh = false;
   notificationRequests = 0;
+  pendingSharingChange = null;
   storedFlags.clear();
   places = [place({}), place({ id: "club", name: "Football club", emoji: "⚽", geometry: null })];
 });
@@ -226,4 +228,9 @@ test("a failed background refresh keeps the loaded places", async () => {
   const text = await render();
   expect(text).toContain("Home");
   expect(text).not.toContain("Couldn’t load places");
+});
+
+test("the arrivals switch shows the new value while the change is being saved", async () => {
+  pendingSharingChange = { isPending: true, variables: { enabled: false } };
+  expect(await render()).toContain("switch:off");
 });

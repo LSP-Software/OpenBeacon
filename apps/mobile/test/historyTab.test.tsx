@@ -41,8 +41,12 @@ mock.module("../lib/api.ts", () => ({ trpcClient: {} }));
 mock.module("../lib/auth-client.ts", () => ({
   authClient: { useSession: () => ({ data: { user: { id: "user-1" } } }) },
 }));
+const stored = new Map<string, number>();
 mock.module("../lib/storage.ts", () => ({
-  storage: { getNumber: () => undefined, set: () => {} },
+  storage: {
+    getNumber: (key: string) => stored.get(key),
+    set: (key: string, value: number) => stored.set(key, value),
+  },
 }));
 mock.module("../components/LoadingIndicator.tsx", () => ({ LoadingIndicator: () => null }));
 mock.module("../components/ui/Button.tsx", () => ({
@@ -68,9 +72,9 @@ const event = (type: string, id: string) => ({
   subject: { userId: "user-3", name: "Alex" },
 });
 
-const render = async () => {
+const render = async (latestAt: Date | null = null) => {
   const root = createRoot();
-  await act(async () => root.render(<HistoryTab groupId="group-1" active />));
+  await act(async () => root.render(<HistoryTab groupId="group-1" active latestAt={latestAt} />));
   const text = JSON.stringify(root.container.children);
   await act(async () => root.unmount());
   return text;
@@ -89,4 +93,23 @@ test("a day holding only events this build doesn't know shows the empty message"
   items = [event("SEATS_CHANGED", "unknown")];
 
   expect(await render()).toContain("Nothing has happened in the last 14 days.");
+});
+
+test("opening History clears the dot even when the newest group event is beyond the first page", async () => {
+  stored.clear();
+  const joinedAt = new Date("2026-11-10T09:00:00Z");
+  items = [
+    {
+      kind: "place",
+      id: "transition",
+      at: new Date("2026-11-17T09:00:00Z"),
+      type: "ARRIVED",
+      actor: { userId: "user-2", name: "Sam" },
+      place: { id: "place-1", name: "Home", emoji: null },
+    },
+  ];
+
+  await render(joinedAt);
+
+  expect(stored.get("groupHistory.seenAt.user-1.group-1")).toBe(joinedAt.getTime());
 });

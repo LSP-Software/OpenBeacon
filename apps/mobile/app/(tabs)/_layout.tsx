@@ -13,7 +13,7 @@ import { authClient } from "../../lib/auth-client.ts";
 import { groupColorSyncQueryOptions } from "../../lib/groupColorSync.ts";
 import { checkImageKeys } from "../../lib/imageKeySelfCheck.ts";
 
-export default function TabsLayout() {
+const TabsLayout = () => {
   const { data: session, isPending } = authClient.useSession();
   useQuery(groupColorSyncQueryOptions(session?.user.id));
   const { data: providers } = useQuery(trpc.auth.providers.queryOptions());
@@ -97,4 +97,6 @@ export default function TabsLayout() {
       <HistoryShareNotice userId={session.user.id} />
     </>
   );
-}
+};
+
+export default TabsLayout;

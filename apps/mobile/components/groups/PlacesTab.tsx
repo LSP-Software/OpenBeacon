@@ -173,13 +173,21 @@ const PlacesTab = ({
         <Switch
           accessibilityLabel="Share arrivals and departures"
           disabled={sharing.data === undefined || setSharing.isPending}
-          value={sharing.data?.enabled ?? true}
+          value={
+            setSharing.isPending && setSharing.variables
+              ? setSharing.variables.enabled
+              : (sharing.data?.enabled ?? true)
+          }
           onValueChange={async (enabled) => {
             const result = await tryCatch(setSharing.mutateAsync({ groupId, enabled }));
             if (result.error) {
               Alert.alert("Unable to change this setting", userMessage(result.error));
               return;
             }
+            queryClient.setQueryData(
+              sharingQueryOptions.queryKey,
+              (current) => current && { ...current, enabled },
+            );
             await queryClient.invalidateQueries({ queryKey: sharingQueryOptions.queryKey });
             if (userId) {
               const synced = await tryCatch(

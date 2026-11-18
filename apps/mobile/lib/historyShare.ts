@@ -45,6 +45,24 @@ export const historyShareNote = (name: string | null, share: HistoryShare) => {
   return name === null ? `You share ${period}` : `${name} shares ${period}`;
 };
 
+export const timelineEmptyLines = ({
+  groupName,
+  notes,
+  personSelected,
+}: {
+  groupName: string;
+  notes: readonly string[];
+  personSelected: boolean;
+}) => {
+  if (personSelected && notes.length > 0) return notes;
+  return [
+    personSelected
+      ? "No location history for this person in this group yet."
+      : `No location history in ${groupName} yet.`,
+    ...notes,
+  ];
+};
+
 export const groupHistoryShare = (setting: HistoryShareSetting, groupId: string) => {
   const override = setting.groups.find((group) => group.groupId === groupId)?.historyShare ?? null;
   return { override, share: resolveHistoryShare({ account: setting.account, group: override }) };

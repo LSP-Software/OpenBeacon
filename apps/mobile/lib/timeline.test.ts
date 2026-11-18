@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
+  timelinePauseDetail,
+  timelinePlayStart,
   buildTimeline,
   pickPersonDevices,
   timelineDayStats,
@@ -449,5 +451,38 @@ describe("timelineDayStats", () => {
       point({ streamId: "stream-2", stayUntil: at(11), time: at(10, 30) }),
     ]);
     expect(timelineDayStats({ places: [], segments: apart }).stops).toHaveLength(2);
+  });
+});
+
+describe("timelinePlayStart", () => {
+  const base = { from: 0, located: [{ start: 7_000 }, { start: 9_000 }], to: 20_000 };
+
+  test("today plays from the first location until the user has scrubbed", () => {
+    expect(timelinePlayStart({ ...base, scrubbed: false, time: 19_000, today: true })).toBe(7_000);
+    expect(timelinePlayStart({ ...base, scrubbed: true, time: 19_000, today: true })).toBe(19_000);
+  });
+
+  test("a finished play rewinds to the start, and past days keep their time", () => {
+    expect(timelinePlayStart({ ...base, scrubbed: true, time: 20_000, today: false })).toBe(0);
+    expect(timelinePlayStart({ ...base, scrubbed: false, time: 7_000, today: false })).toBe(7_000);
+    expect(
+      timelinePlayStart({ ...base, located: [], scrubbed: false, time: 19_000, today: true }),
+    ).toBe(19_000);
+  });
+});
+
+describe("timelinePauseDetail", () => {
+  const clock = (time: number) => `t${time}`;
+  const pause = (start: number, end: number) =>
+    timelinePauseDetail({ clock, from: 0, name: "Alice", segment: { end, start }, to: 100 });
+
+  test("a pause that began before the day says only when it ended", () => {
+    expect(pause(0, 40)).toBe("Alice paused until t40");
+  });
+
+  test("a pause inside the day gives both times, and one running past the end gives its start", () => {
+    expect(pause(10, 40)).toBe("Alice paused from t10 to t40");
+    expect(pause(60, 100)).toBe("Alice paused from t60");
+    expect(pause(0, 100)).toBe("Alice paused");
   });
 });

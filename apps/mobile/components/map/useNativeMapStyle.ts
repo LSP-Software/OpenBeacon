@@ -280,7 +280,6 @@ export const useNativeMapStyle = () => {
     showSymbols,
     symbolLayerIds,
     showRecoverableError: showRecoverableError || forceRefreshSignedPmtilesUrlMutation.isPaused,
-    isLoading: signedPmtilesUrlQuery.isLoading,
     isError: signedPmtilesUrlQuery.isError,
     isFetching: signedPmtilesUrlQuery.isFetching,
     isOffline: signedPmtilesUrlQuery.isPaused,

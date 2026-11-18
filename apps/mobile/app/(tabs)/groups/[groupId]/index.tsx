@@ -239,7 +239,13 @@ const GroupBody = ({ groupId, initialTab }: { groupId: string; initialTab: Group
               }
 
               if (tabValue === "history") {
-                return <HistoryTab groupId={groupId} active={value === "history"} />;
+                return (
+                  <HistoryTab
+                    active={value === "history"}
+                    groupId={groupId}
+                    latestAt={historyLatestAt}
+                  />
+                );
               }
 
               return <SettingsTab groupId={groupId} />;

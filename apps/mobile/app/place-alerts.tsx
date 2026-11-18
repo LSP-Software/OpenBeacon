@@ -26,7 +26,8 @@ const PlaceAlertsScreen = () => {
   const isFocused = useIsFocused();
   const { data: session } = authClient.useSession();
   const userId = session?.user.id;
-  const { group } = useCachedGroup(groupId);
+  const cachedGroup = useCachedGroup(groupId);
+  const { group } = cachedGroup;
   const places = useQuery({ ...groupPlacesQueryOptions(groupId, userId), subscribed: isFocused });
   const memberName = useMemberNames(groupId);
   const { mutes, setMute } = usePlaceAlertMutes(groupId);
@@ -48,7 +49,16 @@ const PlaceAlertsScreen = () => {
           Everyone else still gets theirs.
         </Text>
 
-        {(places.isError && !places.data) || (mutes.isError && !mutes.data) ? (
+        {cachedGroup.isMissing ? (
+          <Text>This group isn’t available on this phone.</Text>
+        ) : cachedGroup.isError ? (
+          <View className="gap-3">
+            <Text>Couldn’t load your groups. Check your connection and try again.</Text>
+            <Button variant="secondary" onPress={() => void cachedGroup.refetch()}>
+              <Text>Try again</Text>
+            </Button>
+          </View>
+        ) : (places.isError && !places.data) || (mutes.isError && !mutes.data) ? (
           <View className="gap-3">
             <Text>Couldn’t load your alerts. Check your connection and try again.</Text>
             <Button

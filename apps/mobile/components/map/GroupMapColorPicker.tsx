@@ -26,7 +26,7 @@ export const GroupMapColorPicker = ({ groupId }: { groupId: string }) => {
       <View className="gap-1">
         <Text className="text-foreground font-medium">Map marker colour</Text>
         <Text className="text-tertiary text-sm">
-          Used for this group's ring on the live map. Only you see this colour.
+          Used for this group’s ring on the live map. Only you see this colour.
         </Text>
       </View>
       {sync.isError ? (

@@ -51,7 +51,12 @@ const PlaceScreen = () => {
   const router = useRouter();
   const { data: session } = authClient.useSession();
   const userId = session?.user.id;
-  const { group, isPending: groupPending } = useCachedGroup(groupId);
+  const {
+    group,
+    isError: groupError,
+    isPending: groupPending,
+    refetch: refetchGroup,
+  } = useCachedGroup(groupId);
   const places = useQuery(groupPlacesQueryOptions(groupId, userId));
   const [revision, setRevision] = useState(0);
   const [closing, setClosing] = useState(false);
@@ -73,23 +78,34 @@ const PlaceScreen = () => {
     );
   }
 
-  const problem = !group
-    ? "This group isn’t available on this phone."
-    : role !== "OWNER" && role !== "ADMIN"
-      ? "Only owners and admins can add or change places."
-      : placeId && places.isError && !places.data
-        ? "Couldn’t load this place. Check your connection and try again."
-        : placeId && !place
-          ? "This place has been deleted."
-          : place && !place.geometry
-            ? "This place is still syncing to this phone. Try again in a few minutes."
-            : null;
+  const placeError = !!placeId && places.isError && !places.data;
+  const problem = groupError
+    ? "Couldn’t load your groups. Check your connection and try again."
+    : !group
+      ? "This group isn’t available on this phone."
+      : role !== "OWNER" && role !== "ADMIN"
+        ? "Only owners and admins can add or change places."
+        : placeError
+          ? "Couldn’t load this place. Check your connection and try again."
+          : placeId && !place
+            ? "This place has been deleted."
+            : place && !place.geometry
+              ? "This place is still syncing to this phone. Try again in a few minutes."
+              : null;
 
   if ((problem && !closing) || !group) {
     return (
       <View className="flex-1 items-center justify-center gap-4 bg-background px-8">
         <Text className="text-center text-foreground">{problem}</Text>
-        <Button variant="secondary" onPress={close}>
+        {groupError || placeError ? (
+          <Button
+            variant="secondary"
+            onPress={() => void (groupError ? refetchGroup() : places.refetch())}
+          >
+            <Text>Try again</Text>
+          </Button>
+        ) : null}
+        <Button variant={groupError || placeError ? "ghost" : "secondary"} onPress={close}>
           <Text>Go back</Text>
         </Button>
       </View>
@@ -269,7 +285,7 @@ const PlaceEditor = ({
         {map.isMapNotReady ? (
           <>
             <Text className="text-center text-tertiary">
-              The server is still preparing the map. You can add places when it's ready.
+              The server is still preparing the map. You can add places when it’s ready.
             </Text>
             <Button variant="secondary" onPress={map.retryUrl}>
               <Text>Try again</Text>

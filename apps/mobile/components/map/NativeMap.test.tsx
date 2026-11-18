@@ -2216,7 +2216,8 @@ describe("NativeMap over a fake MapLibre", () => {
     const pressMarker = async (name: string) => {
       const marker = root?.container.queryAll(
         (instance) =>
-          instance.type === "pressable" && instance.props["accessibilityLabel"] === name,
+          instance.type === "pressable" &&
+          String(instance.props["accessibilityLabel"]).split(", ")[0] === name,
       )[0];
       if (!marker) throw new Error(`Missing marker ${name}`);
       await act(async () =>
