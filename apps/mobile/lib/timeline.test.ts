@@ -275,6 +275,42 @@ describe("buildTimeline", () => {
     expect(cal?.segments).toEqual([]);
   });
 
+  test("a first location within 10 minutes of the start isn't shown as no location", () => {
+    expect(kinds([point({ time: at(0, 0.5) }), point({ time: at(0, 2) })]).slice(0, 2)).toEqual([
+      ["moving", 0.5, 2],
+      ["noLocation", 2, 1440],
+    ]);
+    expect(kinds([point({ time: at(0, 11) }), point({ time: at(0, 12) })])[0]).toEqual([
+      "noLocation",
+      0,
+      11,
+    ]);
+  });
+
+  test("a night at home split into hourly parts plays as one stop from the start of the window", () => {
+    const home = { latitude: 51.5, longitude: -0.12 };
+    const parts = [17, 18, 19].map((hour) =>
+      point({ ...home, stayUntil: at(hour + 1), streamId: `stay-${hour}`, time: at(hour) }),
+    );
+    const timeline = buildTimeline({
+      day,
+      devices: [{ ...device(parts), userId: "sam" }],
+      joinStart: null,
+      now: at(20),
+      senders: [{ userId: "sam", firstHour: at(17) / HOUR_MS }],
+      windowStart: dayStart - 14 * 24 * HOUR_MS,
+    });
+    const segments = timeline.devices[0]?.segments ?? [];
+    expect(segments.map(({ kind, start }) => [kind, (start - dayStart) / MINUTE_MS])).toEqual([
+      ["stay", 17 * 60],
+      ["stay", 18 * 60],
+      ["stay", 19 * 60],
+    ]);
+    expect(timelineDayStats({ places: [], segments }).stops).toEqual([
+      { end: at(20), placeId: null, position: { accuracy: 5, ...home }, start: at(17) },
+    ]);
+  });
+
   test("counts only points timed inside the day", () => {
     const timeline = buildTimeline({
       day,

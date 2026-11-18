@@ -89,7 +89,7 @@ check(
   "stay point IDs are stable and 8 bytes"
 )
 
-let filterStart: Int64 = 1_783_968_300_000
+let filterStart: Int64 = 1_783_965_600_000
 let northMeters = { (north: Double) in 51.5 + north / 111_195.0 }
 let eastMeters = { (east: Double) in -0.1 + east / (111_195.0 * cos(51.5 * Double.pi / 180)) }
 let historyFix = { (time: Int64, east: Double, north: Double, speed: Double) in
@@ -131,6 +131,12 @@ check(zip(stays, stays.dropFirst()).allSatisfy { $1.stayUntil! > $0.stayUntil! }
 check(stays.last?.stayUntil == walkOut[1].timestampMillis, "leaving closes the stay once the phone is clearly outside")
 check(stayRecords.last?.stayUntil == nil && stayRecords.last!.fix.timestampMillis > walkOut[1].timestampMillis, "the route resumes after leaving")
 check(PlaceDwellDetector.distanceMeters(stays.last!.fix.latitude, stays.last!.fix.longitude, northMeters(0), eastMeters(70)) < 5, "the stay is placed at the average position")
+
+let longStay = (0..<30).map { historyFix(filterStart + 40 * 60_000 + Int64($0) * 300_000, jitterMeters($0), jitterMeters($0 + 3), 0) }
+let longStayParts = Dictionary(grouping: runFilter(HistoryFilter(), longStay).filter { $0.stayUntil != nil }, by: \.fix.timestampMillis)
+  .mapValues { $0.last! }.sorted { $0.key < $1.key }.map(\.value)
+check(longStayParts.map(\.fix.timestampMillis) == [filterStart + 40 * 60_000, filterStart + 3_600_000, filterStart + 7_200_000, filterStart + 10_800_000], "a long stay is split at each UTC hour")
+check(longStayParts.dropLast().map(\.stayUntil) == [filterStart + 3_600_000, filterStart + 7_200_000, filterStart + 10_800_000], "each part of a stay ends at the hour the next one starts")
 
 let silent = track(0..<20) { (jitterMeters($0), jitterMeters($0 + 3), 0) }.map { fix -> HistoryFix in
   var spaced = fix

@@ -105,6 +105,29 @@ final class HistoryFilter {
     let gap = fix.timestampMillis - current.latest.timestampMillis > settings.stayGapMs
     if !gap && distance - (fix.accuracyMeters ?? 0) <= settings.stayRadiusMeters {
       leaving = nil
+      let hourStart = fix.timestampMillis - ((fix.timestampMillis % 3_600_000) + 3_600_000) % 3_600_000
+      if var arrivedAt = current.arrival, arrivedAt.timestampMillis < hourStart {
+        var closing = current.record()
+        closing?.stayUntil = hourStart
+        let closed = closing != nil && takeAllowance()
+        arrivedAt.timestampMillis = hourStart
+        var opened = Stay(
+          arrival: arrivedAt,
+          latest: fix,
+          latitudeSum: current.latitudeSum + fix.latitude,
+          longitudeSum: current.longitudeSum + fix.longitude,
+          count: current.count + 1,
+          sentUntil: nil
+        )
+        let closedRecords = closed ? [closing].compactMap { $0 } : []
+        guard takeAllowance() else {
+          stay = opened
+          return closedRecords
+        }
+        opened.sentUntil = fix.timestampMillis
+        stay = opened
+        return closedRecords + [opened.record()].compactMap { $0 }
+      }
       let arrival = current.arrival ?? fix
       var next = current
       next.arrival = arrival

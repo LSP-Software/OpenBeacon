@@ -117,6 +117,26 @@ class HistoryFilter(
     val gap = fix.timestampMillis - current.latest.timestampMillis > settings.stayGapMs
     if (!gap && distance - (fix.accuracyMeters ?: 0.0) <= settings.stayRadiusMeters) {
       leaving = null
+      val segmentStart = current.arrival?.timestampMillis
+      val hourStart = fix.timestampMillis.floorDiv(HOUR_MS) * HOUR_MS
+      if (segmentStart != null && segmentStart < hourStart) {
+        val closing = current.record()?.copy(stayUntil = hourStart)
+        val closed = closing != null && takeAllowance()
+        val opened = Stay(
+          arrival = current.arrival.copy(timestampMillis = hourStart, fixId = null),
+          latest = fix,
+          latitudeSum = current.latitudeSum + fix.latitude,
+          longitudeSum = current.longitudeSum + fix.longitude,
+          count = current.count + 1,
+          sentUntil = null,
+        )
+        if (!takeAllowance()) {
+          stay = opened
+          return listOfNotNull(closing?.takeIf { closed })
+        }
+        stay = opened.copy(sentUntil = fix.timestampMillis)
+        return listOfNotNull(closing?.takeIf { closed }, opened.record())
+      }
       val arrival = current.arrival ?: fix
       val next = current.copy(
         arrival = arrival,
@@ -233,6 +253,10 @@ class HistoryFilter(
     lastKept = fix
     pending.clear()
     return records + HistoryRecord(fix)
+  }
+
+  private companion object {
+    const val HOUR_MS = 3_600_000L
   }
 
   private fun dropRoute() {

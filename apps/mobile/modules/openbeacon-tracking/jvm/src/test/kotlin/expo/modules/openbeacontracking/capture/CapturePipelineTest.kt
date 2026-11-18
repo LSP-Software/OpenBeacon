@@ -311,7 +311,7 @@ class CapturePipelineTest {
   }
 
   @Test
-  fun historyRowsCarryTheUtcHourTheyWereRecordedInAndAStayKeepsItsArrivalHour() {
+  fun historyRowsCarryTheUtcHourTheyWereRecordedInAndALongStayIsSplitAtTheHour() {
     val keys = InMemoryEpochKeyStore()
     keys.replaceAll(listOf(ProvisionedEpochKey("group_a", "epoch_a", ByteArray(32), "device_1", "trackingPoint")))
     val queue = InMemoryCiphertextQueue()
@@ -329,10 +329,13 @@ class CapturePipelineTest {
     val points = rows.filter { it.role == CiphertextQueueRow.ROLE_POINT }
     assertEquals(points.map { (decrypt(it).first / hour).toInt() }, points.map { it.capturedHour })
     assertTrue(points.mapNotNull { it.capturedHour }.toSet().size == 2)
-    val stay = rows.single { it.role == CiphertextQueueRow.ROLE_STAY }
-    val (arrivedAt, stayUntil) = decrypt(stay)
-    assertTrue(stayUntil!! / hour > arrivedAt / hour)
-    assertEquals((arrivedAt / hour).toInt(), stay.capturedHour)
+    val stays = rows.filter { it.role == CiphertextQueueRow.ROLE_STAY }.map { it to decrypt(it) }
+    assertEquals(2, stays.size)
+    val (before, after) = stays
+    assertEquals(after.second.first, before.second.second)
+    assertEquals(0L, after.second.first % hour)
+    assertTrue(stays.all { (row, times) -> row.capturedHour == (times.first / hour).toInt() })
+    assertTrue(after.first.capturedHour!! > before.first.capturedHour!!)
     assertEquals(listOf<Int?>(null), rows.filter { it.role == CiphertextQueueRow.ROLE_LIVE }.map { it.capturedHour })
   }
 

@@ -11,6 +11,7 @@ import type {
 } from "./timelineTypes.ts";
 
 export const SAME_STOP_METERS = 100;
+const NO_LOCATION_AFTER_MS = 10 * 60_000;
 
 const positionOf = ({ accuracy, latitude, longitude }: TimelinePoint): TimelinePosition => ({
   accuracy,
@@ -44,7 +45,7 @@ const deviceSegments = (unsorted: readonly TimelinePoint[]) => {
     };
     if (next.revisionPrefix !== point.revisionPrefix) {
       segments.push({ kind: "pause", ...gap });
-    } else if (next.time - coveredUntil > 10 * 60_000) {
+    } else if (next.time - coveredUntil > NO_LOCATION_AFTER_MS) {
       segments.push({ kind: "noLocation", start: gap.start, end: gap.end });
     } else {
       segments.push({ kind: "moving", ...gap });
@@ -92,7 +93,9 @@ const clipSegments = (segments: readonly TimelineSegment[], from: number, to: nu
   if (!first || !last)
     return from < to ? [{ kind: "noLocation" as const, start: from, end: to }] : [];
   return [
-    ...(first.start > from ? [{ kind: "noLocation" as const, start: from, end: first.start }] : []),
+    ...(first.start - from > NO_LOCATION_AFTER_MS
+      ? [{ kind: "noLocation" as const, start: from, end: first.start }]
+      : []),
     ...clipped,
     ...(last.end < to ? [{ kind: "noLocation" as const, start: last.end, end: to }] : []),
   ];

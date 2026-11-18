@@ -10,7 +10,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class HistoryFilterTest {
-  private val start = 1_783_968_300_000L
+  private val start = 1_783_965_600_000L
 
   @Test
   fun aStraightWalkKeepsOnlyThePointsTheMaximumGapNeeds() {
@@ -83,6 +83,21 @@ class HistoryFilterTest {
   }
 
   @Test
+  fun aStayIsSplitAtEachUtcHourSoEveryHourOfItIsFiledInThatHour() {
+    val hour = 3_600_000L
+    val still = (0 until 30).map { step -> fix(start + 40 * 60_000L + step * 5 * 60_000L, jitter(step), jitter(step + 3), 0.0) }
+    val records = run(HistoryFilter(), still)
+    val parts = records.filter { it.stayUntil != null }.groupBy { it.fix.timestampMillis }.map { (_, copies) -> copies.last() }
+
+    assertEquals(listOf(start + 40 * 60_000L, start + hour, start + 2 * hour, start + 3 * hour), parts.map { it.fix.timestampMillis })
+    assertEquals(listOf(start + hour, start + 2 * hour, start + 3 * hour), parts.dropLast(1).map { it.stayUntil })
+    assertEquals(still.last().timestampMillis, parts.last().stayUntil)
+    assertTrue(parts.all { it.fix.fixId == null || it == parts.first() })
+    val centre = parts.first().fix
+    assertTrue(parts.all { PlaceDwellDetector.distanceMeters(centre.latitude, centre.longitude, it.fix.latitude, it.fix.longitude) < 10.0 })
+  }
+
+  @Test
   fun aLongSilenceEndsTheStaySoHistoryShowsAGap() {
     val still = track(0 until 20) { step -> Triple(jitter(step), jitter(step + 3), 0.0) }.map { it.copy(timestampMillis = start + (it.timestampMillis - start) * 3) }
     val afterGap = fix(still.last().timestampMillis + 3_600_000L, 0.0, 0.0, 0.0)
@@ -117,7 +132,7 @@ class HistoryFilterTest {
 
   @Test
   fun aPhoneSittingStillIndoorsWithPoorAccuracyStartsOneStay() {
-    val fixes = (0..120).map { step ->
+    val fixes = (0..110).map { step ->
       val angle = step * 2.5
       fix(start + step * 30_000L, 30.0 * cos(angle), 30.0 * sin(angle), 0.0).copy(accuracyMeters = 35.0)
     }
