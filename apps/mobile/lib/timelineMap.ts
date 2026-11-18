@@ -109,7 +109,6 @@ export const timelineRouteGradient = ({
 };
 
 const MAX_ARROWS = 600;
-const ARROW_ARM_ANGLE = (40 * Math.PI) / 180;
 
 export const timelineArrows = ({
   runs,
@@ -173,7 +172,7 @@ export const timelineArrows = ({
         y: tip.y - sizePx * (direction.x * sin + direction.y * cos),
       });
     };
-    chevrons.push([arm(ARROW_ARM_ANGLE), toCoordinate(tip), arm(-ARROW_ARM_ANGLE)]);
+    chevrons.push([arm((40 * Math.PI) / 180), toCoordinate(tip), arm((-40 * Math.PI) / 180)]);
   };
 
   for (const run of runs) {

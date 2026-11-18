@@ -2,17 +2,11 @@ import { CheckIcon } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
 import { Animated, Easing, View } from "react-native";
 import { useReducedMotion } from "../../hooks/useReducedMotion.ts";
+import type { TimelineDecryptProgress } from "../../lib/timelineTypes.ts";
 import { Icon } from "../ui/Icon.tsx";
 import { Text } from "../ui/Text.tsx";
 
-type Person = {
-  color: string;
-  decrypted: number;
-  done: boolean;
-  name: string;
-  total: number;
-  userId: string;
-};
+type Person = TimelineDecryptProgress & { color: string; name: string };
 
 export const TimelineDecryptCard = ({
   loading,

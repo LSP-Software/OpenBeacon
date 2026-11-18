@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { buildTimelineDayPicker, localDayOf } from "./timelineDays.ts";
+import { buildTimelineDayPicker, localDayOf, timelineWindowStart } from "./timelineDays.ts";
 import { timelineFetchWindow } from "./timelineLoad.ts";
 
 const HOUR_MS = 60 * 60_000;
@@ -62,6 +62,36 @@ describe("timelineFetchWindow", () => {
     } finally {
       process.env.TZ = "Europe/London";
     }
+  });
+});
+
+describe("timelineWindowStart", () => {
+  test("reaches back to the oldest recorded hour, so a point uploaded long after it was recorded still has its day", () => {
+    const windowStart = new Date("2026-11-04T03:00:00Z");
+    const devices = [
+      { firstHour: hourOf("2026-10-30T18:00:00Z") },
+      { firstHour: hourOf("2026-11-10T09:00:00Z") },
+    ];
+    const start = timelineWindowStart({ devices, windowStart });
+    expect(start.toISOString()).toBe("2026-10-30T18:00:00.000Z");
+    expect(
+      buildTimelineDayPicker({
+        devices: [{ firstHour: devices[0]!.firstHour, hours: [], senderUserId: "alice" }],
+        now: Date.parse("2026-11-18T12:00:00Z"),
+        windowStart: start,
+      })[0]?.key,
+    ).toBe("2026-10-30");
+  });
+
+  test("stays at the server's window when nothing was recorded before it", () => {
+    const windowStart = new Date("2026-11-04T03:00:00Z");
+    expect(
+      timelineWindowStart({
+        devices: [{ firstHour: hourOf("2026-11-05T00:00:00Z") }],
+        windowStart,
+      }),
+    ).toEqual(windowStart);
+    expect(timelineWindowStart({ devices: [], windowStart })).toEqual(windowStart);
   });
 });
 

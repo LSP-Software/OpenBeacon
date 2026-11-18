@@ -26,6 +26,11 @@ export type TimelineDecryptProgress = {
   userId: string;
 };
 
+export type TimelineDeviceHours = {
+  hours: ReadonlyArray<{ count: number; hour: number }>;
+  senderUserId: string;
+};
+
 export type TimelineDay = {
   end: number;
   key: string;

@@ -1,5 +1,5 @@
 import { timelineFetchWindow } from "./timelineLoad.ts";
-import type { TimelineDay } from "./timelineTypes.ts";
+import type { TimelineDay, TimelineDeviceHours } from "./timelineTypes.ts";
 
 export const MAX_TIMELINE_POINTS = 12_000;
 
@@ -12,10 +12,7 @@ export const pickTimelinePeople = ({
 }: {
   chosen: readonly string[] | null;
   day: TimelineDay;
-  devices: ReadonlyArray<{
-    hours: ReadonlyArray<{ count: number; hour: number }>;
-    senderUserId: string;
-  }>;
+  devices: ReadonlyArray<TimelineDeviceHours>;
   memberIds: readonly string[];
   selectedUserId: string | null;
 }) => {

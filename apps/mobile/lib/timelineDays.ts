@@ -1,4 +1,4 @@
-import type { TimelineDay } from "./timelineTypes.ts";
+import type { TimelineDay, TimelineDeviceHours } from "./timelineTypes.ts";
 
 const HOUR_MS = 60 * 60_000;
 
@@ -14,17 +14,22 @@ export const localDayOf = (time: number): TimelineDay => {
   };
 };
 
+export const timelineWindowStart = ({
+  devices,
+  windowStart,
+}: {
+  devices: ReadonlyArray<{ firstHour: number }>;
+  windowStart: Date;
+}) =>
+  new Date(Math.min(windowStart.getTime(), ...devices.map(({ firstHour }) => firstHour * HOUR_MS)));
+
 export const buildTimelineDayPicker = ({
   devices,
   now,
   userId,
   windowStart,
 }: {
-  devices: ReadonlyArray<{
-    firstHour: number;
-    hours: ReadonlyArray<{ count: number; hour: number }>;
-    senderUserId: string;
-  }>;
+  devices: ReadonlyArray<TimelineDeviceHours & { firstHour: number }>;
   now: number;
   userId?: string | undefined;
   windowStart: Date;

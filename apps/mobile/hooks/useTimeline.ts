@@ -4,7 +4,7 @@ import { trpc, trpcClient } from "../lib/api.ts";
 import { ensureDeviceKeyRegistration } from "../lib/deviceKeys.ts";
 import { createHistoryKeyReader, unwrapEpochKeyFromWraps } from "../lib/epochKeys.ts";
 import { buildTimeline } from "../lib/timeline.ts";
-import { buildTimelineDayPicker } from "../lib/timelineDays.ts";
+import { buildTimelineDayPicker, timelineWindowStart } from "../lib/timelineDays.ts";
 import { loadTimelineDay } from "../lib/timelineLoad.ts";
 import type {
   TimelineDay,
@@ -15,19 +15,15 @@ import type {
 export const useTimelineDays = (groupId: string, userId?: string) => {
   const query = useQuery(trpc.groupTracking.historyDays.queryOptions({ groupId }));
   const { data, dataUpdatedAt } = query;
+  const windowStart = useMemo(() => (data ? timelineWindowStart(data) : null), [data]);
   const days = useMemo(
     () =>
-      data
-        ? buildTimelineDayPicker({
-            devices: data.devices,
-            now: dataUpdatedAt,
-            userId,
-            windowStart: data.windowStart,
-          })
+      data && windowStart
+        ? buildTimelineDayPicker({ devices: data.devices, now: dataUpdatedAt, userId, windowStart })
         : null,
-    [data, dataUpdatedAt, userId],
+    [data, dataUpdatedAt, userId, windowStart],
   );
-  return { days, query, windowStart: data?.windowStart ?? null };
+  return { days, query, windowStart };
 };
 
 export const useTimelineDay = ({
