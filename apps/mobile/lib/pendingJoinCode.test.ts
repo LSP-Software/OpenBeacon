@@ -139,17 +139,41 @@ describe("join links", () => {
   });
 
   test("an invite link opened on a phone that isn't set up is saved for after setup", () => {
-    saveJoinLinkForAfterSetup(`openbeacon://join?code=${code}`);
+    expect(saveJoinLinkForAfterSetup(`openbeacon://join?code=${code}`)).toBe(true);
 
     expect(takePendingJoinCode("user-1")).toBe(code);
   });
 
+  test("an invite link opened during onboarding is saved for after onboarding", () => {
+    thisDeviceState = "active";
+    storageValues.set("onboarding.user-1", "{}");
+
+    expect(saveJoinLinkForAfterSetup(`openbeacon://join?code=${code}`)).toBe(true);
+
+    expect(takePendingJoinCode("user-1")).toBe(code);
+  });
+
+  test("another account's unfinished onboarding doesn't hold back an invite", () => {
+    thisDeviceState = "active";
+    storageValues.set("onboarding.user-2", "{}");
+
+    expect(saveJoinLinkForAfterSetup(`openbeacon://join?code=${code}`)).toBe(false);
+
+    expect(takePendingJoinCode("user-1")).toBeNull();
+  });
+
   test("an invite link on a set-up or unregistered phone opens normally and isn't saved", () => {
     thisDeviceState = "active";
-    saveJoinLinkForAfterSetup(`openbeacon://join?code=${code}`);
+    expect(saveJoinLinkForAfterSetup(`openbeacon://join?code=${code}`)).toBe(false);
     thisDeviceState = "unregistered";
     registeredUserId = null;
-    saveJoinLinkForAfterSetup(`openbeacon://join?code=${code}`);
+    expect(saveJoinLinkForAfterSetup(`openbeacon://join?code=${code}`)).toBe(false);
+
+    expect(storageValues.size).toBe(0);
+  });
+
+  test("a link that isn't an invite isn't saved", () => {
+    expect(saveJoinLinkForAfterSetup("openbeacon://place?id=1")).toBe(false);
 
     expect(storageValues.size).toBe(0);
   });

@@ -14,6 +14,7 @@ import { isThisDeviceActive } from "../lib/deviceActivation.ts";
 import { ensureDeviceKeyRegistration } from "../lib/deviceKeys.ts";
 import { endSession } from "../lib/endSession.ts";
 import { launchRetryDelayMs } from "../lib/launchRetry.ts";
+import { readOnboarding, startOnboarding } from "../lib/onboarding.ts";
 import { readSavedDeviceLink } from "../lib/savedDeviceLink.ts";
 import { useColors } from "../lib/theme.ts";
 
@@ -94,8 +95,19 @@ export default function HomeScreen() {
       let cancelled = false;
       let retry: ReturnType<typeof setTimeout> | undefined;
       let failed = 0;
+      const tryAgainLater = () => {
+        failed += 1;
+        setFailures(failed);
+        retry = setTimeout(() => void route(), launchRetryDelayMs(failed));
+      };
       const route = async () => {
-        const savedLink = await tryCatch(ensureDeviceKeyRegistration().then(readSavedDeviceLink));
+        const device = await tryCatch(ensureDeviceKeyRegistration());
+        if (cancelled) return;
+        if (device.error) {
+          tryAgainLater();
+          return;
+        }
+        const savedLink = await tryCatch(readSavedDeviceLink(device.data));
         if (cancelled) return;
         if (savedLink.data) {
           router.replace("/setup/link");
@@ -104,13 +116,14 @@ export default function HomeScreen() {
         const active = await tryCatch(isThisDeviceActive());
         if (cancelled) return;
         if (active.error) {
-          failed += 1;
-          setFailures(failed);
-          retry = setTimeout(() => void route(), launchRetryDelayMs(failed));
+          tryAgainLater();
           return;
         }
         setFailures(0);
-        router.replace(active.data ? "/(tabs)/map" : "/setup");
+        const { userId } = device.data;
+        const onboarding = readOnboarding(userId);
+        if (!active.data && onboarding?.kind !== "newDevice") startOnboarding(userId, "newDevice");
+        router.replace(active.data && !onboarding ? "/(tabs)/map" : "/onboarding");
       };
       void route();
       return () => {

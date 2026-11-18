@@ -65,6 +65,7 @@ const setupRoutes = [
   "forgotPassword",
   "serverUrl",
   "device-removed",
+  "onboarding/index",
   "setup/index",
   "setup/link",
   "setup/waiting",

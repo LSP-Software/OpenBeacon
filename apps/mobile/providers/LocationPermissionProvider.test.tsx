@@ -20,17 +20,12 @@ let sessionState: {
   };
   isPending: boolean;
 };
-let launchRequestCalls = 0;
-let failLaunchRequest = false;
 let refreshCalls = 0;
+let foregroundRequestCalls = 0;
 let backgroundRequestCalls = 0;
 let settingsCalls = 0;
-let notificationRequestCalls = 0;
-let permissionRequestOrder: string[] = [];
-let notificationGate: Promise<void> | null = null;
-let refreshGate: Promise<void> | null = null;
-let launchRequestResult: import("../lib/locationPermissions.ts").LocationPermissionState;
 let refreshResult: import("../lib/locationPermissions.ts").LocationPermissionState;
+let foregroundRequestResult: import("../lib/locationPermissions.ts").LocationPermissionState;
 let backgroundRequestResult: import("../lib/locationPermissions.ts").LocationPermissionState;
 let appStateListener: ((nextAppState: string) => void) | null = null;
 
@@ -99,32 +94,23 @@ mock.module("../lib/deviceActivation.ts", () => ({
 mock.module("../lib/locationPermissions.ts", () => ({
   getLocationPermissionState: async () => {
     refreshCalls += 1;
-    await refreshGate;
     return refreshResult;
   },
   openLocationSettings: async () => {
     settingsCalls += 1;
   },
+  requestForegroundLocationPermissions: async () => {
+    foregroundRequestCalls += 1;
+    return foregroundRequestResult;
+  },
   requestBackgroundLocationPermissions: async () => {
     backgroundRequestCalls += 1;
     return backgroundRequestResult;
-  },
-  requestLocationPermissionsForLaunch: async () => {
-    launchRequestCalls += 1;
-    permissionRequestOrder.push("location");
-    if (failLaunchRequest) throw new Error("permission request failed");
-    return launchRequestResult;
   },
 }));
 
 mock.module("../lib/notifications.ts", () => ({
   dismissNotice: async () => {},
-  requestNotificationPermissions: async () => {
-    notificationRequestCalls += 1;
-    permissionRequestOrder.push("notification");
-    await notificationGate;
-    return true;
-  },
 }));
 
 const {
@@ -191,6 +177,15 @@ const pressButton = (root: Root, buttonIndex: number) => {
   props.onClick?.();
 };
 
+const AccountWarning = () => {
+  const { openLocationPermissionSettings } = useLocationPermissions();
+  return (
+    <button type="button" onClick={openLocationPermissionSettings}>
+      Grant access
+    </button>
+  );
+};
+
 describe("LocationPermissionProvider", () => {
   beforeEach(() => {
     sessionState = {
@@ -206,17 +201,12 @@ describe("LocationPermissionProvider", () => {
       },
       isPending: false,
     };
-    launchRequestCalls = 0;
-    failLaunchRequest = false;
     refreshCalls = 0;
+    foregroundRequestCalls = 0;
     backgroundRequestCalls = 0;
     settingsCalls = 0;
-    notificationRequestCalls = 0;
-    permissionRequestOrder = [];
-    notificationGate = null;
-    refreshGate = null;
-    launchRequestResult = createPermissionState({});
     refreshResult = createPermissionState({});
+    foregroundRequestResult = createPermissionState({});
     backgroundRequestResult = createPermissionState({
       backgroundStatus: "granted",
       canRequestBackgroundInApp: false,
@@ -234,17 +224,17 @@ describe("LocationPermissionProvider", () => {
     });
   });
 
-  test("uses the launch request path on initial signed-in load", async () => {
-    await renderProvider();
+  test("only reads the permission state on launch and never prompts", async () => {
+    const root = await renderProvider();
+    await flushEffects();
 
-    expect(launchRequestCalls).toBe(1);
-    expect(notificationRequestCalls).toBe(1);
-    expect(permissionRequestOrder).toEqual(["notification", "location"]);
-    expect(refreshCalls).toBe(0);
+    expect(refreshCalls).toBe(1);
+    expect(foregroundRequestCalls).toBe(0);
+    expect(backgroundRequestCalls).toBe(0);
+    expect(getRenderedOutput(root)).not.toContain("Allow background location");
   });
 
-  test("reads the permission state directly when the launch request fails", async () => {
-    failLaunchRequest = true;
+  test("shares the permission state it read", async () => {
     refreshResult = createPermissionState({ backgroundStatus: "granted", missing: [] });
     const seen: { readyForSharing: boolean | null } = { readyForSharing: null };
     const Probe = () => {
@@ -255,19 +245,16 @@ describe("LocationPermissionProvider", () => {
     await renderProvider(<Probe />);
     await flushEffects();
 
-    expect(refreshCalls).toBe(1);
     expect(seen.readyForSharing).toBe(true);
   });
 
-  test("doesn't ask for permissions until this phone is set up", async () => {
+  test("doesn't check permissions until this phone is set up", async () => {
     thisDeviceState = "registered";
     const root = await renderProvider();
     appStateListener?.("background");
     appStateListener?.("active");
     await flushEffects();
 
-    expect(notificationRequestCalls).toBe(0);
-    expect(launchRequestCalls).toBe(0);
     expect(refreshCalls).toBe(0);
 
     thisDeviceState = "active";
@@ -277,172 +264,93 @@ describe("LocationPermissionProvider", () => {
     });
     await flushEffects();
 
-    expect(notificationRequestCalls).toBe(1);
-    expect(launchRequestCalls).toBe(1);
+    expect(refreshCalls).toBe(1);
   });
 
   test.each([
     ["linking", "/setup/link", {}],
-    ["naming this phone", "/setup/name", {}],
     ["removing old devices", "/setup/remove-devices", {}],
     ["restoring from the phrase during setup", "/account/recovery-restore", { setup: "true" }],
     ["starting fresh during setup", "/account/recovery-reset", { setup: "true" }],
-  ])("waits until setup is finished before asking, while %s", async (_step, setupPath, params) => {
-    pathname = setupPath;
-    searchParams = params;
-    const root = await renderProvider();
-    appStateListener?.("background");
-    appStateListener?.("active");
-    await flushEffects();
-
-    expect(notificationRequestCalls).toBe(0);
-    expect(launchRequestCalls).toBe(0);
-    expect(refreshCalls).toBe(0);
-
-    pathname = "/";
-    searchParams = {};
-    await act(async () => {
-      root.render(<LocationPermissionProvider>{null}</LocationPermissionProvider>);
-      await Promise.resolve();
-    });
-    await flushEffects();
-
-    expect(notificationRequestCalls).toBe(1);
-    expect(launchRequestCalls).toBe(1);
-  });
-
-  test("asks as usual on the recovery screens outside setup", async () => {
-    pathname = "/account/recovery-reset";
-    await renderProvider();
-
-    expect(notificationRequestCalls).toBe(1);
-    expect(launchRequestCalls).toBe(1);
-  });
-
-  test("runs launch setup when the app resumes during the notification prompt", async () => {
-    let finishNotification = () => {};
-    let finishRefresh = () => {};
-    notificationGate = new Promise((resolve) => {
-      finishNotification = resolve;
-    });
-    refreshGate = new Promise((resolve) => {
-      finishRefresh = resolve;
-    });
-    const SetupState = () => {
-      const { isConfiguringLocation } = useLocationPermissions();
-      return <text>{isConfiguringLocation ? "configuring" : "finished"}</text>;
-    };
-    const root = await renderProvider(<SetupState />);
-
-    await act(async () => {
+  ])(
+    "waits until setup is finished before checking, while %s",
+    async (_step, setupPath, params) => {
+      pathname = setupPath;
+      searchParams = params;
+      const root = await renderProvider();
       appStateListener?.("background");
       appStateListener?.("active");
-      await Promise.resolve();
-      finishNotification();
-      await Promise.resolve();
-    });
-    expect(refreshCalls).toBe(1);
-    expect(launchRequestCalls).toBe(0);
-    expect(getRenderedOutput(root)).toContain("configuring");
-    await act(async () => {
-      finishRefresh();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+      await flushEffects();
 
-    expect(launchRequestCalls).toBe(1);
-    expect(getRenderedOutput(root)).toContain("Allow background location");
-    await act(async () => root.unmount());
-  });
+      expect(refreshCalls).toBe(0);
 
-  test("uses the refresh path when the app resumes", async () => {
+      pathname = "/";
+      searchParams = {};
+      await act(async () => {
+        root.render(<LocationPermissionProvider>{null}</LocationPermissionProvider>);
+        await Promise.resolve();
+      });
+      await flushEffects();
+
+      expect(refreshCalls).toBe(1);
+    },
+  );
+
+  test("checks again when the app resumes", async () => {
     await renderProvider();
+    await flushEffects();
 
     appStateListener?.("background");
     await flushEffects();
     appStateListener?.("active");
     await flushEffects();
 
-    expect(launchRequestCalls).toBe(1);
-    expect(refreshCalls).toBe(1);
+    expect(refreshCalls).toBe(2);
   });
 
-  test("does not reopen the dialog on resume after the user dismisses it", async () => {
-    const root = await renderProvider();
-
-    expect(getRenderedOutput(root)).toContain("Allow background location");
-
-    await act(async () => {
-      pressButton(root, 0);
-      await Promise.resolve();
-    });
-
-    expect(getRenderedOutput(root)).not.toContain("Allow background location");
-
-    appStateListener?.("background");
-    await flushEffects();
-    appStateListener?.("active");
-    await flushEffects();
-
-    expect(getRenderedOutput(root)).not.toContain("Allow background location");
-  });
-
-  test("opens the launch dialog only when background escalation is allowed in app", async () => {
-    launchRequestResult = createPermissionState({
-      canRequestBackgroundInApp: true,
-    });
-
-    const root = await renderProvider();
-
-    expect(getRenderedOutput(root)).toContain("Allow background location");
-  });
-
-  test("does not open the launch dialog for the iOS allow once state", async () => {
-    launchRequestResult = createPermissionState({
-      canRequestBackgroundInApp: false,
-    });
-
-    const root = await renderProvider();
-
-    expect(getRenderedOutput(root)).not.toContain("Allow background location");
-  });
-
-  test("account warning opens the styled dialog before requesting background access", async () => {
-    const AccountWarning = () => {
-      const { openLocationPermissionSettings } = useLocationPermissions();
-      return (
-        <button type="button" onClick={openLocationPermissionSettings}>
-          Grant access
-        </button>
-      );
-    };
+  test("account warning asks for background access in app only after Continue is pressed", async () => {
     const root = await renderProvider(<AccountWarning />);
-    await act(async () => {
-      pressButton(root, 1);
-    });
+    await flushEffects();
     await act(async () => {
       pressButton(root, 0);
     });
     expect(getRenderedOutput(root)).toContain("Allow background location");
+    expect(getRenderedOutput(root)).toContain("The app will ask for that access next.");
     expect(backgroundRequestCalls).toBe(0);
     await act(async () => {
       pressButton(root, 2);
       await Promise.resolve();
     });
     expect(backgroundRequestCalls).toBe(1);
+    expect(settingsCalls).toBe(0);
   });
 
-  test("account warning offers settings when background access cannot be requested again", async () => {
-    launchRequestResult = createPermissionState({ canRequestBackgroundInApp: false });
-    const AccountWarning = () => {
-      const { openLocationPermissionSettings } = useLocationPermissions();
-      return (
-        <button type="button" onClick={openLocationPermissionSettings}>
-          Grant access
-        </button>
-      );
-    };
+  test("account warning asks for location in app when it was never asked", async () => {
+    refreshResult = createPermissionState({
+      foregroundStatus: "undetermined",
+      backgroundStatus: "undetermined",
+      preciseEnabled: false,
+      canRequestBackgroundInApp: false,
+      missing: ["foreground"],
+    });
     const root = await renderProvider(<AccountWarning />);
+    await flushEffects();
+    await act(async () => {
+      pressButton(root, 0);
+    });
+    expect(getRenderedOutput(root)).toContain("Allow location access");
+    await act(async () => {
+      pressButton(root, 2);
+      await Promise.resolve();
+    });
+    expect(foregroundRequestCalls).toBe(1);
+    expect(settingsCalls).toBe(0);
+  });
+
+  test("account warning offers settings when access cannot be requested again", async () => {
+    refreshResult = createPermissionState({ canRequestBackgroundInApp: false });
+    const root = await renderProvider(<AccountWarning />);
+    await flushEffects();
     await act(async () => {
       pressButton(root, 0);
     });
@@ -453,18 +361,21 @@ describe("LocationPermissionProvider", () => {
     });
     expect(settingsCalls).toBe(1);
     expect(backgroundRequestCalls).toBe(0);
+    expect(foregroundRequestCalls).toBe(0);
   });
 
-  test("requests background access only after the continue button is pressed", async () => {
-    const root = await renderProvider();
-
-    expect(backgroundRequestCalls).toBe(0);
-
+  test("Not now closes the dialog without asking", async () => {
+    const root = await renderProvider(<AccountWarning />);
+    await flushEffects();
+    await act(async () => {
+      pressButton(root, 0);
+    });
     await act(async () => {
       pressButton(root, 1);
       await Promise.resolve();
     });
-
-    expect(backgroundRequestCalls).toBe(1);
+    expect(getRenderedOutput(root)).not.toContain("Allow background location");
+    expect(backgroundRequestCalls).toBe(0);
+    expect(settingsCalls).toBe(0);
   });
 });

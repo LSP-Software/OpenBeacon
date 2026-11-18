@@ -212,9 +212,6 @@ export const requestBackgroundLocationPermissions = async (): Promise<LocationPe
   });
 };
 
-export const requestLocationPermissionsForLaunch = async (): Promise<LocationPermissionState> =>
-  requestForegroundLocationPermissions();
-
 export const openLocationSettings = async (): Promise<void> => {
   const linking = await import("expo-linking");
   await linking.openSettings();
