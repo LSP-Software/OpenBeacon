@@ -98,6 +98,7 @@ mock.module("../components/ui/Dialog.tsx", () => ({
   DialogHeader: View,
   DialogTitle: View,
 }));
+mock.module("../components/SeatsSetting.tsx", () => ({ SeatsSetting: () => null }));
 mock.module("../components/ui/Icon.tsx", () => ({ Icon: () => null }));
 mock.module("../components/ui/Input.tsx", () => ({ Input: () => null }));
 mock.module("../components/ui/Text.tsx", () => ({ Text: View }));

@@ -5,6 +5,14 @@ import z from "zod";
 import { deleteGroup } from "../../lib/deleteGroup.ts";
 import { persistGroupEpoch } from "../../lib/groupEpochs.ts";
 import { assertAccountBelowGroupLimit } from "../../lib/groupLimit.ts";
+import {
+  accountSeats,
+  activatedDevices,
+  noFreeSeatsError,
+  seatCount,
+  seatsEnforced,
+  seatsUsed,
+} from "../../lib/seats.ts";
 import { groupOwnerProcedure } from "../../procedures/auth/group.ts";
 import { protectedProcedure } from "../../procedures/auth/runtime.ts";
 import type { GroupListItem } from "../../types/GroupListItem.ts";
@@ -73,6 +81,22 @@ export const groupLifecycleRouter = {
         if (!user || user.pendingDeletion || !session)
           throw new TRPCError({ code: "UNAUTHORIZED" });
         await assertAccountBelowGroupLimit(tx, ctx.session.user.id);
+        if (seatsEnforced(ctx)) {
+          const [seats, used, needed] = await Promise.all([
+            accountSeats(tx, ctx.session.user.id),
+            seatsUsed(tx, ctx.session.user.id),
+            activatedDevices(tx, ctx.session.user.id),
+          ]);
+          const free = Math.max(0, seats - used);
+          if (seats === 0) {
+            throw noFreeSeatsError("Your account has no seats. Add seats to create a group.");
+          }
+          if (needed > free) {
+            throw noFreeSeatsError(
+              `Creating a group needs ${seatCount(needed)}, one for each of your phones, and you have ${free} free.`,
+            );
+          }
+        }
         const createdGroup = await tx.group.create({
           data: {
             id: input.groupId,

@@ -33,6 +33,7 @@ import { SettingsContainer } from "../../../components/containers/settingsContai
 import { LocationSharingCard } from "../../../components/LocationSharingCard.tsx";
 import { ProfileImage } from "../../../components/image/ProfileImage.tsx";
 import { PromptCard } from "../../../components/PromptCard.tsx";
+import { SeatsSetting } from "../../../components/SeatsSetting.tsx";
 import { Button } from "../../../components/ui/Button.tsx";
 import {
   Dialog,
@@ -443,6 +444,7 @@ const AccountScreen = () => {
               },
             ]}
           />
+          <SeatsSetting subscribed={isFocused} />
         </View>
         {signOutPhase && (
           <Text accessibilityLiveRegion="polite" className="text-secondary px-1 text-sm">

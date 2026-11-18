@@ -107,6 +107,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(await caller(guest).groupInvites.sharedPreview({ code: code.toLowerCase() })).toEqual({
         group: { id: groupId, name: "Smith Family", image: null, memberCount: 1 },
         inviter: { name: `Name ${owner}`, image: null },
+        owner: { name: `Name ${owner}` },
+        seats: { needed: 1, free: null, perGroup: 64 },
         alreadyMember: false,
         joinBlockedBy: null,
       });
@@ -160,6 +162,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(await caller(guest).groupInvites.preview({ inviteId: invite.id })).toEqual({
         group: { id: groupId, name: "Smith Family", image: null, memberCount: 1 },
         inviter: { name: `Name ${owner}`, image: null },
+        owner: { name: `Name ${owner}` },
+        seats: { needed: 1, free: null, perGroup: 64 },
         alreadyMember: false,
         joinBlockedBy: null,
       });

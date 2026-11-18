@@ -28,6 +28,9 @@ export const errorReasons = [
   "SIGN_IN_CODES_UNAVAILABLE",
   "GROUP_OWNER",
   "OWNERSHIP_OFFER_GONE",
+  "NO_FREE_SEATS",
+  "GROUP_FULL",
+  "SEAT_ON_HOLD",
 ] as const;
 
 export type ErrorReason = (typeof errorReasons)[number];

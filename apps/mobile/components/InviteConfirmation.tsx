@@ -179,7 +179,7 @@ export const InviteConfirmation = ({
     );
   }
 
-  const { group, inviter, alreadyMember, joinBlockedBy } = preview.data;
+  const { group, inviter, owner, seats, alreadyMember, joinBlockedBy } = preview.data;
   const backButton = (
     <Button variant="secondary" onPress={backToGroups}>
       <Text>Back</Text>
@@ -230,7 +230,11 @@ export const InviteConfirmation = ({
           <Text className="mt-8 text-center text-secondary">
             {joinBlockedBy === "GROUP_LIMIT"
               ? "You’re already in as many groups as your account allows. Leave a group before joining another."
-              : "Your account is scheduled for deletion, so it can’t join groups."}
+              : joinBlockedBy === "NO_FREE_SEATS"
+                ? `This group has no free seats for your phones (you need ${seats.needed}, ${seats.free ?? 0} ${seats.free === 1 ? "is" : "are"} free). Ask ${owner.name} to add seats.`
+                : joinBlockedBy === "GROUP_FULL"
+                  ? `This group is full. A group can have up to ${seats.perGroup} phones.`
+                  : "Your account is scheduled for deletion, so it can’t join groups."}
           </Text>
         ) : (
           <>

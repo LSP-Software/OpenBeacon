@@ -16,6 +16,16 @@ import {
 import { emailInviteCreatedAfter } from "../../lib/emailInvites.ts";
 import { assertAccountBelowGroupLimit } from "../../lib/groupLimit.ts";
 import { limits } from "../../lib/limits.ts";
+import {
+  activatedDevices,
+  assertRoomToInvite,
+  assertRoomToJoin,
+  groupFullError,
+  groupSeatState,
+  joinBlockedBy,
+  noFreeSeatsToInviteMessage,
+  lockOwnerThenGroup,
+} from "../../lib/seats.ts";
 import { groupEditorProcedure } from "../../procedures/auth/group.ts";
 import { protectedProcedure } from "../../procedures/auth/runtime.ts";
 import { imageKeySelect, toStoredImageKey } from "../../lib/imageKeys.ts";
@@ -62,12 +72,14 @@ const getInvitePreview = async ({
   groupId,
   inviter,
   notFoundMessage,
+  selfHosted,
   userId,
 }: {
-  db: Pick<Prisma.TransactionClient, "group" | "groupMember" | "user">;
+  db: Pick<Prisma.TransactionClient, "$queryRaw" | "group" | "groupMember" | "user" | "userDevice">;
   groupId: string;
   inviter: { name: string };
   notFoundMessage: string;
+  selfHosted: boolean;
   userId: string;
 }) => {
   const [group, member, user, groupCount] = await Promise.all([
@@ -84,6 +96,10 @@ const getInvitePreview = async ({
   ]);
   if (!group) throw new TRPCError({ code: "NOT_FOUND", message: notFoundMessage });
   const alreadyMember = member !== null;
+  const [seats, needed] = await Promise.all([
+    groupSeatState({ db, groupId, selfHosted }),
+    activatedDevices(db, userId),
+  ]);
   return {
     group: {
       id: group.id,
@@ -92,6 +108,8 @@ const getInvitePreview = async ({
       memberCount: group._count.groupMembers,
     },
     inviter: { name: inviter.name, image: null },
+    owner: { name: seats.owner.name },
+    seats: { needed, free: seats.free, perGroup: seats.seatsPerGroup },
     alreadyMember,
     joinBlockedBy: alreadyMember
       ? null
@@ -99,7 +117,7 @@ const getInvitePreview = async ({
         ? ("PENDING_DELETION" as const)
         : groupCount >= limits.groupsPerAccount
           ? ("GROUP_LIMIT" as const)
-          : null,
+          : joinBlockedBy({ free: seats.free, groupSeats: seats.groupSeats, needed }),
   };
 };
 
@@ -132,6 +150,12 @@ export const groupInvitesRouter = {
             code: "FORBIDDEN",
             message: "You are not an Admin or Editor of this group",
           });
+        await assertRoomToInvite({
+          db: tx,
+          groupId: input.groupId,
+          selfHosted: ctx.selfHosted,
+          userId: ctx.session.user.id,
+        });
         return tx.groupSharedInvite.create({
           data: {
             codeHash: createHash("sha256").update(code).digest("hex"),
@@ -148,6 +172,24 @@ export const groupInvitesRouter = {
         expiresInMs: Math.max(0, expiresAt.getTime() - Date.now()),
       };
     }),
+  seats: groupEditorProcedure.query(async ({ ctx, input }) => {
+    const state = await groupSeatState({
+      db: ctx.db,
+      groupId: input.groupId,
+      selfHosted: ctx.selfHosted,
+    });
+    const blockedBy = joinBlockedBy({ free: state.free, groupSeats: state.groupSeats, needed: 1 });
+    return {
+      ...state,
+      blockedBy,
+      message:
+        blockedBy === "GROUP_FULL"
+          ? groupFullError().message
+          : blockedBy === "NO_FREE_SEATS"
+            ? noFreeSeatsToInviteMessage({ ...state, userId: ctx.session.user.id })
+            : null,
+    };
+  }),
   sharedStatuses: groupEditorProcedure
     .input(
       z.object({
@@ -199,6 +241,7 @@ export const groupInvitesRouter = {
         groupId: invite.groupId,
         inviter: invite.creator,
         notFoundMessage: "Invite is invalid or expired",
+        selfHosted: ctx.selfHosted,
         userId: ctx.session.user.id,
       });
     }),
@@ -216,13 +259,17 @@ export const groupInvitesRouter = {
     .mutation(async ({ ctx, input }) => {
       const codeHash = sharedCodeHash(input.code);
       const joinEvent = await ctx.db.$transaction(async (tx) => {
-        await assertAccountCanJoinGroup(tx, ctx.session.user.id);
         const invite = await tx.groupSharedInvite.findUnique({ where: { codeHash } });
         if (!invite)
           throw new TRPCError({ code: "NOT_FOUND", message: "Invite is invalid or expired" });
-        await tx.$queryRaw(
-          Prisma.sql`SELECT id FROM "Group" WHERE id = ${invite.groupId} FOR UPDATE`,
-        );
+        const ownerId = await lockOwnerThenGroup({
+          db: tx,
+          groupId: invite.groupId,
+          userIds: [ctx.session.user.id],
+        });
+        await assertAccountCanJoinGroup(tx, ctx.session.user.id);
+        if (!ownerId)
+          throw new TRPCError({ code: "NOT_FOUND", message: "Invite is invalid or expired" });
         if (!(await creatorCanAdmit(tx, invite)))
           throw new TRPCError({ code: "NOT_FOUND", message: "Invite is invalid or expired" });
         const claimed = await tx.groupSharedInvite.updateMany({
@@ -237,6 +284,12 @@ export const groupInvitesRouter = {
         if (existing)
           throw new TRPCError({ code: "CONFLICT", message: "You are already a group member" });
         await assertAccountBelowGroupLimit(tx, ctx.session.user.id);
+        await assertRoomToJoin({
+          db: tx,
+          groupId: invite.groupId,
+          joinerId: ctx.session.user.id,
+          selfHosted: ctx.selfHosted,
+        });
         const joined = await tx.groupMember.create({
           data: {
             groupId: invite.groupId,
@@ -289,6 +342,7 @@ export const groupInvitesRouter = {
         groupId: invite.groupId,
         inviter: invite.inviter,
         notFoundMessage: "Invite not found",
+        selfHosted: ctx.selfHosted,
         userId: ctx.session.user.id,
       });
     }),
@@ -317,7 +371,6 @@ export const groupInvitesRouter = {
     )
     .mutation(async ({ ctx, input }) => {
       const member = await ctx.db.$transaction(async (tx) => {
-        await assertAccountCanJoinGroup(tx, ctx.session.user.id);
         const invite = await tx.groupMemberInvite.findFirst({
           where: {
             id: input.inviteId,
@@ -330,9 +383,13 @@ export const groupInvitesRouter = {
           throw new TRPCError({ code: "NOT_FOUND", message: "Invite not found" });
         }
 
-        await tx.$queryRaw(
-          Prisma.sql`SELECT id FROM "Group" WHERE id = ${invite.groupId} FOR UPDATE`,
-        );
+        const ownerId = await lockOwnerThenGroup({
+          db: tx,
+          groupId: invite.groupId,
+          userIds: [ctx.session.user.id],
+        });
+        await assertAccountCanJoinGroup(tx, ctx.session.user.id);
+        if (!ownerId) throw new TRPCError({ code: "NOT_FOUND", message: "Invite not found" });
 
         const currentInvite = await tx.groupMemberInvite.findFirst({
           where: {
@@ -351,6 +408,12 @@ export const groupInvitesRouter = {
           throw new TRPCError({ code: "CONFLICT", message: "You are already a group member" });
         }
         await assertAccountBelowGroupLimit(tx, ctx.session.user.id);
+        await assertRoomToJoin({
+          db: tx,
+          groupId: invite.groupId,
+          joinerId: ctx.session.user.id,
+          selfHosted: ctx.selfHosted,
+        });
 
         const createdMember = await tx.groupMember.create({
           data: {
@@ -532,6 +595,12 @@ export const groupInvitesRouter = {
         ) {
           throw new TRPCError({ code: "FORBIDDEN", message: "Only Admins can invite Editors." });
         }
+        await assertRoomToInvite({
+          db: tx,
+          groupId: input.groupId,
+          selfHosted: ctx.selfHosted,
+          userId: ctx.session.user.id,
+        });
         await tx.groupMemberInvite.deleteMany({
           where: { groupId: input.groupId, createdAt: { lte: emailInviteCreatedAfter() } },
         });

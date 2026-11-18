@@ -85,6 +85,7 @@ const createCaller = async ({
     $queryRaw: async (query: { strings: string[]; values: unknown[] }) => {
       const sql = query.strings.join("");
       statements.push(sql);
+      if (sql.includes('"ownerRank"')) return [];
       if (sql.includes('JOIN "User" AS "account"')) {
         return [sharingDeviceRow, { ...sharingDeviceRow, deviceId: "device-2" }];
       }

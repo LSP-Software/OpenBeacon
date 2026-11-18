@@ -35,7 +35,14 @@ const createCaller = (
   };
   const createMany = mock(async () => ({ count: 1 }));
   const db = {
-    $queryRaw: mock(async () => [actor]),
+    $queryRaw: mock(async (query: { strings: string[] }) =>
+      query.strings.join("").includes('AS "used"') ? [{ used: 1 }] : [actor],
+    ),
+    group: {
+      findUniqueOrThrow: mock(async () => ({
+        owner: { id: "owner-user", name: "Owner", seats: 2 },
+      })),
+    },
     groupMember: {
       findUnique: mock(async () => actor),
       findFirst: mock(async () => ({

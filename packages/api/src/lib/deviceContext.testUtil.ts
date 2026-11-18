@@ -7,6 +7,8 @@ export const withDeviceActive =
   ) =>
   async () =>
     ({
+      selfHosted: true,
+      allowSelfSetSeats: false,
       ...context,
       deviceActive: context.deviceId
         ? (await context.db.userDevice.count({

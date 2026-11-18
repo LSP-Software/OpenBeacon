@@ -2,13 +2,14 @@ import { Alert } from "../../lib/alert.ts";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { inviteMemberToGroupSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { LinkIcon, MailIcon, PlusIcon, QrCodeIcon, Trash2Icon } from "lucide-react-native";
 import { useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { Pressable, View } from "react-native";
 import type z from "zod";
 import { trpc } from "../../lib/api.ts";
+import { groupLimitAlert } from "../../lib/groupLimitAlert.ts";
 import { SharedInvite } from "./SharedInvite.tsx";
 import { FormSelectInput } from "../formInputs/FormSelectInput.tsx";
 import { Button } from "../ui/Button.tsx";
@@ -32,6 +33,12 @@ export const InviteMemberToGroupDialog = ({
   canInviteEditors,
 }: InviteMemberToGroupDialogProps) => {
   const [value, setValue] = useState("email");
+  const seats = useQuery({
+    ...trpc.groupInvites.seats.queryOptions({ groupId }),
+    enabled: open,
+    staleTime: 0,
+  });
+  const blocked = seats.data?.blockedBy ? seats.data : null;
 
   return (
     <Dialog open={open} onOpenChange={(open) => setOpen(open)}>
@@ -39,30 +46,39 @@ export const InviteMemberToGroupDialog = ({
         <DialogHeader>
           <DialogTitle>Invite a member</DialogTitle>
         </DialogHeader>
-        <Tabs value={value} onValueChange={setValue}>
-          <TabsList className="mb-4 w-full">
-            <TabsTrigger value="email" className="flex-1">
-              <Icon as={MailIcon} />
-              <Text>Email</Text>
-            </TabsTrigger>
-            <TabsTrigger value="link" className="flex-1">
-              <Icon as={LinkIcon} />
-              <Text>Link / Code</Text>
-            </TabsTrigger>
-            <TabsTrigger value="qr" className="flex-1">
-              <Icon as={QrCodeIcon} />
-              <Text>QR code</Text>
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="email" className="flex flex-col gap-4">
-            <InviteMembersInputs
-              groupId={groupId}
-              setOpen={setOpen}
-              canInviteEditors={canInviteEditors}
-            />
-          </TabsContent>
-          {open && <SharedInvite groupId={groupId} open={open} setOpen={setOpen} value={value} />}
-        </Tabs>
+        {blocked ? (
+          <View className="gap-2">
+            <Text variant="large">
+              {blocked.blockedBy === "GROUP_FULL" ? "Group full" : "No free seats"}
+            </Text>
+            <Text className="text-secondary">{blocked.message}</Text>
+          </View>
+        ) : (
+          <Tabs value={value} onValueChange={setValue}>
+            <TabsList className="mb-4 w-full">
+              <TabsTrigger value="email" className="flex-1">
+                <Icon as={MailIcon} />
+                <Text>Email</Text>
+              </TabsTrigger>
+              <TabsTrigger value="link" className="flex-1">
+                <Icon as={LinkIcon} />
+                <Text>Link / Code</Text>
+              </TabsTrigger>
+              <TabsTrigger value="qr" className="flex-1">
+                <Icon as={QrCodeIcon} />
+                <Text>QR code</Text>
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="email" className="flex flex-col gap-4">
+              <InviteMembersInputs
+                groupId={groupId}
+                setOpen={setOpen}
+                canInviteEditors={canInviteEditors}
+              />
+            </TabsContent>
+            {open && <SharedInvite groupId={groupId} open={open} setOpen={setOpen} value={value} />}
+          </Tabs>
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -118,7 +134,8 @@ export const InviteMembersInputs = ({
       }),
     );
     if (result.error) {
-      Alert.alert("Unable to send invitation", result.error.message);
+      const limit = groupLimitAlert(result.error);
+      Alert.alert(limit?.title ?? "Unable to send invitation", result.error.message);
       return;
     }
     form.reset();

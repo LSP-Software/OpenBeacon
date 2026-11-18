@@ -34,6 +34,8 @@ import { beginAccountDeletion, deleteAccountRecords } from "../lib/account-delet
 import { deviceRemovedError } from "../lib/deviceRemoved.ts";
 import { deviceUnverifiedError } from "../lib/deviceUnverified.ts";
 import { removeUserDevice, toAlertDevice } from "../lib/removeDevice.ts";
+import { maxAccountSeats } from "../lib/limits.ts";
+import { accountSeats, seatsEnforced, seatsUsed } from "../lib/seats.ts";
 import {
   freshSessionProcedure,
   protectedProcedure,
@@ -445,6 +447,36 @@ export const accountRouter = {
         data: { name: input.name },
         select: { name: true },
       });
+    }),
+  seats: protectedProcedure.query(async ({ ctx }) => {
+    const [seats, used] = await Promise.all([
+      accountSeats(ctx.db, ctx.session.user.id),
+      seatsUsed(ctx.db, ctx.session.user.id),
+    ]);
+    return {
+      enforced: seatsEnforced(ctx),
+      selfSetAllowed: ctx.allowSelfSetSeats && !ctx.selfHosted,
+      seats,
+      used,
+      max: maxAccountSeats,
+    };
+  }),
+  setSeats: protectedProcedure
+    .meta({ rateLimit: { limit: 30, windowMs: 60_000 } })
+    .input(z.object({ seats: z.number().int().min(0).max(maxAccountSeats) }))
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.allowSelfSetSeats || ctx.selfHosted) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "This server doesn't let you set your own seats.",
+        });
+      }
+      const user = await ctx.db.user.update({
+        where: { id: ctx.session.user.id },
+        data: { seats: input.seats },
+        select: { seats: true },
+      });
+      return { seats: user.seats };
     }),
   viewers: protectedProcedure
     .meta({ rateLimit: { limit: 60, windowMs: 60_000 } })

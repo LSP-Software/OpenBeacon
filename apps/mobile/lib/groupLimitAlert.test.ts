@@ -15,6 +15,27 @@ describe("groupLimitAlert", () => {
     });
   });
 
+  test("shows the server's message when the owner has no free seats or the group is full", () => {
+    expect(
+      groupLimitAlert({
+        message: "Your account has no seats. Add seats to create a group.",
+        data: { code: "PRECONDITION_FAILED", reason: "NO_FREE_SEATS" },
+      }),
+    ).toEqual({
+      title: "No free seats",
+      message: "Your account has no seats. Add seats to create a group.",
+    });
+    expect(
+      groupLimitAlert({
+        message: "This group is full. A group can have up to 64 phones.",
+        data: { code: "PRECONDITION_FAILED", reason: "GROUP_FULL" },
+      }),
+    ).toEqual({
+      title: "Group full",
+      message: "This group is full. A group can have up to 64 phones.",
+    });
+  });
+
   test("leaves other errors to the screen", () => {
     expect(groupLimitAlert({ data: { code: "PRECONDITION_FAILED", reason: null } })).toBeNull();
     expect(groupLimitAlert({ data: { code: "FORBIDDEN", reason: "NOT_GROUP_MEMBER" } })).toBeNull();

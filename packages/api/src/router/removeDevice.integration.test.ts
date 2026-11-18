@@ -387,6 +387,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("a removed device
         serverVersion: "test",
         serverName: "test",
         selfHosted: true,
+        allowSelfSetSeats: false,
       }),
     );
 
@@ -412,6 +413,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("a removed device
           serverVersion: "test",
           serverName: "test",
           selfHosted: true,
+          allowSelfSetSeats: false,
         }),
     });
 

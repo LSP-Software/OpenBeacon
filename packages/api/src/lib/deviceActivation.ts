@@ -4,6 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { deviceRemovedError } from "./deviceRemoved.ts";
 import { lockUserGroups } from "./lockUserGroups.ts";
 import { ReasonError } from "./reasonError.ts";
+import { lockAccounts } from "./seats.ts";
 
 export class DevicePendingError extends ReasonError {
   constructor() {
@@ -30,6 +31,14 @@ export const activateDevice = async ({
   deviceId: string;
   userId: string;
 }) => {
+  const owners = await db.group.findMany({
+    where: { groupMembers: { some: { userId } } },
+    select: { ownerId: true },
+  });
+  await lockAccounts(
+    db,
+    owners.map(({ ownerId }) => ownerId),
+  );
   await lockUserGroups(db, userId);
   const activated = await db.userDevice.updateMany({
     data: { activatedAt: new Date(), activatedBy },

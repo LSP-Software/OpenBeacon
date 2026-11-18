@@ -24,6 +24,7 @@ import {
   uploadPlaceTransitions,
 } from "../../lib/placeTransitions.ts";
 import { limits } from "../../lib/limits.ts";
+import { heldDeviceIds, seatOnHoldError } from "../../lib/seats.ts";
 import { getTrackingKeyState } from "../../lib/trackingKeyState.ts";
 import { ReasonError } from "../../lib/reasonError.ts";
 import { groupMemberProcedure } from "../../procedures/auth/group.ts";
@@ -111,13 +112,22 @@ export const groupTrackingRouter = {
             groupLock: "FOR SHARE",
             userId,
           });
-          const points =
-            input.points.length > 0
+          const held = await heldDeviceIds({
+            db: tx,
+            groupId: input.groupId,
+            selfHosted: ctx.selfHosted,
+          });
+          const sharedPoints = input.points.filter((point) => !held.has(point.senderDeviceId));
+          const heldPointIds = input.points
+            .filter((point) => held.has(point.senderDeviceId))
+            .map((point) => point.clientPointId);
+          const uploaded =
+            sharedPoints.length > 0
               ? await uploadGroupTrackingBatch({
                   db: tx,
                   groupId: input.groupId,
                   memberSince: member.createdAt,
-                  points: input.points,
+                  points: sharedPoints,
                   userId,
                   refundAllowance,
                   takeAllowance: async (senderDeviceId, cost) => {
@@ -141,24 +151,26 @@ export const groupTrackingRouter = {
                   },
                 })
               : { accepted: [], discarded: [], duplicates: [], expired: [] };
+          const points = { ...uploaded, discarded: [...uploaded.discarded, ...heldPointIds] };
           if (placeTransitions.length === 0) return points;
           return {
             ...points,
-            placeTransitions: transitionBudget.allowed
-              ? await uploadPlaceTransitions({
-                  db: tx,
-                  deviceId: ctx.deviceId,
-                  groupId: input.groupId,
-                  memberSince: member.createdAt,
-                  now,
-                  transitions: placeTransitions,
-                  userId,
-                })
-              : {
-                  accepted: [],
-                  duplicates: [],
-                  discarded: placeTransitions.map(({ clientId }) => clientId),
-                },
+            placeTransitions:
+              transitionBudget.allowed && !held.has(ctx.deviceId)
+                ? await uploadPlaceTransitions({
+                    db: tx,
+                    deviceId: ctx.deviceId,
+                    groupId: input.groupId,
+                    memberSince: member.createdAt,
+                    now,
+                    transitions: placeTransitions,
+                    userId,
+                  })
+                : {
+                    accepted: [],
+                    duplicates: [],
+                    discarded: placeTransitions.map(({ clientId }) => clientId),
+                  },
           };
         }),
       );
@@ -221,6 +233,7 @@ export const groupTrackingRouter = {
     .meta({ rateLimit: { limit: 480, windowMs: 60_000 } })
     .input(groupTrackingPollSchema)
     .query(async ({ ctx, input }) => {
+      await assertNotOnHold(ctx, input.groupId);
       return await pollGroupTrackingPoints({
         cursor: input.cursor,
         db: ctx.db,
@@ -233,6 +246,7 @@ export const groupTrackingRouter = {
     .meta({ rateLimit: { limit: 480, windowMs: 60_000 } })
     .input(groupTrackingGetLatestSchema)
     .query(async ({ ctx, input }) => {
+      await assertNotOnHold(ctx, input.groupId);
       return await getLatestGroupTrackingPoints({
         db: ctx.db,
         groupId: input.groupId,
@@ -243,6 +257,7 @@ export const groupTrackingRouter = {
     .meta({ rateLimit: { limit: 60, windowMs: 60_000 } })
     .input(groupTrackingHistoryDaysSchema)
     .query(async ({ ctx, input }) => {
+      await assertNotOnHold(ctx, input.groupId);
       return await readGroupTrackingHistoryDays({
         db: ctx.db,
         groupId: input.groupId,
@@ -253,6 +268,7 @@ export const groupTrackingRouter = {
     .meta({ rateLimit: { limit: 240, windowMs: 60_000 } })
     .input(groupTrackingHistoryRangeSchema)
     .query(async ({ ctx, input }) => {
+      await assertNotOnHold(ctx, input.groupId);
       return await readGroupTrackingHistoryRange({
         cursor: input.cursor,
         db: ctx.db,
@@ -264,3 +280,11 @@ export const groupTrackingRouter = {
       });
     }),
 } satisfies TRPCRouterRecord;
+
+const assertNotOnHold = async (
+  ctx: { db: Parameters<typeof heldDeviceIds>[0]["db"]; deviceId: string; selfHosted: boolean },
+  groupId: string,
+) => {
+  const held = await heldDeviceIds({ db: ctx.db, groupId, selfHosted: ctx.selfHosted });
+  if (held.has(ctx.deviceId)) throw seatOnHoldError();
+};

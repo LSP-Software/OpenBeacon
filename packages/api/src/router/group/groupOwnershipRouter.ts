@@ -9,7 +9,15 @@ import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
 import { recordGroupEvent } from "../../lib/groupHistory.ts";
 import { ReasonError } from "../../lib/reasonError.ts";
-import { groupSeats } from "../../lib/seats.ts";
+import {
+  accountSeats,
+  groupSeats,
+  lockAccounts,
+  noFreeSeatsError,
+  seatCount,
+  seatsEnforced,
+  seatsUsed,
+} from "../../lib/seats.ts";
 import { groupMemberProcedure } from "../../procedures/auth/group.ts";
 import { protectedProcedure } from "../../procedures/auth/runtime.ts";
 
@@ -127,6 +135,7 @@ export const groupOwnershipRouter = {
   }),
   accept: groupMemberProcedure.mutation(async ({ ctx, input }) => {
     const eventId = await ctx.db.$transaction(async (tx) => {
+      await lockAccounts(tx, [ctx.session.user.id]);
       const group = await lockGroup(tx, input.groupId);
       if (group.ownershipOfferedToId !== ctx.session.user.id) throw offerGone();
       const member = await tx.groupMember.findUnique({
@@ -134,6 +143,19 @@ export const groupOwnershipRouter = {
         select: { role: true, user: { select: { pendingDeletion: true } } },
       });
       if (member?.role !== GroupRole.ADMIN || member.user.pendingDeletion) throw offerGone();
+      if (seatsEnforced(ctx)) {
+        const [seats, used, needed] = await Promise.all([
+          accountSeats(tx, ctx.session.user.id),
+          seatsUsed(tx, ctx.session.user.id),
+          groupSeats(tx, input.groupId),
+        ]);
+        const free = Math.max(0, seats - used);
+        if (needed > free) {
+          throw noFreeSeatsError(
+            `Taking over this group needs ${seatCount(needed)} and you have ${free} free. Add seats first.`,
+          );
+        }
+      }
       await tx.group.update({
         where: { id: input.groupId },
         data: {

@@ -6,6 +6,7 @@ import { Platform, Share, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { useCachedGroup } from "../../hooks/useCachedGroup.ts";
 import { trpc } from "../../lib/api.ts";
+import { groupLimitAlert } from "../../lib/groupLimitAlert.ts";
 import { BrandedQrCode } from "../BrandedQrCode.tsx";
 import { Button } from "../ui/Button.tsx";
 import { Text } from "../ui/Text.tsx";
@@ -70,7 +71,9 @@ export const SharedInvite = ({
   const create = async () => {
     const result = await tryCatch(invite.mutateAsync({ groupId }));
     if (result.error) {
-      Alert.alert("Unable to create invitation");
+      const limit = groupLimitAlert(result.error);
+      if (limit) Alert.alert(limit.title, limit.message);
+      else Alert.alert("Unable to create invitation");
       return;
     }
   };
