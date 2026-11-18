@@ -1,5 +1,5 @@
 import { Link } from "expo-router";
-import { EyeIcon } from "lucide-react-native";
+import { EyeIcon, HistoryIcon } from "lucide-react-native";
 import { Pressable, View } from "react-native";
 import { deviceIconFor } from "../../lib/deviceIcons.ts";
 import type {
@@ -86,6 +86,18 @@ export const LiveMapMissingPersonSheet = ({
               </Button>
             </Link>
           ) : null}
+          <Link
+            href={{
+              pathname: "/timeline",
+              params: { groupId: person.timelineGroupId, userId: person.userId },
+            }}
+            asChild
+          >
+            <Button className="mt-3" accessibilityRole="link">
+              <Icon as={HistoryIcon} size={18} className="text-primary-foreground" />
+              <Text>See today’s route</Text>
+            </Button>
+          </Link>
         </View>
       ) : waitingForLocation ? (
         <View className="mt-3 gap-3">

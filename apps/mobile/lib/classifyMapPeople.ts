@@ -75,7 +75,7 @@ export const classifyMapPeople = ({
       };
       const devices = status.sharing?.filter((device) => device.userId === member.userId) ?? [];
       if (devices.length > 0 && devices.every((device) => device.paused)) {
-        people.paused.push({ ...person, sharingPaused: true });
+        people.paused.push({ ...person, sharingPaused: true, timelineGroupId: group.id });
         continue;
       }
 
