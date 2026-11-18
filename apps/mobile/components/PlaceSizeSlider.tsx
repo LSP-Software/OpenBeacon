@@ -1,6 +1,5 @@
 import { useRef, useState } from "react";
-import { PanResponder, Pressable, View } from "react-native";
-import { cn } from "../lib/cn.ts";
+import { PanResponder, View } from "react-native";
 import {
   formatPlaceDistance,
   formatPlaceSize,
@@ -11,6 +10,7 @@ import {
   sliderFromPlaceRadius,
   snapPlaceRadius,
 } from "../lib/places.ts";
+import { SegmentedControl } from "./ui/SegmentedControl.tsx";
 import { Text } from "./ui/Text.tsx";
 
 export const PlaceSizeSlider = ({
@@ -94,32 +94,12 @@ export const PlaceSizeSlider = ({
         <Text className="text-xs text-tertiary">{formatPlaceDistance(PLACE_RADIUS_MIN)}</Text>
         <Text className="text-xs text-tertiary">{formatPlaceDistance(PLACE_RADIUS_MAX)}</Text>
       </View>
-      <View className="flex-row gap-2">
-        {PLACE_SIZE_STOPS.map((stop) => {
-          const selected = stop.radiusMeters === radiusMeters;
-          return (
-            <Pressable
-              key={stop.label}
-              accessibilityRole="button"
-              accessibilityState={{ selected }}
-              onPress={() => onChange(stop.radiusMeters)}
-              className={cn(
-                "flex-1 items-center rounded-xl border px-2 py-2",
-                selected ? "border-primary bg-primary-soft" : "border-border",
-              )}
-            >
-              <Text
-                className={cn("font-semibold", selected ? "text-primary-text" : "text-foreground")}
-              >
-                {stop.label}
-              </Text>
-              <Text className="text-xs text-tertiary">
-                {formatPlaceDistance(stop.radiusMeters)}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+      <SegmentedControl
+        accessibilityLabel="Place size"
+        options={PLACE_SIZE_STOPS.map((stop) => ({ value: stop.radiusMeters, label: stop.label }))}
+        selected={radiusMeters}
+        onChange={onChange}
+      />
     </View>
   );
 };

@@ -602,22 +602,18 @@ export const NativeMap = ({
           style={{ top: insets.top + 56 }}
           accessibilityLabel="Loading map"
         >
-          <ActivityIndicator />
+          <ActivityIndicator color={colors.primary} />
         </View>
       ) : null}
       <View
-        className={cn(
-          "absolute right-3",
-          hasMarkers &&
-            "overflow-hidden rounded-full border border-border bg-card shadow-sm shadow-black/10",
-        )}
+        className="absolute right-3"
         style={{ top: insets.top + 56 }}
         onLayout={(event) => {
           edge.onControlsLayout(event.nativeEvent.layout);
         }}
       >
         {hasMarkers ? (
-          <>
+          <View className="overflow-hidden rounded-full border border-border bg-card shadow-sm shadow-black/10">
             <Pressable
               accessibilityLabel="Show everyone"
               accessibilityRole="button"
@@ -636,7 +632,7 @@ export const NativeMap = ({
                 <Icon as={LocateFixedIcon} size={20} className="text-foreground" />
               </Pressable>
             ) : null}
-          </>
+          </View>
         ) : null}
       </View>
       <View

@@ -70,7 +70,7 @@ export default function GroupsScreen() {
 
   return (
     <RefreshablePage>
-      <SafeAreaView className="flex-1 bg-background px-4 pb-32" edges={["top"]}>
+      <View className="flex-1 bg-background px-4 pb-32">
         <CreateGroupDialog open={createGroupDialogOpen} setOpen={setCreateGroupDialogOpen} />
         <View className="flex-row items-center justify-between px-1 pb-4 pt-3">
           <Text accessibilityRole="header" className="text-foreground text-3xl font-bold">
@@ -109,7 +109,7 @@ export default function GroupsScreen() {
         ) : null}
         <GroupInvitesList groupInvites={invites.data ?? []} />
         <GroupList groupList={groups.data} setCreateGroupDialogOpen={setCreateGroupDialogOpen} />
-      </SafeAreaView>
+      </View>
     </RefreshablePage>
   );
 }

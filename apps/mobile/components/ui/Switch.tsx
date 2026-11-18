@@ -1,9 +1,9 @@
-import { Platform, Switch as NativeSwitch } from "react-native";
-import { useColors } from "../../lib/theme.ts";
+import { Pressable, View } from "react-native";
+import { cn } from "../../lib/cn.ts";
 
 export const Switch = ({
   accessibilityLabel,
-  disabled,
+  disabled = false,
   onValueChange,
   value,
 }: {
@@ -11,18 +11,20 @@ export const Switch = ({
   disabled?: boolean;
   onValueChange: (value: boolean) => void;
   value: boolean;
-}) => {
-  const colors = useColors();
-
-  return (
-    <NativeSwitch
-      accessibilityLabel={accessibilityLabel}
-      value={value}
-      disabled={disabled}
-      trackColor={{ true: colors.primary, false: colors.inputBorder }}
-      // Android's SwitchCompat tints the on thumb with the AppCompat accent (teal) unless thumbColor is set.
-      thumbColor={Platform.OS === "android" ? "#FFFFFF" : undefined}
-      onValueChange={onValueChange}
-    />
-  );
-};
+}) => (
+  <Pressable
+    accessibilityRole="switch"
+    accessibilityLabel={accessibilityLabel}
+    accessibilityState={{ checked: value, disabled }}
+    disabled={disabled}
+    hitSlop={10}
+    onPress={() => onValueChange(!value)}
+    className={cn(
+      "h-[30px] w-[50px] flex-row items-center rounded-full px-[3px]",
+      value ? "justify-end bg-primary" : "justify-start bg-border-strong",
+      disabled && "opacity-50",
+    )}
+  >
+    <View className="size-6 rounded-full bg-white" />
+  </Pressable>
+);

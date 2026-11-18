@@ -390,9 +390,7 @@ const PlaceEditor = ({
             accessibilityLabel={step === 1 ? "Where is it?" : "Name it"}
             header={
               <View className="gap-1">
-                <Text className="text-xs font-bold uppercase tracking-wider text-tertiary">
-                  Step {step} of 2
-                </Text>
+                <Text className="text-secondary text-sm font-semibold">Step {step} of 2</Text>
                 <Text className="text-foreground text-2xl font-bold">
                   {step === 1 ? "Where is it?" : "Name it"}
                 </Text>

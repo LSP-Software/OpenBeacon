@@ -82,7 +82,7 @@ const PlaceAlertsScreen = () => {
                   >
                     <AccordionTrigger className="items-center">
                       <View className="flex-1 flex-row items-center gap-4">
-                        <View className="size-12 items-center justify-center rounded-xl bg-primary-soft">
+                        <View className="size-12 items-center justify-center rounded-xl bg-secondary">
                           <Text className="text-2xl">{place.emoji}</Text>
                         </View>
                         <View className="min-w-0 flex-1">

@@ -53,12 +53,10 @@ const TabBar = ({
               className="w-24 items-center gap-1 py-1"
               onPress={() => handleTabPress(route.key, route.name)}
             >
-              <View
-                className={cn(
-                  "h-8 w-16 items-center justify-center rounded-full",
-                  isActive && "bg-primary-soft",
-                )}
-              >
+              <View className="h-8 w-16 items-center justify-center">
+                {isActive ? (
+                  <View className="absolute inset-0 rounded-full bg-primary-soft" />
+                ) : null}
                 <Icon
                   as={tab.icon}
                   size={22}

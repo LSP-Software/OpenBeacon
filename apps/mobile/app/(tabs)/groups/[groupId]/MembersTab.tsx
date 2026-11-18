@@ -192,7 +192,7 @@ const MembersTab = ({
   }
 
   return (
-    <View className="gap-3">
+    <View>
       <InviteMemberToGroupDialog
         open={addMemberDialogOpen}
         setOpen={setAddMemberDialogOpen}
@@ -309,7 +309,7 @@ const MembersTab = ({
           </Button>
         </DialogContent>
       </Dialog>
-      <View className="flex-row items-center justify-between">
+      <View className="flex-row items-center justify-between pb-3">
         <Text variant="label">
           {members?.length ?? 0} {members?.length === 1 ? "member" : "members"}
         </Text>

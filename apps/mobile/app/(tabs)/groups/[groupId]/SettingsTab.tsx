@@ -66,7 +66,7 @@ const SettingsTab = ({ groupId }: { groupId: string }) => {
       {historyShare.setting ? (
         <View className="gap-2">
           <Text variant="label">Your location history</Text>
-          <Text className="text-secondary px-1 text-sm">
+          <Text className="text-secondary text-sm">
             How much of your history members of {group?.name ?? "this group"} can play back in
             Timeline. Only you can change this.
           </Text>

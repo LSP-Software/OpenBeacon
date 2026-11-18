@@ -1,6 +1,6 @@
 import { Alert } from "../../lib/alert.ts";
 import { tryCatch } from "@openbeacon/shared";
-import { PencilIcon, UserIcon } from "lucide-react-native";
+import { type LucideIcon, PencilIcon, UserIcon } from "lucide-react-native";
 import { useState } from "react";
 import { ActivityIndicator, Pressable, View } from "react-native";
 import { cn } from "../../lib/cn.ts";
@@ -18,6 +18,7 @@ interface EditableImageProps {
   size?: "sm" | "md" | "lg";
   uploadImage?: (uri: string) => Promise<ImageUploadResult>;
   alt: string;
+  fallbackIcon?: LucideIcon;
 }
 
 export const EditableImage = ({
@@ -27,6 +28,7 @@ export const EditableImage = ({
   size = "md",
   uploadImage,
   alt,
+  fallbackIcon = UserIcon,
 }: EditableImageProps) => {
   const [isUploading, setIsUploading] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -92,7 +94,7 @@ export const EditableImage = ({
         <DecryptedAvatarImage url={imageUrl} />
         <AvatarFallback>
           <Icon
-            as={UserIcon}
+            as={fallbackIcon}
             className={cn(sizeClassNames[size].fallbackIcon, "text-primary-foreground")}
           />
         </AvatarFallback>

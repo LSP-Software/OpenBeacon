@@ -4,7 +4,6 @@ import { skipToken, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { BackButton } from "../../../../components/headers/BackButton.tsx";
 import { GroupImage } from "../../../../components/image/GroupImage.tsx";
 import { LoadingIndicator } from "../../../../components/LoadingIndicator.tsx";
@@ -168,7 +167,7 @@ const GroupBody = ({ groupId, initialTab }: { groupId: string; initialTab: Group
 
   return (
     <RefreshablePage>
-      <SafeAreaView edges={["top", "bottom"]} className="flex-1 bg-background pb-32">
+      <View className="flex-1 bg-background pb-32">
         <View className="px-2 py-1">
           <BackButton fallback="/(tabs)/groups/list" />
         </View>
@@ -247,7 +246,7 @@ const GroupBody = ({ groupId, initialTab }: { groupId: string; initialTab: Group
             }}
           />
         </View>
-      </SafeAreaView>
+      </View>
     </RefreshablePage>
   );
 };

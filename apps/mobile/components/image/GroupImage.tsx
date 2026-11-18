@@ -1,3 +1,4 @@
+import { UsersIcon } from "lucide-react-native";
 import { showUploadedGroupImage, uploadGroupImage } from "../../lib/groupImageUpload.ts";
 import { EditableImage } from "./EditableImage.tsx";
 
@@ -15,6 +16,7 @@ export const GroupImage = ({
   <EditableImage
     accessibilityLabel="Edit group picture"
     alt="Group avatar"
+    fallbackIcon={UsersIcon}
     imageUrl={imageUrl}
     onImageUploaded={(uploadedImageUrl) =>
       showUploadedGroupImage({ groupId, imageUrl: uploadedImageUrl })
