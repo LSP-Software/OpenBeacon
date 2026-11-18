@@ -46,27 +46,27 @@ class AndroidSdkTest(unittest.TestCase):
 
 class AndroidVersionsTest(unittest.TestCase):
     def test_each_version_gets_its_own_avd_and_routes_repeat(self):
-        devices = simulation.version_devices([24, 26, 28, 29, 30], None)
-        self.assertEqual([avd for avd, _, _, _ in devices], ["OpenBeacon_API_24", "OpenBeacon_API_26", "OpenBeacon_API_28", "OpenBeacon_API_29", "OpenBeacon_API_30"])
+        devices = simulation.version_devices([26, 28, 29, 30, 31], None)
+        self.assertEqual([avd for avd, _, _, _ in devices], ["OpenBeacon_API_26", "OpenBeacon_API_28", "OpenBeacon_API_29", "OpenBeacon_API_30", "OpenBeacon_API_31"])
         self.assertEqual([route[0] for _, _, _, route in devices], ["stationary", "walking", "jogging", "car", "stationary"])
-        self.assertEqual(devices[0][1], "Android 7.0 (API 24) stationary")
+        self.assertEqual(devices[0][1], "Android 8.0 (API 26) stationary")
 
     def test_newer_versions_get_more_memory_unless_overridden(self):
         memory = [memory_mb for _, _, memory_mb, _ in simulation.version_devices(list(simulation.ANDROID_VERSIONS), None)]
         self.assertEqual(memory, sorted(memory))
         self.assertLess(memory[0], memory[-1])
-        self.assertEqual({memory_mb for _, _, memory_mb, _ in simulation.version_devices([24, 36], 2048)}, {2048})
+        self.assertEqual({memory_mb for _, _, memory_mb, _ in simulation.version_devices([26, 36], 2048)}, {2048})
 
     def test_versions_cover_minimum_to_target_sdk(self):
-        self.assertEqual(min(simulation.ANDROID_VERSIONS), 24)
+        self.assertEqual(min(simulation.ANDROID_VERSIONS), 26)
         self.assertEqual(max(simulation.ANDROID_VERSIONS), 36)
 
     def test_installs_and_creates_only_missing_versions(self):
         with self.android_sdk() as (sdk, tools, avd_home):
-            self.install_image(sdk, 24)
-            self.create_avd(avd_home, 24)
+            self.install_image(sdk, 26)
+            self.create_avd(avd_home, 26)
             (avd_home / "OpenBeacon_API_30.avd").mkdir()
-            commands = self.create_version_avds(sdk, avd_home, [24, 30])
+            commands = self.create_version_avds(sdk, avd_home, [26, 30])
             self.assertEqual(commands, [
                 [str(tools / "sdkmanager"), "--list"],
                 [str(tools / "sdkmanager"), "--install", "system-images;android-30;google_apis;x86_64"],
@@ -167,7 +167,7 @@ class AndroidVersionsTest(unittest.TestCase):
 
     def test_requires_command_line_tools(self):
         with tempfile.TemporaryDirectory() as directory, self.assertRaisesRegex(RuntimeError, "Command-line Tools"):
-            simulation.create_version_avds(Path(directory), [24], "x86_64")
+            simulation.create_version_avds(Path(directory), [26], "x86_64")
 
 
 class LaunchTest(unittest.TestCase):
@@ -232,7 +232,7 @@ class MemoryCheckTest(unittest.TestCase):
             self.assertIsNone(simulation.available_memory_mb("Darwin"))
 
     def test_needs_every_emulator_plus_headroom(self):
-        devices = simulation.version_devices([24, 36], None)
+        devices = simulation.version_devices([26, 36], None)
         self.assertIsNone(simulation.memory_error(devices, 3072 + 8192 + 2048))
         error = simulation.memory_error(devices, 3072 + 8192 + 2047)
         self.assertIn("2 emulators need about 13312 MiB", error)

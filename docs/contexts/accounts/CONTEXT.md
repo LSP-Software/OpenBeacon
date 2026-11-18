@@ -33,7 +33,7 @@ A message telling the owner that something important happened to their account: 
 _Avoid_: Email alert, Always-on alert, Optional alert, Place Alert
 
 **Account Notice**:
-A Security alert kept on the server for the account's other phones, never the device that made the change. Phones fetch it in the response to their tracking uploads and write the notification themselves. It's deleted 24 hours after it's created.
+A Security alert kept on the server for the account's other phones, never the device that made the change. Every signed-in phone fetches it through an account-level sync, in a group or not, and writes the notification itself. A phone's first sync returns none and sets its starting point 15 seconds earlier. Later syncs return the Account Notices created from that point on, and never ones from before its session started. It's deleted 24 hours after it's created.
 _Avoid_: Push, message
 
 **Notification Setting**:
@@ -41,5 +41,5 @@ One Email or Phone switch for one message type in Account › Notifications. It'
 _Avoid_: Preference, per-device setting
 
 **Push wake-up**:
-A Firebase Cloud Messaging message with no content that makes a phone run its tracking upload straight away, to fetch new Place Alerts, Account Notices and group activity. Only a server with the `FCM_*` settings sends them, which means the hosted service. Self-hosted servers send none, and their phones get the same notifications on their next upload.
+A Firebase Cloud Messaging message with no content that makes a phone fetch its Account Notices straight away and, if it's in a group, run its tracking upload to fetch new Place Alerts and group activity. Only a server with the `FCM_*` settings sends them, which means the hosted service. Self-hosted servers send none, and their phones get the same notifications on their next upload.
 _Avoid_: Push notification
