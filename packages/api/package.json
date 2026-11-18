@@ -10,6 +10,7 @@
     "./envSchema.ts": "./src/envSchema.ts",
     "./checkStorage.ts": "./src/checkStorage.ts",
     "./account-deletion.ts": "./src/lib/account-deletion.ts",
+    "./historyShare.ts": "./src/lib/historyShare.ts",
     "./trackingCleanup.ts": "./src/lib/trackingCleanup.ts",
     "./storage.ts": "./src/lib/storage.ts",
     "./image-upload.ts": "./src/lib/image-upload.ts",

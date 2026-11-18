@@ -22,3 +22,11 @@ export { signInCodeHeader, signInTokenHeader } from "./signInHeaders.ts";
 export { devicePendingCause, deviceRemovedCause, deviceUnverifiedCause } from "./deviceRemoved.ts";
 export { errorReasons } from "./errorReason.ts";
 export type { ErrorReason } from "./errorReason.ts";
+export {
+  HISTORY_SHARES,
+  historyShareFirstHour,
+  historyShareHours,
+  isShorterHistoryShare,
+  resolveHistoryShare,
+} from "./historyShare.ts";
+export type { HistoryShare } from "./historyShare.ts";

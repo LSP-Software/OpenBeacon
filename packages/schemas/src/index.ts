@@ -1,5 +1,10 @@
 import { optionalEnvString, serverNameSchema } from "./env.ts";
 export {
+  historyShareSchema,
+  setGroupHistoryShareSchema,
+  setHistoryShareSchema,
+} from "./schemas/account/historyShare.ts";
+export {
   locationSharingChangeInputSchema,
   setLocationSharingSchema,
 } from "./schemas/account/locationSharing.ts";

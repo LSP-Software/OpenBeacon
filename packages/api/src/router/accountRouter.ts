@@ -10,6 +10,7 @@ import { errorCode, isSharingPaused, resolveLocationSharing, tryCatch } from "@o
 import { TRPCError } from "@trpc/server";
 import {
   accountNameSchema,
+  setHistoryShareSchema,
   setLocationSharingSchema,
   confirmProfileImageUploadSchema,
   removeDeviceSchema,
@@ -26,6 +27,7 @@ import {
   setPendingImageUploadForUser,
 } from "../lib/image-upload.ts";
 import { readAccountViewers } from "../lib/accountViewers.ts";
+import { deleteHistoryOutsideShare } from "../lib/historyShare.ts";
 import { assertActiveDevices, assertSentFromThisDevice } from "../lib/groupWriteChecks.ts";
 import { imageKeyColumns } from "../lib/imageKeys.ts";
 import { beginAccountDeletion, deleteAccountRecords } from "../lib/account-deletion.ts";
@@ -46,17 +48,28 @@ export const accountRouter = {
       sharingChangedAt: true,
       sharingRevision: true,
     } as const;
-    const [account, device] = await Promise.all([
-      ctx.db.user.findUniqueOrThrow({ where: { id: ctx.session.user.id }, select }),
-      ctx.db.userDevice.findFirst({
-        where: { id: ctx.deviceId, userId: ctx.session.user.id, revokedAt: null },
-        select,
-      }),
-    ]);
+    const [{ historyShare, historyShareChangedAt, ...account }, device, groups] = await Promise.all(
+      [
+        ctx.db.user.findUniqueOrThrow({
+          where: { id: ctx.session.user.id },
+          select: { ...select, historyShare: true, historyShareChangedAt: true },
+        }),
+        ctx.db.userDevice.findFirst({
+          where: { id: ctx.deviceId, userId: ctx.session.user.id, revokedAt: null },
+          select,
+        }),
+        ctx.db.groupMember.findMany({
+          where: { userId: ctx.session.user.id },
+          select: { groupId: true, historyShare: true },
+          orderBy: { groupId: "asc" },
+        }),
+      ],
+    );
     if (!device) throw deviceRemovedError();
     return {
       account,
       device,
+      historyShare: { account: historyShare, changedAt: historyShareChangedAt, groups },
       deviceId: ctx.deviceId,
       userId: ctx.session.user.id,
       serverTime: new Date(),
@@ -162,6 +175,37 @@ export const accountRouter = {
         return expired ? ("expired" as const) : ("applied" as const);
       });
       return { status };
+    }),
+  setHistoryShare: protectedProcedure
+    .meta({ rateLimit: { limit: 30, windowMs: 60_000 } })
+    .input(setHistoryShareSchema)
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+      return ctx.db.$transaction(async (tx) => {
+        await tx.$queryRaw(
+          Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR NO KEY UPDATE`,
+        );
+        const account = await tx.user.update({
+          where: { id: userId },
+          data: { historyShare: input.historyShare, historyShareChangedAt: new Date() },
+          select: { historyShare: true, historyShareChangedAt: true },
+        });
+        const following = await tx.groupMember.findMany({
+          where: { userId, historyShare: null },
+          select: { groupId: true },
+        });
+        const deletedPoints = await deleteHistoryOutsideShare({
+          db: tx,
+          groupIds: following.map(({ groupId }) => groupId),
+          historyShare: input.historyShare,
+          userId,
+        });
+        return {
+          historyShare: account.historyShare,
+          changedAt: account.historyShareChangedAt,
+          deletedPoints,
+        };
+      });
     }),
   deletionVerificationMethods: setupProcedure.query(async ({ ctx }) => {
     const accounts = await ctx.db.account.findMany({

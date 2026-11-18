@@ -1,12 +1,21 @@
 import { Prisma, readDatabaseTime } from "@openbeacon/database";
 import { decodeBase64, encodeBase64, XCHACHA20_NONCE_LENGTH } from "@openbeacon/encryption";
 import type { groupTrackingPointSchema, TRACKING_POINT_ROLES } from "@openbeacon/schemas";
-import type { GroupDeviceSharingState } from "@openbeacon/shared";
+import {
+  historyShareFirstHour,
+  type GroupDeviceSharingState,
+  type HistoryShare,
+} from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import type z from "zod";
 import type { GroupWriteChecksDb } from "./groupWriteChecks.ts";
 import { assertActiveDevices, findGroupEpochs } from "./groupWriteChecks.ts";
 import { getGroupSharingStates } from "./locationSharing.ts";
+import {
+  effectiveHistoryShareSql,
+  historyFirstHourSql,
+  readUploaderHistoryWindow,
+} from "./historyShare.ts";
 import { HISTORY_RETENTION_MS } from "./placeTransitions.ts";
 
 const HOUR_MS = 3_600_000;
@@ -72,11 +81,18 @@ export const uploadGroupTrackingBatch = async ({
   const current = points
     .filter((point) => foundEpochIds.has(point.epochId))
     .map((point) => ({ ...point, ...parseClientPointId(point.clientPointId) }));
+  const { firstHour, nowHour } = await readUploaderHistoryWindow(db, { groupId, userId });
   const discarded = current.filter((point) => {
     const state = sharing.find(
       (device) => device.deviceId === point.senderDeviceId && device.userId === userId,
     );
-    return !state || state.paused || point.revisionPrefix !== state.revisionPrefix;
+    if (!state || state.paused || point.revisionPrefix !== state.revisionPrefix) return true;
+    if (point.role === "LIVE") return false;
+    const capturedHour = Math.min(
+      Math.max(point.capturedHour ?? nowHour, nowHour - HISTORY_RETENTION_HOURS),
+      nowHour + 1,
+    );
+    return capturedHour < firstHour;
   });
   const kept = current.filter((point) => !discarded.includes(point));
 
@@ -362,21 +378,30 @@ const filterSharedPoints = <
 
 type HistoryDb = Pick<Prisma.TransactionClient, "$queryRaw">;
 
-const readHistoryWindowHour = async (db: HistoryDb) =>
-  Math.floor((await readDatabaseTime(db)).getTime() / HOUR_MS) - HISTORY_RETENTION_HOURS;
+const readHistoryHours = async (db: HistoryDb) => {
+  const nowHour = Math.floor((await readDatabaseTime(db)).getTime() / HOUR_MS);
+  return { nowHour, windowHour: nowHour - HISTORY_RETENTION_HOURS };
+};
 
-const historyStreams = (groupId: string, joinedEpochNumber: number) => Prisma.sql`
+const historyStreams = (
+  groupId: string,
+  joinedEpochNumber: number,
+  { nowHour, windowHour }: { nowHour: number; windowHour: number },
+) => Prisma.sql`
   SELECT "stream"."id", "stream"."senderUserId", "stream"."senderDeviceId", "stream"."epochId",
-    "epoch"."epochNumber", "stream"."revisionPrefix"
+    "epoch"."epochNumber", "stream"."revisionPrefix",
+    ${historyFirstHourSql(nowHour, windowHour - HISTORY_RETENTION_HOURS)} AS "firstHour"
   FROM "TrackingStream" AS "stream"
   JOIN "GroupEpoch" AS "epoch" ON "epoch"."id" = "stream"."epochId"
   JOIN "GroupMember" AS "member"
     ON "member"."groupId" = "stream"."groupId" AND "member"."userId" = "stream"."senderUserId"
+  JOIN "User" AS "account" ON "account"."id" = "stream"."senderUserId"
   JOIN "UserDevice" AS "device"
     ON "device"."id" = "stream"."senderDeviceId" AND "device"."userId" = "stream"."senderUserId"
   WHERE "stream"."groupId" = ${groupId}
     AND "epoch"."epochNumber" >= ${joinedEpochNumber}
     AND "device"."revokedAt" IS NULL AND "device"."activatedAt" IS NOT NULL
+    AND ${effectiveHistoryShareSql} <> 'LAST_LOCATION'
 `;
 
 export const readGroupTrackingHistoryDays = async ({
@@ -388,19 +413,30 @@ export const readGroupTrackingHistoryDays = async ({
   groupId: string;
   joinedEpochNumber: number;
 }) => {
-  const windowHour = await readHistoryWindowHour(db);
-  const rows = await db.$queryRaw<
-    Array<{ count: number; hour: number; senderDeviceId: string; senderUserId: string }>
-  >(Prisma.sql`
+  const hours = await readHistoryHours(db);
+  const { nowHour, windowHour } = hours;
+  const [rows, senders] = await Promise.all([
+    db.$queryRaw<
+      Array<{ count: number; hour: number; senderDeviceId: string; senderUserId: string }>
+    >(Prisma.sql`
+    WITH "stream" AS MATERIALIZED (${historyStreams(groupId, joinedEpochNumber, hours)})
     SELECT "stream"."senderUserId", "stream"."senderDeviceId",
       "point"."capturedHour" AS "hour", COUNT(*)::int AS "count"
-    FROM (${historyStreams(groupId, joinedEpochNumber)}) AS "stream"
+    FROM "stream"
     JOIN "TrackingPoint" AS "point" ON "point"."streamId" = "stream"."id"
-    WHERE "point"."capturedHour" >= ${windowHour - HISTORY_RETENTION_HOURS}
+    WHERE "point"."capturedHour" >= "stream"."firstHour"
       AND "point"."receivedHour" >= ${windowHour}
     GROUP BY "stream"."senderUserId", "stream"."senderDeviceId", "point"."capturedHour"
     ORDER BY "stream"."senderUserId", "stream"."senderDeviceId", "point"."capturedHour"
-  `);
+  `),
+    db.$queryRaw<Array<{ historyShare: HistoryShare; userId: string }>>(Prisma.sql`
+      SELECT "member"."userId", ${effectiveHistoryShareSql}::text AS "historyShare"
+      FROM "GroupMember" AS "member"
+      JOIN "User" AS "account" ON "account"."id" = "member"."userId"
+      WHERE "member"."groupId" = ${groupId}
+      ORDER BY "member"."userId"
+    `),
+  ]);
   const devices = new Map<
     string,
     {
@@ -416,7 +452,15 @@ export const readGroupTrackingHistoryDays = async ({
     device.hours.push({ count, hour });
     devices.set(key, device);
   }
-  return { devices: [...devices.values()], windowStart: new Date(windowHour * HOUR_MS) };
+  return {
+    devices: [...devices.values()],
+    senders: senders.map(({ historyShare, userId }) => ({
+      userId,
+      historyShare,
+      firstHour: historyShareFirstHour(historyShare, nowHour),
+    })),
+    windowStart: new Date(windowHour * HOUR_MS),
+  };
 };
 
 export const readGroupTrackingHistoryRange = async ({
@@ -436,8 +480,9 @@ export const readGroupTrackingHistoryRange = async ({
   limit: number;
   toHour: number;
 }) => {
-  const windowHour = await readHistoryWindowHour(db);
-  const streams = historyStreams(groupId, joinedEpochNumber);
+  const hours = await readHistoryHours(db);
+  const { windowHour } = hours;
+  const streams = historyStreams(groupId, joinedEpochNumber, hours);
   type Row = {
     capturedHour: number;
     epochId: string;
@@ -454,11 +499,13 @@ export const readGroupTrackingHistoryRange = async ({
     "point"."pointId"::text AS "pointId", "point"."capturedHour", "point"."payload"`;
   const [rows, lookbackRows] = await Promise.all([
     db.$queryRaw<Row[]>(Prisma.sql`
+      WITH "stream" AS MATERIALIZED (${streams})
       SELECT ${columns}
-      FROM (${streams}) AS "stream"
+      FROM "stream"
       JOIN "TrackingPoint" AS "point" ON "point"."streamId" = "stream"."id"
       WHERE "point"."capturedHour" >= ${cursor && cursor.capturedHour > fromHour ? cursor.capturedHour : fromHour}
         AND "point"."capturedHour" < ${toHour}
+        AND "point"."capturedHour" >= "stream"."firstHour"
         AND "point"."receivedHour" >= ${windowHour}
         ${
           cursor
@@ -472,7 +519,7 @@ export const readGroupTrackingHistoryRange = async ({
     cursor
       ? []
       : db.$queryRaw<Row[]>(Prisma.sql`
-          WITH "stream" AS (${streams}),
+          WITH "stream" AS MATERIALIZED (${streams}),
           "lastHour" AS (
             SELECT "stream"."senderUserId", "stream"."senderDeviceId",
               max("last"."capturedHour") AS "capturedHour"
@@ -481,7 +528,7 @@ export const readGroupTrackingHistoryRange = async ({
               SELECT "capturedHour"
               FROM "TrackingPoint"
               WHERE "TrackingPoint"."streamId" = "stream"."id"
-                AND "TrackingPoint"."capturedHour" >= ${windowHour - HISTORY_RETENTION_HOURS}
+                AND "TrackingPoint"."capturedHour" >= "stream"."firstHour"
                 AND "TrackingPoint"."capturedHour" < ${fromHour}
                 AND "TrackingPoint"."receivedHour" >= ${windowHour}
               ORDER BY "TrackingPoint"."capturedHour" DESC

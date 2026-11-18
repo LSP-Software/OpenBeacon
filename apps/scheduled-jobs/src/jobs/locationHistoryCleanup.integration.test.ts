@@ -415,4 +415,42 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history
     await createEpochCleanup()();
     expect(await epochNumbers(groupId)).toEqual([2]);
   });
+  test("deletes points past each sender's chosen window, through group overrides, and keeps the latest point", async () => {
+    const followsAccount = await createGroup("share-account", [200]);
+    const overridden = await createGroup("share-override", [200]);
+    const maximum = await createGroup("share-maximum", [200]);
+    await prisma.user.update({ where: { id: userId }, data: { historyShare: "DAY_1" } });
+    await prisma.groupMember.createMany({
+      data: [
+        { groupId: followsAccount, userId, role: "OWNER", joinedEpochNumber: 1 },
+        {
+          groupId: overridden,
+          userId,
+          role: "OWNER",
+          joinedEpochNumber: 1,
+          historyShare: "HOURS_6",
+        },
+        { groupId: maximum, userId, role: "OWNER", joinedEpochNumber: 1, historyShare: "MAXIMUM" },
+      ],
+    });
+    for (const groupId of [followsAccount, overridden, maximum]) {
+      await addPayloads(
+        groupId,
+        [3, 5, 6, 23, 24, 30].map((hours) => ({
+          epoch: 1,
+          receivedAt: ago(hours / 24),
+          name: `${hours}h`,
+        })),
+      );
+    }
+    await addLatest(overridden, 1, ago(1 / 24));
+
+    await createLocationHistoryCleanup({ batchSize: 2 })();
+
+    expect(await payloadNames(followsAccount)).toEqual(["23h", "3h", "5h", "6h"]);
+    expect(await payloadNames(overridden)).toEqual(["3h", "5h"]);
+    expect(await payloadNames(maximum)).toEqual(["23h", "24h", "30h", "3h", "5h", "6h"]);
+    expect(await prisma.trackingLatestPoint.count({ where: { groupId: overridden } })).toBe(1);
+    await prisma.user.update({ where: { id: userId }, data: { historyShare: "MAXIMUM" } });
+  });
 });

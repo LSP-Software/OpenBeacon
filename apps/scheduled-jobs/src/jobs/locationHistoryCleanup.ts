@@ -1,3 +1,4 @@
+import { effectiveHistoryShareSql, historyFirstHourSql } from "@openbeacon/api/historyShare.ts";
 import { deleteTrackingPointsInBatches } from "@openbeacon/api/trackingCleanup.ts";
 import { Prisma } from "@openbeacon/database";
 import { errorCode, tryCatch } from "@openbeacon/shared";
@@ -10,7 +11,9 @@ const retentionCutoff = async () =>
 export const createLocationHistoryCleanup =
   ({ batchSize = 1_000, runLimit = 500_000 }: { batchSize?: number; runLimit?: number } = {}) =>
   async () => {
-    const cutoff = await retentionCutoff();
+    const now = await getDatabaseTime();
+    const cutoff = new Date(now.getTime() - 14 * 24 * 60 * 60_000).toISOString();
+    const nowHour = Math.floor(now.getTime() / 3_600_000);
     const cutoffHour = Math.floor(new Date(cutoff).getTime() / 3_600_000);
     const result = await tryCatch(
       (async () => {
@@ -21,6 +24,20 @@ export const createLocationHistoryCleanup =
           batchSize,
           limit: runLimit,
         });
+        const outsideShare =
+          deleted < runLimit
+            ? await deleteTrackingPointsInBatches({
+                db: services.db,
+                streamJoins: Prisma.sql`
+                  JOIN "GroupMember" AS "member"
+                    ON "member"."groupId" = "stream"."groupId" AND "member"."userId" = "stream"."senderUserId"
+                  JOIN "User" AS "account" ON "account"."id" = "stream"."senderUserId"`,
+                streams: Prisma.sql`${effectiveHistoryShareSql} <> 'MAXIMUM'`,
+                points: Prisma.sql`"point"."capturedHour" < ${historyFirstHourSql(nowHour, 0)}`,
+                batchSize,
+                limit: runLimit - deleted,
+              })
+            : 0;
         await services.db.$executeRaw`
           DELETE FROM "TrackingLatestPoint"
           WHERE "updatedAt" < (${cutoff}::timestamptz AT TIME ZONE 'UTC')
@@ -51,7 +68,7 @@ export const createLocationHistoryCleanup =
             return streams;
           });
           const last = locked.at(-1);
-          if (!last || locked.length < batchSize) return deleted;
+          if (!last || locked.length < batchSize) return deleted + outsideShare;
           afterStream = last.id;
         }
       })(),
