@@ -4,7 +4,6 @@ import { renderAccountExistsEmail } from "./accountExistsEmail.tsx";
 import { renderCodeEmail } from "./codeEmail.tsx";
 import { loadEmailSettings } from "./config.ts";
 import { renderGoogleSignInEmail } from "./googleSignInEmail.tsx";
-import { renderEmailLayout } from "./layout.tsx";
 import { createSendSecurityAlertEmail } from "./securityAlertEmail.tsx";
 import { createSendEmail } from "./sender.ts";
 import { createEmailTransport } from "./transport.ts";
@@ -33,9 +32,6 @@ export {
   securityAlertSettings,
   type TurnedOffNotification,
 } from "./types.ts";
-
-export const renderEmail = (email: Omit<Parameters<typeof renderEmailLayout>[0], "serverName">) =>
-  renderEmailLayout({ ...email, serverName });
 
 export const sendEmail = createSendEmail(
   transport

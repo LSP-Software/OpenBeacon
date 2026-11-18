@@ -72,3 +72,64 @@ test("a caller that chose nothing gets the Redis error, and bad input still thro
 test("ping reports false instead of throwing", async () => {
   expect(await cache.ping()).toBe(false);
 });
+
+class FailingCache extends OpenBeaconCache {
+  constructor(private readonly failure: Error & { code: string }) {
+    super({ redisUrl: "redis://localhost:6379", hashSecret: testRedisHashSecret });
+  }
+
+  protected override createRedisClient() {
+    return {
+      send: async () => {
+        throw this.failure;
+      },
+      del: async () => {
+        throw this.failure;
+      },
+      close: () => {},
+    };
+  }
+}
+
+test("a Redis that is up but refuses the call is not treated as an outage", async () => {
+  const error = spyOn(console, "error").mockImplementation(() => {});
+  const refusing = new FailingCache(
+    Object.assign(new Error("NOPERM this user has no permissions"), {
+      code: "ERR_REDIS_SERVER_ERROR",
+    }),
+  );
+  await expect(
+    refusing.rateLimits.consume(limit, { whenUnavailable: "allow" }),
+  ).rejects.toMatchObject({ code: "ERR_REDIS_SERVER_ERROR" });
+  await expect(refusing.rateLimits.peek(limit, { whenUnavailable: "deny" })).rejects.toThrow(
+    "NOPERM",
+  );
+  expect(error).not.toHaveBeenCalled();
+  error.mockRestore();
+});
+
+test("a call that times out is treated as an outage", async () => {
+  const error = spyOn(console, "error").mockImplementation(() => {});
+  const slow = new FailingCache(
+    Object.assign(new Error("Redis didn't answer in time"), { code: "ERR_REDIS_TIMEOUT" }),
+  );
+  expect(await slow.rateLimits.consume(limit, { whenUnavailable: "allow" })).toMatchObject({
+    allowed: true,
+    unavailable: true,
+  });
+  error.mockRestore();
+});
+
+test("rate limiting by email without a hash secret fails loudly instead of looking like an outage", async () => {
+  const noSecret = new (class extends OpenBeaconCache {
+    protected override createRedisClient(): UnavailableRedis {
+      return new UnavailableRedis();
+    }
+  })({ redisUrl: "redis://localhost:6379" });
+  await expect(
+    noSecret.rateLimits.consume(
+      { ...limit, identifier: { type: "email", value: "a@example.com" } },
+      { whenUnavailable: "allow" },
+    ),
+  ).rejects.toThrow("needs a hash secret");
+});

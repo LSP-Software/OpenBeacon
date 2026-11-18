@@ -1,5 +1,6 @@
 import { createHmac } from "node:crypto";
 import type { RedisLike } from "../cache/redis.ts";
+import { redisTimeoutCode } from "../cache/selfHealingRedis.ts";
 import {
   type RateLimitIdentifier,
   rateLimitConsumeInputSchema,
@@ -97,7 +98,7 @@ const buildRateLimitKey = ({
     return `${keyPrefix}:ratelimit:${namespace}:deviceGroup:${identifier.deviceId}:${identifier.groupId}`;
   }
   if (!hashSecret) {
-    throw new Error("Rate limiting by IP address or email address needs a hash secret.");
+    throw new Error("Rate limiting by email address needs a hash secret.");
   }
   const hash = createHmac("sha256", hashSecret)
     .update(`${identifier.type}:${identifier.value}`)
@@ -161,6 +162,13 @@ const executeRateLimitScript = async ({
   return parseRateLimitResult(result);
 };
 
+const redisUnavailableCodes = new Set([
+  "ERR_REDIS_CONNECTION_CLOSED",
+  "ERR_REDIS_CONNECTION_TIMEOUT",
+  "ERR_REDIS_IDLE_TIMEOUT",
+  redisTimeoutCode,
+]);
+
 const withFallback = async (
   { namespace, limit }: { namespace: string; limit: number },
   result: Promise<RateLimitResult>,
@@ -168,8 +176,9 @@ const withFallback = async (
 ): Promise<RateLimitResult> => {
   if (!options) return result;
   return result.catch((error: unknown) => {
-    const allowed = options.whenUnavailable === "allow";
     const code = error instanceof Error && "code" in error ? String(error.code) : null;
+    if (!code || !redisUnavailableCodes.has(code)) throw error;
+    const allowed = options.whenUnavailable === "allow";
     console.error(
       `[rate-limit] Redis is unavailable${code ? ` (${code})` : ""}, so ${namespace} is ${allowed ? "allowed" : "refused"}`,
     );
@@ -201,7 +210,7 @@ export const createRateLimits = ({ hashSecret, keyPrefix, now, redis }: RateLimi
           now,
           ...parsedInput,
           mode: "peek",
-          cost: 0,
+          cost: parsedInput.cost ?? 1,
         }),
         options,
       );
