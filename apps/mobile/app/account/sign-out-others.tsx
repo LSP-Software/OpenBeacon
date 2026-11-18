@@ -1,6 +1,5 @@
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { TRPCClientError } from "@trpc/client";
 import { Link, router, useNavigation } from "expo-router";
 import { useEffect, useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
@@ -13,6 +12,7 @@ import { useIdentityGate } from "../../hooks/useIdentityGate.ts";
 import { Alert } from "../../lib/alert.ts";
 import { trpc } from "../../lib/api.ts";
 import { needsFreshSignIn } from "../../lib/needsFreshSignIn.ts";
+import { userMessage } from "../../lib/userMessage.ts";
 
 const SignOutOtherSessionsScreen = () => {
   const [step, setStep] = useState<"verify" | "ready" | "signingOut">("verify");
@@ -41,12 +41,7 @@ const SignOutOtherSessionsScreen = () => {
     }
     if (result.error) {
       setStep("ready");
-      Alert.alert(
-        "Unable to sign out other sessions",
-        result.error instanceof TRPCClientError && result.error.data
-          ? result.error.message
-          : "Check your connection and try again.",
-      );
+      Alert.alert("Unable to sign out other sessions", userMessage(result.error));
       return;
     }
     if (navigation.isFocused()) router.back();

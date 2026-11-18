@@ -48,7 +48,7 @@ import {
 } from "../../../lib/mapGroupVisibility.ts";
 import { nextMapMarkerSelection } from "../../../lib/mapMarkerSelection.ts";
 import type { MapMemberDevice } from "../../../lib/mapPeopleTypes.ts";
-import { readRegisteredDevice } from "../../../lib/registeredDevice.ts";
+import { registeredDeviceQueryOptions } from "../../../lib/registeredDevice.ts";
 import { resolveSelfDeviceLocationFallback } from "../../../lib/resolveSelfDeviceLocationFallback.ts";
 import { storage } from "../../../lib/storage.ts";
 import { TAB_BAR_CONTENT_HEIGHT } from "../../../lib/tabBarLayout.ts";
@@ -118,12 +118,7 @@ const MapScreen = () => {
   }, [groups, keyAccessSignature]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
   const selfUserId = session?.user.id ?? "";
-  const { data: registeredDevice } = useQuery({
-    queryKey: ["registeredDevice", selfUserId],
-    enabled: selfUserId.length > 0,
-    staleTime: Number.POSITIVE_INFINITY,
-    queryFn: readRegisteredDevice,
-  });
+  const { data: registeredDevice } = useQuery(registeredDeviceQueryOptions(selfUserId));
   const selfDeviceId = registeredDevice?.userId === selfUserId ? registeredDevice.deviceId : "";
   const memberDeviceLists = useQueries({
     queries: (groups ?? []).map((group) => ({
@@ -511,7 +506,7 @@ const MapScreen = () => {
               Multiple groups require attention
             </Text>
             <View className="flex-row flex-wrap items-center gap-3">
-              <Link href="/(tabs)/groups" asChild>
+              <Link href="/(tabs)/groups/list" asChild>
                 <Button size="sm">
                   <Text>Open groups</Text>
                 </Button>

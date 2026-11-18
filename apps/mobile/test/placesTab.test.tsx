@@ -12,6 +12,7 @@ let role = "OWNER";
 let places: GroupPlace[] = [];
 let sharing = { enabled: true, arrivalsOff: [] as { userId: string; deviceId: string }[] };
 let sharingFailed = false;
+let placesFailedToRefresh = false;
 let notificationRequests = 0;
 const storedFlags = new Set<string>();
 const passthrough = ({ children }: { children?: ReactNode }) =>
@@ -23,7 +24,9 @@ mock.module("@tanstack/react-query", () => ({
   useQueryClient: () => ({ invalidateQueries: async () => {} }),
   useQuery: (options: { queryKey?: unknown[]; select?: (groups: unknown[]) => unknown }) => {
     const key = options.queryKey?.[0];
-    if (key === "groupPlaces") return { data: places, isPending: false, isError: false };
+    if (key === "groupPlaces") {
+      return { data: places, isPending: false, isError: placesFailedToRefresh };
+    }
     if (key === "placeSharing") {
       return sharingFailed
         ? { data: undefined, isError: true, isFetching: false, refetch: async () => {} }
@@ -77,7 +80,9 @@ mock.module("../lib/auth-client.ts", () => ({
 mock.module("../hooks/useMemberNames.ts", () => ({
   useMemberNames: () => (userId: string) => (userId === "sam" ? "Sam" : null),
 }));
-mock.module("../lib/registeredDevice.ts", () => ({ readRegisteredDevice: async () => null }));
+mock.module("../lib/registeredDevice.ts", () => ({
+  registeredDeviceQueryOptions: (userId: string) => ({ queryKey: ["registeredDevice", userId] }),
+}));
 mock.module("../lib/placeCatchUp.ts", () => ({ catchUpGroupPlaces: async () => 0 }));
 mock.module("../lib/placeBackgroundSync.ts", () => ({
   markPlacesUnsynced: () => {},
@@ -102,7 +107,7 @@ mock.module("../lib/placeSync.ts", () => ({
   groupPlacesQueryOptions: () => ({ queryKey: ["groupPlaces"] }),
 }));
 
-const { default: PlacesTab } = await import("../app/(tabs)/groups/[groupId]/PlacesTab.tsx");
+const { default: PlacesTab } = await import("../components/groups/PlacesTab.tsx");
 
 const place = (overrides: Partial<GroupPlace>): GroupPlace => ({
   algorithm: "xchacha20poly1305",
@@ -151,6 +156,7 @@ beforeEach(() => {
   role = "OWNER";
   sharing = { enabled: true, arrivalsOff: [] };
   sharingFailed = false;
+  placesFailedToRefresh = false;
   notificationRequests = 0;
   storedFlags.clear();
   places = [place({}), place({ id: "club", name: "Football club", emoji: "⚽", geometry: null })];
@@ -213,4 +219,11 @@ test("asks for notification permission the first time Places opens, and only the
   await render();
   await render();
   expect(notificationRequests).toBe(1);
+});
+
+test("a failed background refresh keeps the loaded places", async () => {
+  placesFailedToRefresh = true;
+  const text = await render();
+  expect(text).toContain("Home");
+  expect(text).not.toContain("Couldn’t load places");
 });

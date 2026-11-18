@@ -2,7 +2,6 @@ import { Alert } from "../../lib/alert.ts";
 import { diagnoseRecoveryPhraseInput, parseRecoveryPhrase } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { TRPCClientError } from "@trpc/client";
 import { Link, router, Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
 import {
   allowScreenCaptureAsync,
@@ -29,6 +28,7 @@ import { restoreFromRecoveryPhrase } from "../../lib/recovery.ts";
 import { requestTrackingSync } from "../../lib/trackingEvents.ts";
 import { resealPersonalData } from "../../lib/resealPersonalData.ts";
 import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
+import { userMessage } from "../../lib/userMessage.ts";
 
 const emptyWords = () => Array.from({ length: 12 }, () => "");
 
@@ -108,7 +108,7 @@ const RecoveryRestoreScreen = () => {
     const result = await tryCatch(restoreFromRecoveryPhrase(parsed.data));
     if (result.error) {
       setStep("enter");
-      Alert.alert("Unable to restore", result.error.message);
+      Alert.alert("Unable to restore", userMessage(result.error));
       return;
     }
     setWords(emptyWords());
@@ -129,11 +129,7 @@ const RecoveryRestoreScreen = () => {
         return;
       }
       if (activated.error) {
-        setActivationProblem(
-          activated.error instanceof TRPCClientError && !activated.error.data
-            ? "We couldn’t reach the server. Check your connection and try again."
-            : activated.error.message,
-        );
+        setActivationProblem(userMessage(activated.error));
         setStep("activationFailed");
         return;
       }

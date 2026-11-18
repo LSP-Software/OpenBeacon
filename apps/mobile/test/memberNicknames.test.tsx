@@ -166,7 +166,7 @@ mock.module("../lib/batteryVisual.ts", () => ({
   }),
 }));
 mock.module("../lib/timeSince.ts", () => ({ timeSince: () => "2 minutes ago" }));
-const { default: MembersTab } = await import("../app/(tabs)/groups/[groupId]/MembersTab.tsx");
+const { default: MembersTab } = await import("../components/groups/MembersTab.tsx");
 const { getSnapshot: getAlerts } = await import("../lib/alert.ts");
 const live = () => ({
   dropRemovedDevices: () => {},

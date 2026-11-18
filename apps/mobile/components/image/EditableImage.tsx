@@ -9,6 +9,7 @@ import { pickImage, processImage } from "../../lib/pickImage.ts";
 import { DecryptedAvatarImage } from "./DecryptedAvatarImage.tsx";
 import { Avatar, AvatarFallback } from "../ui/Avatar.tsx";
 import { Icon } from "../ui/Icon.tsx";
+import { userMessage } from "../../lib/userMessage.ts";
 
 interface EditableImageProps {
   accessibilityLabel: string;
@@ -77,11 +78,11 @@ export const EditableImage = ({
           Promise.resolve(onImageUploaded(uploadResult.data)),
         );
         if (callbackError) {
-          Alert.alert("Unable to update the picture", callbackError.message);
+          Alert.alert("Unable to update the picture", userMessage(callbackError));
         }
       }
     } catch (error) {
-      Alert.alert("Upload failed", error instanceof Error ? error.message : String(error));
+      Alert.alert("Upload failed", userMessage(error));
     } finally {
       setIsUploading(false);
       setPickerOpen(false);

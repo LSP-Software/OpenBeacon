@@ -12,6 +12,7 @@ import { Alert } from "../../lib/alert.ts";
 import { trpc } from "../../lib/api.ts";
 import { cn } from "../../lib/cn.ts";
 import { useNotificationSettings } from "../../lib/notifications.ts";
+import { userMessage } from "../../lib/userMessage.ts";
 
 const sections = [
   { key: "places", title: "Places" },
@@ -63,7 +64,7 @@ const NotificationsScreen = () => {
       },
       onError: (error, { type, channel }, context) => {
         if (typeof context?.previous === "boolean") setCell(type, channel, context.previous);
-        Alert.alert("Unable to save your notification settings", error.message);
+        Alert.alert("Unable to save your notification settings", userMessage(error));
       },
     }),
     networkMode: "always",

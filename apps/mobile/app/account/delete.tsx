@@ -14,6 +14,7 @@ import { ChoiceList } from "../../components/ui/ChoiceList.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { trpc } from "../../lib/api.ts";
 import { endSession } from "../../lib/endSession.ts";
+import { userMessage } from "../../lib/userMessage.ts";
 
 const DeleteAccountScreen = () => {
   const requestDeletion = useMutation(trpc.account.requestDeletion.mutationOptions());
@@ -44,7 +45,7 @@ const DeleteAccountScreen = () => {
             );
             deletionForm.reset();
             if (result.error) {
-              Alert.alert("Unable to delete account", result.error.message);
+              Alert.alert("Unable to delete account", userMessage(result.error));
               return;
             }
             await tryCatch(endSession({ reason: immediate ? "accountDeleted" : "signedOut" }));

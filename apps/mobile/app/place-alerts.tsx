@@ -48,7 +48,7 @@ const PlaceAlertsScreen = () => {
           Everyone else still gets theirs.
         </Text>
 
-        {places.isError || mutes.isError ? (
+        {(places.isError && !places.data) || (mutes.isError && !mutes.data) ? (
           <View className="gap-3">
             <Text>Couldn’t load your alerts. Check your connection and try again.</Text>
             <Button

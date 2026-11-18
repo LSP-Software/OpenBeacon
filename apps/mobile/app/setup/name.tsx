@@ -20,6 +20,7 @@ import { cn } from "../../lib/cn.ts";
 import { deviceIconFor, selectableDeviceIcons } from "../../lib/deviceIcons.ts";
 import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 import { requestTrackingSync } from "../../lib/trackingEvents.ts";
+import { userMessage } from "../../lib/userMessage.ts";
 
 const schema = z.object({ name: deviceNameSchema, icon: deviceIconSchema });
 
@@ -61,7 +62,7 @@ const NameThisPhoneScreen = () => {
     const result = await tryCatch(updateDevice.mutateAsync({ deviceId: thisPhone.id, name, icon }));
     saving.current = false;
     if (result.error) {
-      Alert.alert("Unable to save the name", result.error.message);
+      Alert.alert("Unable to save the name", userMessage(result.error));
       return;
     }
     await queryClient.invalidateQueries({
@@ -79,7 +80,7 @@ const NameThisPhoneScreen = () => {
       title={`Name this ${noun}`}
       description="Its name and icon help you tell your devices apart in Account → Devices."
       primary={
-        devices.isError
+        devices.isError && !devices.data
           ? { label: "Try again", onPress: () => void devices.refetch() }
           : {
               label: "Continue",
@@ -96,7 +97,7 @@ const NameThisPhoneScreen = () => {
     >
       {devices.isPending ? (
         <LoadingIndicator />
-      ) : devices.isError ? (
+      ) : devices.isError && !devices.data ? (
         <Text className="text-secondary text-base">
           We couldn’t load this {noun}’s details. Check your connection and try again, or skip and
           name it later in Account → Devices.

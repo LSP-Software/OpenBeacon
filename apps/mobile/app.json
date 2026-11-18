@@ -54,7 +54,7 @@
     },
     "scheme": "openbeacon",
     "plugins": [
-      "expo-router",
+      ["expo-router", { "sitemap": false }],
       "expo-secure-store",
       [
         "expo-build-properties",

@@ -17,6 +17,11 @@ let mutationStatus: Awaited<ReturnType<typeof changeLocationSharing>> = "applied
 let pauseLocallyBeforeFailing = false;
 let sharingData: { account: SharingPreference; device: SharingPreference };
 let pendingAccount: z.infer<typeof setLocationSharingSchema> | null = null;
+let permissionState: {
+  isReadyForSharing: boolean;
+  shouldShowAccountWarning: boolean;
+  missing: ("foreground" | "precise" | "background")[];
+} | null = null;
 const changes: Parameters<typeof changeLocationSharing>[0][] = [];
 const preference = (overrides: Partial<SharingPreference> = {}): SharingPreference => ({
   sharingPaused: false,
@@ -48,6 +53,15 @@ mock.module("react-native", () => ({
     visible ? children : null,
 }));
 const appLock = { locked: false, away: false };
+mock.module("expo-location", () => ({
+  getBackgroundPermissionsAsync: async () => ({}),
+  getForegroundPermissionsAsync: async () => ({}),
+  requestBackgroundPermissionsAsync: async () => ({}),
+  requestForegroundPermissionsAsync: async () => ({}),
+}));
+mock.module("../providers/LocationPermissionProvider.tsx", () => ({
+  useLocationPermissions: () => ({ permissionState }),
+}));
 mock.module("../lib/appLock.ts", () => ({ useAppLock: () => ({ ...appLock }) }));
 mock.module("lucide-react-native", () => ({
   CheckIcon: () => null,
@@ -138,6 +152,7 @@ const selectedDurations = () =>
 beforeEach(() => {
   sharingData = { account: preference(), device: preference() };
   pendingAccount = null;
+  permissionState = null;
   locallyPaused = false;
   rejectedChange = false;
   mutationError = null;
@@ -368,4 +383,25 @@ test("the pause sheet can't be used while the app is locked or away", async () =
     await act(async () => root?.render(<LocationSharingCard />));
     expect(selectedDurations()).toEqual([]);
   }
+});
+
+test("doesn't claim this phone is sharing while a location permission it needs is off", async () => {
+  permissionState = {
+    isReadyForSharing: false,
+    shouldShowAccountWarning: true,
+    missing: ["background"],
+  };
+  const output = await render();
+  expect(output).toContain("Background location is off");
+  expect(output).not.toContain("Sharing enabled");
+});
+
+test("another device's card isn't affected by this phone's permissions", async () => {
+  permissionState = {
+    isReadyForSharing: false,
+    shouldShowAccountWarning: true,
+    missing: ["precise"],
+  };
+  const output = await render({ ...preference(), id: "tablet", name: "Tablet", isCurrent: false });
+  expect(output).toContain("Sharing enabled on Tablet");
 });

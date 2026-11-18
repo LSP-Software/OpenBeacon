@@ -24,6 +24,7 @@ import { cn } from "../../lib/cn.ts";
 import { serverNow } from "../../lib/locationSharing.ts";
 import { deviceIconFor, selectableDeviceIcons } from "../../lib/deviceIcons.ts";
 import { shortTimeSince } from "../../lib/timeSince.ts";
+import { userMessage } from "../../lib/userMessage.ts";
 
 const schema = z.object({ name: deviceNameSchema, icon: deviceIconSchema });
 
@@ -48,7 +49,7 @@ const DevicesScreen = () => {
     if (!editing) return;
     const result = await tryCatch(updateDevice.mutateAsync({ deviceId: editing.id, name, icon }));
     if (result.error) {
-      Alert.alert("Unable to update device", result.error.message);
+      Alert.alert("Unable to update device", userMessage(result.error));
       return;
     }
     await queryClient.invalidateQueries({ queryKey: trpc.account.listDevices.queryKey() });
@@ -132,7 +133,7 @@ const DevicesScreen = () => {
 
       {devices.isPending ? (
         <LoadingIndicator />
-      ) : devices.isError ? (
+      ) : devices.isError && !devices.data ? (
         <View className="flex-1 items-center justify-center gap-4 px-6">
           <Text className="text-tertiary text-center">
             We couldn’t load your devices. Check your connection and try again.

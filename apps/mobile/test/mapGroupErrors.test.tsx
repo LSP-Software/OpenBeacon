@@ -41,6 +41,7 @@ let queueEviction: {
 const dismissedEvictions: unknown[] = [];
 mock.module("../components/AnnouncementBanner.tsx", () => ({ AnnouncementBanner: () => null }));
 mock.module("@tanstack/react-query", () => ({
+  queryOptions: <T,>(options: T) => options,
   skipToken: Symbol("skipToken"),
   useQuery: ({ queryKey }: { queryKey?: unknown[] }) => ({
     data: queryKey?.[0] === "trackingQueueEviction" ? queueEviction : groups,
@@ -180,7 +181,7 @@ test("shows individual group links for up to two missing keys and a groups link 
       expect(rendered).toContain('"groupId":"0"');
       expect(rendered).toContain('"groupId":"2"');
     }
-    if (count === 3) expect(rendered).toContain("/(tabs)/groups");
+    if (count === 3) expect(rendered).toContain("/(tabs)/groups/list");
   }
   await act(async () => root.unmount());
 });

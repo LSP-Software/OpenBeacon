@@ -870,7 +870,7 @@ const TimelineView = ({
         style={{ bottom: insets.bottom + 8 }}
         onLayout={(event) => setPanelHeight(event.nativeEvent.layout.height + insets.bottom + 8)}
       >
-        {daysQuery.isError ? (
+        {daysQuery.isError && !days ? (
           <ProblemNote
             message={`Couldn’t load the Timeline for ${group.name}. Check your connection and try again.`}
             loading={daysQuery.isFetching}
@@ -884,7 +884,7 @@ const TimelineView = ({
               ? "No location history for this person in this group yet."
               : `No location history in ${group.name} yet.`}
           </Text>
-        ) : dayQuery.isError ? (
+        ) : dayQuery.isError && !timeline ? (
           <ProblemNote
             message="Couldn’t load this day. Check your connection and try again."
             loading={dayQuery.isFetching}
@@ -894,6 +894,11 @@ const TimelineView = ({
           <ActivityIndicator className="py-6" />
         ) : (
           <View className="gap-3">
+            {daysQuery.isError || dayQuery.isError ? (
+              <Text className="text-sm text-secondary">
+                Couldn’t reach the server, so this may be out of date.
+              </Text>
+            ) : null}
             <View className="flex-row items-center gap-3">
               <Text className="text-3xl font-semibold text-foreground">{clockLabel}</Text>
               <View className="min-w-0 flex-1">

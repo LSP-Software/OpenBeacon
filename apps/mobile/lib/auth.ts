@@ -10,6 +10,7 @@ import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
 import { isDeviceRemovedError } from "./deviceRemovedError.ts";
 import { withOwnScreen } from "./ownScreen.ts";
 import { resetSessionLinkRetries } from "./sessionLink.ts";
+import { userMessage } from "./userMessage.ts";
 
 const getGoogleWebClientId = () => process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
 
@@ -96,7 +97,7 @@ export const completeAuthenticatedSessionSetup = async () => {
     return {
       data: null,
       error: {
-        message: getErrorMessage(error, "Unable to register this device."),
+        message: userMessage(error),
       },
     };
   }

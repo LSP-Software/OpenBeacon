@@ -1,3 +1,4 @@
+import { queryOptions } from "@tanstack/react-query";
 import { getBaseUrl } from "./currentServer.ts";
 import { storage } from "./storage.ts";
 
@@ -23,3 +24,12 @@ export const readRegisteredDeviceNow = () => {
 };
 
 export const readRegisteredDevice = async () => readRegisteredDeviceNow();
+
+export const registeredDeviceQueryOptions = (userId: string) =>
+  queryOptions({
+    queryKey: ["registeredDevice", userId],
+    enabled: userId.length > 0,
+    staleTime: Number.POSITIVE_INFINITY,
+    networkMode: "always",
+    queryFn: readRegisteredDevice,
+  });

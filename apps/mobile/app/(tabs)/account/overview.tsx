@@ -61,6 +61,7 @@ import { storage } from "../../../lib/storage.ts";
 import { appVersion } from "../../../lib/versions.ts";
 import { useLocationPermissions } from "../../../providers/LocationPermissionProvider.tsx";
 import { useTheme } from "../../../providers/ThemeProvider.tsx";
+import { userMessage } from "../../../lib/userMessage.ts";
 
 const schema = z.object({ name: accountNameSchema });
 
@@ -110,7 +111,7 @@ const AccountScreen = () => {
   const saveName = async ({ name }: z.infer<typeof schema>) => {
     const result = await tryCatch(updateName.mutateAsync({ name }));
     if (result.error) {
-      Alert.alert("Unable to update name", result.error.message);
+      Alert.alert("Unable to update name", userMessage(result.error));
       return;
     }
     await Promise.all([

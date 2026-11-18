@@ -55,7 +55,9 @@ import {
   isTrackingKeyCheckDue,
   markTrackingKeysStale,
   noteTrackingKeyState,
+  readCursorGroup,
   recordTrackingKeyCheck,
+  rememberCursorGroup,
 } from "./trackingKeyCheck.ts";
 import { loadTrackingModule } from "./trackingModule.ts";
 import { recordTrackingUpload } from "./trackingUploadTime.ts";
@@ -268,6 +270,7 @@ const reconcileTrackingKeysInternal = async ({
     ]);
     if (!isCurrent()) return false;
     if (getErrorCode(device.error) === "UNAUTHORIZED") throw device.error;
+    if (device.data) rememberCursorGroup(getOwner(device.data.userId), groups);
     if (device.data && (await isPending())) return false;
     if (!isCurrent()) return false;
     if (device.data) {
@@ -326,6 +329,18 @@ const reconcileTrackingKeysInternal = async ({
   }
   if (!isCurrent()) return false;
 
+  const cachedDevice = await getRegisteredDeviceKey();
+  if (
+    cachedDevice &&
+    trackingModule.listProvisionedEpochKeys().length > 0 &&
+    !hasPendingSharingPause(cachedDevice.userId) &&
+    !hasLocallyPausedSharing(cachedDevice.userId) &&
+    trackingModule.isQueueOwner(getOwner(cachedDevice.userId), cachedDevice.deviceId)
+  ) {
+    await applyCaptureState({ hasKeys: true, isCurrent, onlyIfRunning, trackingModule });
+    if (!isCurrent()) return false;
+  }
+
   const [deviceKeyContext, groups] = await Promise.all([
     ensureDeviceKeyRegistration({ checkOwner: force }),
     trpcClient.groupMembership.list.query(),
@@ -337,6 +352,7 @@ const reconcileTrackingKeysInternal = async ({
   }
   if (!isCurrent()) return false;
   const owner = getOwner(deviceKeyContext.userId);
+  rememberCursorGroup(owner, groups);
   trackingModule.setQueueOwner(owner, deviceKeyContext.deviceId);
   await syncSharingPreference();
   if (!isCurrent()) return false;
@@ -1124,13 +1140,17 @@ const showApiCompatibilityNotice = async () => {
   if (shown) markApiCompatibilityNotified();
 };
 
-const pollPlaceUpdates = () =>
+const pollPlaceUpdates = ({ onlyWithoutKeys = false }: { onlyWithoutKeys?: boolean } = {}) =>
   inPlaceRound(async () => {
     if (trackingPaused) return;
     const trackingModule = await loadTrackingModule();
     const device = await getRegisteredDeviceKey();
     if (!trackingModule || !device) return;
-    const groupId = trackingModule.listProvisionedEpochKeys()[0]?.groupId;
+    const keyGroupId = trackingModule.listProvisionedEpochKeys()[0]?.groupId;
+    const groupId =
+      keyGroupId && onlyWithoutKeys
+        ? null
+        : (keyGroupId ?? readCursorGroup(getOwner(device.userId)));
     const accountSync = startAccountSync(trackingModule, device);
     const upload = groupId
       ? tryCatch(
@@ -1159,14 +1179,10 @@ const pollPlaceUpdates = () =>
     });
   });
 
-export const syncAccountNotices = () =>
-  inPlaceRound(async () => {
-    if (trackingPaused || getApiCompatibility()) return;
-    const trackingModule = await loadTrackingModule();
-    const device = await getRegisteredDeviceKey();
-    if (!trackingModule || !device) return;
-    await settleAccountSync(trackingModule, startAccountSync(trackingModule, device));
-  });
+export const syncAccountNotices = async () => {
+  if (getApiCompatibility()) return;
+  await pollPlaceUpdates({ onlyWithoutKeys: true });
+};
 
 export type UploadReason = "upload" | "sharing" | "parked" | "push";
 

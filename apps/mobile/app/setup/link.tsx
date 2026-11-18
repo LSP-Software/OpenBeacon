@@ -31,6 +31,7 @@ import {
 } from "../../lib/savedDeviceLink.ts";
 import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 import { requestTrackingSync } from "../../lib/trackingEvents.ts";
+import { userMessage } from "../../lib/userMessage.ts";
 
 const problemMessage = (error: Error) => {
   if (!(error instanceof TRPCClientError)) return error.message;
@@ -87,7 +88,7 @@ const LinkWithOtherPhoneScreen = () => {
       return;
     }
     if (created.error && errorReason(created.error) === "NO_APPROVING_DEVICE") {
-      setProblem({ message: created.error.message, action: "setup" });
+      setProblem({ message: userMessage(created.error), action: "setup" });
       return;
     }
     if (created.error) {

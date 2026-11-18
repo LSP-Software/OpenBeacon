@@ -21,10 +21,10 @@ import { authClient } from "../../../../lib/auth-client.ts";
 import { rotateGroupEpochIfRequired } from "../../../../lib/groupEncryption.ts";
 import { catchUpGroupImageKeys } from "../../../../lib/imageKeyCatchUp.ts";
 import { storage } from "../../../../lib/storage.ts";
-import HistoryTab from "./HistoryTab.tsx";
-import MembersTab from "./MembersTab.tsx";
-import PlacesTab from "./PlacesTab.tsx";
-import SettingsTab from "./SettingsTab.tsx";
+import HistoryTab from "../../../../components/groups/HistoryTab.tsx";
+import MembersTab from "../../../../components/groups/MembersTab.tsx";
+import PlacesTab from "../../../../components/groups/PlacesTab.tsx";
+import SettingsTab from "../../../../components/groups/SettingsTab.tsx";
 
 type GroupTabValue = "members" | "places" | "history" | "settings";
 

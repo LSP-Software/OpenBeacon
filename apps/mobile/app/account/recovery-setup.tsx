@@ -16,6 +16,7 @@ import { useIdentityGate } from "../../hooks/useIdentityGate.ts";
 import { trpc } from "../../lib/api.ts";
 import { protectHistory } from "../../lib/protectHistory.ts";
 import { setUpRecoveryPhrase } from "../../lib/recovery.ts";
+import { userMessage } from "../../lib/userMessage.ts";
 
 const RecoveryPhraseSetupScreen = () => {
   const queryClient = useQueryClient();
@@ -37,7 +38,7 @@ const RecoveryPhraseSetupScreen = () => {
     const result = await tryCatch(setUpRecoveryPhrase(phrase));
     if (result.error) {
       setStep("phrase");
-      Alert.alert("Unable to set up recovery phrase", result.error.message);
+      Alert.alert("Unable to set up recovery phrase", userMessage(result.error));
       return;
     }
     if (result.data.status === "reauthenticate") {

@@ -8,7 +8,7 @@ import { Text } from "../../components/ui/Text.tsx";
 import { Alert } from "../../lib/alert.ts";
 import {
   changeRelockAfter,
-  hasScreenLock,
+  phoneScreenLockQueryOptions,
   turnOffAppLock,
   turnOnAppLock,
   useAppLock,
@@ -28,11 +28,7 @@ const relockOptions = [
 const AppLockSettingsScreen = () => {
   const { enabled, relockAfter } = useAppLock();
   const [requested, setRequested] = useState<boolean | null>(null);
-  const screenLock = useQuery({
-    queryKey: ["phoneScreenLock"],
-    queryFn: hasScreenLock,
-    staleTime: 0,
-  });
+  const screenLock = useQuery(phoneScreenLockQueryOptions);
   const unavailable = !enabled && screenLock.data === false;
 
   const changeRelock = async (next: RelockAfter) => {

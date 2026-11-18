@@ -128,10 +128,10 @@ mock.module("../components/ui/SwipeTabs.tsx", () => ({
 mock.module("../components/ui/Text.tsx", () => ({
   Text: ({ children }: { children: React.ReactNode }) => children,
 }));
-mock.module("../app/(tabs)/groups/[groupId]/MembersTab.tsx", () => ({ default: () => null }));
+mock.module("../components/groups/MembersTab.tsx", () => ({ default: () => null }));
 mock.module("../hooks/useMemberNames.ts", () => ({ useMemberNames: () => () => null }));
 mock.module("../components/ui/Icon.tsx", () => ({ Icon: () => null }));
-mock.module("../app/(tabs)/groups/[groupId]/PlacesTab.tsx", () => ({ default: () => null }));
+mock.module("../components/groups/PlacesTab.tsx", () => ({ default: () => null }));
 mock.module("../hooks/useUnseenGroupHistory.ts", () => ({
   useUnseenGroupHistory: () => ({
     latest: [{ groupId: routeGroupId, latestAt }],
@@ -142,10 +142,10 @@ mock.module("../hooks/useUnseenGroupHistory.ts", () => ({
 mock.module("../hooks/useLiveTrackingPositions.ts", () => ({
   useLiveTrackingPositions: () => ({ positions: [], status: { undecryptable: [] } }),
 }));
-mock.module("../app/(tabs)/groups/[groupId]/SettingsTab.tsx", () => ({ default: () => null }));
+mock.module("../components/groups/SettingsTab.tsx", () => ({ default: () => null }));
 
 const { default: GroupScreen } = await import("../app/(tabs)/groups/[groupId]/index.tsx");
-const { default: HistoryTab } = await import("../app/(tabs)/groups/[groupId]/HistoryTab.tsx");
+const { default: HistoryTab } = await import("../components/groups/HistoryTab.tsx");
 
 const family = (members: { role: string; userId: string }[], id = "group-1") => ({
   id,

@@ -7,6 +7,7 @@ import { GROUP_COLOR_NAMES, GROUP_COLOR_PALETTE, getGroupColor } from "../../lib
 import { groupColorSyncQueryOptions, saveGroupColor } from "../../lib/groupColorSync.ts";
 import { Button } from "../ui/Button.tsx";
 import { Text } from "../ui/Text.tsx";
+import { userMessage } from "../../lib/userMessage.ts";
 
 export const GroupMapColorPicker = ({ groupId }: { groupId: string }) => {
   const { data: session } = authClient.useSession();
@@ -15,7 +16,7 @@ export const GroupMapColorPicker = ({ groupId }: { groupId: string }) => {
   const sync = useQuery(groupColorSyncQueryOptions(userId));
   const save = useMutation({
     mutationFn: saveGroupColor,
-    onError: (error) => Alert.alert("Unable to save colour", error.message),
+    onError: (error) => Alert.alert("Unable to save colour", userMessage(error)),
   });
   const locked = !userId || !sync.isSuccess || sync.isFetching || save.isPending;
   const selectedColor = save.isPending ? save.variables.color : getGroupColor(groupId);

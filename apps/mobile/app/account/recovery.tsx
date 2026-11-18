@@ -33,7 +33,7 @@ const RecoveryScreen = () => {
         contentContainerClassName="gap-6 px-4 pb-32 pt-2"
         showsVerticalScrollIndicator={false}
       >
-        {(status.isLoading || heldVersions.isLoading) && <LoadingIndicator />}
+        {(status.isPending || heldVersions.isLoading) && <LoadingIndicator />}
         {status.isError && (
           <View className="gap-4">
             <Text>Unable to load your recovery settings. Please try again.</Text>

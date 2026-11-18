@@ -24,6 +24,7 @@ import { Avatar, AvatarFallback } from "./ui/Avatar.tsx";
 import { Button } from "./ui/Button.tsx";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/Dialog.tsx";
 import { Text } from "./ui/Text.tsx";
+import { userMessage } from "../lib/userMessage.ts";
 
 export const InviteConfirmation = ({
   invite,
@@ -86,7 +87,7 @@ export const InviteConfirmation = ({
         return;
       }
       if (result.error) {
-        Alert.alert("Unable to join", result.error.message);
+        Alert.alert("Unable to join", userMessage(result.error));
         return;
       }
       const joinedGroupId = preview.data?.group.id;
@@ -105,7 +106,7 @@ export const InviteConfirmation = ({
           trpcClient.groupInvites.decline.mutate({ inviteId: invite.inviteId }),
         );
         if (result.error && !isNotFound(result.error)) {
-          Alert.alert("Unable to decline invite", result.error.message);
+          Alert.alert("Unable to decline invite", userMessage(result.error));
           return;
         }
         await refreshInvites();
@@ -164,7 +165,7 @@ export const InviteConfirmation = ({
               ? "We couldn’t load this invite. Check your connection and try again."
               : preview.error.data.code === "TOO_MANY_REQUESTS"
                 ? "Too many attempts. Wait a minute and try again."
-                : preview.error.message}
+                : userMessage(preview.error)}
           </Text>
         </View>
         <View className="gap-3">

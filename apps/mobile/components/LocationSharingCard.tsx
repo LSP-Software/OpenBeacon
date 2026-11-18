@@ -22,6 +22,8 @@ import {
 import { useAppLock } from "../lib/appLock.ts";
 import { authClient } from "../lib/auth-client.ts";
 import { formatResumeTime } from "../lib/formatResumeTime.ts";
+import { getLocationPermissionWarningTitle } from "../lib/locationPermissions.ts";
+import { useLocationPermissions } from "../providers/LocationPermissionProvider.tsx";
 import { BottomSheet } from "./ui/BottomSheet.tsx";
 import { Button } from "./ui/Button.tsx";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/Card.tsx";
@@ -52,6 +54,9 @@ export const LocationSharingCard = ({
   const [now, setNow] = useState(serverNow);
   const [message, setMessage] = useState<string | null>(null);
   const thisDevice = !device || device.isCurrent;
+  const { permissionState } = useLocationPermissions();
+  const missingPermission =
+    thisDevice && permissionState && !permissionState.isReadyForSharing ? permissionState : null;
   const pending = session?.user.id ? getPendingSharingChanges(session.user.id) : null;
   const pendingDevice = thisDevice ? (pending?.device ?? null) : null;
   const pendingAccount = thisDevice ? (pending?.account ?? null) : null;
@@ -178,11 +183,13 @@ export const LocationSharingCard = ({
               ? "Paused on all your devices"
               : paused
                 ? `Paused on ${target}`
-                : sharing.isPending
-                  ? "Checking sharing status…"
-                  : sharing.isError
-                    ? "Couldn’t check sharing status"
-                    : `Sharing enabled on ${target}`}
+                : missingPermission
+                  ? getLocationPermissionWarningTitle(missingPermission)
+                  : sharing.isPending
+                    ? "Checking sharing status…"
+                    : sharing.isError
+                      ? "Couldn’t check sharing status"
+                      : `Sharing enabled on ${target}`}
           </Text>
         </View>
       </CardHeader>

@@ -1,6 +1,5 @@
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { TRPCClientError } from "@trpc/client";
 import { router, useLocalSearchParams, useNavigation } from "expo-router";
 import { useEffect, useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
@@ -13,6 +12,7 @@ import { useIdentityGate } from "../../hooks/useIdentityGate.ts";
 import { Alert } from "../../lib/alert.ts";
 import { trpc } from "../../lib/api.ts";
 import { needsFreshSignIn } from "../../lib/needsFreshSignIn.ts";
+import { userMessage } from "../../lib/userMessage.ts";
 
 const RemoveDeviceScreen = () => {
   const { deviceId, name } = useLocalSearchParams<{ deviceId: string; name: string }>();
@@ -42,12 +42,7 @@ const RemoveDeviceScreen = () => {
     }
     if (result.error) {
       setStep("ready");
-      Alert.alert(
-        "Unable to remove device",
-        result.error instanceof TRPCClientError && result.error.data
-          ? result.error.message
-          : "Check your connection and try again.",
-      );
+      Alert.alert("Unable to remove device", userMessage(result.error));
       return;
     }
     await queryClient.invalidateQueries({ queryKey: trpc.account.listDevices.queryKey() });

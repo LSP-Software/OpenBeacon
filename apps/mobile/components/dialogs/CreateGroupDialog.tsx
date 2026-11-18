@@ -28,6 +28,7 @@ import {
 import { Icon } from "../ui/Icon.tsx";
 import { Input } from "../ui/Input.tsx";
 import { Text } from "../ui/Text.tsx";
+import { userMessage } from "../../lib/userMessage.ts";
 
 export const CreateGroupDialog = ({
   open,
@@ -83,10 +84,7 @@ export const CreateGroupDialog = ({
         return;
       }
       if (result.error) {
-        Alert.alert(
-          "Unable to create group",
-          result.error instanceof Error ? result.error.message : "Something went wrong.",
-        );
+        Alert.alert("Unable to create group", userMessage(result.error));
       }
     });
   };

@@ -6,9 +6,10 @@ import { useMutation } from "@tanstack/react-query";
 import { LinkIcon, MailIcon, PlusIcon, QrCodeIcon, Trash2Icon } from "lucide-react-native";
 import { useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
-import { Pressable, View } from "react-native";
+import { Pressable, ScrollView, useWindowDimensions, View } from "react-native";
 import type z from "zod";
 import { trpc } from "../../lib/api.ts";
+import { useSingleFlight } from "../../lib/useSingleFlight.ts";
 import { SharedInvite } from "./SharedInvite.tsx";
 import { FormSelectInput } from "../formInputs/FormSelectInput.tsx";
 import { Button } from "../ui/Button.tsx";
@@ -17,6 +18,7 @@ import { Icon } from "../ui/Icon.tsx";
 import { Input } from "../ui/Input.tsx";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/Tabs.tsx";
 import { Text } from "../ui/Text.tsx";
+import { userMessage } from "../../lib/userMessage.ts";
 
 interface InviteMemberToGroupDialogProps {
   open: boolean;
@@ -32,37 +34,44 @@ export const InviteMemberToGroupDialog = ({
   canInviteAdmins,
 }: InviteMemberToGroupDialogProps) => {
   const [value, setValue] = useState("email");
+  const { height } = useWindowDimensions();
 
   return (
     <Dialog open={open} onOpenChange={(open) => setOpen(open)}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Invite a member</DialogTitle>
-        </DialogHeader>
-        <Tabs value={value} onValueChange={setValue}>
-          <TabsList className="mb-4 w-full">
-            <TabsTrigger value="email" className="flex-1">
-              <Icon as={MailIcon} />
-              <Text>Email</Text>
-            </TabsTrigger>
-            <TabsTrigger value="link" className="flex-1">
-              <Icon as={LinkIcon} />
-              <Text>Link / Code</Text>
-            </TabsTrigger>
-            <TabsTrigger value="qr" className="flex-1">
-              <Icon as={QrCodeIcon} />
-              <Text>QR code</Text>
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="email" className="flex flex-col gap-4">
-            <InviteMembersInputs
-              groupId={groupId}
-              setOpen={setOpen}
-              canInviteAdmins={canInviteAdmins}
-            />
-          </TabsContent>
-          {open && <SharedInvite groupId={groupId} open={open} setOpen={setOpen} value={value} />}
-        </Tabs>
+      <DialogContent style={{ maxHeight: height - 32 }}>
+        <ScrollView
+          className="shrink"
+          contentContainerClassName="gap-4"
+          keyboardShouldPersistTaps="handled"
+        >
+          <DialogHeader>
+            <DialogTitle>Invite a member</DialogTitle>
+          </DialogHeader>
+          <Tabs value={value} onValueChange={setValue}>
+            <TabsList className="mb-4 w-full">
+              <TabsTrigger value="email" className="flex-1">
+                <Icon as={MailIcon} />
+                <Text>Email</Text>
+              </TabsTrigger>
+              <TabsTrigger value="link" className="flex-1">
+                <Icon as={LinkIcon} />
+                <Text>Link / Code</Text>
+              </TabsTrigger>
+              <TabsTrigger value="qr" className="flex-1">
+                <Icon as={QrCodeIcon} />
+                <Text>QR code</Text>
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="email" className="flex flex-col gap-4">
+              <InviteMembersInputs
+                groupId={groupId}
+                setOpen={setOpen}
+                canInviteAdmins={canInviteAdmins}
+              />
+            </TabsContent>
+            {open && <SharedInvite groupId={groupId} open={open} setOpen={setOpen} value={value} />}
+          </Tabs>
+        </ScrollView>
       </DialogContent>
     </Dialog>
   );
@@ -108,22 +117,24 @@ export const InviteMembersInputs = ({
   };
 
   const inviteMemberMutation = useMutation(trpc.groupInvites.send.mutationOptions());
-  const onSubmit = async (data: z.infer<typeof inviteMemberToGroupSchema>) => {
-    const result = await tryCatch(
-      inviteMemberMutation.mutateAsync({
-        ...data,
-        invites: canInviteAdmins
-          ? data.invites
-          : data.invites.map((invite) => ({ ...invite, role: "MEMBER" as const })),
-      }),
-    );
-    if (result.error) {
-      Alert.alert("Unable to send invitation", result.error.message);
-      return;
-    }
-    form.reset();
-    setOpen(false);
-  };
+  const submission = useSingleFlight<"send">();
+  const onSubmit = (data: z.infer<typeof inviteMemberToGroupSchema>) =>
+    submission.run("send", async () => {
+      const result = await tryCatch(
+        inviteMemberMutation.mutateAsync({
+          ...data,
+          invites: canInviteAdmins
+            ? data.invites
+            : data.invites.map((invite) => ({ ...invite, role: "MEMBER" as const })),
+        }),
+      );
+      if (result.error) {
+        Alert.alert("Unable to send invitation", userMessage(result.error));
+        return;
+      }
+      form.reset();
+      setOpen(false);
+    });
 
   return (
     <View className="flex flex-col gap-4">
@@ -157,14 +168,16 @@ export const InviteMembersInputs = ({
                     />
                   </View>
                 )}
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Remove this email"
-                  className="size-[52px] items-center justify-center"
-                  onPress={() => handleRemoveInvite(index)}
-                >
-                  <Icon as={Trash2Icon} className="text-destructive-text size-5" />
-                </Pressable>
+                {fields.length > 1 && (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Remove this email"
+                    className="size-[52px] items-center justify-center"
+                    onPress={() => handleRemoveInvite(index)}
+                  >
+                    <Icon as={Trash2Icon} className="text-destructive-text size-5" />
+                  </Pressable>
+                )}
               </View>
             );
           })}
@@ -188,7 +201,7 @@ export const InviteMembersInputs = ({
             </Text>
           )}
         </View>
-        <Button onPress={form.handleSubmit(onSubmit)} loading={inviteMemberMutation.isPending}>
+        <Button onPress={form.handleSubmit(onSubmit)} loading={submission.isPending}>
           <Icon as={MailIcon} className="text-white" />
           <Text>Send invitation{fields.length > 1 ? "s" : ""}</Text>
         </Button>

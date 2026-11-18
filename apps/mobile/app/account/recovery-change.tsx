@@ -14,6 +14,7 @@ import { Text } from "../../components/ui/Text.tsx";
 import { useIdentityGate } from "../../hooks/useIdentityGate.ts";
 import { trpc } from "../../lib/api.ts";
 import { changeRecoveryPhrase } from "../../lib/recovery.ts";
+import { userMessage } from "../../lib/userMessage.ts";
 
 const RecoveryPhraseChangeScreen = () => {
   const queryClient = useQueryClient();
@@ -31,7 +32,7 @@ const RecoveryPhraseChangeScreen = () => {
     const result = await tryCatch(changeRecoveryPhrase(phrase));
     if (result.error) {
       setStep("phrase");
-      Alert.alert("Unable to change recovery phrase", result.error.message);
+      Alert.alert("Unable to change recovery phrase", userMessage(result.error));
       return;
     }
     if (result.data.status === "reauthenticate") {

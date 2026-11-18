@@ -53,7 +53,7 @@ mock.module("../components/ui/Text.tsx", () => ({
 }));
 mock.module("../hooks/useMemberNames.ts", () => ({ useMemberNames: () => () => null }));
 
-const { default: HistoryTab } = await import("../app/(tabs)/groups/[groupId]/HistoryTab.tsx");
+const { default: HistoryTab } = await import("../components/groups/HistoryTab.tsx");
 
 const event = (type: string, id: string) => ({
   kind: "group",

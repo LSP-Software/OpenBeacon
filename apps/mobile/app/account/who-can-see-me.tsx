@@ -93,7 +93,7 @@ const WhoCanSeeMeScreen = () => {
 
       {viewers.isPending ? (
         <LoadingIndicator />
-      ) : viewers.isError ? (
+      ) : viewers.isError && !viewers.data ? (
         <View className="flex-1 items-center justify-center gap-4 px-6">
           <Text className="text-tertiary text-center">
             We couldn’t load who can see you. Check your connection and try again.

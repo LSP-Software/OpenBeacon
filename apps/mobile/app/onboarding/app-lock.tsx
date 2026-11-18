@@ -10,18 +10,14 @@ import {
 import { Icon } from "../../components/ui/Icon.tsx";
 import { useAppForeground } from "../../hooks/useAppForeground.ts";
 import { Alert } from "../../lib/alert.ts";
-import { hasScreenLock, turnOnAppLock } from "../../lib/appLock.ts";
+import { phoneScreenLockQueryOptions, turnOnAppLock } from "../../lib/appLock.ts";
 import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 
 const AppLockStepScreen = () => {
   const noun = thisDeviceNoun();
   const advance = useAdvanceOnboardingOnce();
   const [turningOn, setTurningOn] = useState(false);
-  const screenLock = useQuery({
-    queryKey: ["phoneScreenLock"],
-    queryFn: hasScreenLock,
-    staleTime: 0,
-  });
+  const screenLock = useQuery(phoneScreenLockQueryOptions);
   const unavailable = screenLock.data === false;
 
   useAppForeground(() => void screenLock.refetch());

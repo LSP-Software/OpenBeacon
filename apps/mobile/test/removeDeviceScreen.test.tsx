@@ -123,3 +123,22 @@ test("a phone that isn't set up yet is told why instead of being asked to sign i
   }
   expect(recheck).not.toHaveBeenCalled();
 });
+
+test("a lost session says the person was signed out instead of showing UNAUTHORIZED", async () => {
+  removeDevice.mockImplementationOnce(async () => {
+    throw TRPCClientError.from({
+      error: {
+        code: -32001,
+        data: { code: "UNAUTHORIZED", httpStatus: 401 },
+        message: "UNAUTHORIZED",
+      },
+    });
+  });
+
+  expect(await removeAndCollectAlerts()).toEqual([
+    {
+      title: "Unable to remove device",
+      message: "You’ve been signed out. Sign in again to keep using this phone.",
+    },
+  ]);
+});

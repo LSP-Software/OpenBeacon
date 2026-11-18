@@ -13,25 +13,26 @@ import {
 } from "lucide-react-native";
 import { useEffect } from "react";
 import { Pressable, View } from "react-native";
-import { LoadingIndicator } from "../../../../components/LoadingIndicator.tsx";
-import { Button } from "../../../../components/ui/Button.tsx";
-import { Icon } from "../../../../components/ui/Icon.tsx";
-import { Switch } from "../../../../components/ui/Switch.tsx";
-import { Text } from "../../../../components/ui/Text.tsx";
-import { useCachedGroup } from "../../../../hooks/useCachedGroup.ts";
-import { useMemberNames } from "../../../../hooks/useMemberNames.ts";
-import { Alert } from "../../../../lib/alert.ts";
-import { trpc } from "../../../../lib/api.ts";
-import { cn } from "../../../../lib/cn.ts";
-import { authClient } from "../../../../lib/auth-client.ts";
-import type { LiveMapPosition } from "../../../../lib/mapTrackingTypes.ts";
-import { describePeopleHere, formatPlaceSize, peopleAtPlace } from "../../../../lib/places.ts";
-import { requestNotificationPermissions } from "../../../../lib/notifications.ts";
-import { markPlacesUnsynced, syncGroupPlaces } from "../../../../lib/placeBackgroundSync.ts";
-import { catchUpGroupPlaces } from "../../../../lib/placeCatchUp.ts";
-import { groupPlacesQueryKey, groupPlacesQueryOptions } from "../../../../lib/placeSync.ts";
-import { readRegisteredDevice } from "../../../../lib/registeredDevice.ts";
-import { storage } from "../../../../lib/storage.ts";
+import { LoadingIndicator } from "../LoadingIndicator.tsx";
+import { Button } from "../ui/Button.tsx";
+import { Icon } from "../ui/Icon.tsx";
+import { Switch } from "../ui/Switch.tsx";
+import { Text } from "../ui/Text.tsx";
+import { useCachedGroup } from "../../hooks/useCachedGroup.ts";
+import { useMemberNames } from "../../hooks/useMemberNames.ts";
+import { Alert } from "../../lib/alert.ts";
+import { trpc } from "../../lib/api.ts";
+import { cn } from "../../lib/cn.ts";
+import { authClient } from "../../lib/auth-client.ts";
+import type { LiveMapPosition } from "../../lib/mapTrackingTypes.ts";
+import { describePeopleHere, formatPlaceSize, peopleAtPlace } from "../../lib/places.ts";
+import { requestNotificationPermissions } from "../../lib/notifications.ts";
+import { markPlacesUnsynced, syncGroupPlaces } from "../../lib/placeBackgroundSync.ts";
+import { catchUpGroupPlaces } from "../../lib/placeCatchUp.ts";
+import { groupPlacesQueryKey, groupPlacesQueryOptions } from "../../lib/placeSync.ts";
+import { registeredDeviceQueryOptions } from "../../lib/registeredDevice.ts";
+import { storage } from "../../lib/storage.ts";
+import { userMessage } from "../../lib/userMessage.ts";
 
 const PlacesTab = ({
   groupId,
@@ -63,12 +64,7 @@ const PlacesTab = ({
     ...trpc.groupMembership.listMemberDevices.queryOptions({ groupId }),
     subscribed: isFocused,
   });
-  const { data: registeredDevice } = useQuery({
-    queryKey: ["registeredDevice", userId ?? ""],
-    enabled: userId !== undefined,
-    staleTime: Number.POSITIVE_INFINITY,
-    queryFn: readRegisteredDevice,
-  });
+  const { data: registeredDevice } = useQuery(registeredDeviceQueryOptions(userId ?? ""));
   const thisDeviceName = memberDevices.data?.find(
     (device) => device.deviceId === registeredDevice?.deviceId,
   )?.name;
@@ -101,7 +97,7 @@ const PlacesTab = ({
     return <LoadingIndicator />;
   }
 
-  if (places.isError) {
+  if (places.isError && !places.data) {
     return (
       <View className="gap-3 rounded-2xl border border-border bg-card p-5">
         <Text className="text-foreground text-lg font-semibold">Couldn’t load places</Text>
@@ -181,7 +177,7 @@ const PlacesTab = ({
           onValueChange={async (enabled) => {
             const result = await tryCatch(setSharing.mutateAsync({ groupId, enabled }));
             if (result.error) {
-              Alert.alert("Unable to change this setting", result.error.message);
+              Alert.alert("Unable to change this setting", userMessage(result.error));
               return;
             }
             await queryClient.invalidateQueries({ queryKey: sharingQueryOptions.queryKey });

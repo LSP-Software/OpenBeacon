@@ -28,6 +28,7 @@ import {
   verifyRecoveryResetCode,
 } from "../../lib/recovery.ts";
 import { requestTrackingSync } from "../../lib/trackingEvents.ts";
+import { userMessage } from "../../lib/userMessage.ts";
 
 const RecoveryPhraseResetScreen = () => {
   const { setup } = useLocalSearchParams<{ setup?: string }>();
@@ -68,7 +69,7 @@ const RecoveryPhraseResetScreen = () => {
 
   const sendCode = async () => {
     const result = await tryCatch(requestRecoveryResetCode());
-    if (result.error) return result.error.message;
+    if (result.error) return userMessage(result.error);
     if (result.data.status === "reauthenticate") {
       await reauthenticate();
       return undefined;
@@ -98,7 +99,7 @@ const RecoveryPhraseResetScreen = () => {
 
   const verifyCode = async (code: string) => {
     const result = await tryCatch(verifyRecoveryResetCode(code));
-    if (result.error) return result.error.message;
+    if (result.error) return userMessage(result.error);
     if (result.data.status === "invalidCode") return invalidCodeMessage;
     if (result.data.status === "reauthenticate") {
       await reauthenticate();
@@ -127,7 +128,7 @@ const RecoveryPhraseResetScreen = () => {
     const result = await tryCatch(resetRecoveryPhrase(phrase, resetToken));
     if (result.error) {
       setStep("phrase");
-      Alert.alert("Unable to reset recovery phrase", result.error.message);
+      Alert.alert("Unable to reset recovery phrase", userMessage(result.error));
       return;
     }
     if (result.data.status === "reauthenticate") {

@@ -1,5 +1,5 @@
 import { useIsFocused } from "@react-navigation/native";
-import { Alert } from "../../../../lib/alert.ts";
+import { Alert } from "../../lib/alert.ts";
 import { accountNameSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import { skipToken, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -15,38 +15,31 @@ import {
 } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, TextInput, View } from "react-native";
-import { InviteMemberToGroupDialog } from "../../../../components/dialogs/InviteMemberToGroupDialog.tsx";
-import { LoadingIndicator } from "../../../../components/LoadingIndicator.tsx";
-import { DecryptedAvatarImage } from "../../../../components/image/DecryptedAvatarImage.tsx";
-import { Avatar, AvatarFallback } from "../../../../components/ui/Avatar.tsx";
-import { BottomSheet } from "../../../../components/ui/BottomSheet.tsx";
-import { Button } from "../../../../components/ui/Button.tsx";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "../../../../components/ui/Dialog.tsx";
-import { Icon } from "../../../../components/ui/Icon.tsx";
-import { SegmentedControl } from "../../../../components/ui/SegmentedControl.tsx";
-import { Text } from "../../../../components/ui/Text.tsx";
-import { useCachedGroup } from "../../../../hooks/useCachedGroup.ts";
-import type { useLiveTrackingPositions } from "../../../../hooks/useLiveTrackingPositions.ts";
-import { trpc } from "../../../../lib/api.ts";
-import {
-  loadPersonalNicknames,
-  encryptPersonalNickname,
-} from "../../../../lib/personalNicknames.ts";
-import { authClient } from "../../../../lib/auth-client.ts";
-import { cn } from "../../../../lib/cn.ts";
-import { getBatteryVisual } from "../../../../lib/batteryVisual.ts";
-import { buildMemberLiveStatuses } from "../../../../lib/buildMemberLiveStatuses.ts";
-import { deviceIconFor } from "../../../../lib/deviceIcons.ts";
-import { buildRemoveGroupMemberInput, submitEpochChange } from "../../../../lib/groupEncryption.ts";
-import { forgetHiddenMapGroup } from "../../../../lib/hiddenMapGroups.ts";
-import { timeSince } from "../../../../lib/timeSince.ts";
-import { requestTrackingSync } from "../../../../lib/trackingEvents.ts";
-import { useSingleFlight } from "../../../../lib/useSingleFlight.ts";
+import { InviteMemberToGroupDialog } from "../dialogs/InviteMemberToGroupDialog.tsx";
+import { LoadingIndicator } from "../LoadingIndicator.tsx";
+import { DecryptedAvatarImage } from "../image/DecryptedAvatarImage.tsx";
+import { Avatar, AvatarFallback } from "../ui/Avatar.tsx";
+import { BottomSheet } from "../ui/BottomSheet.tsx";
+import { Button } from "../ui/Button.tsx";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/Dialog.tsx";
+import { Icon } from "../ui/Icon.tsx";
+import { SegmentedControl } from "../ui/SegmentedControl.tsx";
+import { Text } from "../ui/Text.tsx";
+import { useCachedGroup } from "../../hooks/useCachedGroup.ts";
+import type { useLiveTrackingPositions } from "../../hooks/useLiveTrackingPositions.ts";
+import { trpc } from "../../lib/api.ts";
+import { loadPersonalNicknames, encryptPersonalNickname } from "../../lib/personalNicknames.ts";
+import { authClient } from "../../lib/auth-client.ts";
+import { cn } from "../../lib/cn.ts";
+import { getBatteryVisual } from "../../lib/batteryVisual.ts";
+import { buildMemberLiveStatuses } from "../../lib/buildMemberLiveStatuses.ts";
+import { deviceIconFor } from "../../lib/deviceIcons.ts";
+import { buildRemoveGroupMemberInput, submitEpochChange } from "../../lib/groupEncryption.ts";
+import { forgetHiddenMapGroup } from "../../lib/hiddenMapGroups.ts";
+import { timeSince } from "../../lib/timeSince.ts";
+import { requestTrackingSync } from "../../lib/trackingEvents.ts";
+import { useSingleFlight } from "../../lib/useSingleFlight.ts";
+import { userMessage } from "../../lib/userMessage.ts";
 
 const MembersTab = ({
   groupId,
@@ -181,10 +174,7 @@ const MembersTab = ({
               }),
             );
             if (result.error) {
-              Alert.alert(
-                "Unable to update group",
-                result.error instanceof Error ? result.error.message : "Something went wrong.",
-              );
+              Alert.alert("Unable to update group", userMessage(result.error));
             }
           },
         },
@@ -264,7 +254,7 @@ const MembersTab = ({
                 await queryClient.invalidateQueries({
                   queryKey: ["personalNicknames", groupId, session?.user.id],
                 });
-                Alert.alert("Unable to save nickname", result.error.message);
+                Alert.alert("Unable to save nickname", userMessage(result.error));
                 return;
               }
               await queryClient.invalidateQueries({
@@ -437,7 +427,7 @@ const MembersTab = ({
                             );
                             if (result.error) {
                               setChangingRole(null);
-                              Alert.alert("Unable to change role", result.error.message);
+                              Alert.alert("Unable to change role", userMessage(result.error));
                               return;
                             }
                             await queryClient.invalidateQueries({

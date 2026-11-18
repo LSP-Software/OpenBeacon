@@ -117,6 +117,7 @@ let failRefreshCapture = false;
 let failRevokeEpochKeys = false;
 let failMembershipList = false;
 let failRegistration = false;
+let nativeQueueOwner: string | null = null;
 let registrationError: Error | null = null;
 let failRotation = false;
 let rotationError: Error | null = null;
@@ -541,7 +542,11 @@ mock.module("../modules/openbeacon-tracking/index.ts", () => ({
       return true;
     },
     setHistoryShare: () => true,
-    setQueueOwner: () => {},
+    setQueueOwner: (owner: string, deviceId: string) => {
+      nativeQueueOwner = JSON.stringify([owner, deviceId]);
+    },
+    isQueueOwner: (owner: string, deviceId: string) =>
+      nativeQueueOwner === JSON.stringify([owner, deviceId]),
     countUnassignedCiphertexts: async () => unassignedCount,
     assignUnassignedCiphertexts: async (deviceId: string, owner: string) => {
       assignments.push({ deviceId, owner });
@@ -729,6 +734,7 @@ describe("tracking service", () => {
     failRevokeEpochKeys = false;
     failMembershipList = false;
     failRegistration = false;
+    nativeQueueOwner = null;
     registrationError = null;
     failRotation = false;
     rotationError = null;
@@ -838,6 +844,33 @@ describe("tracking service", () => {
         { cursor: storedAccountCursor, pushToken: "token-1" },
       ]);
       expect(shownAccountNotices).toHaveLength(2);
+    });
+
+    test("a phone without location permission still gets place alerts and group notices", async () => {
+      await reconcileTrackingKeys({ startCapture: false, force: true });
+      expect(provisionedKeys).toHaveLength(0);
+      const cursorOnly = {
+        groupId: "group-1",
+        points: [],
+        placeAlertsCursor: null,
+        noticesCursor: "2026-11-17T09:00:00.000Z|",
+      };
+
+      await syncBackgroundTracking("push");
+      expect(uploadCalls).toEqual([cursorOnly]);
+      expect(uploadsBatchedWithSync).toEqual([true]);
+
+      await syncAccountNotices();
+      expect(uploadCalls).toEqual([cursorOnly, cursorOnly]);
+      expect(uploadsBatchedWithSync).toEqual([true, true]);
+      expect(accountSyncCalls).toHaveLength(2);
+    });
+
+    test("coming to the foreground on a sharing phone leaves place alerts to its uploads", async () => {
+      expect(provisionedKeys.length).toBeGreaterThan(0);
+      await syncAccountNotices();
+      expect(uploadCalls).toEqual([]);
+      expect(accountSyncCalls).toEqual([{ cursor: storedAccountCursor }]);
     });
 
     test("coming to the foreground checks account notices without a group", async () => {
@@ -1689,6 +1722,34 @@ describe("tracking service", () => {
     expect(startCaptureCalls).toBe(starts + 1);
   });
 
+  test("opening the app offline after the process died restarts capture from the keys on the phone", async () => {
+    await reconcileTrackingKeys({ startCapture: true, force: true });
+    expect(provisionedKeys).toHaveLength(2);
+    expect(startCaptureCalls).toBe(1);
+
+    captureRunning = false;
+    failMembershipList = true;
+    failRegistration = true;
+
+    await expect(reconcileTrackingKeys({ startCapture: true, force: true })).rejects.toThrow();
+    expect(startCaptureCalls).toBe(2);
+    expect(provisionedKeys).toHaveLength(2);
+  });
+
+  test("an offline start doesn't capture with keys queued for another account", async () => {
+    await reconcileTrackingKeys({ startCapture: true, force: true });
+    captureRunning = false;
+    nativeQueueOwner = JSON.stringify([
+      JSON.stringify(["https://api.example.test", "user-2"]),
+      "device-9",
+    ]);
+    failMembershipList = true;
+    failRegistration = true;
+
+    await expect(reconcileTrackingKeys({ startCapture: true, force: true })).rejects.toThrow();
+    expect(startCaptureCalls).toBe(1);
+  });
+
   test("checks and sweeps for backfill at most once every ten minutes per user", async () => {
     jest.useFakeTimers();
     try {
@@ -2413,7 +2474,7 @@ describe("tracking service", () => {
 
     apiCompatibility = null;
     await reconcileTrackingKeys({ startCapture: true, force: true });
-    expect(startCaptureCalls).toBe(1);
+    expect(startCaptureCalls).toBeGreaterThan(0);
   });
 
   test("background sync uploads again once a fresh check shows the server was updated", async () => {

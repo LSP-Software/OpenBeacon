@@ -6,6 +6,7 @@ import { trpc, trpcClient } from "../lib/api.ts";
 import { historyShareLabel, shortensHistory } from "../lib/historyShare.ts";
 import type { HistoryShareChange } from "../lib/historyShareTypes.ts";
 import { syncLocationSharing } from "../lib/locationSharing.ts";
+import { userMessage } from "../lib/userMessage.ts";
 
 const confirmShortening = (label: string) =>
   new Promise<boolean>((resolve) =>
@@ -52,7 +53,7 @@ export const useHistoryShare = (enabled = true) => {
     );
     setSaving(false);
     if (result.error) {
-      Alert.alert("Couldn’t change your history setting", result.error.message);
+      Alert.alert("Couldn’t change your history setting", userMessage(result.error));
       return false;
     }
     await Promise.all([

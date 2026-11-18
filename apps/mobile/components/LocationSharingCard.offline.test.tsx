@@ -41,6 +41,15 @@ mock.module("react-native", () => ({
   Modal: ({ visible, children }: { visible: boolean; children?: React.ReactNode }) =>
     visible ? children : null,
 }));
+mock.module("expo-location", () => ({
+  getBackgroundPermissionsAsync: async () => ({}),
+  getForegroundPermissionsAsync: async () => ({}),
+  requestBackgroundPermissionsAsync: async () => ({}),
+  requestForegroundPermissionsAsync: async () => ({}),
+}));
+mock.module("../providers/LocationPermissionProvider.tsx", () => ({
+  useLocationPermissions: () => ({ permissionState: null }),
+}));
 mock.module("../lib/appLock.ts", () => ({ useAppLock: () => ({ locked: false, away: false }) }));
 mock.module("lucide-react-native", () => ({
   CheckIcon: () => null,

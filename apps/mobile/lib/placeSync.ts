@@ -8,6 +8,7 @@ import { resolveEpochKey } from "./epochKeys.ts";
 import { errorReason } from "./errorReason.ts";
 import { rotateGroupEpochIfRequired } from "./groupEncryption.ts";
 import { decryptPlaceGeometry, encryptPlaceGeometry, type GroupPlace } from "./places.ts";
+import { userMessage } from "./userMessage.ts";
 
 export const loadGroupPlaces = async (groupId: string): Promise<GroupPlace[]> => {
   const [list, device] = await Promise.all([
@@ -115,7 +116,7 @@ export const confirmDeletePlace = ({
           const result = await tryCatch(trpcClient.groupPlaces.delete.mutate({ groupId, placeId }));
           if (result.error && errorReason(result.error) !== "PLACE_GONE") {
             onDeleting?.(false);
-            Alert.alert("Unable to delete place", result.error.message);
+            Alert.alert("Unable to delete place", userMessage(result.error));
             return;
           }
           onDeleted();

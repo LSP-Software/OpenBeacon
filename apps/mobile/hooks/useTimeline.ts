@@ -55,7 +55,7 @@ export const useTimelineDay = ({
   const query = useQuery({
     enabled: day !== null && userIds.length > 0,
     queryKey: ["timelineDay", groupId, day?.key, people],
-    staleTime: 60_000,
+    staleTime: day && day.end <= Date.now() ? Number.POSITIVE_INFINITY : 60_000,
     queryFn: async ({ signal }) => {
       if (!day) throw new Error("No day is selected.");
       const device = await ensureDeviceKeyRegistration();

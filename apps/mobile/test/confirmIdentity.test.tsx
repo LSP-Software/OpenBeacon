@@ -24,6 +24,7 @@ const phone: { hasLock: boolean; result: "confirmed" | "noScreenLock" | "lockedO
   hasLock: true,
   result: "confirmed",
 };
+let methodsWaitingForNetwork = false;
 const View = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
 
 mock.module("react-native", () => ({
@@ -38,16 +39,20 @@ mock.module("@tanstack/react-query", () => ({
   useQuery: (options: { queryKey?: string[] }) =>
     options.queryKey?.[0] === "phoneScreenLock"
       ? { data: phone.hasLock }
-      : { data: { google: true, password: true }, isError: false, isLoading: false },
+      : methodsWaitingForNetwork
+        ? { data: undefined, isError: false, isLoading: false, isPending: true }
+        : { data: { google: true, password: true }, isError: false, isPending: false },
 }));
 mock.module("../lib/appLock.ts", () => ({
-  hasScreenLock: async () => phone.hasLock,
+  phoneScreenLockQueryOptions: { queryKey: ["phoneScreenLock"] },
   confirmWithPhoneLock: async () => {
     events.push("phoneLock");
     return phone.result;
   },
 }));
-mock.module("../components/LoadingIndicator.tsx", () => ({ LoadingIndicator: () => null }));
+mock.module("../components/LoadingIndicator.tsx", () => ({
+  LoadingIndicator: () => React.createElement("loading-indicator"),
+}));
 mock.module("../components/EmailCodeEntry.tsx", () => ({
   EmailCodeEntry: (props: NonNullable<typeof codeEntry.props>) => {
     codeEntry.props = props;
@@ -138,6 +143,15 @@ beforeEach(() => {
   codeEntry.props = null;
   phone.hasLock = true;
   phone.result = "confirmed";
+  methodsWaitingForNetwork = false;
+});
+
+test("shows it is loading while the sign-in methods wait for a connection", async () => {
+  methodsWaitingForNetwork = true;
+  const root = createRoot();
+  await act(async () => root.render(<ConfirmIdentity onConfirmed={() => {}} />));
+  expect(root.container.queryAll((item) => item.type === "loading-indicator")).toHaveLength(1);
+  await act(async () => root.unmount());
 });
 
 test("a removed phone shows no alert of its own", async () => {

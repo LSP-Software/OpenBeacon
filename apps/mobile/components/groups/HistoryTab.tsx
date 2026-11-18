@@ -16,18 +16,14 @@ import {
 } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { Pressable, View } from "react-native";
-import { LoadingIndicator } from "../../../../components/LoadingIndicator.tsx";
-import { Button } from "../../../../components/ui/Button.tsx";
-import { Icon } from "../../../../components/ui/Icon.tsx";
-import { Text } from "../../../../components/ui/Text.tsx";
-import { useMemberNames } from "../../../../hooks/useMemberNames.ts";
-import { type RouterInputs, trpcClient } from "../../../../lib/api.ts";
-import { authClient } from "../../../../lib/auth-client.ts";
-import {
-  describeGroupEvent,
-  groupByDay,
-  markGroupHistorySeen,
-} from "../../../../lib/groupHistory.ts";
+import { LoadingIndicator } from "../LoadingIndicator.tsx";
+import { Button } from "../ui/Button.tsx";
+import { Icon } from "../ui/Icon.tsx";
+import { Text } from "../ui/Text.tsx";
+import { useMemberNames } from "../../hooks/useMemberNames.ts";
+import { type RouterInputs, trpcClient } from "../../lib/api.ts";
+import { authClient } from "../../lib/auth-client.ts";
+import { describeGroupEvent, groupByDay, markGroupHistorySeen } from "../../lib/groupHistory.ts";
 
 const eventIcons = {
   GROUP_CREATED: SparklesIcon,

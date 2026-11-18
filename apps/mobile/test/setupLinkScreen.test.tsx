@@ -68,6 +68,7 @@ mock.module("expo-router", () => ({
     },
   },
   useFocusEffect: (effect: () => () => void) => React.useEffect(effect, [effect]),
+  usePathname: () => "/setup/link",
 }));
 mock.module("@tanstack/react-query", () => ({
   useMutation: () => ({ isPending: false, mutateAsync: createLink }),

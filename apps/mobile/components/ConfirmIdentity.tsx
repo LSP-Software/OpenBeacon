@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { View } from "react-native";
 import { Alert } from "../lib/alert.ts";
-import { confirmWithPhoneLock, hasScreenLock } from "../lib/appLock.ts";
+import { confirmWithPhoneLock, phoneScreenLockQueryOptions } from "../lib/appLock.ts";
 import { trpc } from "../lib/api.ts";
 import { isNativeGoogleSignInConfigured, signInWithGoogle } from "../lib/auth.ts";
 import { authClient, saveSessionTokenToRevoke } from "../lib/auth-client.ts";
@@ -23,11 +23,7 @@ import { Text } from "./ui/Text.tsx";
 export const ConfirmIdentity = ({ onConfirmed }: { onConfirmed: () => void }) => {
   const { data: session } = authClient.useSession();
   const methods = useQuery(trpc.account.deletionVerificationMethods.queryOptions());
-  const screenLock = useQuery({
-    queryKey: ["phoneScreenLock"],
-    queryFn: hasScreenLock,
-    staleTime: 0,
-  });
+  const screenLock = useQuery(phoneScreenLockQueryOptions);
   const [pending, setPending] = useState(false);
   const [signInCode, setSignInCode] = useState<{
     password: string;
@@ -185,7 +181,7 @@ export const ConfirmIdentity = ({ onConfirmed }: { onConfirmed: () => void }) =>
           <Text>Continue with Google</Text>
         </Button>
       )}
-      {methods.isLoading && <LoadingIndicator />}
+      {methods.isPending && <LoadingIndicator />}
       {methods.isError && (
         <View className="gap-4">
           <Text>Unable to load sign-in methods. Please try again.</Text>
