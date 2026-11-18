@@ -3,7 +3,7 @@ import { readdir } from "node:fs/promises";
 import { SQL } from "bun";
 
 const migrationsPath = `${import.meta.dir}/../prisma/migrations`;
-const target = "20261118021100_tracking_point_hours";
+const target = "20261118060000_tracking_point_hours";
 
 describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
   "tracking point hours migration",
