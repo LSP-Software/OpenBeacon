@@ -20,6 +20,7 @@ import {
 } from "../../../../components/ui/Dialog.tsx";
 import { Icon } from "../../../../components/ui/Icon.tsx";
 import { Text } from "../../../../components/ui/Text.tsx";
+import { useAreaNames } from "../../../../hooks/useAreaNames.ts";
 import { useCachedGroup } from "../../../../hooks/useCachedGroup.ts";
 import type { useLiveTrackingPositions } from "../../../../hooks/useLiveTrackingPositions.ts";
 import { trpc } from "../../../../lib/api.ts";
@@ -33,6 +34,8 @@ import { buildMemberLiveStatuses } from "../../../../lib/buildMemberLiveStatuses
 import { deviceIconFor } from "../../../../lib/deviceIcons.ts";
 import { buildRemoveGroupMemberInput, submitEpochChange } from "../../../../lib/groupEncryption.ts";
 import { forgetHiddenMapGroup } from "../../../../lib/hiddenMapGroups.ts";
+import { placeContaining } from "../../../../lib/memberArea.ts";
+import { groupPlacesQueryOptions } from "../../../../lib/placeSync.ts";
 import { timeSince } from "../../../../lib/timeSince.ts";
 import { requestTrackingSync } from "../../../../lib/trackingEvents.ts";
 import { useSingleFlight } from "../../../../lib/useSingleFlight.ts";
@@ -101,6 +104,10 @@ const MembersTab = ({
     );
     return `Arrivals off on ${names.join(", ")}`;
   };
+  const groupPlaces = useQuery({
+    ...groupPlacesQueryOptions(groupId, userId),
+    subscribed: isFocused,
+  });
   const memberStatuses = buildMemberLiveStatuses({
     memberDevices: memberDevices.data ?? [],
     members: (members ?? []).map((member) => ({
@@ -108,7 +115,30 @@ const MembersTab = ({
       nickname: nicknames[member.id]?.name ?? null,
     })),
     positions: livePositions,
+  }).map((member) => {
+    const sharingPaused =
+      liveStatus.sharing?.some((device) => device.userId === member.user.id) === true &&
+      liveStatus.sharing.every((device) => device.userId !== member.user.id || device.paused);
+    const place =
+      member.location && !sharingPaused
+        ? placeContaining({
+            places: (groupPlaces.data ?? []).flatMap((item) =>
+              item.geometry ? [{ ...item.geometry, name: item.name }] : [],
+            ),
+            point: member.location,
+          })
+        : null;
+    return { ...member, place, sharingPaused };
   });
+  const areaNames = useAreaNames(
+    groupPlaces.isPending && userId
+      ? []
+      : memberStatuses.flatMap((member) =>
+          member.location && !member.sharingPaused && !member.place
+            ? [{ key: member.id, ...member.location }]
+            : [],
+        ),
+  );
   const self = members?.find((member) => member.user.id === session?.user.id);
   const canManage = self?.role === "OWNER" || self?.role === "ADMIN";
   const confirmRemoval = (
@@ -309,14 +339,16 @@ const MembersTab = ({
       {memberStatuses.map((member) => (
         <View key={member.id} className="gap-3 rounded-2xl border border-border bg-card p-4">
           <MemberCard
+            area={
+              member.place
+                ? `At ${member.place.name}`
+                : areaNames.get(member.id)
+                  ? `Near ${areaNames.get(member.id)}`
+                  : null
+            }
             arrivalsOff={arrivalsOffLabel(member.user.id)}
             member={member}
-            sharingPaused={
-              liveStatus.sharing?.some((device) => device.userId === member.user.id) === true &&
-              liveStatus.sharing.every(
-                (device) => device.userId !== member.user.id || device.paused,
-              )
-            }
+            sharingPaused={member.sharingPaused}
           />
           {self?.role === "OWNER" && member.id !== self.id && (
             <View
@@ -419,10 +451,12 @@ const MembersTab = ({
 };
 
 const MemberCard = ({
+  area,
   arrivalsOff,
   member,
   sharingPaused,
 }: {
+  area: string | null;
   arrivalsOff: string | null;
   member: ReturnType<typeof buildMemberLiveStatuses>[number];
   sharingPaused: boolean;
@@ -455,6 +489,11 @@ const MemberCard = ({
             <View className="flex-col items-start">
               {sharingPaused ? (
                 <Text className="text-md text-muted">Location sharing paused</Text>
+              ) : member.timestamp && area ? (
+                <>
+                  <Text className="text-md text-foreground">{area}</Text>
+                  <Text className="text-muted text-sm">Updated {timeSince(member.timestamp)}</Text>
+                </>
               ) : member.timestamp ? (
                 <Text className="text-md text-muted">
                   Location updated {timeSince(member.timestamp)}

@@ -23,6 +23,7 @@ type PersonDevice = {
 };
 
 export const LiveMapPersonSheet = ({
+  area = null,
   battery,
   devices,
   image,
@@ -36,6 +37,7 @@ export const LiveMapPersonSheet = ({
   timestamp,
   unreadableGroup,
 }: {
+  area?: string | null;
   battery: { charging: boolean; level: number | null } | null;
   devices?: readonly PersonDevice[] | undefined;
   image: string | null;
@@ -75,6 +77,7 @@ export const LiveMapPersonSheet = ({
             </Avatar>
             <View className="min-w-0 flex-1 gap-1">
               <Text className="text-foreground text-xl font-bold">{name}</Text>
+              {area && !isMultiDevice ? <Text className="text-foreground">{area}</Text> : null}
               <Text className="text-muted text-sm">
                 {isMultiDevice
                   ? `${devices.length} devices`

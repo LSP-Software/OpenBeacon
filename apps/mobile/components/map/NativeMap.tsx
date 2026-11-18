@@ -17,6 +17,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAreaNames } from "../../hooks/useAreaNames.ts";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
 import {
   type LiveMapPinGroup,
@@ -26,6 +27,7 @@ import {
 } from "../../lib/liveMapPinGroups.ts";
 import { cn } from "../../lib/cn.ts";
 import type { MapGroupOption, MapMemberDevice, MapPeople } from "../../lib/mapPeopleTypes.ts";
+import { placeContaining } from "../../lib/memberArea.ts";
 import {
   type MapPlace,
   peopleAtPlace,
@@ -117,6 +119,30 @@ export const NativeMap = ({
           marker: markers.find((marker) => marker.deviceId === device.deviceId) ?? null,
         }))
     : [];
+  const selectedPersonPlace =
+    selectedMarker && selectedMarker.timestamp !== null && selectedPersonDevices.length < 2
+      ? placeContaining({
+          places: places.filter((place) => place.memberUserIds.includes(selectedMarker.userId)),
+          point: selectedMarker,
+        })
+      : null;
+  const selectedPersonAreaNames = useAreaNames(
+    selectedMarker &&
+      selectedMarker.timestamp !== null &&
+      selectedPersonDevices.length < 2 &&
+      !selectedPersonPlace
+      ? [
+          {
+            key: selectedMarker.deviceId,
+            latitude: selectedMarker.latitude,
+            longitude: selectedMarker.longitude,
+          },
+        ]
+      : [],
+  );
+  const selectedPersonAreaName = selectedMarker
+    ? selectedPersonAreaNames.get(selectedMarker.deviceId)
+    : null;
   const isStackSheetOpen = stackSheetMembers.length > 1;
   const [missingUserId, setMissingUserId] = useState<string | null>(null);
   const missingPerson =
@@ -758,6 +784,13 @@ export const NativeMap = ({
       ) : selectedMarker ? (
         <LiveMapPersonSheet
           key={selectedMarker.userId}
+          area={
+            selectedPersonPlace
+              ? `At ${selectedPersonPlace.name}`
+              : selectedPersonAreaName
+                ? `Near ${selectedPersonAreaName}`
+                : null
+          }
           battery={selectedMarker.battery}
           devices={
             selectedPersonDevices.length >= 2

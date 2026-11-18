@@ -239,6 +239,10 @@ mock.module("../../hooks/useSignedPmtilesUrl.ts", () => ({
   useSignedPmtilesUrl: () => currentSignedPmtilesUrlQuery,
 }));
 
+mock.module("../../hooks/useAreaNames.ts", () => ({
+  useAreaNames: () => new Map<string, string | null>(),
+}));
+
 mock.module("../../hooks/useSelfDeviceHeading.ts", () => ({
   useSelfDeviceHeading: () => getNativeMapSelfHeadingDegrees(),
 }));

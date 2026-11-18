@@ -1,4 +1,5 @@
 import { OfflineManager } from "@maplibre/maplibre-react-native";
+import { clearAreaNames } from "./memberArea.ts";
 import { storage } from "./storage.ts";
 
 export const mapCacheSizesMb = [100, 250, 500, 1000] as const;
@@ -49,6 +50,7 @@ export const clearSavedMap = async () => {
   storage.set(clearPendingKey, true);
   storage.remove(lastSourceUrlKey);
   storage.remove(lastArchiveIdKey);
+  clearAreaNames();
   await clearCachedMapTiles();
   storage.remove(clearPendingKey);
 };

@@ -22,6 +22,7 @@ mock.module("./storage.ts", () => ({
       stored.set(key, value);
     },
     remove: (key: string) => stored.delete(key),
+    getAllKeys: () => [...stored.keys()],
   },
 }));
 
@@ -94,11 +95,14 @@ test("remembers the last map source with or without an archive", () => {
 test("clearing the saved map forgets the source, wipes the tiles and keeps the size", async () => {
   await setMapCacheSizeMb(500);
   saveLastMapSource({ archiveId: "a-20261101", sourceUrl: "https://t.example/a.pmtiles" });
+  stored.set("memberArea.archiveId", "a-20261101");
+  stored.set("memberArea.11/1023/681", "[]");
   nativeCalls.length = 0;
 
   await clearSavedMap();
 
   expect(readLastMapSource()).toBeNull();
+  expect([...stored.keys()].filter((key) => key.startsWith("memberArea."))).toEqual([]);
   expect(nativeCalls).toEqual(["clear"]);
   expect(stored.has("map.clearPending")).toBe(false);
   expect(getMapCacheSizeMb()).toBe(500);

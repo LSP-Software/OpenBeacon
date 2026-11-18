@@ -14,6 +14,12 @@ let buttons: { label: string; disabled: boolean; onPress: () => void }[] = [];
 let input = "";
 let positions: LiveMapPosition[] = [];
 let memberDevices: MapMemberDevice[] = [];
+let groupPlaces: {
+  geometry: { latitude: number; longitude: number; radiusMeters: number } | null;
+  name: string;
+}[] = [];
+let areaNames = new Map<string, string | null>();
+let areaLookups: { key: string; latitude: number; longitude: number }[] = [];
 const mutate = mock(async (_input: unknown) => {});
 const group = {
   id: "group",
@@ -30,7 +36,9 @@ mock.module("@tanstack/react-query", () => ({
       ? { data: records, isPending: pending, isFetching: pending, isError: false }
       : options.queryKey?.[0] === "memberDevices"
         ? { data: memberDevices, isPending: false }
-        : { data: options.select?.([group]), isPending: false },
+        : options.queryKey?.[0] === "groupPlaces"
+          ? { data: groupPlaces, isPending: false }
+          : { data: options.select?.([group]), isPending: false },
 }));
 mock.module("expo-router", () => ({ useRouter: () => ({ replace: () => {} }) }));
 mock.module("@react-navigation/native", () => ({ useIsFocused: () => true }));
@@ -86,7 +94,9 @@ mock.module("../components/ui/Button.tsx", () => ({
     return null;
   },
 }));
-mock.module("../components/ui/Text.tsx", () => ({ Text: passthrough }));
+mock.module("../components/ui/Text.tsx", () => ({
+  Text: ({ children }: { children?: ReactNode }) => React.createElement("text", null, children),
+}));
 mock.module("../components/ui/Dialog.tsx", () => ({
   Dialog: ({ open, children }: { open: boolean; children: ReactNode }) => (open ? children : null),
   DialogContent: passthrough,
@@ -142,6 +152,16 @@ mock.module("../lib/batteryVisual.ts", () => ({
   }),
 }));
 mock.module("../lib/timeSince.ts", () => ({ timeSince: () => "2 minutes ago" }));
+mock.module("../lib/storage.ts", () => ({ storage: {} }));
+mock.module("../lib/placeSync.ts", () => ({
+  groupPlacesQueryOptions: () => ({ queryKey: ["groupPlaces"] }),
+}));
+mock.module("../hooks/useAreaNames.ts", () => ({
+  useAreaNames: (points: { key: string; latitude: number; longitude: number }[]) => {
+    areaLookups = points;
+    return areaNames;
+  },
+}));
 const { default: MembersTab } = await import("../app/(tabs)/groups/[groupId]/MembersTab.tsx");
 const { getSnapshot: getAlerts } = await import("../lib/alert.ts");
 const live = () => ({
@@ -264,5 +284,48 @@ test("a removal can't be submitted twice while the new epoch is being built", as
   expect(button("Remove member").disabled).toBe(false);
   group.members.pop();
   buildRemoval = async () => ({});
+  await act(async () => root.unmount());
+});
+
+test("shows the place or nearby area above when the location was updated", async () => {
+  const root = createRoot();
+  pending = false;
+  records = {};
+  const at = (latitude: number, longitude: number): LiveMapPosition => ({
+    battery: { charging: false, level: 80 },
+    deviceId: "phone",
+    latitude,
+    longitude,
+    sourceGroupId: "group",
+    speed: null,
+    timestamp: "2026-11-11T12:00:00.000Z",
+    userId: "other",
+  });
+  const texts = () =>
+    root.container
+      .queryAll((item) => item.type === "text")
+      .map((item) => item.children.filter((child) => typeof child === "string").join(""));
+  groupPlaces = [
+    { geometry: { latitude: 51.5, longitude: -0.1, radiusMeters: 200 }, name: "Home" },
+  ];
+  areaNames = new Map([["member", "Tooting"]]);
+
+  positions = [at(51.5001, -0.1)];
+  await act(async () => root.render(<MembersTab groupId="group" live={live()} />));
+  expect(texts()).toContain("At Home");
+  expect(texts()).toContain("Updated 2 minutes ago");
+  expect(areaLookups).toEqual([]);
+
+  positions = [at(51.43, -0.17)];
+  await act(async () => root.render(<MembersTab groupId="group" live={live()} />));
+  expect(texts()).toContain("Near Tooting");
+  expect(areaLookups).toEqual([{ key: "member", latitude: 51.43, longitude: -0.17 }]);
+
+  areaNames = new Map();
+  await act(async () => root.render(<MembersTab groupId="group" live={live()} />));
+  expect(texts()).toContain("Location updated 2 minutes ago");
+
+  positions = [];
+  groupPlaces = [];
   await act(async () => root.unmount());
 });

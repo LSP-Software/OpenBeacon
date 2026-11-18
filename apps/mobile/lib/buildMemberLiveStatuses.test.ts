@@ -46,6 +46,7 @@ describe("buildMemberLiveStatuses", () => {
         devices: [],
         nickname: null,
         id: "membership-alice",
+        location: null,
         role: "OWNER",
         timestamp: null,
         user: { id: "alice", image: "https://example.com/a.png", name: "Alice Smith" },
@@ -65,6 +66,7 @@ describe("buildMemberLiveStatuses", () => {
         ],
         nickname: null,
         id: "membership-bob",
+        location: { latitude: 51.5, longitude: -0.12 },
         role: "MEMBER",
         timestamp: "2026-07-17T12:05:00.000Z",
         user: { id: "bob", image: null, name: "Bob Jones" },
@@ -91,6 +93,7 @@ describe("buildMemberLiveStatuses", () => {
         devices: [],
         nickname: null,
         id: "membership-alice",
+        location: null,
         role: "OWNER",
         timestamp: null,
         user: { id: "alice", image: null, name: "Alice" },
@@ -162,6 +165,8 @@ describe("buildMemberLiveStatuses", () => {
         position({
           battery: { charging: true, level: 90 },
           deviceId: "alice-tablet",
+          latitude: 51.42,
+          longitude: -0.17,
           sourceGroupId: "family",
           timestamp: "2026-07-17T12:10:00.000Z",
           userId: "alice",
@@ -172,6 +177,7 @@ describe("buildMemberLiveStatuses", () => {
     expect(alice?.activeDeviceCount).toBe(2);
     expect(alice?.battery).toEqual({ charging: true, level: 90 });
     expect(alice?.timestamp).toBe("2026-07-17T12:10:00.000Z");
+    expect(alice?.location).toEqual({ latitude: 51.42, longitude: -0.17 });
     expect(alice?.devices.map(({ battery, name }) => ({ level: battery.level, name }))).toEqual([
       { level: 90, name: "iPad" },
       { level: 15, name: "Pixel 9" },

@@ -19,6 +19,7 @@
   "dependencies": {
     "@better-auth/expo": "^1.7.22",
     "@hookform/resolvers": "^5.2.2",
+    "@mapbox/vector-tile": "^3.0.0",
     "@maplibre/maplibre-react-native": "^11.5.1",
     "@noble/hashes": "^2.4.0",
     "@openbeacon/api": "workspace:*",
@@ -65,8 +66,10 @@
     "expo-secure-store": "^55.0.9",
     "expo-status-bar": "~55.0.4",
     "expo-web-browser": "^55.0.10",
+    "fflate": "^0.8.3",
     "lucide-react-native": "^0.577.0",
     "nativewind": "^4.2.2",
+    "pmtiles": "^4.5.0",
     "qrcode": "^1.5.4",
     "react": "catalog:",
     "react-hook-form": "^7.71.2",
