@@ -78,3 +78,31 @@ test("stops the runner with a clear line when the email settings are invalid", (
   expect(stderr).not.toContain("at resolveEmailConfig");
   expect(stderr).not.toContain("at loadEmailSettings");
 });
+
+test("names REDIS_URL when email is on and it is missing", () => {
+  const { REDIS_URL: _redisUrl, ...withoutRedis } = env;
+  const result = Bun.spawnSync({
+    cmd: [process.execPath, `${import.meta.dir}/env.ts`],
+    env: {
+      ...withoutRedis,
+      DATABASE_URL: "postgresql://localhost:5432/test",
+      SMTP_HOST: "127.0.0.1",
+      EMAIL_FROM: "openbeacon@example.com",
+    },
+  });
+  const output = result.stdout.toString() + result.stderr.toString();
+  expect(result.exitCode).not.toBe(0);
+  expect(output).toContain(
+    "  Email: REDIS_URL must be a redis:// or rediss:// URL when email is on",
+  );
+  expect(output).toContain("Environment configuration validation failed");
+});
+
+test("needs no Redis when email is off", () => {
+  const { REDIS_URL: _redisUrl, ...withoutRedis } = env;
+  const result = Bun.spawnSync({
+    cmd: [process.execPath, `${import.meta.dir}/env.ts`],
+    env: { ...withoutRedis, DATABASE_URL: "postgresql://localhost:5432/test" },
+  });
+  expect(result.exitCode).toBe(0);
+});

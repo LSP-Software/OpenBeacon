@@ -124,7 +124,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(await accountState()).toEqual(before);
       expect(before.payloads).toBe(3);
     });
-    test("deletes an account and returns a failure for an unknown email", async () => {
+    test("deletes an account matched in any letter case and returns a failure for an unknown email", async () => {
       const group = await prisma.group.create({
         data: {
           name: "Owner group",
@@ -139,7 +139,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect((await run(email)).code).toBe(1);
       expect(await prisma.user.findUnique({ where: { id: userId } })).not.toBeNull();
       await prisma.group.delete({ where: { id: group.id } });
-      const deleted = await run(email);
+      const deleted = await run(email.toUpperCase());
       expect(deleted.code).toBe(0);
       expect(deleted.output).toContain("Account deleted");
       expect(await prisma.user.findUnique({ where: { id: userId } })).toBeNull();

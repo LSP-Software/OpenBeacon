@@ -8,7 +8,7 @@ import { env } from "@openbeacon/api/env.ts";
 import { tryCatch } from "@openbeacon/shared";
 import { closeServices, services } from "./services.ts";
 
-const email = process.argv[2]?.trim();
+const email = process.argv[2]?.trim().toLowerCase();
 if (!email || process.argv.length !== 3) {
   console.error("Usage: bun run delete-account <email>");
   await closeServices();

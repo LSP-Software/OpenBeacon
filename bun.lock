@@ -129,6 +129,7 @@
         "@openbeacon/api": "workspace:*",
         "@openbeacon/auth": "workspace:*",
         "@openbeacon/backend": "workspace:*",
+        "@openbeacon/cache": "workspace:*",
         "@openbeacon/database": "workspace:*",
         "@openbeacon/email": "workspace:*",
         "@openbeacon/schemas": "workspace:*",

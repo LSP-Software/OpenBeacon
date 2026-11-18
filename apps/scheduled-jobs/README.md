@@ -32,7 +32,7 @@ Processes at most 100 due accounts and 100 image cleanup records per run, and de
 
 ### `expired-records-cleanup` (every hour)
 
-Deletes verification rows with one `DELETE`; they expire within minutes, so an hourly run only finds an hour's worth. It deletes the other tables (`Session`, `GoogleDeletionChallenge`, `GroupSharedInvite`, `GroupMemberInvite` and `Feedback`) 1,000 rows at a time, at most 10 times per table per run. A table that fails is logged by name, with the database error code when there is one, and the remaining tables are still cleaned.
+Deletes verification rows with one `DELETE`; they expire within minutes, so an hourly run only finds an hour's worth. It deletes the other tables (`Session`, `GoogleDeletionChallenge`, `GroupSharedInvite`, `GroupMemberInvite`, `AccountNotice` and `Feedback`) 1,000 rows at a time, at most 10 times per table per run. `AccountNotice` rows go after one day. A `GroupMemberInvite` goes when it is a month old or when its inviter is no longer in the group. A table that fails is logged by name, with the database error code when there is one, and the remaining tables are still cleaned.
 
 None of their `expiresAt` columns are indexed. `Session` can be large, but an index was left out on purpose: it would stop session refreshes from being HOT updates and slow them down, and an hourly scan measured about 40 ms on 1 million sessions.
 
