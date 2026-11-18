@@ -74,7 +74,6 @@ const createCaller = async ({
   });
   const context = {
     cache,
-    clientIp: "203.0.113.10",
     db: {
       groupMember: {
         findUnique: memberFindUniqueMock,

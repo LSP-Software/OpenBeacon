@@ -47,7 +47,6 @@ const caller = (
     withDeviceActive({
       cache,
       db: prisma,
-      clientIp: "127.0.0.1",
       ...device,
       session: { user: { id: userId } },
     }) as Parameters<typeof router.createCaller>[0],

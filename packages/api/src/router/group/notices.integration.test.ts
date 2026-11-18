@@ -93,7 +93,6 @@ const setup = async () => {
       withDeviceActive({
         cache,
         db: prisma,
-        clientIp: "127.0.0.1",
         deviceId,
         unverifiedDeviceId: null,
         session: {

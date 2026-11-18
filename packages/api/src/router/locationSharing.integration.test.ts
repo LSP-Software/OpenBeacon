@@ -32,7 +32,6 @@ const caller = (ownerId = userId, deviceId = phoneId) =>
     withDeviceActive({
       cache,
       db: prisma,
-      clientIp: "127.0.0.1",
       deviceId,
       session: { user: { id: ownerId }, session: { id: `${ownerId}-session` } },
     }) as Parameters<typeof router.createCaller>[0],
@@ -292,7 +291,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const authenticatedBeforeRemoval = router.createCaller({
         cache,
         db: prisma,
-        clientIp: "127.0.0.1",
         deviceId: phoneId,
         deviceActive: true,
         session: { user: { id: userId }, session: { id: `${userId}-session` } },

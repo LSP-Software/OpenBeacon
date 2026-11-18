@@ -34,5 +34,5 @@ USER bun
 ENV NODE_ENV=production
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
-    CMD ["bun", "-e", "const h = process.env.OPENBEACON_API_HOSTNAME; const host = !h || h === '0.0.0.0' || h === '::' ? '127.0.0.1' : h; const r = await fetch(`http://${host}:${process.env.OPENBEACON_API_PORT || 3000}/health`, { signal: AbortSignal.timeout(3000) }); process.exit(r.ok ? 0 : 1);"]
+    CMD ["bun", "-e", "const h = process.env.OPENBEACON_API_HOSTNAME; const host = !h || h === '0.0.0.0' || h === '::' ? '127.0.0.1' : h.includes(':') ? `[${h}]` : h; const r = await fetch(`http://${host}:${process.env.OPENBEACON_API_PORT || 3000}/health`, { signal: AbortSignal.timeout(3000) }); process.exit(r.ok ? 0 : 1);"]
 CMD ["sh", "apps/backend/docker-entrypoint.sh"]

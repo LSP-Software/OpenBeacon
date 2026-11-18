@@ -56,7 +56,6 @@ const createCaller = (
         hashSecret: testRedisHashSecret,
         now: () => 0,
       }),
-      clientIp: "127.0.0.1",
       db: {
         ...db,
         $transaction: async (callback: (tx: typeof db) => Promise<unknown>) => callback(db),

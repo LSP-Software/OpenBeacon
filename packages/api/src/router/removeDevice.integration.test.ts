@@ -91,7 +91,6 @@ const callerFor = (account: Account, { deviceId = account.thisPhone.id } = {}) =
       db: prisma,
       emailCodes: null,
       securityAlerts,
-      clientIp: `ip-${account.userId}`,
       deviceId,
       session: {
         user: { id: account.userId },
@@ -276,7 +275,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("removing a devic
         db: prisma,
         emailCodes: null,
         securityAlerts,
-        clientIp: `ip-${account.userId}`,
         deviceId: account.thisPhone.id,
         session: {
           user: { id: account.userId },
@@ -311,7 +309,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("removing a devic
         db: prisma,
         emailCodes: null,
         securityAlerts,
-        clientIp: `ip-${account.userId}`,
         deviceId: null,
         unverifiedDeviceId: account.thisPhone.id,
         session: {
@@ -442,7 +439,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("a removed device
         db: prisma,
         emailCodes: null,
         securityAlerts,
-        clientIp: `ip-${account.userId}`,
         deviceId: null,
         session: {
           user: { id: account.userId },
@@ -508,7 +504,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("a removed device
         db: prisma,
         emailCodes: null,
         securityAlerts,
-        clientIp: `ip-${account.userId}`,
         deviceId: pending.id,
         session: {
           user: { id: account.userId },

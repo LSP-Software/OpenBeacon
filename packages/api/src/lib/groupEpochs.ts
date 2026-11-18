@@ -564,7 +564,7 @@ export const persistGroupEpoch = async ({
   });
 };
 
-export const defaultDeviceIcon = (model: string | undefined) =>
+const defaultDeviceIcon = (model: string | undefined) =>
   model && /iPad|Tab/.test(model) ? "tablet" : "phone";
 
 export const upsertUserDevice = async ({

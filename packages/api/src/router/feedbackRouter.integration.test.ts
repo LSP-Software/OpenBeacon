@@ -6,7 +6,6 @@ import { appRouter } from "../root.ts";
 const prefix = `feedback-test-${crypto.randomUUID()}`;
 const caller = appRouter.createCaller({
   cache: createIntegrationTestCache(() => 0),
-  clientIp: "127.0.0.1",
   db: prisma,
   serverVersion: "9.9.9",
   selfHosted: false,

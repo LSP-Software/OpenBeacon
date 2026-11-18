@@ -46,7 +46,6 @@ const callEach = async (
       hashSecret: testRedisHashSecret,
       now: () => 0,
     }),
-    clientIp: "203.0.113.10",
     db: new Proxy(
       {},
       {

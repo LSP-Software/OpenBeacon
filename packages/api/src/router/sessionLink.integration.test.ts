@@ -41,7 +41,6 @@ const callerFor = async ({
     db: prisma,
     emailCodes: null,
     securityAlerts: null,
-    clientIp: `ip-${userId}`,
     deviceId: device.deviceId,
     unverifiedDeviceId: device.unverifiedDeviceId,
     deviceActive: device.deviceActive,
@@ -265,7 +264,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             serverName: "test",
             selfHosted: true,
           })),
-          clientIp: "127.0.0.1",
         }),
       });
 
@@ -312,7 +310,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             serverName: "test",
             selfHosted: true,
           })),
-          clientIp: "127.0.0.1",
         }),
       });
 

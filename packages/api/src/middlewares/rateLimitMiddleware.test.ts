@@ -6,8 +6,6 @@ import { type AnyRouter, TRPCError } from "@trpc/server";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { createAuthProcedures } from "../procedures/auth/base.ts";
 import { createTRPCComponents } from "../trpc.ts";
-import { createRateLimitMiddleware } from "./rateLimitMiddleware.ts";
-import { createTimingMiddleware } from "./timingMiddleware.ts";
 
 class TestOpenBeaconCache extends OpenBeaconCache {
   protected override createRedisClient(): FakeRedis {
@@ -23,17 +21,10 @@ class UnavailableCache extends OpenBeaconCache {
 
 let originalBetterAuthUrl: string | undefined;
 let originalBetterAuthSecret: string | undefined;
-let originalNodeEnv: string | undefined;
 
 const createModules = () => {
   const { t, createTRPCRouter } = createTRPCComponents();
-  const rateLimitMiddleware = createRateLimitMiddleware({ t });
-  const timingMiddleware = createTimingMiddleware({ t });
-  const { publicProcedure, protectedProcedure } = createAuthProcedures({
-    t,
-    rateLimitMiddleware,
-    timingMiddleware,
-  });
+  const { publicProcedure, protectedProcedure } = createAuthProcedures({ t });
 
   return {
     createTRPCRouter,
@@ -45,12 +36,10 @@ const createModules = () => {
 
 const createCaller = <TRouter extends AnyRouter>({
   cache,
-  clientIp,
   router,
   userId,
 }: {
   cache: OpenBeaconCache;
-  clientIp?: string;
   router: TRouter;
   userId: string | null;
 }): ReturnType<TRouter["createCaller"]> => {
@@ -67,7 +56,6 @@ const createCaller = <TRouter extends AnyRouter>({
           },
         }
       : null,
-    ...(clientIp !== undefined ? { clientIp } : {}),
   };
   return router.createCaller(context);
 };
@@ -76,10 +64,8 @@ describe("rateLimitMiddleware", () => {
   beforeEach(() => {
     originalBetterAuthUrl = process.env.BETTER_AUTH_URL;
     originalBetterAuthSecret = process.env.BETTER_AUTH_SECRET;
-    originalNodeEnv = process.env.NODE_ENV;
     process.env.BETTER_AUTH_URL = "http://localhost:3000";
     process.env.BETTER_AUTH_SECRET = "test-secret-000000000000000000000000";
-    process.env.NODE_ENV = "production";
   });
 
   afterEach(() => {
@@ -93,12 +79,6 @@ describe("rateLimitMiddleware", () => {
       delete process.env.BETTER_AUTH_SECRET;
     } else {
       process.env.BETTER_AUTH_SECRET = originalBetterAuthSecret;
-    }
-
-    if (originalNodeEnv === undefined) {
-      delete process.env.NODE_ENV;
-    } else {
-      process.env.NODE_ENV = originalNodeEnv;
     }
   });
 
@@ -115,12 +95,10 @@ describe("rateLimitMiddleware", () => {
         .meta({ rateLimit: { limit: 1, windowMs: 60_000, scope: "server" } })
         .query(() => "public"),
     });
-    await expect(
-      createCaller({ cache, clientIp: "10.0.0.1", router, userId: "user-1" }).private(),
-    ).resolves.toBe("private");
-    await expect(
-      createCaller({ cache, clientIp: "10.0.0.1", router, userId: null }).public(),
-    ).resolves.toBe("public");
+    await expect(createCaller({ cache, router, userId: "user-1" }).private()).resolves.toBe(
+      "private",
+    );
+    await expect(createCaller({ cache, router, userId: null }).public()).resolves.toBe("public");
     expect(error.mock.calls).toEqual([
       ["[rate-limit] Redis is unavailable (ERR_REDIS_CONNECTION_CLOSED), so private is allowed"],
       ["[rate-limit] Redis is unavailable (ERR_REDIS_CONNECTION_CLOSED), so public is allowed"],
@@ -143,8 +121,8 @@ describe("rateLimitMiddleware", () => {
         .query(() => "strict"),
       private: protectedProcedure.query(() => "private"),
     });
-    const anonymous = createCaller({ cache, clientIp: "10.0.0.1", router, userId: null });
-    const signedIn = createCaller({ cache, clientIp: "10.0.0.1", router, userId: "user-1" });
+    const anonymous = createCaller({ cache, router, userId: null });
+    const signedIn = createCaller({ cache, router, userId: "user-1" });
 
     for (let index = 0; index < 100; index += 1) {
       await expect(anonymous.public()).resolves.toBe("public");
@@ -173,8 +151,8 @@ describe("rateLimitMiddleware", () => {
         .query(() => "strict"),
       relaxed: publicProcedure.query(() => "relaxed"),
     });
-    const first = createCaller({ cache, clientIp: "198.51.100.10", router, userId: "first" });
-    const second = createCaller({ cache, clientIp: "198.51.100.10", router, userId: "second" });
+    const first = createCaller({ cache, router, userId: "first" });
+    const second = createCaller({ cache, router, userId: "second" });
 
     for (let index = 0; index < 60; index += 1) {
       await expect(first.shared()).resolves.toBe("shared");
@@ -200,8 +178,8 @@ describe("rateLimitMiddleware", () => {
         .mutation(() => true),
     });
     const callers = [
-      createCaller({ cache, clientIp: "198.51.100.1", router, userId: null }),
-      createCaller({ cache, clientIp: "198.51.100.2", router, userId: "user-1" }),
+      createCaller({ cache, router, userId: null }),
+      createCaller({ cache, router, userId: "user-1" }),
       createCaller({ cache, router, userId: null }),
     ];
     for (const caller of callers) await expect(caller.submit()).resolves.toBe(true);
@@ -261,13 +239,11 @@ describe("rateLimitMiddleware", () => {
     });
     const firstCaller = createCaller({
       cache,
-      clientIp: "203.0.113.30",
       router,
       userId: "user-1",
     });
     const secondCaller = createCaller({
       cache,
-      clientIp: "203.0.113.31",
       router,
       userId: "user-1",
     });
@@ -340,7 +316,6 @@ describe("rateLimitMiddleware", () => {
           ({
             cache,
             db: {} as never,
-            clientIp: "198.51.100.1",
             deviceId: "device-1",
             deviceActive: true,
             session: { user: { id: "user-1" } },
@@ -390,7 +365,7 @@ describe("rateLimitMiddleware", () => {
         .mutation(() => true),
     });
     const callers = Array.from({ length: 100 }, (_, index) =>
-      createCaller({ cache, clientIp: "10.0.0.1", router, userId: `user-${index}` }),
+      createCaller({ cache, router, userId: `user-${index}` }),
     );
     for (const caller of callers) {
       await caller.lookup();
@@ -421,9 +396,9 @@ describe("rateLimitMiddleware", () => {
       lookup: procedure.mutation(() => true),
       accept: procedure.mutation(() => true),
     });
-    const first = createCaller({ cache, clientIp: "198.51.100.1", router, userId: "first" });
-    const second = createCaller({ cache, clientIp: "198.51.100.1", router, userId: "second" });
-    const third = createCaller({ cache, clientIp: "198.51.100.1", router, userId: "third" });
+    const first = createCaller({ cache, router, userId: "first" });
+    const second = createCaller({ cache, router, userId: "second" });
+    const third = createCaller({ cache, router, userId: "third" });
     await expect(first.lookup()).resolves.toBe(true);
     await expect(first.accept()).resolves.toBe(true);
     await expect(first.lookup()).rejects.toMatchObject({ code: "TOO_MANY_REQUESTS" });

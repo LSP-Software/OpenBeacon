@@ -23,6 +23,7 @@ router.on(["POST", "GET"], "/trpc/*", async (c) => {
     endpoint,
     req: c.req.raw,
     router: appRouter,
+    maxBatchSize: 40,
     onError: ({ error, path }) => {
       if (error.code === "INTERNAL_SERVER_ERROR") {
         const location = [error.cause?.stack, error.stack]
@@ -47,7 +48,6 @@ router.on(["POST", "GET"], "/trpc/*", async (c) => {
         serverName: env.SERVER_NAME,
         selfHosted: env.SELF_HOSTED,
         feedbackWebhookUrl: env.DISCORD_FEEDBACK_WEBHOOK_URL,
-        ...(c.env.clientIp != null ? { clientIp: c.env.clientIp } : {}),
       }),
   });
 });

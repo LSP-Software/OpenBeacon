@@ -54,7 +54,6 @@ const callerFor = (
       db: prisma,
       emailCodes: null,
       securityAlerts: null,
-      clientIp: `ip-${account.userId}`,
       ...device,
       session: {
         user: { id: account.userId },

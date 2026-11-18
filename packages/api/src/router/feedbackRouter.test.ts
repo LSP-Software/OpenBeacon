@@ -29,7 +29,6 @@ const createCaller = ({
 }) =>
   appRouter.createCaller({
     cache,
-    clientIp: "203.0.113.10",
     serverVersion: "9.9.9",
     serverName: "Hosted",
     selfHosted,

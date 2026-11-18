@@ -1,4 +1,6 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { OpenBeaconCache } from "@openbeacon/cache";
+import { FakeRedis, testRedisHashSecret } from "@openbeacon/cache/testing";
 
 const testEnv = {
   BETTER_AUTH_URL: "http://localhost:3000",
@@ -50,5 +52,49 @@ describe("mapsRouter", () => {
         windowMs: 600_000,
       },
     });
+  });
+
+  test("map URL calls leave no account ID in the server log", async () => {
+    const signedUrl = {
+      archiveId: "archive-1",
+      expiresAt: "2026-11-18T00:10:00.000Z",
+      key: "maps/a.pmtiles",
+      mapBuild: "20261118",
+      mapSlot: "a",
+      refreshAt: "2026-11-18T00:05:00.000Z",
+      source: "generated",
+      url: "https://map-storage.example.com/a.pmtiles",
+    };
+    mock.module("../lib/pmtilesUrl.ts", () => ({
+      getSignedPmtilesUrlForUser: async () => signedUrl,
+      forceRefreshSignedPmtilesUrlForUser: async () => ({ ...signedUrl, source: "forced" }),
+    }));
+    const { mapsRouter }: typeof import("./mapsRouter.ts") = await import(
+      `./mapsRouter.ts?test=${Math.random().toString(36).slice(2)}`
+    );
+    const { createTRPCRouter } = await import("../trpcRuntime.ts");
+    const caller = createTRPCRouter({ maps: mapsRouter }).createCaller({
+      cache: new (class extends OpenBeaconCache {
+        protected override createRedisClient(): FakeRedis {
+          return new FakeRedis();
+        }
+      })({ redisUrl: "redis://localhost:6379", hashSecret: testRedisHashSecret, now: () => 0 }),
+      deviceId: "device-1",
+      deviceActive: true,
+      session: { user: { id: "account-7f3a" } },
+    } as never);
+    const logged: unknown[][] = [];
+    const spies = (["info", "log", "warn", "error"] as const).map((level) =>
+      spyOn(console, level).mockImplementation((...args: unknown[]) => {
+        logged.push(args);
+      }),
+    );
+
+    await caller.maps.getSignedPmtilesUrl();
+    await caller.maps.forceRefreshSignedPmtilesUrl();
+
+    for (const spy of spies) spy.mockRestore();
+    mock.restore();
+    expect(JSON.stringify(logged)).not.toContain("account-7f3a");
   });
 });

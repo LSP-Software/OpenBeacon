@@ -23,7 +23,6 @@ const caller = (userId: string, deviceId: string | null) =>
     withDeviceActive({
       cache,
       db: prisma,
-      clientIp: `ip-${userId}`,
       deviceId,
       emailCodes: null,
       securityAlerts: null,

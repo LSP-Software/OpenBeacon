@@ -44,7 +44,6 @@ const caller = (userId: string, deviceId: string) =>
     withDeviceActive({
       cache,
       db: prisma,
-      clientIp: "127.0.0.1",
       deviceId,
       session: { user: { id: userId }, session: { id: `${userId}-session` } },
     }) as Parameters<typeof router.createCaller>[0],
@@ -205,7 +204,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           withDeviceActive({
             cache: slowCache,
             db: prisma,
-            clientIp: "127.0.0.1",
             deviceId: memberDevice,
             session: { user: { id: memberId }, session: { id: `${memberId}-session` } },
           }) as Parameters<typeof router.createCaller>[0],

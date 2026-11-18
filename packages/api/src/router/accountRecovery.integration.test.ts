@@ -126,7 +126,6 @@ const caller = (userId: string, sessionCreatedAt = new Date(), codes: EmailCodes
       cache,
       db: prisma,
       emailCodes: codes,
-      clientIp: `ip-${userId}`,
       deviceId: `${userId}-device`,
       session: {
         user: { id: userId },
@@ -682,7 +681,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
                 cache,
                 db: prisma,
                 emailCodes: null,
-                clientIp: `ip-${resetUser}`,
                 ...device,
                 session: {
                   user: { id: resetUser },

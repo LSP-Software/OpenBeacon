@@ -18,7 +18,7 @@ export const envSchema = {
     z.stringbool().default(true),
   ),
   OPENBEACON_API_PORT: z.coerce.number().int().min(1).max(65535).default(3000),
-  OPENBEACON_API_HOSTNAME: z.ipv4().default("0.0.0.0"),
+  OPENBEACON_API_HOSTNAME: z.union([z.ipv4(), z.ipv6()]).default("0.0.0.0"),
   TRUSTED_PROXY_PROVIDER: z
     .enum(["none", "cloudflare", "cloudflare-authenticated", "trusted-proxy"])
     .default("none"),

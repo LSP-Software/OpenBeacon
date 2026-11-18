@@ -30,7 +30,6 @@ const caller = (sessionId: string) =>
     withDeviceActive({
       cache,
       db: prisma,
-      clientIp: "127.0.0.1",
       deviceId: `${userId}-device`,
       session: { user: { id: userId, email }, session: { id: sessionId } },
     }) as Parameters<typeof appRouter.createCaller>[0],
@@ -66,7 +65,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         withDeviceActive({
           cache: lockoutCache,
           db: prisma,
-          clientIp: "127.0.0.1",
           deviceId: `${id}-device`,
           session: { user: { id, email: lockoutEmail }, session: { id: session.id } },
         }) as Parameters<typeof appRouter.createCaller>[0],
@@ -167,7 +165,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         withDeviceActive({
           cache,
           db: prisma,
-          clientIp: "127.0.0.1",
           deviceId: `${inviteeId}-device`,
           session: {
             user: { id: inviteeId, email: `${inviteeId}@example.test` },
@@ -306,7 +303,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             withDeviceActive({
               cache,
               db: prisma,
-              clientIp: "127.0.0.1",
               deviceId: `${id}-device`,
               session: { user: { id, email: accountEmail }, session: { id: sessionId } },
             }) as Parameters<typeof appRouter.createCaller>[0],
@@ -372,7 +368,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           withDeviceActive({
             cache,
             db: prisma,
-            clientIp: "127.0.0.1",
             deviceId: device.id,
             session: { user: { id, email: accountEmail }, session: { id: session.id } },
           }) as Parameters<typeof appRouter.createCaller>[0],
@@ -462,7 +457,6 @@ test.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         withDeviceActive({
           cache,
           db: prisma,
-          clientIp: "127.0.0.1",
           deviceId: `${immediateUserId}-device`,
           session: {
             user: { id: immediateUserId, email: immediateEmail },

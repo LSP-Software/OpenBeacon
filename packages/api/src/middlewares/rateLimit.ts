@@ -14,5 +14,3 @@ export const defaultRateLimitMeta = {
   limit: 60,
   windowMs: 60_000,
 } satisfies z.infer<typeof rateLimitMetaSchema>;
-
-export class RateLimitContextError extends Error {}

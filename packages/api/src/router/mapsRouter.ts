@@ -22,10 +22,6 @@ export const mapsRouter = {
         userId: ctx.session.user.id,
       });
 
-      console.info(
-        `[maps.getSignedPmtilesUrl] userId=${ctx.session.user.id} key=${signedUrl.key} archive=${signedUrl.archiveId} expiresAt=${signedUrl.expiresAt} source=${signedUrl.source}`,
-      );
-
       return {
         archiveId: signedUrl.archiveId,
         expiresAt: signedUrl.expiresAt,
@@ -47,10 +43,6 @@ export const mapsRouter = {
         cache: ctx.cache,
         userId: ctx.session.user.id,
       });
-
-      console.info(
-        `[maps.forceRefreshSignedPmtilesUrl] userId=${ctx.session.user.id} key=${signedUrl.key} archive=${signedUrl.archiveId} expiresAt=${signedUrl.expiresAt} source=${signedUrl.source}`,
-      );
 
       return {
         archiveId: signedUrl.archiveId,

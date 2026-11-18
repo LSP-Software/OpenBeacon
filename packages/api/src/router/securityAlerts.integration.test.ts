@@ -90,7 +90,6 @@ const createAccount = async () => {
         db: prisma,
         emailCodes: null,
         securityAlerts,
-        clientIp: `ip-${user.id}`,
         deviceId,
         session: {
           user: { id: user.id, email },
@@ -637,7 +636,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
             },
           },
         }),
-        clientIp: `ip-${account.userId}`,
         deviceId: device.id,
         session: {
           user: { id: account.userId },

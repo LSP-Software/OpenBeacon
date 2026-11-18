@@ -96,6 +96,7 @@ export const trpcClient = createTRPCClient<AppRouter>({
       transformer: superjson,
       url: "/api/trpc",
       maxURLLength: 6000,
+      maxItems: 20,
       fetch: (path, options) =>
         apiCompatibilityFetch(`${getBaseUrl()}${path}`, {
           ...options,
@@ -125,6 +126,7 @@ export const feedbackClient = createTRPCClient<AppRouter>({
     httpBatchLink({
       transformer: superjson,
       url: `${getFeedbackUrl()}/api/trpc`,
+      maxItems: 20,
       headers: () => ({ "x-trpc-source": "expo-react" }),
       fetch: (url, options) =>
         fetch(

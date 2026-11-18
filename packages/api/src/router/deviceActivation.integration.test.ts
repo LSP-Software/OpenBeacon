@@ -45,7 +45,6 @@ const caller = (
     withDeviceActive({
       cache,
       db: prisma,
-      clientIp: "127.0.0.1",
       deviceId,
       emailCodes: null,
       securityAlerts,
@@ -262,7 +261,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         withDeviceActive({
           cache,
           db: prisma,
-          clientIp: "127.0.0.1",
           deviceId: null,
           emailCodes: null,
           securityAlerts: null,
@@ -569,7 +567,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         withDeviceActive({
           cache,
           db: prisma,
-          clientIp: "127.0.0.1",
           deviceId: null,
           unverifiedDeviceId: account.firstDeviceId,
           emailCodes: null,
