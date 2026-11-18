@@ -1,4 +1,4 @@
-import { baseUrl } from "./currentServer.ts";
+import { getBaseUrl } from "./currentServer.ts";
 import { storage } from "./storage.ts";
 
 export const REGISTERED_DEVICE_KEY = "encryption.device.registered";
@@ -15,7 +15,7 @@ export const readRegisteredDeviceNow = () => {
   const stored = storage.getString(REGISTERED_DEVICE_KEY);
   if (!stored) return null;
   const record = parseStoredRecord(stored);
-  if (!Array.isArray(record) || record[0] !== baseUrl) return null;
+  if (!Array.isArray(record) || record[0] !== getBaseUrl()) return null;
   const [, userId, deviceId, publicKey] = record;
   if (typeof userId !== "string" || typeof deviceId !== "string" || typeof publicKey !== "string")
     return null;

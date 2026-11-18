@@ -12,15 +12,19 @@ import {
 } from "expo-screen-capture";
 import { useCallback, useEffect, useState } from "react";
 import { BackHandler, KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
+import { ConfirmIdentity } from "../../components/ConfirmIdentity.tsx";
 import { ScreenHeader } from "../../components/headers/ScreenHeader.tsx";
+import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
 import { RecoveryPhraseGrid } from "../../components/RecoveryPhraseGrid.tsx";
 import { RecoveryCoverage } from "../../components/RecoveryCoverage.tsx";
 import { Button } from "../../components/ui/Button.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { useHeldHistoryKeyVersions } from "../../hooks/useHeldHistoryKeyVersions.ts";
+import { useIdentityGate } from "../../hooks/useIdentityGate.ts";
 import { trpc } from "../../lib/api.ts";
 import { authClient } from "../../lib/auth-client.ts";
 import { activateWithHistoryKey } from "../../lib/deviceActivation.ts";
+import { needsFreshSignIn } from "../../lib/needsFreshSignIn.ts";
 import { restoreFromRecoveryPhrase } from "../../lib/recovery.ts";
 import { requestTrackingSync } from "../../lib/trackingEvents.ts";
 import { resealPersonalData } from "../../lib/resealPersonalData.ts";
@@ -40,12 +44,17 @@ const RecoveryRestoreScreen = () => {
   );
   const holdsCurrent = currentVersion !== undefined && heldVersions.data?.includes(currentVersion);
   const [step, setStep] = useState<
-    "enter" | "restoring" | "activating" | "activationFailed" | "done"
-  >("enter");
+    "verify" | "enter" | "restoring" | "activating" | "activationFailed" | "reverify" | "done"
+  >(setup ? "verify" : "enter");
+  const gate = useIdentityGate({ enabled: step === "verify" });
   const [userId, setUserId] = useState<string>();
   const [words, setWords] = useState(emptyWords);
   const [problem, setProblem] = useState<{ message: string; invalidIndexes: number[] }>();
   const [activationProblem, setActivationProblem] = useState<string>();
+
+  useEffect(() => {
+    if (step === "verify" && gate.decision === "ready") setStep("enter");
+  }, [step, gate.decision]);
 
   const entering = step === "enter" || step === "restoring";
   const busy = step === "restoring" || step === "activating";
@@ -115,6 +124,10 @@ const RecoveryRestoreScreen = () => {
       setStep("activating");
       setActivationProblem(undefined);
       const activated = await tryCatch(activateWithHistoryKey());
+      if (needsFreshSignIn(activated.error)) {
+        setStep("reverify");
+        return;
+      }
       if (activated.error) {
         setActivationProblem(
           activated.error instanceof TRPCClientError && !activated.error.data
@@ -150,6 +163,16 @@ const RecoveryRestoreScreen = () => {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          {step === "verify" && gate.decision === null && <LoadingIndicator />}
+          {step === "verify" && gate.decision === "confirm" && (
+            <ConfirmIdentity
+              onConfirmed={() => {
+                void gate.refresh();
+                setStep("enter");
+              }}
+            />
+          )}
+
           {entering && (
             <View className="gap-4">
               <Text className="text-foreground text-2xl font-bold">Restore your history</Text>
@@ -209,6 +232,10 @@ const RecoveryRestoreScreen = () => {
                 <Text>Try again</Text>
               </Button>
             </View>
+          )}
+
+          {step === "reverify" && userId && (
+            <ConfirmIdentity onConfirmed={() => void finish(userId)} />
           )}
 
           {step === "done" && (

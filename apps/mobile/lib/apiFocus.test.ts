@@ -19,7 +19,7 @@ mock.module("./storage.ts", () => ({
   storage: { getString: () => undefined, set: () => {}, remove: () => {}, contains: () => false },
 }));
 mock.module("./currentServer.ts", () => ({
-  baseUrl: "http://127.0.0.1",
+  getBaseUrl: () => "http://127.0.0.1",
   getFeedbackUrl: () => "http://127.0.0.1",
 }));
 mock.module("./auth-client.ts", () => ({ authClient: { getCookie: () => null } }));

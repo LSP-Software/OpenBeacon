@@ -32,12 +32,13 @@ mock.module("expo-secure-store", () => ({
 mock.module("expo-constants", () => ({ default: { expoConfig: { scheme: "openbeacon" } } }));
 mock.module("expo-linking", () => ({ createURL: (path: string) => `openbeacon://${path}` }));
 
+mock.module("./currentServer.ts", () => ({ getBaseUrl: () => server }));
+
+const authClientModule = await import("./auth-client.ts");
+
 const loadAuthClient = async (baseUrl: string) => {
   server = baseUrl;
-  mock.module("./currentServer.ts", () => ({ baseUrl: server }));
-  return import(`./auth-client.ts?server=${encodeURIComponent(baseUrl)}`) as Promise<
-    typeof import("./auth-client.ts")
-  >;
+  return authClientModule;
 };
 
 beforeEach(() => {
@@ -46,18 +47,21 @@ beforeEach(() => {
 });
 
 test("each server's session cookie is stored under its own key", async () => {
-  const hosted = await loadAuthClient("https://hosted.example.test");
-  const selfHosted = await loadAuthClient("https://self-hosted.example.test");
-  expect(hosted.getServerKey("https://hosted.example.test")).not.toBe(
-    selfHosted.getServerKey("https://self-hosted.example.test"),
+  const { authClient, getServerKey } = authClientModule;
+  expect(getServerKey("https://hosted.example.test")).not.toBe(
+    getServerKey("https://self-hosted.example.test"),
   );
   secureStore.set(
-    `openbeacon_${hosted.getServerKey("https://hosted.example.test")}_cookie`,
+    `openbeacon_${getServerKey("https://hosted.example.test")}_cookie`,
     JSON.stringify({ "better-auth.session_token": { value: "hosted-session", expires: null } }),
   );
 
-  expect(await hosted.authClient.getCookie()).toContain("hosted-session");
-  expect(await selfHosted.authClient.getCookie()).toBe("");
+  await loadAuthClient("https://hosted.example.test");
+  expect(await authClient.getCookie()).toContain("hosted-session");
+  await loadAuthClient("https://self-hosted.example.test");
+  expect(await authClient.getCookie()).toBe("");
+  await loadAuthClient("https://hosted.example.test");
+  expect(await authClient.getCookie()).toContain("hosted-session");
 });
 
 test("credentials are stored only for this device while unlocked", async () => {
@@ -84,4 +88,18 @@ test("a session token saved before tokens were tied to a server is dropped", asy
   const { readSessionTokenToRevoke } = await loadAuthClient("https://hosted.example.test");
   expect(await readSessionTokenToRevoke()).toBeNull();
   expect(secureStore.has("sessionTokenToRevokeOnNextLogin")).toBe(false);
+});
+
+test("a proxy page answered with 200 is treated as an unreachable server, never as the session", async () => {
+  const { authClient } = await loadAuthClient("https://self-hosted.example.test");
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async () =>
+    new Response("<html><body>Welcome to nginx!</body></html>", {
+      status: 200,
+      headers: { "content-type": "text/html" },
+    })) as unknown as typeof fetch;
+  const result = await authClient.getSession();
+  globalThis.fetch = realFetch;
+  expect(result.data).toBeNull();
+  expect(result.error?.status).toBe(503);
 });

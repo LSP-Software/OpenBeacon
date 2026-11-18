@@ -87,7 +87,7 @@ const changeFromAnotherPhone = (scopeName: "device" | "account", paused: boolean
   };
 };
 mock.module("react-native", () => ({ Platform: { OS: "android" } }));
-mock.module("./currentServer.ts", () => ({ baseUrl: "https://server.test" }));
+mock.module("./currentServer.ts", () => ({ getBaseUrl: () => "https://server.test" }));
 mock.module("./createSecureId.ts", () => ({ createSecureId: () => `request-${++nextRequestId}` }));
 mock.module("./deviceKeys.ts", () => ({
   getStoredDeviceId: () => registeredDeviceId,

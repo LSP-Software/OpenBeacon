@@ -42,7 +42,7 @@ mock.module("./storage.ts", () => ({
     remove: (key: string) => storageValues.delete(key),
   },
 }));
-mock.module("./currentServer.ts", () => ({ baseUrl: "https://api.example.test" }));
+mock.module("./currentServer.ts", () => ({ getBaseUrl: () => "https://api.example.test" }));
 mock.module("./deviceKeys.ts", () => ({
   getRegisteredDeviceKey: async () => ({ deviceId: "device-1", userId: "user-1" }),
 }));

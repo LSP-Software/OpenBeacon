@@ -176,6 +176,7 @@ mock.module("./secretStorage.ts", () => ({
   invalidateSecretWrites: async () => {},
 }));
 let sessionChecks = 0;
+mock.module("./sessionRefresh.ts", () => ({ refreshSessionIfDue: async () => {} }));
 mock.module("./sessionCheck.ts", () => ({
   checkSessionAfterUnauthorized: () => {
     sessionChecks += 1;
@@ -277,7 +278,7 @@ mock.module("./resealPersonalData.ts", () => ({
 }));
 
 mock.module("./currentServer.ts", () => ({
-  baseUrl: "https://api.example.test",
+  getBaseUrl: () => "https://api.example.test",
   hasCustomServerUrl: () => false,
 }));
 

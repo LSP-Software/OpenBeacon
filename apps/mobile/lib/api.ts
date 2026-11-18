@@ -12,9 +12,13 @@ import { devicePendingCause, deviceIdHeader, deviceUnverifiedCause } from "@open
 import { observable } from "@trpc/server/observable";
 import { AppState } from "react-native";
 import superjson from "superjson";
-import { apiCompatibilityFetch, withApiCompatibilityHeader } from "./apiCompatibility.ts";
+import {
+  apiCompatibilityFetch,
+  getApiCompatibility,
+  withApiCompatibilityHeader,
+} from "./apiCompatibility.ts";
 import { authClient } from "./auth-client.ts";
-import { baseUrl, getFeedbackUrl } from "./currentServer.ts";
+import { getBaseUrl, getFeedbackUrl } from "./currentServer.ts";
 import { isDeviceRemovedError } from "./deviceRemovedError.ts";
 import { readRegisteredDevice } from "./registeredDevice.ts";
 import { RequestTimeoutError, timeoutLink } from "./timeoutLink.ts";
@@ -31,15 +35,15 @@ export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 30_000,
-      retry: (failureCount, error) =>
-        failureCount < 3 &&
-        !(
-          error instanceof TRPCClientError &&
-          (error.cause instanceof RequestTimeoutError ||
-            ["BAD_REQUEST", "UNAUTHORIZED", "FORBIDDEN", "NOT_FOUND", "TOO_MANY_REQUESTS"].includes(
-              error.data?.code,
-            ))
-        ),
+      retry: (failureCount, error) => {
+        if (failureCount >= 3 || getApiCompatibility()) return false;
+        if (!(error instanceof TRPCClientError)) return true;
+        if (error.cause instanceof RequestTimeoutError) return false;
+        const response = error.meta?.["response"];
+        const status =
+          error.data?.httpStatus ?? (response instanceof Response ? response.status : undefined);
+        return typeof status !== "number" || status >= 500;
+      },
     },
   },
 });
@@ -90,10 +94,13 @@ export const trpcClient = createTRPCClient<AppRouter>({
     timeoutLink(),
     httpBatchLink({
       transformer: superjson,
-      url: `${baseUrl}/api/trpc`,
+      url: "/api/trpc",
       maxURLLength: 6000,
-      fetch: (url, options) =>
-        apiCompatibilityFetch(url, { ...options, signal: options?.signal ?? null }),
+      fetch: (path, options) =>
+        apiCompatibilityFetch(`${getBaseUrl()}${path}`, {
+          ...options,
+          signal: options?.signal ?? null,
+        }),
       async headers() {
         const headers = new Map<string, string>();
         headers.set("x-trpc-source", "expo-react");

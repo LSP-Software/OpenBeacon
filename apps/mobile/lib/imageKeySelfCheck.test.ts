@@ -96,7 +96,7 @@ mock.module("./storage.ts", () => ({
     },
   },
 }));
-mock.module("./currentServer.ts", () => ({ baseUrl: "https://api.example.test" }));
+mock.module("./currentServer.ts", () => ({ getBaseUrl: () => "https://api.example.test" }));
 mock.module("./api.ts", () => ({
   trpcClient: {
     groupMembership: {

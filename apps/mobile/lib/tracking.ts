@@ -15,13 +15,14 @@ import {
   markApiCompatibilityNotified,
   refreshApiCompatibilityInBackground,
 } from "./apiCompatibility.ts";
-import { baseUrl, hasCustomServerUrl } from "./currentServer.ts";
+import { getBaseUrl, hasCustomServerUrl } from "./currentServer.ts";
 import { createHistoryKey } from "./createHistoryKey.ts";
 import { getCurrentHistoryKeyState } from "./currentHistoryKey.ts";
 import { isThisDeviceActive } from "./deviceActivation.ts";
 import { getStoredHistoryKey } from "./historyKeys.ts";
 import { secretOwner } from "./secretStorage.ts";
 import { checkSessionAfterUnauthorized } from "./sessionCheck.ts";
+import { refreshSessionIfDue } from "./sessionRefresh.ts";
 import {
   cancelDeviceKeyRegistrations,
   ensureDeviceKeyRegistration,
@@ -84,10 +85,10 @@ let keyAccessChangePending = false;
 const observedGroupEpochs = new Map<string, string>();
 const lastCleanBackfills = new Map<string, { at: number; missingVersion: number | null }>();
 
-const getOwner = (userId: string) => JSON.stringify([baseUrl, userId]);
+const getOwner = (userId: string) => JSON.stringify([getBaseUrl(), userId]);
 
 const getPushScope = (device: { userId: string; deviceId: string }) =>
-  JSON.stringify([baseUrl, device.userId, device.deviceId]);
+  JSON.stringify([getBaseUrl(), device.userId, device.deviceId]);
 
 const getQueueOwner = async (signal?: AbortSignal) => {
   const device = await getRegisteredDeviceKey();
@@ -100,7 +101,7 @@ const getQueueOwner = async (signal?: AbortSignal) => {
 };
 
 const getKeyCheckScope = (userId: string, startCapture: boolean) =>
-  JSON.stringify([baseUrl, userId, startCapture]);
+  JSON.stringify([getBaseUrl(), userId, startCapture]);
 
 const hasFreshKeyCheck = async (startCapture: boolean) => {
   const device = await getRegisteredDeviceKey();
@@ -1108,6 +1109,7 @@ export const flushPendingTrackingPoints = (force = false): Promise<void> => {
 
 export const flushForegroundTrackingPoints = async (force = false) => {
   if (!force && (await loadTrackingModule())?.isCaptureRunning()) return;
+  await refreshSessionIfDue();
   await flushPendingTrackingPoints(force);
 };
 
@@ -1169,6 +1171,7 @@ export const syncAccountNotices = () =>
 export type UploadReason = "upload" | "sharing" | "parked" | "push";
 
 const syncBackgroundTrackingInternal = async (reason: UploadReason) => {
+  await refreshSessionIfDue();
   if (getApiCompatibility()) {
     await refreshApiCompatibilityInBackground();
     if (!getApiCompatibility()) await dismissNotice("compatibility");
@@ -1352,7 +1355,7 @@ export const getUnassignedTrackingPoints = async () => {
   );
   const deviceIds = counts.filter(({ count }) => count > 0).map(({ deviceId }) => deviceId);
   const count = counts.reduce((total, item) => total + item.count, 0);
-  return count > 0 ? { count, deviceIds, server: baseUrl, userId } : null;
+  return count > 0 ? { count, deviceIds, server: getBaseUrl(), userId } : null;
 };
 
 export const recoverUnassignedTrackingPoints = async ({

@@ -9,7 +9,7 @@ import { BeaconIcon } from "../components/BeaconIcon.tsx";
 import { Button } from "../components/ui/Button.tsx";
 import { Text } from "../components/ui/Text.tsx";
 import { authClient } from "../lib/auth-client.ts";
-import { baseUrl, hasCustomServerUrl } from "../lib/currentServer.ts";
+import { getBaseUrl, hasCustomServerUrl } from "../lib/currentServer.ts";
 import { isThisDeviceActive } from "../lib/deviceActivation.ts";
 import { ensureDeviceKeyRegistration } from "../lib/deviceKeys.ts";
 import { endSession } from "../lib/endSession.ts";
@@ -148,7 +148,7 @@ export default function HomeScreen() {
             <AnnouncementBanner />
             <Text className="text-center text-secondary" accessibilityLiveRegion="polite">
               {hasCustomServerUrl()
-                ? `Couldn't connect to ${baseUrl}. Check your connection and that your server is running. Trying again automatically.`
+                ? `Couldn't connect to ${getBaseUrl()}. Check your connection and that your server is running. Trying again automatically.`
                 : "Couldn't connect to OpenBeacon. Check your connection. Trying again automatically."}
             </Text>
             <Button onPress={() => setAttempt((value) => value + 1)}>

@@ -162,7 +162,7 @@ const { ensureDeviceKeyRegistration } = await import("./deviceKeys.ts");
 const { handleDeviceRemoved, wipeAfterRemovingThisPhone } = await import("./deviceRemoved.ts");
 const { endSession, settleLostSessions } = await import("./endSession.ts");
 const { storeHistoryKey } = await import("./historyKeys.ts");
-const { baseUrl } = await import("./currentServer.ts");
+const baseUrl = (await import("./currentServer.ts")).getBaseUrl();
 const pendingSharingKey = `locationSharing.pending.${JSON.stringify([baseUrl, "user-a", "device"])}`;
 
 const removedError = () =>

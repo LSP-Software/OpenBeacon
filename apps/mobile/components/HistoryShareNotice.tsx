@@ -2,7 +2,7 @@ import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { View } from "react-native";
 import { useHistoryShare } from "../hooks/useHistoryShare.ts";
-import { baseUrl } from "../lib/currentServer.ts";
+import { getBaseUrl } from "../lib/currentServer.ts";
 import { storage } from "../lib/storage.ts";
 import { Button } from "./ui/Button.tsx";
 import {
@@ -15,7 +15,7 @@ import {
 import { Text } from "./ui/Text.tsx";
 
 export const HistoryShareNotice = ({ userId }: { userId: string }) => {
-  const key = `historyShareNotice.${JSON.stringify([baseUrl, userId])}`;
+  const key = `historyShareNotice.${JSON.stringify([getBaseUrl(), userId])}`;
   const [seen, setSeen] = useState(() => storage.getString(key) !== undefined);
   const { setting } = useHistoryShare(!seen);
   const dismiss = () => {

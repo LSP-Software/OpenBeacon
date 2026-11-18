@@ -9,7 +9,7 @@ import { tryCatch } from "@openbeacon/shared";
 import * as Device from "expo-device";
 import { Platform } from "react-native";
 import { trpcClient } from "./api.ts";
-import { baseUrl } from "./currentServer.ts";
+import { getBaseUrl } from "./currentServer.ts";
 import { createSecureId } from "./createSecureId.ts";
 import { readRegisteredDevice, REGISTERED_DEVICE_KEY } from "./registeredDevice.ts";
 import {
@@ -309,7 +309,7 @@ export const ensureDeviceKeyRegistration = async ({
         registeredDevice = device;
         storage.set(
           REGISTERED_DEVICE_KEY,
-          JSON.stringify([baseUrl, userId, context.deviceId, context.publicKey]),
+          JSON.stringify([getBaseUrl(), userId, context.deviceId, context.publicKey]),
         );
       }
       return device;

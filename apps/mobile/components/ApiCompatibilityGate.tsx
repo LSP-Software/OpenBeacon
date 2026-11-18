@@ -11,7 +11,7 @@ import {
   useApiCompatibility,
 } from "../lib/apiCompatibility.ts";
 import { authClient } from "../lib/auth-client.ts";
-import { baseUrl, getBaseUrl, hasCustomServerUrl } from "../lib/currentServer.ts";
+import { getBaseUrl, hasCustomServerUrl } from "../lib/currentServer.ts";
 import { endSession } from "../lib/endSession.ts";
 import { dismissNotice } from "../lib/notifications.ts";
 import { openPlayStore } from "../lib/openPlayStore.ts";
@@ -34,7 +34,6 @@ export const ApiCompatibilityGate = () => {
   const [signingOut, setSigningOut] = useState(false);
   const { data: session } = authClient.useSession();
   const selfHosted = hasCustomServerUrl();
-  const switchedServer = getBaseUrl() !== baseUrl;
   const problem = compatibility?.problem ?? null;
   const previousProblem = useRef(problem);
   const title =
@@ -107,39 +106,31 @@ export const ApiCompatibilityGate = () => {
             <Text className="font-bold text-4xl" accessibilityRole="header">
               {title}
             </Text>
-            {switchedServer ? (
+            {compatibility.problem === "appTooOld" && (
               <Text className="text-lg">
-                You've switched server. Close OpenBeacon and open it again to connect.
+                This version of OpenBeacon is out of date, so your family can't see your location.
+                Update the app to start sharing again.
               </Text>
-            ) : (
-              <>
-                {compatibility.problem === "appTooOld" && (
-                  <Text className="text-lg">
-                    This version of OpenBeacon is out of date, so your family can't see your
-                    location. Update the app to start sharing again.
-                  </Text>
-                )}
-                {compatibility.problem === "serverTooOld" && (
-                  <Text className="text-lg">
-                    {selfHosted
-                      ? "Your OpenBeacon server is out of date, so your location isn't being shared. Ask whoever runs your server to update it."
-                      : "We're updating OpenBeacon's servers. Your location isn't being shared right now. Try again in a little while."}
-                  </Text>
-                )}
-                {compatibility.problem === "outOfSync" && (
-                  <Text className="text-lg">
-                    OpenBeacon asked your server for something it doesn't have. Please tell us, and
-                    include the versions below.
-                  </Text>
-                )}
-              </>
+            )}
+            {compatibility.problem === "serverTooOld" && (
+              <Text className="text-lg">
+                {selfHosted
+                  ? "Your OpenBeacon server is out of date, so your location isn't being shared. Ask whoever runs your server to update it."
+                  : "We're updating OpenBeacon's servers. Your location isn't being shared right now. Try again in a little while."}
+              </Text>
+            )}
+            {compatibility.problem === "outOfSync" && (
+              <Text className="text-lg">
+                OpenBeacon asked your server for something it doesn't have. Please tell us, and
+                include the versions below.
+              </Text>
             )}
             {compatibility.message !== null && (
               <Text className="text-lg">{compatibility.message}</Text>
             )}
             <View className="rounded-xl bg-secondary p-4 gap-1">
               <Text className="text-sm text-secondary">App version {appVersion}</Text>
-              {selfHosted && <Text className="text-sm text-secondary">Server {baseUrl}</Text>}
+              {selfHosted && <Text className="text-sm text-secondary">Server {getBaseUrl()}</Text>}
               {compatibility.problem !== "appTooOld" && (
                 <Text className="text-sm text-secondary">Server version {serverVersion}</Text>
               )}
@@ -160,12 +151,10 @@ export const ApiCompatibilityGate = () => {
                 <Text>Update</Text>
               </Button>
             )}
-            {!switchedServer && (
-              <Button variant="secondary" loading={checking} onPress={tryAgain}>
-                <Text>Try again</Text>
-              </Button>
-            )}
-            {unreachable && !switchedServer && (
+            <Button variant="secondary" loading={checking} onPress={tryAgain}>
+              <Text>Try again</Text>
+            </Button>
+            {unreachable && (
               <Text className="text-secondary" accessibilityLiveRegion="polite">
                 Couldn't reach your server. Check your internet connection and try again.
               </Text>

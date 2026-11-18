@@ -1,7 +1,7 @@
 import { decryptImage, decryptImageKey, type ImageKeyMaterial } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
 import { type RouterOutputs, trpcClient } from "./api.ts";
-import { baseUrl } from "./currentServer.ts";
+import { getBaseUrl } from "./currentServer.ts";
 import { downloadEncryptedImage } from "./decryptedImages.ts";
 import { errorReason } from "./errorReason.ts";
 import { resolveEpochKey } from "./epochKeys.ts";
@@ -28,7 +28,7 @@ let currentUserId: string | null = null;
 const unsettled = { settled: false, repaired: false };
 
 const storageKey = (name: string, userId: string, groupId: string) =>
-  `imageKeys.${name}.${JSON.stringify([baseUrl, userId, groupId])}`;
+  `imageKeys.${name}.${JSON.stringify([getBaseUrl(), userId, groupId])}`;
 
 const sameBytes = (a: Uint8Array, b: Uint8Array) =>
   a.length === b.length && a.every((byte, index) => byte === b[index]);

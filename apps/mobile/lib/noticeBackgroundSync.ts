@@ -1,6 +1,6 @@
 import { alertsCursorSchema, notificationTypes } from "@openbeacon/schemas";
 import type { RouterOutputs } from "./api.ts";
-import { baseUrl } from "./currentServer.ts";
+import { getBaseUrl } from "./currentServer.ts";
 import { describeGroupEvent } from "./groupHistory.ts";
 import { showEventNotice } from "./notifications.ts";
 import { nicknamesByGroup } from "./nicknamesByGroup.ts";
@@ -10,10 +10,10 @@ export type Notices = NonNullable<RouterOutputs["groupTracking"]["uploadBatch"][
 
 type AccountNotices = RouterOutputs["accountNotices"]["sync"];
 
-const cursorKey = (userId: string) => `notices.cursor.${JSON.stringify([baseUrl, userId])}`;
+const cursorKey = (userId: string) => `notices.cursor.${JSON.stringify([getBaseUrl(), userId])}`;
 
 const accountCursorKey = (userId: string) =>
-  `notices.accountCursor.${JSON.stringify([baseUrl, userId])}`;
+  `notices.accountCursor.${JSON.stringify([getBaseUrl(), userId])}`;
 
 const readCursor = (key: string) => {
   const parsed = alertsCursorSchema.safeParse(storage.getString(key));

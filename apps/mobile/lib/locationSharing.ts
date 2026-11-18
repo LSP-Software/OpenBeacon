@@ -10,7 +10,7 @@ import { Platform } from "react-native";
 import superjson from "superjson";
 import { z } from "zod";
 import { trpcClient } from "./api.ts";
-import { baseUrl } from "./currentServer.ts";
+import { getBaseUrl } from "./currentServer.ts";
 import { createSecureId } from "./createSecureId.ts";
 import { getRegisteredDeviceKey, getStoredDeviceId } from "./deviceKeys.ts";
 import { errorReason } from "./errorReason.ts";
@@ -20,14 +20,14 @@ import { requestTrackingSync } from "./trackingEvents.ts";
 
 const pendingPrefix = "locationSharing.pending.";
 const pendingKey = (userId: string, scope: "device" | "account") =>
-  `${pendingPrefix}${JSON.stringify([baseUrl, userId, scope])}`;
+  `${pendingPrefix}${JSON.stringify([getBaseUrl(), userId, scope])}`;
 const rejectedKey = (userId: string) =>
-  `${pendingPrefix}${JSON.stringify([baseUrl, userId, "rejected"])}`;
+  `${pendingPrefix}${JSON.stringify([getBaseUrl(), userId, "rejected"])}`;
 const localPauseKey = (userId: string, deviceId: string) =>
-  `locationSharing.localPause.${JSON.stringify([baseUrl, userId, deviceId])}`;
+  `locationSharing.localPause.${JSON.stringify([getBaseUrl(), userId, deviceId])}`;
 const syncedKey = (userId: string, deviceId: string) =>
-  `locationSharing.synced.${JSON.stringify([baseUrl, userId, deviceId])}`;
-const clockOffsetKey = () => `locationSharing.clockOffset.${JSON.stringify(baseUrl)}`;
+  `locationSharing.synced.${JSON.stringify([getBaseUrl(), userId, deviceId])}`;
+const clockOffsetKey = () => `locationSharing.clockOffset.${JSON.stringify(getBaseUrl())}`;
 const preferenceSchema = z.object({
   sharingPaused: z.boolean(),
   sharingPausedUntil: z.date().nullable(),
@@ -134,7 +134,7 @@ const applyNativeSharingState = async (state: DeviceSharingState, isCurrent: () 
   if (!isCurrent()) return false;
   const pausedUntil = state.pausedUntil ? toDeviceClock(state.pausedUntil).getTime() : null;
   const applied = module.setSharingState(
-    JSON.stringify([baseUrl, state.userId]),
+    JSON.stringify([getBaseUrl(), state.userId]),
     state.deviceId,
     state.revisionPrefix,
     state.paused,
@@ -154,7 +154,7 @@ const applyNativeHistoryShare = async (state: LoadedSharingState, abandoned: () 
   const module = (await import("../modules/openbeacon-tracking/index.ts")).default;
   if (abandoned()) return;
   module.setHistoryShare(
-    JSON.stringify([baseUrl, state.userId]),
+    JSON.stringify([getBaseUrl(), state.userId]),
     state.deviceId,
     state.historyShare.account,
     Object.fromEntries(
@@ -168,7 +168,7 @@ const applyNativeHistoryShare = async (state: LoadedSharingState, abandoned: () 
 const isNativeQueueOwner = async (device: { userId: string; deviceId: string }) => {
   if (Platform.OS !== "android" && Platform.OS !== "ios") return false;
   const module = (await import("../modules/openbeacon-tracking/index.ts")).default;
-  return module.isQueueOwner(JSON.stringify([baseUrl, device.userId]), device.deviceId);
+  return module.isQueueOwner(JSON.stringify([getBaseUrl(), device.userId]), device.deviceId);
 };
 
 const applyLocalSharingState = (

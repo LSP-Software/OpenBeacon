@@ -11,7 +11,8 @@ mock.module("./storage.ts", () => ({
   },
 }));
 
-const useServer = (baseUrl: string) => mock.module("./currentServer.ts", () => ({ baseUrl }));
+const useServer = (baseUrl: string) =>
+  mock.module("./currentServer.ts", () => ({ getBaseUrl: () => baseUrl }));
 
 const importFresh = async (tag: string): Promise<typeof import("./announcements.ts")> =>
   import(`./announcements.ts?${tag}`);

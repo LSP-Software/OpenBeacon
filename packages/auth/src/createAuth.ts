@@ -234,7 +234,7 @@ export const createAuth = ({
       },
     },
     account: { accountLinking: { enabled: false } },
-    session: { freshAge: 30 * 60 },
+    session: { expiresIn: 7 * 24 * 60 * 60, updateAge: 24 * 60 * 60, freshAge: 30 * 60 },
     verification: {
       storeIdentifier: { default: "plain", overrides: { "reset-password:": "hashed" } },
     },

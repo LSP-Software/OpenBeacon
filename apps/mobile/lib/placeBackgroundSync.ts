@@ -2,7 +2,7 @@ import { alertsCursorSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import z from "zod";
 import { queryClient, type RouterOutputs, trpc, trpcClient } from "./api.ts";
-import { baseUrl } from "./currentServer.ts";
+import { getBaseUrl } from "./currentServer.ts";
 import { getRegisteredDeviceKey } from "./deviceKeys.ts";
 import { catchUpGroupImageKeys } from "./imageKeyCatchUp.ts";
 import { showNotices } from "./noticeBackgroundSync.ts";
@@ -35,10 +35,10 @@ const imageKeyMissesSchema = z.record(
 
 const imageKeyCatchUps = new Set<Promise<void>>();
 
-const placeOwner = (userId: string) => JSON.stringify([baseUrl, userId]);
+const placeOwner = (userId: string) => JSON.stringify([getBaseUrl(), userId]);
 
 const storageKey = (userId: string, name: string, groupId?: string) =>
-  `places.${name}.${JSON.stringify([baseUrl, userId, ...(groupId ? [groupId] : [])])}`;
+  `places.${name}.${JSON.stringify([getBaseUrl(), userId, ...(groupId ? [groupId] : [])])}`;
 
 const placesTabLink = (groupId: string) => ({
   href: { pathname: "/(tabs)/groups/[groupId]", params: { groupId, tab: "places" } } as const,

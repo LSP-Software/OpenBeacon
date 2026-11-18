@@ -9,6 +9,7 @@ import { createRoot } from "test-renderer";
 
 let searchParams: { setup?: string } = {};
 let heldVersions: number[] = [];
+let gateDecision: "confirm" | "ready" | null = "ready";
 const replace = mock((_route: string) => {});
 const restoreFromRecoveryPhrase = mock(async () => ({ userId: "user-1" }));
 const activateWithHistoryKey = mock(async () => {});
@@ -86,6 +87,14 @@ mock.module("../components/RecoveryPhraseGrid.tsx", () => ({
     React.createElement("phrase-grid", { onChangeWords }),
 }));
 mock.module("../components/RecoveryCoverage.tsx", () => ({ RecoveryCoverage: () => null }));
+mock.module("../components/LoadingIndicator.tsx", () => ({ LoadingIndicator: () => null }));
+mock.module("../components/ConfirmIdentity.tsx", () => ({
+  ConfirmIdentity: ({ onConfirmed }: { onConfirmed: () => void }) =>
+    React.createElement("confirm-identity", { onConfirmed }),
+}));
+mock.module("../hooks/useIdentityGate.ts", () => ({
+  useIdentityGate: () => ({ decision: gateDecision, refresh: async () => {} }),
+}));
 mock.module("../components/ui/Button.tsx", () => ({
   Button: ({ children, onPress }: { children?: React.ReactNode; onPress?: () => void }) =>
     React.createElement("mock-button", { onPress }, children),
@@ -106,6 +115,7 @@ const renderScreen = async () => {
 beforeEach(() => {
   searchParams = {};
   heldVersions = [1];
+  gateDecision = "ready";
   replace.mockClear();
   restoreFromRecoveryPhrase.mockClear();
   activateWithHistoryKey.mockClear();
@@ -210,5 +220,68 @@ test("back is blocked while this phone is being set up after the phrase is resto
   expect(gestureEnabled).toBe(false);
 
   await act(async () => release());
+  await act(async () => root.unmount());
+});
+
+const freshSignInRequired = () =>
+  new TRPCClientError("Sign in again to continue.", {
+    result: {
+      error: {
+        code: -32003,
+        message: "Sign in again to continue.",
+        data: { code: "FORBIDDEN", httpStatus: 403, reason: "FRESH_SIGN_IN_REQUIRED" },
+      },
+    },
+  });
+
+const enterPhraseAndRestore = async (root: ReturnType<typeof createRoot>) => {
+  const [grid] = root.container.queryAll((item) => item.type === "phrase-grid");
+  if (!grid) throw new Error("Missing phrase grid");
+  await act(async () =>
+    (grid.props as { onChangeWords: (words: string[]) => void }).onChangeWords(
+      Array.from({ length: 12 }, () => "word"),
+    ),
+  );
+  const restore = root.container
+    .queryAll((item) => item.type === "mock-button")
+    .find((item) => JSON.stringify(item.children).includes("Restore"));
+  if (!restore) throw new Error("Missing button Restore");
+  await act(async () => (restore.props as { onPress: () => Promise<void> }).onPress());
+};
+
+test("a sign-in older than the fresh window asks for the password, then finishes without retyping the phrase", async () => {
+  searchParams = { setup: "true" };
+  activateWithHistoryKey.mockImplementationOnce(async () => {
+    throw freshSignInRequired();
+  });
+  const root = createRoot();
+  await act(async () => root.render(<RecoveryRestoreScreen />));
+  await enterPhraseAndRestore(root);
+
+  const [confirm] = root.container.queryAll((item) => item.type === "confirm-identity");
+  if (!confirm) throw new Error("Missing identity check");
+  expect(JSON.stringify(root.container.toJSON())).not.toContain("Try again");
+  expect(replace).not.toHaveBeenCalled();
+
+  await act(async () => (confirm.props as { onConfirmed: () => void }).onConfirmed());
+
+  expect(restoreFromRecoveryPhrase).toHaveBeenCalledTimes(1);
+  expect(activateWithHistoryKey).toHaveBeenCalledTimes(2);
+  expect(replace.mock.calls).toEqual([["/setup/name"]]);
+  await act(async () => root.unmount());
+});
+
+test("setting up with a sign-in about to go stale asks for the password before the phrase", async () => {
+  searchParams = { setup: "true" };
+  gateDecision = "confirm";
+  const root = createRoot();
+  await act(async () => root.render(<RecoveryRestoreScreen />));
+  expect(root.container.queryAll((item) => item.type === "phrase-grid")).toHaveLength(0);
+  const [confirm] = root.container.queryAll((item) => item.type === "confirm-identity");
+  if (!confirm) throw new Error("Missing identity check");
+
+  await act(async () => (confirm.props as { onConfirmed: () => void }).onConfirmed());
+
+  expect(root.container.queryAll((item) => item.type === "phrase-grid")).toHaveLength(1);
   await act(async () => root.unmount());
 });

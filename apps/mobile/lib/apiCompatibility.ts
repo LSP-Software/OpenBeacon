@@ -9,7 +9,7 @@ import {
 import { useSyncExternalStore } from "react";
 import { z } from "zod";
 import { healthAnnouncementsSchema, saveAnnouncements } from "./announcements.ts";
-import { baseUrl } from "./currentServer.ts";
+import { getBaseUrl } from "./currentServer.ts";
 import { storage } from "./storage.ts";
 
 const problemSchema = z.enum(["appTooOld", "serverTooOld", "outOfSync"]);
@@ -138,7 +138,9 @@ export const readApiCompatibilityResponse = async (
 export const checkServerCompatibility = async (serverUrl: string) => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10_000);
-  const response = await tryCatch(fetch(`${serverUrl}/health`, { signal: controller.signal }));
+  const response = await tryCatch(
+    fetch(`${serverUrl}/health`, { signal: controller.signal, credentials: "omit" }),
+  );
   const body = response.error || !response.data.ok ? null : await readJson(response.data);
   clearTimeout(timer);
   const health = healthSchema.safeParse(body);
@@ -175,7 +177,7 @@ const loadSaved = (): ApiCompatibilityState | null => {
     storage.remove(storageKey);
     return null;
   }
-  if (saved.serverUrl !== baseUrl || saved.appLevel !== apiCompatibilityLevel) {
+  if (saved.serverUrl !== getBaseUrl() || saved.appLevel !== apiCompatibilityLevel) {
     storage.remove(storageKey);
     return null;
   }
@@ -196,7 +198,7 @@ const setState = (next: ApiCompatibilityState | null) => {
   if (next) {
     storage.set(
       storageKey,
-      JSON.stringify({ serverUrl: baseUrl, appLevel: apiCompatibilityLevel, ...next }),
+      JSON.stringify({ serverUrl: getBaseUrl(), appLevel: apiCompatibilityLevel, ...next }),
     );
   } else {
     storage.remove(storageKey);
@@ -278,7 +280,7 @@ export const refreshApiCompatibility = async ({ userRequested }: { userRequested
   latestHealthCheck += 1;
   const healthCheck = latestHealthCheck;
   const { verdict, serverVersion, message, announcements } =
-    await checkServerCompatibility(baseUrl);
+    await checkServerCompatibility(getBaseUrl());
   if (announcements && healthCheck === latestHealthCheck) saveAnnouncements(announcements);
   if (revision === startedAt) {
     applyVerdict({ verdict, serverVersion, message, sticky: false, userRequested });
@@ -293,7 +295,7 @@ export const refreshApiCompatibilityInBackground = async (now = Date.now()) => {
 };
 
 export const apiCompatibilityFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-  const response = await fetch(input, withApiCompatibilityHeader(init));
+  const response = await fetch(input, withApiCompatibilityHeader({ ...init, credentials: "omit" }));
   const { verdict, message, sticky } = await readApiCompatibilityResponse(response);
   if (verdict !== null && verdict !== "ok") revision += 1;
   applyVerdict({ verdict, serverVersion: null, message, sticky, userRequested: false });

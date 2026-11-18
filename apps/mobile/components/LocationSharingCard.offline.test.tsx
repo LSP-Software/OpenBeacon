@@ -83,7 +83,7 @@ mock.module("../lib/api.ts", () => ({
 mock.module("../lib/auth-client.ts", () => ({
   authClient: { useSession: () => ({ data: { user: { id: "alex" } } }) },
 }));
-mock.module("../lib/currentServer.ts", () => ({ baseUrl: "https://server.test" }));
+mock.module("../lib/currentServer.ts", () => ({ getBaseUrl: () => "https://server.test" }));
 mock.module("../lib/deviceKeys.ts", () => ({
   getStoredDeviceId: () => "phone",
   getRegisteredDeviceKey: async () => ({ userId: "alex", deviceId: "phone" }),

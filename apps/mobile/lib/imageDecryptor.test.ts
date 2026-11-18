@@ -11,7 +11,7 @@ import {
 
 mock.module("expo-file-system", () => ({ Directory: class {}, File: class {}, Paths: {} }));
 mock.module("./storage.ts", () => ({ storage: {} }));
-mock.module("./currentServer.ts", () => ({ baseUrl: "https://api.example" }));
+mock.module("./currentServer.ts", () => ({ getBaseUrl: () => "https://api.example" }));
 
 const { createImageDecryptor, ImageGoneError, imageKeySources } =
   await import("./imageDecryptor.ts");

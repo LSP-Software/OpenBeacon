@@ -30,6 +30,7 @@ export const createTRPCContext = async (opts: {
 }) => {
   const session = await auth.api.getSession({
     headers: opts.headers,
+    query: { disableRefresh: true },
   });
   const requestDeviceId = opts.headers.get(deviceIdHeader);
   const device = requestDeviceId

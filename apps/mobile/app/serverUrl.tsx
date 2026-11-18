@@ -39,9 +39,7 @@ export default function ServerUrl() {
 
     const save = async () => {
       await changeServer(url);
-      Alert.alert("Server saved", "Restart the app to connect to your custom server.", [
-        { text: "OK", onPress: () => router.back() },
-      ]);
+      Alert.alert("Server saved", undefined, [{ text: "OK", onPress: () => router.back() }]);
     };
 
     const { verdict, serverVersion } = await checkServerCompatibility(url);
@@ -71,9 +69,7 @@ export default function ServerUrl() {
     setClearing(true);
     await changeServer("");
     setClearing(false);
-    Alert.alert("Using default server", "Restart the app to switch back to the default server.", [
-      { text: "OK", onPress: () => router.back() },
-    ]);
+    Alert.alert("Using default server", undefined, [{ text: "OK", onPress: () => router.back() }]);
   };
 
   return (
@@ -119,8 +115,7 @@ export default function ServerUrl() {
 
             <View className="rounded-xl bg-secondary p-4">
               <Text className="text-sm text-secondary">
-                Changing server signs you out on this phone. Changes take effect after restarting
-                the app.
+                Changing server signs you out on this phone.
               </Text>
             </View>
 

@@ -45,7 +45,7 @@ mock.module("../lib/auth-client.ts", () => ({
 }));
 
 mock.module("../lib/currentServer.ts", () => ({
-  baseUrl: "https://beacon.example.com",
+  getBaseUrl: () => "https://beacon.example.com",
   hasCustomServerUrl: () => true,
 }));
 mock.module("../lib/endSession.ts", () => ({ endSession: async () => ({ signedOut: true }) }));

@@ -19,7 +19,7 @@ mock.module("./storage.ts", () => ({
     },
   },
 }));
-mock.module("./currentServer.ts", () => ({ baseUrl: "https://api.example.test" }));
+mock.module("./currentServer.ts", () => ({ getBaseUrl: () => "https://api.example.test" }));
 mock.module("./personalNicknames.ts", () => ({
   loadPersonalNicknames: async () => ({ "member-sam": { name: "Mum", ciphertext: "sealed" } }),
 }));
