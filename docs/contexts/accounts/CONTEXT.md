@@ -33,7 +33,7 @@ A message telling the owner that something important happened to their account: 
 _Avoid_: Email alert, Always-on alert, Optional alert, Place Alert
 
 **Account Notice**:
-A Security alert kept on the server for the account's other phones, never the device that made the change. Every signed-in phone fetches it through an account-level sync, whether or not it's in a group, and writes the notification itself. A phone only gets Account Notices from after its session started. It's deleted 24 hours after it's created.
+A Security alert kept on the server for the account's other phones, never the device that made the change. Every signed-in phone fetches it through an account-level sync, in a group or not, and writes the notification itself. A phone's first sync returns none and only sets its starting point, so it gets the Account Notices created after that, and never ones from before its session started. It's deleted 24 hours after it's created.
 _Avoid_: Push, message
 
 **Notification Setting**:
