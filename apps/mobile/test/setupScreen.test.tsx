@@ -70,6 +70,8 @@ mock.module("../components/ui/Button.tsx", () => ({
   }) => React.createElement("mock-button", { disabled, onPress }, children),
 }));
 mock.module("../components/ui/Text.tsx", () => ({ Text: View }));
+mock.module("../components/ui/Icon.tsx", () => ({ Icon: () => null }));
+mock.module("lucide-react-native", () => ({ CheckIcon: () => null }));
 mock.module("../lib/api.ts", () => ({
   trpc: {
     accountRecovery: { status: { queryOptions: () => ({ queryKey: "recovery" }) } },

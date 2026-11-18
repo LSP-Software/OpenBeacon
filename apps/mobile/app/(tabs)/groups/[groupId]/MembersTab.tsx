@@ -450,6 +450,8 @@ const MembersTab = ({
             <View className="overflow-hidden rounded-2xl border border-border">
               <Pressable
                 accessibilityRole="button"
+                accessibilityLabel="Edit nickname"
+                accessibilityHint="Only you see nicknames"
                 accessibilityState={{
                   disabled:
                     nicknameQuery.isPending || nicknameQuery.isError || nicknameQuery.isFetching,
@@ -458,6 +460,8 @@ const MembersTab = ({
                   nicknameQuery.isPending || nicknameQuery.isError || nicknameQuery.isFetching
                 }
                 onPress={() => {
+                  if (nicknameQuery.isPending || nicknameQuery.isError || nicknameQuery.isFetching)
+                    return;
                   setSelectedMemberId(null);
                   setNicknameMember({
                     id: selectedMember.id,
@@ -478,6 +482,9 @@ const MembersTab = ({
                 (canManage && (self?.role === "OWNER" || selectedMember.role === "MEMBER"))) && (
                 <Pressable
                   accessibilityRole="button"
+                  accessibilityLabel={
+                    selectedMember.id === self?.id ? "Leave group" : "Remove from group"
+                  }
                   accessibilityState={{ disabled: removal.isPending }}
                   disabled={removal.isPending}
                   onPress={() => {

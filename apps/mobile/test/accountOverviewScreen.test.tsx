@@ -26,7 +26,7 @@ mock.module("../components/LocationSharingCard.tsx", () => ({ LocationSharingCar
 const View = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
 const query = { data: undefined, isError: false };
 const notificationSettings: { enabled: boolean | null } = { enabled: true };
-let settingLabels: string[] = [];
+let settings: { label: string; onPress?: () => void }[] = [];
 mock.module("@react-navigation/native", () => ({ useIsFocused: () => true }));
 mock.module("expo-router", () => ({
   Link: View,
@@ -46,13 +46,13 @@ mock.module("lucide-react-native", () =>
     [
       "BellIcon",
       "BellOffIcon",
-      "CameraIcon",
+      "BookOpenIcon",
       "EyeIcon",
-      "HelpCircleIcon",
       "HistoryIcon",
       "InfoIcon",
       "KeyRoundIcon",
       "LockIcon",
+      "LogOutIcon",
       "MailIcon",
       "MapIcon",
       "MapPinIcon",
@@ -71,8 +71,12 @@ mock.module("react-native", () => ({
 }));
 mock.module("react-native-safe-area-context", () => ({ SafeAreaView: View }));
 mock.module("../components/containers/settingsContainer.tsx", () => ({
-  SettingsContainer: ({ categories }: { categories: { settings: { label: string }[] }[] }) => {
-    settingLabels = categories.flatMap((category) => category.settings.map(({ label }) => label));
+  SettingsContainer: ({
+    categories,
+  }: {
+    categories: { settings: { label: string; onPress?: () => void }[] }[];
+  }) => {
+    settings = categories.flatMap((category) => category.settings);
     return null;
   },
 }));
@@ -96,10 +100,19 @@ mock.module("../components/ui/Dialog.tsx", () => ({
 }));
 mock.module("../components/ui/Icon.tsx", () => ({ Icon: () => null }));
 mock.module("../components/ui/Input.tsx", () => ({ Input: () => null }));
-mock.module("../components/ui/Separator.tsx", () => ({ Separator: () => null }));
 mock.module("../components/ui/Text.tsx", () => ({ Text: View }));
 mock.module("../hooks/useHeldHistoryKeyVersions.ts", () => ({
   useHeldHistoryKeyVersions: () => query,
+}));
+mock.module("../hooks/useHistoryShare.ts", () => ({ useHistoryShare: () => ({ setting: null }) }));
+mock.module("../lib/appLock.ts", () => ({ useAppLock: () => ({ enabled: false }) }));
+mock.module("../lib/mapCache.ts", () => ({
+  formatMapCacheSize: () => "250 MB",
+  getMapCacheSizeMb: () => 250,
+}));
+mock.module("../lib/versions.ts", () => ({ appVersion: "1.0.0" }));
+mock.module("../providers/ThemeProvider.tsx", () => ({
+  useTheme: () => ({ appThemePreference: "system" }),
 }));
 mock.module("../lib/alert.ts", () => ({
   Alert: {
@@ -165,12 +178,10 @@ const press = async (title: string, text: string) => {
 
 const removeThisPhoneWithoutAnswer = async () => {
   signOutOfThisPhone.mockImplementationOnce(async () => ({ status: "serverUnreachable" }));
-  const screen = await renderScreen();
-  const button = screen.container
-    .queryAll((item) => item.type === "mock-button")
-    .find((item) => JSON.stringify(item.children).includes("Sign out"));
-  if (!button) throw new Error("Sign out button not found");
-  await act(async () => (button.props as { onPress: () => void }).onPress());
+  await renderScreen();
+  const signOut = settings.find((item) => item.label === "Sign out")?.onPress;
+  if (!signOut) throw new Error("Sign out row not found");
+  await act(async () => signOut());
   await press("Sign out?", "Also remove this phone from your account");
 };
 
@@ -187,7 +198,7 @@ const showsNotificationsCard = (screen: Root) =>
 
 beforeEach(() => {
   notificationSettings.enabled = true;
-  settingLabels = [];
+  settings = [];
   alerts.length = 0;
   replace.mockClear();
   signOutOfThisPhone.mockClear();
@@ -263,6 +274,6 @@ test("the notifications card shows only once notifications are known to be off",
 
 test("Notifications is listed, also on servers that don't send email", async () => {
   await renderScreen();
-  expect(settingLabels).toContain("Notifications");
-  expect(settingLabels).not.toContain("Email alerts");
+  expect(settings.map(({ label }) => label)).toContain("Notifications");
+  expect(settings.map(({ label }) => label)).not.toContain("Email alerts");
 });

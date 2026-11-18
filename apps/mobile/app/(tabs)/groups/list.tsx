@@ -129,11 +129,11 @@ const GroupInvitesList = ({
         >
           <Icon as={MailIcon} className="text-primary-text size-5" />
           <Text className="text-foreground flex-1">
-            You’re invited to <Text className="font-semibold">{invite.group.name}</Text>
+            You’ve been sent an invite to <Text className="font-bold">{invite.group.name}</Text>
           </Text>
           <Link href={{ pathname: "/join", params: { inviteId: invite.id } }} asChild>
-            <Button size="sm" accessibilityLabel={`View invite to ${invite.group.name}`}>
-              <Text>View</Text>
+            <Button size="sm">
+              <Text>View invite</Text>
             </Button>
           </Link>
         </View>

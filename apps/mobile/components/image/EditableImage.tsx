@@ -35,8 +35,8 @@ export const EditableImage = ({
     sm: {
       avatar: "size-16",
       fallbackIcon: "size-5",
-      editButton: "size-6 border",
-      editIcon: "size-3",
+      editButton: "size-7 border",
+      editIcon: "size-3.5",
     },
     md: {
       avatar: "size-24",
@@ -88,7 +88,7 @@ export const EditableImage = ({
 
   return (
     <View>
-      <Avatar alt={alt} className={cn(sizeClassNames[size].avatar, "border-2 border-white")}>
+      <Avatar alt={alt} className={sizeClassNames[size].avatar}>
         <DecryptedAvatarImage url={imageUrl} />
         <AvatarFallback>
           <Icon
@@ -113,9 +113,9 @@ export const EditableImage = ({
           disabled={isLoading}
           accessibilityRole="button"
           accessibilityLabel={accessibilityLabel}
-          className={`absolute bottom-0 right-0 rounded-full bg-primary items-center justify-center border-background ${sizeClassNames[size].editButton} ${isLoading ? "opacity-70" : ""}`}
+          className={`absolute -bottom-1 -right-1 items-center justify-center rounded-full border-border bg-card ${sizeClassNames[size].editButton} ${isLoading ? "opacity-70" : ""}`}
         >
-          <Icon as={PencilIcon} className={`${sizeClassNames[size].editIcon} text-white`} />
+          <Icon as={PencilIcon} className={`${sizeClassNames[size].editIcon} text-foreground`} />
         </Pressable>
       )}
     </View>

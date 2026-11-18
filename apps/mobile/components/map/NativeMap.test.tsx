@@ -147,6 +147,7 @@ mock.module("react-native", () => {
 });
 
 mock.module("lucide-react-native", () => ({
+  ChevronDownIcon: () => null,
   ArrowUpIcon: () => React.createElement("arrow-up-icon"),
   BackpackIcon: () => React.createElement("device-icon"),
   Flower2Icon: () => null,

@@ -437,8 +437,8 @@ const MapScreen = () => {
       />
       <ScrollView
         pointerEvents="box-none"
-        className="absolute left-4 right-16"
-        style={{ top: insets.top + 8, maxHeight: "65%" }}
+        className="absolute left-3 right-16"
+        style={{ top: insets.top + 56, maxHeight: "65%" }}
       >
         <AnnouncementBanner className="mb-2" />
         <NewSignInBanner subscribed={isFocused} />
@@ -448,7 +448,7 @@ const MapScreen = () => {
           userId={selfUserId}
         />
         {queueEviction && (
-          <View className="mb-2 gap-2 rounded-xl border border-warning-accent bg-card p-4">
+          <View className="mb-2 gap-2 rounded-2xl border border-warning-accent bg-card p-4">
             <Text className="font-semibold text-warning-text">
               Some location history was removed
             </Text>
@@ -481,7 +481,7 @@ const MapScreen = () => {
           groupsMissingKeys.map((group) => (
             <View
               key={group.id}
-              className="mb-2 gap-2 rounded-xl border border-destructive-text bg-card p-4"
+              className="mb-2 gap-2 rounded-2xl border border-destructive-text bg-card p-4"
             >
               <Text className="font-semibold text-destructive-text">
                 Can’t show locations for {group.name}
@@ -506,7 +506,7 @@ const MapScreen = () => {
             </View>
           ))}
         {groupsMissingKeys.length > 2 && (
-          <View className="mb-2 gap-2 rounded-xl border border-destructive-text bg-card p-4">
+          <View className="mb-2 gap-2 rounded-2xl border border-destructive-text bg-card p-4">
             <Text className="font-semibold text-destructive-text">
               Multiple groups require attention
             </Text>

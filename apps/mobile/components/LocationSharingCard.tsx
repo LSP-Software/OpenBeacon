@@ -8,7 +8,7 @@ import { useIsFocused } from "@react-navigation/native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MapPinIcon, PauseIcon } from "lucide-react-native";
 import { useEffect, useState } from "react";
-import { Modal, Pressable, ScrollView, View } from "react-native";
+import { ScrollView, View } from "react-native";
 import { trpc } from "../lib/api.ts";
 import { cn } from "../lib/cn.ts";
 import {
@@ -22,10 +22,12 @@ import {
 import { useAppLock } from "../lib/appLock.ts";
 import { authClient } from "../lib/auth-client.ts";
 import { formatResumeTime } from "../lib/formatResumeTime.ts";
+import { BottomSheet } from "./ui/BottomSheet.tsx";
 import { Button } from "./ui/Button.tsx";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/Card.tsx";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ChoiceList } from "./ui/ChoiceList.tsx";
 import { Icon } from "./ui/Icon.tsx";
+import { SegmentedControl } from "./ui/SegmentedControl.tsx";
 import { Text } from "./ui/Text.tsx";
 import { useLoadedSharingState } from "../hooks/useLoadedSharingState.ts";
 
@@ -36,7 +38,6 @@ export const LocationSharingCard = ({
 }) => {
   const queryClient = useQueryClient();
   useLoadedSharingState();
-  const insets = useSafeAreaInsets();
   const { data: session } = authClient.useSession();
   const isFocused = useIsFocused();
   const sharing = useQuery({
@@ -159,12 +160,20 @@ export const LocationSharingCard = ({
   return (
     <Card>
       <CardHeader className="flex-row items-center gap-3">
-        <View className="size-10 items-center justify-center rounded-full bg-primary/10">
-          <Icon as={paused ? PauseIcon : MapPinIcon} className="size-5 text-primary" />
+        <View
+          className={cn(
+            "size-10 items-center justify-center rounded-full",
+            paused ? "bg-warning" : "bg-success-soft",
+          )}
+        >
+          <Icon
+            as={paused ? PauseIcon : MapPinIcon}
+            className={cn("size-5", paused ? "text-warning-text" : "text-success")}
+          />
         </View>
         <View className="flex-1 gap-1">
           <CardTitle>Location sharing{paused ? " paused" : ""}</CardTitle>
-          <Text className="text-sm text-tertiary">
+          <Text className="text-sm text-secondary">
             {accountPaused
               ? "Paused on all your devices"
               : paused
@@ -230,7 +239,7 @@ export const LocationSharingCard = ({
             </Button>
           ) : null}
           <Button
-            variant={paused ? "secondary" : "default"}
+            variant="secondary"
             size="sm"
             disabled={update.isPending}
             onPress={() => {
@@ -255,134 +264,80 @@ export const LocationSharingCard = ({
           </Text>
         ) : null}
       </CardContent>
-      <Modal
-        transparent
+      <BottomSheet
         visible={open && !locked && !away}
-        animationType="slide"
-        onRequestClose={() => setOpen(false)}
+        onClose={() => setOpen(false)}
+        closeLabel="Cancel pause"
       >
-        <View className="flex-1 justify-end bg-black/50">
-          <Pressable
-            className="absolute inset-0"
-            accessibilityRole="button"
-            accessibilityLabel="Cancel pause"
-            onPress={() => setOpen(false)}
-          />
-          <View
-            accessibilityViewIsModal
-            className="max-h-[90%] gap-4 rounded-t-3xl bg-card px-6 pt-5"
-            style={{ paddingBottom: Math.max(insets.bottom, 20) }}
-          >
-            <View className="flex-row items-center justify-between gap-3">
-              <Text accessibilityRole="header" className="flex-1 text-xl font-semibold">
-                Pause location sharing
-              </Text>
-              <Button size="sm" variant="ghost" onPress={() => setOpen(false)}>
-                <Text>Cancel</Text>
-              </Button>
-            </View>
-            <ScrollView contentContainerClassName="gap-4" style={{ maxHeight: 480, flexShrink: 1 }}>
-              <Text className="text-sm text-tertiary">
-                Paused devices disappear from your groups’ maps. Members can see that sharing is
-                paused. You can still see their locations.
-              </Text>
-              {!device ? (
-                <View className="gap-2">
-                  <Text className="font-semibold">Pause on</Text>
-                  <View
-                    accessibilityRole="radiogroup"
-                    accessibilityLabel="Devices to pause"
-                    className="flex-row gap-2"
-                  >
-                    {(["device", "account"] as const).map((option) => (
-                      <Pressable
-                        key={option}
-                        accessibilityRole="radio"
-                        accessibilityState={{
-                          checked: scope === option,
-                          disabled: update.isPending,
-                        }}
-                        disabled={update.isPending}
-                        onPress={() => selectScope(option)}
-                        className={cn(
-                          "min-h-11 flex-1 items-center justify-center rounded-lg border px-3",
-                          scope === option ? "border-primary bg-primary/10" : "border-border",
-                        )}
-                      >
-                        <Text>{option === "device" ? "This device" : "All my devices"}</Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                </View>
-              ) : null}
-              {device ? <Text className="font-semibold">Pause on {device.name}</Text> : null}
-              {scope === "account" ? (
-                <Text className="text-sm text-tertiary">
-                  Includes devices added during the pause. Devices already paused will stay paused
-                  when the account resumes.
-                </Text>
-              ) : null}
-              <View
-                accessibilityRole="radiogroup"
-                accessibilityLabel="Pause duration"
-                className="gap-2"
-              >
-                <Text className="font-semibold">For</Text>
-                {(
-                  [
-                    { minutes: 15, label: "15 minutes" },
-                    { minutes: 60, label: "1 hour" },
-                    { minutes: 480, label: "8 hours" },
-                    { minutes: 1440, label: "24 hours" },
-                    { minutes: null, label: "Until I turn it back on" },
-                  ] as const
-                ).map((option) => (
-                  <Pressable
-                    key={option.label}
-                    accessibilityRole="radio"
-                    accessibilityState={{
-                      checked: duration === option.minutes,
-                      disabled: update.isPending,
-                    }}
-                    disabled={update.isPending}
-                    onPress={() => setDuration(option.minutes)}
-                    className={cn(
-                      "min-h-11 flex-row items-center justify-between rounded-lg border px-3 py-2",
-                      duration === option.minutes
-                        ? "border-primary bg-primary/10"
-                        : "border-border",
-                    )}
-                  >
-                    <Text>{option.label}</Text>
-                    <View
-                      className={cn(
-                        "size-4 rounded-full border",
-                        duration === option.minutes ? "border-primary bg-primary" : "border-border",
-                      )}
-                    />
-                  </Pressable>
-                ))}
-              </View>
-              {duration !== null ? (
-                <Text className="text-sm text-tertiary">
-                  {formatResumeTime(
-                    toDeviceClock(new Date(now + duration * 60_000)),
-                    toDeviceClock(new Date(now)),
-                  )}
-                </Text>
-              ) : null}
-              {message ? (
-                <Text accessibilityLiveRegion="polite" className="text-sm">
-                  {message}
-                </Text>
-              ) : null}
-            </ScrollView>
-            <Button loading={update.isPending} onPress={() => save(true)}>
-              <Text>Pause sharing</Text>
-            </Button>
-          </View>
+        <View className="flex-row items-center justify-between gap-3">
+          <Text accessibilityRole="header" className="flex-1 text-xl font-bold">
+            Pause location sharing
+          </Text>
+          <Button size="sm" variant="ghost" onPress={() => setOpen(false)}>
+            <Text>Cancel</Text>
+          </Button>
         </View>
-      </Modal>
+        <ScrollView contentContainerClassName="gap-4" style={{ maxHeight: 480, flexShrink: 1 }}>
+          <Text className="text-sm text-secondary">
+            Paused devices disappear from your groups’ maps. Members can see that sharing is paused.
+            You can still see their locations.
+          </Text>
+          {!device ? (
+            <View className="gap-2">
+              <Text variant="label">Pause on</Text>
+              <SegmentedControl
+                accessibilityLabel="Devices to pause"
+                options={[
+                  { value: "device", label: "This device" },
+                  { value: "account", label: "All my devices" },
+                ]}
+                selected={scope}
+                disabled={update.isPending}
+                onChange={selectScope}
+              />
+            </View>
+          ) : null}
+          {device ? <Text className="font-semibold">Pause on {device.name}</Text> : null}
+          {scope === "account" ? (
+            <Text className="text-sm text-secondary">
+              Includes devices added during the pause. Devices already paused will stay paused when
+              the account resumes.
+            </Text>
+          ) : null}
+          <View className="gap-2">
+            <Text variant="label">For</Text>
+            <ChoiceList
+              accessibilityLabel="Pause duration"
+              options={[
+                { value: 15, title: "15 minutes" },
+                { value: 60, title: "1 hour" },
+                { value: 480, title: "8 hours" },
+                { value: 1440, title: "24 hours" },
+                { value: null, title: "Until I turn it back on" },
+              ]}
+              selected={duration}
+              disabled={update.isPending}
+              onChange={setDuration}
+            />
+          </View>
+          {duration !== null ? (
+            <Text className="text-sm text-secondary">
+              {formatResumeTime(
+                toDeviceClock(new Date(now + duration * 60_000)),
+                toDeviceClock(new Date(now)),
+              )}
+            </Text>
+          ) : null}
+          {message ? (
+            <Text accessibilityLiveRegion="polite" className="text-sm">
+              {message}
+            </Text>
+          ) : null}
+        </ScrollView>
+        <Button loading={update.isPending} onPress={() => save(true)}>
+          <Text>Pause sharing</Text>
+        </Button>
+      </BottomSheet>
     </Card>
   );
 };

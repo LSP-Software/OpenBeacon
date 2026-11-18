@@ -8,13 +8,13 @@ import { Link, router } from "expo-router";
 import {
   BellIcon,
   BellOffIcon,
-  CameraIcon,
+  BookOpenIcon,
   EyeIcon,
-  HelpCircleIcon,
   HistoryIcon,
   InfoIcon,
   KeyRoundIcon,
   LockIcon,
+  LogOutIcon,
   MailIcon,
   MapIcon,
   MapPinIcon,
@@ -25,7 +25,7 @@ import {
 } from "lucide-react-native";
 import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
-import { Pressable, ScrollView, View } from "react-native";
+import { ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { z } from "zod";
 import { AnnouncementBanner } from "../../../components/AnnouncementBanner.tsx";
@@ -40,105 +40,27 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../../components/ui/Dialog.tsx";
-import { Icon } from "../../../components/ui/Icon.tsx";
 import { Input } from "../../../components/ui/Input.tsx";
-import { Separator } from "../../../components/ui/Separator.tsx";
 import { Text } from "../../../components/ui/Text.tsx";
 import { useHeldHistoryKeyVersions } from "../../../hooks/useHeldHistoryKeyVersions.ts";
+import { useHistoryShare } from "../../../hooks/useHistoryShare.ts";
 import { trpc } from "../../../lib/api.ts";
+import { useAppLock } from "../../../lib/appLock.ts";
 import { authClient } from "../../../lib/auth-client.ts";
 import { getStoredDeviceId } from "../../../lib/deviceKeys.ts";
 import { historyLossRisk } from "../../../lib/historyLossRisk.ts";
+import { historyShareLabel } from "../../../lib/historyShare.ts";
 import {
   getLocationPermissionWarningDescription,
   getLocationPermissionWarningTitle,
 } from "../../../lib/locationPermissions.ts";
+import { formatMapCacheSize, getMapCacheSizeMb } from "../../../lib/mapCache.ts";
 import { useNotificationSettings } from "../../../lib/notifications.ts";
 import { dismissRestoreCard, isRestoreCardDismissed } from "../../../lib/restoreReminders.ts";
 import { storage } from "../../../lib/storage.ts";
+import { appVersion } from "../../../lib/versions.ts";
 import { useLocationPermissions } from "../../../providers/LocationPermissionProvider.tsx";
-
-const categories = [
-  {
-    label: "Account",
-    settings: [
-      {
-        label: "Who can see me",
-        icon: EyeIcon,
-        href: "/account/who-can-see-me",
-      },
-      {
-        label: "Location history",
-        icon: HistoryIcon,
-        href: "/account/location-history",
-      },
-      {
-        label: "Notifications",
-        icon: BellIcon,
-        href: "/account/notifications",
-      },
-      {
-        label: "Devices",
-        icon: SmartphoneIcon,
-        href: "/account/devices",
-      },
-      {
-        label: "Password and Security",
-        icon: LockIcon,
-        href: "/account/password",
-      },
-      {
-        label: "App lock",
-        icon: ScanFaceIcon,
-        href: "/account/app-lock",
-      },
-      {
-        label: "Recovery phrase",
-        icon: KeyRoundIcon,
-        href: "/account/recovery",
-      },
-      {
-        label: "Delete account",
-        icon: Trash2Icon,
-        href: "/account/delete",
-      },
-    ],
-  },
-  {
-    label: "Preferences",
-    settings: [
-      {
-        label: "Theme",
-        icon: SunIcon,
-        href: "/account/theme",
-      },
-      {
-        label: "Map storage",
-        icon: MapIcon,
-        href: "/account/map-storage",
-      },
-    ],
-  },
-  {
-    label: "Support",
-    settings: [
-      {
-        label: "Help Center",
-        icon: HelpCircleIcon,
-      },
-      {
-        label: "Contact Us",
-        icon: MailIcon,
-        href: "/account/contact-us",
-      },
-      {
-        label: "About",
-        icon: InfoIcon,
-        href: "/account/about",
-      },
-    ],
-  },
-];
+import { useTheme } from "../../../providers/ThemeProvider.tsx";
 
 const schema = z.object({ name: accountNameSchema });
 
@@ -152,10 +74,12 @@ const AccountScreen = () => {
     defaultValues: { name: "" },
   });
   const isFocused = useIsFocused();
-  const groups = useQuery({ ...trpc.groupMembership.list.queryOptions(), subscribed: isFocused });
   const devices = useQuery({ ...trpc.account.listDevices.queryOptions(), subscribed: isFocused });
   const { openLocationPermissionSettings, permissionState } = useLocationPermissions();
   const notifications = useNotificationSettings();
+  const appLock = useAppLock();
+  const historyShare = useHistoryShare();
+  const { appThemePreference } = useTheme();
   const [signOutPhase, setSignOutPhase] = useState<"uploading" | "signingOut" | null>(null);
   const signingOut = useRef(false);
   const recoveryStatus = useQuery({
@@ -283,14 +207,7 @@ const AccountScreen = () => {
     );
 
   return (
-    <View className="flex-1 bg-background">
-      <SafeAreaView
-        edges={["top"]}
-        className="flex flex-row justify-center border-b border-border bg-background py-4"
-      >
-        <Text className="text-foreground text-2xl font-bold">Account</Text>
-      </SafeAreaView>
-
+    <SafeAreaView edges={["top"]} className="flex-1 bg-background">
       <Dialog
         open={nameOpen}
         onOpenChange={(open) => {
@@ -317,61 +234,37 @@ const AccountScreen = () => {
 
       <ScrollView
         className="flex-1"
-        contentContainerClassName="px-6 gap-4 my-4 pb-32"
+        contentContainerClassName="gap-3 px-4 pb-40"
         showsVerticalScrollIndicator={false}
       >
+        <Text
+          accessibilityRole="header"
+          className="text-foreground px-1 pb-1 pt-3 text-3xl font-bold"
+        >
+          Account
+        </Text>
         <AnnouncementBanner />
-        <View className="overflow-hidden rounded-lg border border-border bg-card">
-          <View className="relative">
-            <View className="flex flex-row justify-end p-3 bg-primary w-full h-20">
-              <View className="size-8 flex items-center justify-center rounded-full bg-black/15">
-                <Icon as={CameraIcon} className="text-white size-5" />
-              </View>
-            </View>
-            <View className="absolute left-4 -bottom-12 z-10">
-              <ProfileImage imageUrl={session?.user?.image ?? null} />
-            </View>
+        <View className="flex-row items-center gap-4 rounded-2xl border border-border bg-card p-4">
+          <ProfileImage imageUrl={session?.user?.image ?? null} />
+          <View className="flex-1">
+            <Text className="text-foreground text-xl font-bold" numberOfLines={1}>
+              {session?.user.name}
+            </Text>
+            <Text className="text-secondary text-sm" numberOfLines={1}>
+              {session?.user.email}
+            </Text>
           </View>
-          <View className="flex flex-col px-4 pb-4 pt-14">
-            <View className="flex-row items-start justify-between gap-3">
-              <View className="flex-1 gap-1">
-                <Text className="text-foreground font-semibold text-2xl">{session?.user.name}</Text>
-                <Text className="text-tertiary text-base">{session?.user.email}</Text>
-              </View>
-              <Button
-                variant="secondary"
-                size="sm"
-                accessibilityLabel="Edit name"
-                onPress={() => {
-                  form.reset({ name: session?.user.name ?? "" });
-                  setNameOpen(true);
-                }}
-              >
-                <Text>Edit name</Text>
-              </Button>
-            </View>
-
-            <Separator className="my-4" />
-            <View className="flex flex-row items-center gap-6">
-              <View className="flex flex-col items-center">
-                <Text className="text-foreground font-bold text-xl">
-                  {groups.isError ? "—" : (groups.data?.length ?? "—")}
-                </Text>
-                <Text className="text-tertiary text-base font-medium">Groups</Text>
-              </View>
-
-              <Separator className="my-4" orientation="vertical" />
-
-              <Link href="/account/devices" asChild>
-                <Pressable accessibilityRole="link" className="flex flex-col items-center">
-                  <Text className="text-foreground font-bold text-xl">
-                    {devices.isError ? "—" : (devices.data?.length ?? "—")}
-                  </Text>
-                  <Text className="text-tertiary text-base font-medium">Devices</Text>
-                </Pressable>
-              </Link>
-            </View>
-          </View>
+          <Button
+            variant="secondary"
+            size="sm"
+            accessibilityLabel="Edit name"
+            onPress={() => {
+              form.reset({ name: session?.user.name ?? "" });
+              setNameOpen(true);
+            }}
+          >
+            <Text>Edit name</Text>
+          </Button>
         </View>
         <LocationSharingCard />
         {permissionState?.shouldShowAccountWarning && (
@@ -459,22 +352,107 @@ const AccountScreen = () => {
           </PromptCard>
         )}
 
-        <SettingsContainer categories={categories} />
-
-        <View className="mb-28 gap-3">
-          {signOutPhase && (
-            <Text accessibilityLiveRegion="polite" className="text-secondary">
-              {signOutPhase === "uploading"
-                ? "Uploading saved locations before signing out. This may take up to 10 seconds; any remaining locations will be saved for your next sign-in."
-                : "Contacting the server to sign out."}
-            </Text>
-          )}
-          <Button onPress={confirmSignOut} disabled={!!signOutPhase}>
-            <Text>{signOutPhase ? "Signing out…" : "Sign out"}</Text>
-          </Button>
+        <View className="pt-3">
+          <SettingsContainer
+            categories={[
+              {
+                label: "Privacy",
+                settings: [
+                  { label: "Who can see me", icon: EyeIcon, href: "/account/who-can-see-me" },
+                  {
+                    label: "Location history",
+                    icon: HistoryIcon,
+                    href: "/account/location-history",
+                    value: historyShare.setting
+                      ? historyShareLabel(historyShare.setting.account)
+                      : undefined,
+                  },
+                ],
+              },
+              {
+                label: "Account and security",
+                settings: [
+                  { label: "Notifications", icon: BellIcon, href: "/account/notifications" },
+                  {
+                    label: "Devices",
+                    icon: SmartphoneIcon,
+                    href: "/account/devices",
+                    value: devices.data ? String(devices.data.length) : undefined,
+                  },
+                  { label: "Password and security", icon: LockIcon, href: "/account/password" },
+                  {
+                    label: "App lock",
+                    icon: ScanFaceIcon,
+                    href: "/account/app-lock",
+                    value: appLock.enabled ? "On" : "Off",
+                  },
+                  {
+                    label: "Recovery phrase",
+                    icon: KeyRoundIcon,
+                    href: "/account/recovery",
+                    value: recoveryStatus.data
+                      ? recoveryStatus.data.recoveryKey
+                        ? "Set up"
+                        : "Not set up"
+                      : undefined,
+                  },
+                ],
+              },
+              {
+                label: "App",
+                settings: [
+                  {
+                    label: "Theme",
+                    icon: SunIcon,
+                    href: "/account/theme",
+                    value: { system: "Match phone", light: "Light", dark: "Dark" }[
+                      appThemePreference
+                    ],
+                  },
+                  {
+                    label: "Map storage",
+                    icon: MapIcon,
+                    href: "/account/map-storage",
+                    value: formatMapCacheSize(getMapCacheSizeMb()),
+                  },
+                ],
+              },
+              {
+                label: "Help",
+                settings: [
+                  { label: "Help centre", icon: BookOpenIcon, href: "https://docs.openbeacon.net" },
+                  { label: "Contact us", icon: MailIcon, href: "/account/contact-us" },
+                  { label: "About", icon: InfoIcon, href: "/account/about", value: appVersion },
+                ],
+              },
+              {
+                settings: [
+                  {
+                    label: signOutPhase ? "Signing out…" : "Sign out",
+                    icon: LogOutIcon,
+                    onPress: confirmSignOut,
+                    disabled: !!signOutPhase,
+                  },
+                  {
+                    label: "Delete account",
+                    icon: Trash2Icon,
+                    href: "/account/delete",
+                    tone: "danger",
+                  },
+                ],
+              },
+            ]}
+          />
         </View>
+        {signOutPhase && (
+          <Text accessibilityLiveRegion="polite" className="text-secondary px-1 text-sm">
+            {signOutPhase === "uploading"
+              ? "Uploading saved locations before signing out. This may take up to 10 seconds; any remaining locations will be saved for your next sign-in."
+              : "Contacting the server to sign out."}
+          </Text>
+        )}
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 };
 

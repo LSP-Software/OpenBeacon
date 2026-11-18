@@ -9,19 +9,19 @@ export const LiveMapGroupMenu = ({
   groups,
   maxHeight,
   onSetHidden,
+  top,
 }: {
   groups: readonly MapGroupOption[];
   maxHeight: number;
   onSetHidden: (groupId: string, hidden: boolean) => void;
+  top: number;
 }) => (
   <View
     accessibilityLabel="Show on map"
-    className="absolute right-16 top-14 w-64 rounded-2xl border border-border bg-card py-1.5 shadow-md shadow-black/20"
-    style={{ maxHeight }}
+    className="absolute left-3 w-72 rounded-2xl border border-border bg-card py-1.5 shadow-md shadow-black/20"
+    style={{ maxHeight, top }}
   >
-    <Text className="mx-4 mb-1 mt-1.5 text-[11px] font-bold uppercase text-secondary dark:text-tertiary">
-      Show on map
-    </Text>
+    <Text className="text-secondary mx-4 mb-1 mt-2 text-sm font-semibold">Show on map</Text>
     <ScrollView className="grow-0">
       {groups.map((group) => (
         <Pressable
@@ -33,7 +33,7 @@ export const LiveMapGroupMenu = ({
           <View
             className={
               group.hidden
-                ? "size-3 rounded-full border-[1.5px] border-muted dark:border-border-strong"
+                ? "size-3 rounded-full border-[1.5px] border-border-strong"
                 : "size-3 rounded-full"
             }
             style={group.hidden ? undefined : { backgroundColor: group.color }}
@@ -41,15 +41,13 @@ export const LiveMapGroupMenu = ({
           <View className="min-w-0 flex-1">
             <Text
               className={
-                group.hidden
-                  ? "font-semibold text-secondary dark:text-tertiary"
-                  : "font-semibold text-foreground"
+                group.hidden ? "font-semibold text-secondary" : "font-semibold text-foreground"
               }
               numberOfLines={1}
             >
               {group.name}
             </Text>
-            <Text className="text-xs text-secondary dark:text-tertiary">
+            <Text className="text-xs text-secondary">
               {group.memberCount} {group.memberCount === 1 ? "person" : "people"}
             </Text>
           </View>
@@ -61,7 +59,7 @@ export const LiveMapGroupMenu = ({
         </Pressable>
       ))}
     </ScrollView>
-    <Text className="mx-4 mb-1.5 mt-1 border-t border-border pt-2.5 text-xs text-secondary dark:text-tertiary">
+    <Text className="mx-4 mb-1.5 mt-1 border-t border-border pt-2.5 text-xs text-secondary">
       Only changes this phone. You still share your location with hidden groups.
     </Text>
   </View>
@@ -126,7 +124,7 @@ export const LiveMapHiddenGroupsNotice = ({
         className="max-w-full flex-row items-center gap-1.5 rounded-full border border-border bg-card py-2 pl-2.5 pr-3 shadow-sm shadow-black/15 active:opacity-70"
         onPress={onOpenMenu}
       >
-        <Icon as={EyeOffIcon} size={15} className="text-secondary dark:text-tertiary" />
+        <Icon as={EyeOffIcon} size={15} className="text-secondary" />
         <View className="flex-row">
           {hiddenGroups.map((group, index) => (
             <View
@@ -136,7 +134,7 @@ export const LiveMapHiddenGroupsNotice = ({
             />
           ))}
         </View>
-        <Text className="shrink text-[13px] font-semibold text-foreground" numberOfLines={1}>
+        <Text className="shrink text-sm font-semibold text-foreground" numberOfLines={1}>
           {hiddenGroups.length === 1
             ? `${onlyGroup.name} hidden`
             : hiddenGroups.length === groups.length

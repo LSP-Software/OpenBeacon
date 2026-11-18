@@ -12,6 +12,7 @@ import {
   getMapCacheSizeMb,
   mapCacheSizesMb,
   setMapCacheSizeMb,
+  formatMapCacheSize,
 } from "../../lib/mapCache.ts";
 
 const MapStorageScreen = () => {
@@ -67,7 +68,7 @@ const MapStorageScreen = () => {
                   }}
                 >
                   <Text className="text-foreground text-base font-medium">
-                    {size >= 1000 ? `${size / 1000} GB` : `${size} MB`}
+                    {formatMapCacheSize(size)}
                   </Text>
                   <View
                     className={cn(

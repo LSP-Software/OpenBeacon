@@ -10,6 +10,9 @@ const lastSourceUrlKey = "map.lastSourceUrl";
 const lastArchiveIdKey = "map.lastArchiveId";
 const clearPendingKey = "map.clearPending";
 
+export const formatMapCacheSize = (sizeMb: number) =>
+  sizeMb >= 1000 ? `${sizeMb / 1000} GB` : `${sizeMb} MB`;
+
 export const getMapCacheSizeMb = (): MapCacheSizeMb => {
   const stored = storage.getNumber(sizeKey);
   return mapCacheSizesMb.find((size) => size === stored) ?? 250;
