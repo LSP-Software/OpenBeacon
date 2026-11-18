@@ -25,7 +25,8 @@ const SettingsTab = ({ groupId }: { groupId: string }) => {
   const { group, groupCount } = useCachedGroup(groupId);
   const hiddenGroupIds = useHiddenMapGroupIds(session?.user.id);
   const shownOnMap = !hiddenGroupIds.includes(groupId);
-  const [name, setName] = useState("");
+  const [editedName, setName] = useState<string | null>(null);
+  const name = editedName ?? group?.name ?? "";
   const queryClient = useQueryClient();
   const router = useRouter();
   const rename = useMutation(trpc.groupSettings.rename.mutationOptions());
@@ -42,22 +43,22 @@ const SettingsTab = ({ groupId }: { groupId: string }) => {
             accessibilityLabel="Group name"
             value={name}
             onChangeText={setName}
-            placeholder={group?.name}
             maxLength={100}
             className="h-[52px] rounded-lg border border-border-strong bg-input px-4 text-base text-foreground placeholder:text-tertiary"
           />
           <Button
-            disabled={!name.trim() || rename.isPending}
+            disabled={!name.trim()}
+            loading={rename.isPending}
             onPress={async () => {
               const result = await tryCatch(rename.mutateAsync({ groupId, name }));
               if (result.error) {
                 Alert.alert("Unable to rename group", userMessage(result.error));
                 return;
               }
-              setName("");
               await queryClient.invalidateQueries({
                 queryKey: trpc.groupMembership.list.queryKey(),
               });
+              setName(null);
             }}
           >
             <Text>Save name</Text>
@@ -102,11 +103,11 @@ const SettingsTab = ({ groupId }: { groupId: string }) => {
       {role === "OWNER" && (
         <Button
           variant="danger"
-          disabled={deleteGroup.isPending}
+          loading={deleteGroup.isPending}
           onPress={() =>
             Alert.alert(
               "Delete group?",
-              "This permanently deletes the group and its tracking data for all members.",
+              "This permanently deletes the group and its location history for all members.",
               [
                 { text: "Cancel", style: "cancel" },
                 {

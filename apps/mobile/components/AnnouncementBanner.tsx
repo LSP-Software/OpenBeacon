@@ -68,6 +68,7 @@ export const AnnouncementBanner = ({ className }: { className?: string }) => {
       />
       <View className="flex-1 gap-1">
         <Pressable
+          accessibilityRole="button"
           accessibilityState={{ expanded }}
           onPress={() => setExpandedId(expanded ? null : announcement.id)}
         >

@@ -152,7 +152,9 @@ const GroupBody = ({ groupId, initialTab }: { groupId: string; initialTab: Group
   if (!group) {
     return (
       <View className="flex-1 items-center justify-center gap-4 bg-background px-6">
-        <Text>Group not found</Text>
+        <Text className="text-tertiary text-center">
+          We couldn’t load this group. Check your connection and try again.
+        </Text>
         <Button
           onPress={() => {
             setVerifyFailedFor(null);

@@ -87,7 +87,7 @@ export const readSignInError = (error: unknown): SignInOutcome => {
 export const signInCodeEntryError = (outcome: SignInOutcome, codeEntered: boolean) => {
   if (outcome.kind === "codeRequired") {
     return codeEntered
-      ? (outcome.notice ?? "We've emailed you a new code. Enter the new one.")
+      ? (outcome.notice ?? "We’ve emailed you a new code. Enter the new one.")
       : outcome.notice;
   }
   if (outcome.kind === "invalidCode") return invalidCodeMessage;

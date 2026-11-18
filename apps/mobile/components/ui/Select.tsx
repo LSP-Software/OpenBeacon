@@ -107,18 +107,6 @@ function SelectContent({
   );
 }
 
-function SelectLabel({
-  className,
-  ...props
-}: SelectPrimitive.LabelProps & React.RefAttributes<SelectPrimitive.LabelRef>) {
-  return (
-    <SelectPrimitive.Label
-      className={cn("text-tertiary px-2 py-2 text-xs sm:py-1.5", className)}
-      {...props}
-    />
-  );
-}
-
 function SelectItem({
   className,
   children,
@@ -143,23 +131,4 @@ function SelectItem({
   );
 }
 
-function SelectSeparator({
-  className,
-  ...props
-}: SelectPrimitive.SeparatorProps & React.RefAttributes<SelectPrimitive.SeparatorRef>) {
-  return (
-    <SelectPrimitive.Separator className={cn("bg-border -mx-1 my-1 h-px", className)} {...props} />
-  );
-}
-
-export {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectSeparator,
-  SelectTrigger,
-  SelectValue,
-  type Option,
-};
+export { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue, type Option };

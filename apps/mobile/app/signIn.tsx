@@ -95,7 +95,7 @@ const SignIn = () => {
     const requested = await emailCodes.requestEmailVerification(email, password);
     setEmailLoading(false);
     if (requested.error && requested.error.status !== 429) {
-      Alert.alert("Couldn't send a code", emailCodeErrorMessage(requested.error));
+      Alert.alert("Couldn’t send a code", emailCodeErrorMessage(requested.error));
       return;
     }
     setSignInCode(null);
@@ -262,6 +262,7 @@ const SignIn = () => {
                       pathname: "/forgotPassword",
                       params: { joinCode, email: enteredEmail },
                     }}
+                    replace
                     asChild
                   >
                     <Pressable className="self-end py-1" accessibilityRole="link">
@@ -275,10 +276,10 @@ const SignIn = () => {
               </View>
             )}
             <View className="items-center gap-4 pt-2">
-              <Link href={{ pathname: "/signUp", params: { joinCode } }} asChild>
+              <Link href={{ pathname: "/signUp", params: { joinCode } }} replace asChild>
                 <Pressable accessibilityRole="link">
                   <Text className="text-secondary">
-                    Don't have an account?{" "}
+                    Don’t have an account?{" "}
                     <Text className="font-semibold text-primary-text">Create one</Text>
                   </Text>
                 </Pressable>

@@ -89,7 +89,7 @@ describe("theme preferences", () => {
       setStoredAppThemePreference,
       setStoredMapThemePreference,
     } = await importThemePreferencesModule();
-    const { getColors, useColors } = await importThemeModule();
+    const { useColors } = await importThemeModule();
 
     setStoredAppThemePreference("system");
     setStoredMapThemePreference("dark");
@@ -99,7 +99,7 @@ describe("theme preferences", () => {
 
     expect(getStoredAppThemePreference()).toBe("system");
     expect(getStoredMapThemePreference()).toBe("dark");
-    expect(useColors()).toEqual(getColors("light"));
+    expect(useColors().isDark).toBe(false);
     expect(mockedThemeState.mapTheme).toBe("dark");
   });
 });

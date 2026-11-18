@@ -92,7 +92,7 @@ export const getPendingSharingChanges = (userId: string) => ({
   account: readPendingChange(userId, "account")?.input ?? null,
 });
 
-export const hasPendingSharingPause = (userId: string) =>
+export const hasPendingSharingChange = (userId: string) =>
   storage.getString(pendingKey(userId, "device")) !== undefined ||
   storage.getString(pendingKey(userId, "account")) !== undefined;
 
@@ -261,7 +261,7 @@ const loadSharingState = async (
   );
   for (const listener of loadedStateListeners) listener(state);
   const isCurrent = () =>
-    !abandoned() && !hasPendingSharingPause(device.userId) && changeRevision === revision;
+    !abandoned() && !hasPendingSharingChange(device.userId) && changeRevision === revision;
   await applyNativeSharingState(state, isCurrent);
   await applyNativeHistoryShare(state, abandoned);
   return state;
@@ -290,12 +290,12 @@ export const changeLocationSharing = async (input: {
   latestScopeRevisions.set(input.scope, revision);
   const requestedGeneration = generation;
   const device = await getRegisteredDeviceKey();
-  if (!device) throw new Error("This device isn't registered yet.");
-  if (generation !== requestedGeneration) throw new Error("You've signed out.");
+  if (!device) throw new Error("This device isn’t registered yet.");
+  if (generation !== requestedGeneration) throw new Error("You’ve signed out.");
   const deviceId = input.deviceId ?? device.deviceId;
   const affectsThisDevice = input.scope === "account" || deviceId === device.deviceId;
   const offline = await (await import("./networkStatus.ts")).isDeviceOffline();
-  if (generation !== requestedGeneration) throw new Error("You've signed out.");
+  if (generation !== requestedGeneration) throw new Error("You’ve signed out.");
   if (latestScopeRevisions.get(input.scope) !== revision)
     throw new Error("A newer sharing change replaced this one.");
   if (offline && !affectsThisDevice) throw new Error(SERVER_UNREACHABLE_MESSAGE);
@@ -333,7 +333,7 @@ export const changeLocationSharing = async (input: {
       ? { data: null, error: new Error(SERVER_UNREACHABLE_MESSAGE) }
       : await tryCatch(
           queueOperation(async () => {
-            if (generation !== requestedGeneration) throw new Error("You've signed out.");
+            if (generation !== requestedGeneration) throw new Error("You’ve signed out.");
             const { status } = await trpcClient.account.setLocationSharing.mutate(
               change.paused ? { ...change, expectedRevision: null } : change,
             );

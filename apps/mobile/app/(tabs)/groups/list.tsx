@@ -83,6 +83,7 @@ export default function GroupsScreen() {
                   size="sm"
                   variant="secondary"
                   className="rounded-full"
+                  hitSlop={4}
                   accessibilityLabel="Join a group with a QR code or join code"
                 >
                   <Icon as={QrCodeIcon} className="text-foreground size-4" />
@@ -92,6 +93,7 @@ export default function GroupsScreen() {
               <Button
                 size="sm"
                 className="rounded-full"
+                hitSlop={4}
                 accessibilityLabel="Create new group"
                 onPress={() => setCreateGroupDialogOpen(true)}
               >

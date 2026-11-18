@@ -61,7 +61,7 @@ const SignUp = () => {
     const result = await emailCodes.requestSignUpCode(email);
     setEmailLoading(false);
     if (result.error && result.error.status !== 429) {
-      Alert.alert("Couldn't send a code", emailCodeErrorMessage(result.error));
+      Alert.alert("Couldn’t send a code", emailCodeErrorMessage(result.error));
       return;
     }
     setStep({
@@ -266,7 +266,7 @@ const SignUp = () => {
             </View>
 
             <View className="items-center gap-4 pt-2">
-              <Link href={{ pathname: "/signIn", params: { joinCode } }} asChild>
+              <Link href={{ pathname: "/signIn", params: { joinCode } }} replace asChild>
                 <Pressable accessibilityRole="link">
                   <Text className="text-secondary">
                     Already have an account?{" "}

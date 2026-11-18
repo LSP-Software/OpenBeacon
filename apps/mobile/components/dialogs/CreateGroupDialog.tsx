@@ -105,6 +105,7 @@ export const CreateGroupDialog = ({
     });
 
   const closeForm = () => {
+    if (createGroupSubmission.isPending) return;
     setOpen(false);
     form.reset();
     removePicture();
@@ -170,7 +171,7 @@ export const CreateGroupDialog = ({
           <Button
             className="flex-1"
             onPress={closeForm}
-            disabled={picturePicker.isPending}
+            disabled={picturePicker.isPending || createGroupSubmission.isPending}
             variant={"secondary"}
           >
             <Text>Cancel</Text>

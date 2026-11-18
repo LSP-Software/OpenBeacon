@@ -130,7 +130,7 @@ export const useAppLock = () =>
     return () => listeners.delete(listener);
   }, getAppLockState);
 
-export const hasScreenLock = async () => {
+const hasScreenLock = async () => {
   const level = await tryCatch(LocalAuthentication.getEnrolledLevelAsync());
   return (
     (level.data ?? LocalAuthentication.SecurityLevel.NONE) >=

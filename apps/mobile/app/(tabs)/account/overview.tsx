@@ -127,11 +127,14 @@ const AccountScreen = () => {
     signingOut.current = true;
     setSignOutPhase("uploading");
     const { signOutOfThisPhone } = await import("../../../lib/signOut.ts");
-    const { status } = await signOutOfThisPhone({
-      onSigningOut: () => setSignOutPhase("signingOut"),
-      removeThisPhone,
-      sessionTokenToRevoke: session?.session?.token ?? null,
-    });
+    const result = await tryCatch(
+      signOutOfThisPhone({
+        onSigningOut: () => setSignOutPhase("signingOut"),
+        removeThisPhone,
+        sessionTokenToRevoke: session?.session?.token ?? null,
+      }),
+    );
+    const status = result.data?.status;
     signingOut.current = false;
     setSignOutPhase(null);
     if (status === "serverUnreachable") {
@@ -198,12 +201,12 @@ const AccountScreen = () => {
       "This phone stays in Account → Devices, so you can sign in on it again. If you’re giving it away or won’t use it again, remove it too.",
       [
         { text: "Cancel", style: "cancel" },
-        { text: "Sign out", onPress: () => signOut({ removeThisPhone: false }) },
         {
           text: "Also remove this phone from your account",
           style: "destructive",
           onPress: confirmRemoveThisPhone,
         },
+        { text: "Sign out", onPress: () => signOut({ removeThisPhone: false }) },
       ],
     );
 

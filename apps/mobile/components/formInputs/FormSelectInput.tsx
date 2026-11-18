@@ -14,15 +14,13 @@ import {
 
 type FormInputProps<TFieldValues extends FieldValues, TName extends FieldPath<TFieldValues>> = Omit<
   TextInputProps,
-  "value" | "onChangeText"
+  "value" | "onChangeText" | "onBlur" | "onFocus"
 > & {
   control: Control<TFieldValues>;
   name: TName;
   label?: string;
   description?: string;
   fieldClassName?: string;
-  hideError?: boolean;
-  descriptionPosition?: "aboveInput" | "belowInput";
   values: Option[];
   placeholder?: string;
 };
@@ -37,12 +35,8 @@ export const FormSelectInput = <
   description,
   placeholder = "Select a value",
   fieldClassName = "",
-  hideError: _hideError = false,
   className,
-  onBlur,
-  onFocus,
   values,
-  descriptionPosition = "aboveInput",
   ...props
 }: FormInputProps<TFieldValues, TName>) => {
   return (
@@ -53,7 +47,7 @@ export const FormSelectInput = <
         return (
           <Field data-invalid={fieldState.invalid} className={cn(fieldClassName, className)}>
             {(label || description) && (
-              <View className={cn("flex flex-col", descriptionPosition === "aboveInput" && "mb-2")}>
+              <View className="mb-2 flex flex-col">
                 {label && (
                   <FieldLabel className="text-lg font-medium" htmlFor={name}>
                     {label}

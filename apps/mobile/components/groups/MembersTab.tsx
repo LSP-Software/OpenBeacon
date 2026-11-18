@@ -36,6 +36,7 @@ import { buildMemberLiveStatuses } from "../../lib/buildMemberLiveStatuses.ts";
 import { deviceIconFor } from "../../lib/deviceIcons.ts";
 import { buildRemoveGroupMemberInput, submitEpochChange } from "../../lib/groupEncryption.ts";
 import { forgetHiddenMapGroup } from "../../lib/hiddenMapGroups.ts";
+import { initials } from "../../lib/initials.ts";
 import { timeSince } from "../../lib/timeSince.ts";
 import { requestTrackingSync } from "../../lib/trackingEvents.ts";
 import { useSingleFlight } from "../../lib/useSingleFlight.ts";
@@ -55,6 +56,7 @@ const MembersTab = ({
   } | null>(null);
   const [nickname, setNickname] = useState("");
   const updateNickname = useMutation(trpc.groupMembership.updateNickname.mutationOptions());
+  const nicknameSave = useSingleFlight<"save">();
   const [changingRole, setChangingRole] = useState<{
     memberId: string;
     role: "OWNER" | "ADMIN" | "MEMBER";
@@ -117,24 +119,36 @@ const MembersTab = ({
   const self = members?.find((member) => member.user.id === session?.user.id);
   const selectedMember = memberStatuses.find((member) => member.id === selectedMemberId);
   const canManage = self?.role === "OWNER" || self?.role === "ADMIN";
+  const nameOf = (member: { id: string; user: { name: string } }) =>
+    nicknames[member.id]?.name ?? member.user.name;
   const confirmRemoval = (
     member: { id: string; user: { id: string; name: string } },
     successor?: string,
   ) => {
     const isSelf = member.user.id === session?.user.id;
     const isLastMember = isSelf && members?.length === 1;
-    if (isSelf && self?.role === "OWNER" && !successor && !isLastMember) {
+    const anotherOwner = members?.some(
+      (item) => item.role === "OWNER" && item.user.id !== session?.user.id,
+    );
+    if (isSelf && self?.role === "OWNER" && !successor && !isLastMember && !anotherOwner) {
       setSuccessorMemberId(null);
       setSuccessorDialogOpen(true);
       return;
     }
     Alert.alert(
-      isSelf ? "Leave group?" : `Remove ${member.user.name}?`,
+      isSelf ? "Leave group?" : `Remove ${nameOf(member)}?`,
       isSelf
         ? isLastMember
-          ? "You are the last person in this group. Leaving will permanently delete the group and its tracking data."
-          : `${successor ? `${members?.find((item) => item.id === successor)?.user.name ?? "The selected member"} will become an owner. ` : ""}You will leave this group, and your location history in this group will be deleted.`
-        : `${member.user.name} will be removed from this group and their location history in this group will be deleted.`,
+          ? "You are the last person in this group. Leaving will permanently delete the group and its location history."
+          : `${
+              successor
+                ? `${(() => {
+                    const chosen = members?.find((item) => item.id === successor);
+                    return chosen ? nameOf(chosen) : "The selected member";
+                  })()} will become an owner. `
+                : ""
+            }You will leave this group, and your location history in this group will be deleted.`
+        : `${nameOf(member)} will be removed from this group and their location history in this group will be deleted.`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -219,49 +233,52 @@ const MembersTab = ({
             className="h-[52px] rounded-lg border border-border-strong bg-input px-4 text-base text-foreground"
           />
           <Button
-            disabled={updateNickname.isPending || nicknameQuery.isPending || nicknameQuery.isError}
-            onPress={async () => {
-              if (!nicknameMember || nicknameQuery.isPending || nicknameQuery.isError) return;
-              const parsed = nickname.trim() ? accountNameSchema.safeParse(nickname) : null;
-              if (!parsed && nicknames[nicknameMember.id]?.name === null) {
-                setNicknameMember(null);
-                return;
-              }
-              if (parsed && !parsed.success) {
-                Alert.alert("Invalid nickname", parsed.error.issues[0]?.message);
-                return;
-              }
-              const result = await tryCatch(
-                (async () => {
-                  if (!session?.user.id) throw new Error("Please sign in again.");
-                  const ciphertext = parsed?.data
-                    ? await encryptPersonalNickname({
-                        groupId,
-                        memberId: nicknameMember.id,
-                        userId: session.user.id,
-                        nickname: parsed.data,
-                      })
-                    : null;
-                  await updateNickname.mutateAsync({
-                    groupId,
-                    memberId: nicknameMember.id,
-                    ciphertext,
-                    expectedCiphertext: nicknames[nicknameMember.id]?.ciphertext ?? null,
+            disabled={nicknameQuery.isPending || nicknameQuery.isError}
+            loading={nicknameSave.isPending}
+            onPress={() =>
+              nicknameSave.run("save", async () => {
+                if (!nicknameMember || nicknameQuery.isPending || nicknameQuery.isError) return;
+                const parsed = nickname.trim() ? accountNameSchema.safeParse(nickname) : null;
+                if (!parsed && nicknames[nicknameMember.id]?.name === null) {
+                  setNicknameMember(null);
+                  return;
+                }
+                if (parsed && !parsed.success) {
+                  Alert.alert("Invalid nickname", parsed.error.issues[0]?.message);
+                  return;
+                }
+                const result = await tryCatch(
+                  (async () => {
+                    if (!session?.user.id) throw new Error("Please sign in again.");
+                    const ciphertext = parsed?.data
+                      ? await encryptPersonalNickname({
+                          groupId,
+                          memberId: nicknameMember.id,
+                          userId: session.user.id,
+                          nickname: parsed.data,
+                        })
+                      : null;
+                    await updateNickname.mutateAsync({
+                      groupId,
+                      memberId: nicknameMember.id,
+                      ciphertext,
+                      expectedCiphertext: nicknames[nicknameMember.id]?.ciphertext ?? null,
+                    });
+                  })(),
+                );
+                if (result.error) {
+                  await queryClient.invalidateQueries({
+                    queryKey: ["personalNicknames", groupId, session?.user.id],
                   });
-                })(),
-              );
-              if (result.error) {
+                  Alert.alert("Unable to save nickname", userMessage(result.error));
+                  return;
+                }
                 await queryClient.invalidateQueries({
                   queryKey: ["personalNicknames", groupId, session?.user.id],
                 });
-                Alert.alert("Unable to save nickname", userMessage(result.error));
-                return;
-              }
-              await queryClient.invalidateQueries({
-                queryKey: ["personalNicknames", groupId, session?.user.id],
-              });
-              setNicknameMember(null);
-            }}
+                setNicknameMember(null);
+              })
+            }
           >
             <Text>Save nickname</Text>
           </Button>
@@ -289,7 +306,7 @@ const MembersTab = ({
                   <View
                     className={`size-5 rounded-full border-2 ${successorMemberId === member.id ? "border-primary bg-primary" : "border-border"}`}
                   />
-                  <Text>{member.user.name}</Text>
+                  <Text>{nameOf(member)}</Text>
                 </Pressable>
               ))}
           </ScrollView>
@@ -331,9 +348,7 @@ const MembersTab = ({
             <Avatar alt={member.nickname ?? member.user.name} className="size-11">
               <DecryptedAvatarImage url={member.user.image} />
               <AvatarFallback>
-                <Text className="font-bold">
-                  {(member.nickname ?? member.user.name).slice(0, 2)}
-                </Text>
+                <Text className="font-bold">{initials(member.nickname ?? member.user.name)}</Text>
               </AvatarFallback>
             </Avatar>
             <View className="flex-1 gap-1">
@@ -380,7 +395,7 @@ const MembersTab = ({
                 <DecryptedAvatarImage url={selectedMember.user.image} />
                 <AvatarFallback>
                   <Text className="font-bold">
-                    {(selectedMember.nickname ?? selectedMember.user.name).slice(0, 2)}
+                    {initials(selectedMember.nickname ?? selectedMember.user.name)}
                   </Text>
                 </AvatarFallback>
               </Avatar>
@@ -399,7 +414,7 @@ const MembersTab = ({
               <View className="gap-2">
                 <Text variant="label">Role</Text>
                 <SegmentedControl
-                  accessibilityLabel={`Role for ${selectedMember.user.name}`}
+                  accessibilityLabel={`Role for ${selectedMember.nickname ?? selectedMember.user.name}`}
                   options={(["OWNER", "ADMIN", "MEMBER"] as const).map((role) => ({
                     value: role,
                     label: ROLE_LABELS[role],
@@ -411,13 +426,16 @@ const MembersTab = ({
                     setSelectedMemberId(null);
                     Alert.alert(
                       "Change role?",
-                      `Make ${selectedMember.user.name} ${role.toLowerCase()}?`,
+                      `Make ${selectedMember.nickname ?? selectedMember.user.name} ${role.toLowerCase()}?`,
                       [
                         { text: "Cancel", style: "cancel" },
                         {
                           text: "Change",
                           onPress: async () => {
-                            setChangingRole({ memberId: selectedMember.id, role });
+                            setChangingRole({
+                              memberId: selectedMember.id,
+                              role,
+                            });
                             const result = await tryCatch(
                               updateRole.mutateAsync({
                                 groupId,
@@ -505,7 +523,11 @@ const MembersTab = ({
   );
 };
 
-const ROLE_LABELS = { OWNER: "Owner", ADMIN: "Admin", MEMBER: "Member" } as const;
+const ROLE_LABELS = {
+  OWNER: "Owner",
+  ADMIN: "Admin",
+  MEMBER: "Member",
+} as const;
 
 const MemberStatus = ({
   arrivalsOff,

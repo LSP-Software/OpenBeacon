@@ -72,7 +72,7 @@ const RemoveOldDevicesScreen = () => {
         showsVerticalScrollIndicator={false}
       >
         <View className="gap-4">
-          <Text className="text-foreground text-3xl font-bold">
+          <Text accessibilityRole="header" className="text-foreground text-3xl font-bold">
             Remove devices you no longer have
           </Text>
           <Text className="text-secondary text-base">

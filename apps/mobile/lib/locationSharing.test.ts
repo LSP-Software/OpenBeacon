@@ -159,7 +159,7 @@ const {
   abandonLocationSharingChanges,
   changeLocationSharing,
   clearPendingSharingChanges,
-  hasPendingSharingPause,
+  hasPendingSharingChange,
   hasLocallyPausedSharing,
   hasRejectedSharingChange,
   getPendingSharingChanges,
@@ -210,11 +210,11 @@ test("stops locally while offline and retries the pause before applying server s
     }),
   ).toBe("queued");
   expect(nativeStates.at(-1)?.paused).toBe(true);
-  expect(hasPendingSharingPause("alex")).toBe(true);
+  expect(hasPendingSharingChange("alex")).toBe(true);
   offline = false;
   await syncLocationSharing();
   expect(changes).toHaveLength(1);
-  expect(hasPendingSharingPause("alex")).toBe(false);
+  expect(hasPendingSharingChange("alex")).toBe(false);
   expect(nativeStates.at(-1)).toMatchObject({
     owner: JSON.stringify(["https://server.test", "alex"]),
     prefix: "s0.1:",
@@ -238,7 +238,7 @@ test("a known offline pause stops capture without trying the network", async () 
   await syncLocationSharing();
   expect(changes.map((change) => change.scope)).toEqual(["account"]);
   expect(server.account.sharingPaused).toBe(true);
-  expect(hasPendingSharingPause("alex")).toBe(false);
+  expect(hasPendingSharingChange("alex")).toBe(false);
 });
 
 test("an older offline change that finishes its checks late doesn't replace a newer one", async () => {
@@ -275,8 +275,8 @@ test("signing out during the connectivity check stops the change writing anythin
   clearPendingSharingChanges("alex");
   release();
 
-  await expect(change).rejects.toThrow("You've signed out.");
-  expect(hasPendingSharingPause("alex")).toBe(false);
+  await expect(change).rejects.toThrow("You’ve signed out.");
+  expect(hasPendingSharingChange("alex")).toBe(false);
   expect(nativeStates).toHaveLength(0);
 });
 
@@ -305,7 +305,7 @@ test("pausing another device while known offline fails at once and stores nothin
   ).rejects.toThrow("Can’t reach the server");
   expect(changes).toHaveLength(0);
   expect(nativeStates).toHaveLength(0);
-  expect(hasPendingSharingPause("alex")).toBe(false);
+  expect(hasPendingSharingChange("alex")).toBe(false);
 });
 
 test("keeps both device and account pauses pending across a network failure", async () => {
@@ -323,7 +323,7 @@ test("keeps both device and account pauses pending across a network failure", as
   offline = false;
   await syncLocationSharing();
   expect(changes.map((change) => change.scope)).toEqual(["device", "account"]);
-  expect(hasPendingSharingPause("alex")).toBe(false);
+  expect(hasPendingSharingChange("alex")).toBe(false);
 });
 
 test("a pause whose reply was lost is retried with the same request and doesn't restart", async () => {
@@ -361,7 +361,7 @@ test("a queued pause is dropped when another phone changed this device since", a
   expect(changes.at(-1)?.expectedRevision).toBeNull();
   expect(server.device.sharingPaused).toBe(false);
   expect(server.device.sharingRevision).toBe(2);
-  expect(hasPendingSharingPause("alex")).toBe(false);
+  expect(hasPendingSharingChange("alex")).toBe(false);
   expect(hasRejectedSharingChange("alex")).toBe(true);
   expect(nativeStates.at(-1)).toMatchObject({ paused: false, prefix: "s0.2:" });
 });
@@ -383,7 +383,7 @@ test("an offline pause is applied when another phone changed sharing before the 
   await syncLocationSharing();
   expect(changes.at(-1)?.expectedRevision).toBeNull();
   expect(server.account).toMatchObject({ sharingPaused: true, sharingRevision: 3 });
-  expect(hasPendingSharingPause("alex")).toBe(false);
+  expect(hasPendingSharingChange("alex")).toBe(false);
   expect(hasRejectedSharingChange("alex")).toBe(false);
   expect(nativeStates.at(-1)).toMatchObject({ paused: true, prefix: "s3.0:" });
 });
@@ -399,7 +399,7 @@ test("a fresh change reports when another phone got there first", async () => {
     }),
   ).toBe("superseded");
   expect(server.device.sharingPaused).toBe(true);
-  expect(hasPendingSharingPause("alex")).toBe(false);
+  expect(hasPendingSharingChange("alex")).toBe(false);
 });
 
 test("a pause tapped online applies even if another phone changed sharing since it loaded", async () => {
@@ -480,7 +480,7 @@ test("an offline resume of a confirmed pause the native runtime rejected is not 
       durationMinutes: null,
     }),
   ).rejects.toThrow();
-  expect(hasPendingSharingPause("alex")).toBe(false);
+  expect(hasPendingSharingChange("alex")).toBe(false);
   expect(hasLocallyPausedSharing("alex")).toBe(true);
 });
 
@@ -519,7 +519,7 @@ test("a resume still wins when the queued pause reached the server but its reply
   await syncLocationSharing();
   expect(server.device.sharingPaused).toBe(false);
   expect(server.device.sharingRevision).toBe(2);
-  expect(hasPendingSharingPause("alex")).toBe(false);
+  expect(hasPendingSharingChange("alex")).toBe(false);
 });
 
 test("an offline resume keeps capture stopped while the account is still paused", async () => {
@@ -613,7 +613,7 @@ test("signing out forgets queued changes so they aren't replayed later", async (
   offline = false;
   await syncLocationSharing();
   expect(changes).toEqual([]);
-  expect(hasPendingSharingPause("alex")).toBe(false);
+  expect(hasPendingSharingChange("alex")).toBe(false);
 });
 
 test("a response requested before a pause cannot resume capture afterwards", async () => {
@@ -686,7 +686,7 @@ test("serializes a pending account retry before a newer resume", async () => {
   await Promise.all([retry, resume]);
   expect(changes.map((change) => change.paused)).toEqual([true, false]);
   expect(server.account.sharingPaused).toBe(false);
-  expect(hasPendingSharingPause("alex")).toBe(false);
+  expect(hasPendingSharingChange("alex")).toBe(false);
   expect(nativeStates.at(-1)?.paused).toBe(false);
   expect(hasLocallyPausedSharing("alex")).toBe(false);
 });
@@ -726,7 +726,7 @@ test("does not claim a local stop when the native runtime rejected it", async ()
       durationMinutes: null,
     }),
   ).rejects.toThrow();
-  expect(hasPendingSharingPause("alex")).toBe(true);
+  expect(hasPendingSharingChange("alex")).toBe(true);
   expect(hasLocallyPausedSharing("alex")).toBe(false);
   expect(getPendingSharingChanges("alex").account?.scope).toBe("account");
 });
@@ -743,7 +743,7 @@ test("a failed refresh does not turn a saved change into a failed mutation", asy
     }),
   ).toBe("applied");
   expect(changes).toHaveLength(1);
-  expect(hasPendingSharingPause("alex")).toBe(false);
+  expect(hasPendingSharingChange("alex")).toBe(false);
   expect(hasLocallyPausedSharing("alex")).toBe(true);
 });
 
@@ -760,7 +760,7 @@ test("a replacement device does not replay the old device's local pause", async 
   await syncLocationSharing();
   expect(changes).toEqual([]);
   expect(hasLocallyPausedSharing("alex")).toBe(false);
-  expect(hasPendingSharingPause("alex")).toBe(false);
+  expect(hasPendingSharingChange("alex")).toBe(false);
 });
 
 test("forgets a queued change saved in a format it no longer understands", async () => {
@@ -773,7 +773,7 @@ test("forgets a queued change saved in a format it no longer understands", async
   );
   await syncLocationSharing();
   expect(changes).toEqual([]);
-  expect(hasPendingSharingPause("alex")).toBe(false);
+  expect(hasPendingSharingChange("alex")).toBe(false);
 });
 
 test("a sync still running at sign-out neither stores nor applies its late response", async () => {
@@ -835,7 +835,7 @@ test("a change answered after sign-out doesn't refresh or touch capture", async 
   expect(await change).toBe("applied");
   expect(queries).toBe(0);
   expect(nativeStates).toEqual([]);
-  expect(hasPendingSharingPause("alex")).toBe(false);
+  expect(hasPendingSharingChange("alex")).toBe(false);
 });
 
 test("a replayed pause whose reply was lost cannot undo a resume made on another phone", async () => {
@@ -855,7 +855,7 @@ test("a replayed pause whose reply was lost cannot undo a resume made on another
   await syncLocationSharing();
   expect(changes.at(-1)).toMatchObject({ requestId: "request-1", expectedRevision: null });
   expect(server.device).toMatchObject({ sharingPaused: false, sharingRevision: 2 });
-  expect(hasPendingSharingPause("alex")).toBe(false);
+  expect(hasPendingSharingChange("alex")).toBe(false);
   expect(hasRejectedSharingChange("alex")).toBe(true);
   expect(nativeStates.at(-1)).toMatchObject({ paused: false, prefix: "s0.2:" });
 });
@@ -881,7 +881,7 @@ test("a pause tapped before sharing loaded is replayed with its tap time and can
   expect(changes.map((change) => change.requestedAt)).toEqual([tappedAt, tappedAt]);
   expect(changes.at(-1)).toMatchObject({ requestId: "request-1", expectedRevision: null });
   expect(server.device).toMatchObject({ sharingPaused: false, sharingRevision: 2 });
-  expect(hasPendingSharingPause("alex")).toBe(false);
+  expect(hasPendingSharingChange("alex")).toBe(false);
   expect(nativeStates.at(-1)).toMatchObject({ paused: false, prefix: "s0.2:" });
 });
 
@@ -899,13 +899,13 @@ for (const [name, error] of [
     serverClockAhead = 5 * 60_000;
     offline = true;
     await changeLocationSharing({ scope: "device", paused: true, durationMinutes: null });
-    expect(hasPendingSharingPause("alex")).toBe(true);
+    expect(hasPendingSharingChange("alex")).toBe(true);
     offline = false;
     rejectWith = error();
 
     await syncLocationSharing();
 
-    expect(hasPendingSharingPause("alex")).toBe(false);
+    expect(hasPendingSharingChange("alex")).toBe(false);
     expect(hasRejectedSharingChange("alex")).toBe(true);
     expect(nativeStates.at(-1)).toMatchObject({ paused: false });
     expect(Math.abs(serverNow() - serverTime())).toBeLessThan(1_000);
@@ -920,7 +920,7 @@ test("a pause the server refuses straight away is undone and reported as rejecte
     await changeLocationSharing({ scope: "device", paused: true, durationMinutes: null }),
   ).toBe("rejected");
 
-  expect(hasPendingSharingPause("alex")).toBe(false);
+  expect(hasPendingSharingChange("alex")).toBe(false);
   expect(hasRejectedSharingChange("alex")).toBe(true);
   expect(nativeStates.at(-1)).toMatchObject({ paused: false });
 
@@ -944,7 +944,7 @@ for (const [name, error] of [
 
     await expect(syncLocationSharing()).rejects.toBe(rejectWith);
 
-    expect(hasPendingSharingPause("alex")).toBe(true);
+    expect(hasPendingSharingChange("alex")).toBe(true);
     expect(hasRejectedSharingChange("alex")).toBe(false);
     expect(Math.abs(serverNow() - serverTime())).toBeLessThan(1_000);
     expect(nativeStates.at(-1)).toMatchObject({ paused: true });

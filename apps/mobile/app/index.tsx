@@ -12,10 +12,10 @@ import { authClient } from "../lib/auth-client.ts";
 import { getBaseUrl, hasCustomServerUrl } from "../lib/currentServer.ts";
 import { isThisDeviceActive } from "../lib/deviceActivation.ts";
 import { ensureDeviceKeyRegistration } from "../lib/deviceKeys.ts";
-import { endSession } from "../lib/endSession.ts";
 import { launchRetryDelayMs } from "../lib/launchRetry.ts";
 import { readOnboarding, startOnboarding } from "../lib/onboarding.ts";
 import { readSavedDeviceLink } from "../lib/savedDeviceLink.ts";
+import { signOutOfThisPhone } from "../lib/signOut.ts";
 import { useColors } from "../lib/theme.ts";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -135,7 +135,13 @@ export default function HomeScreen() {
 
   const signOut = async () => {
     setSigningOut(true);
-    await tryCatch(endSession({ reason: "signedOut" }));
+    await tryCatch(
+      signOutOfThisPhone({
+        onSigningOut: () => {},
+        removeThisPhone: false,
+        sessionTokenToRevoke: session?.session.token ?? null,
+      }),
+    );
     setSigningOut(false);
     setFailures(0);
   };
@@ -148,8 +154,8 @@ export default function HomeScreen() {
             <AnnouncementBanner />
             <Text className="text-center text-secondary" accessibilityLiveRegion="polite">
               {hasCustomServerUrl()
-                ? `Couldn't connect to ${getBaseUrl()}. Check your connection and that your server is running. Trying again automatically.`
-                : "Couldn't connect to OpenBeacon. Check your connection. Trying again automatically."}
+                ? `Couldn’t connect to ${getBaseUrl()}. Check your connection and that your server is running. Trying again automatically.`
+                : "Couldn’t connect to OpenBeacon. Check your connection. Trying again automatically."}
             </Text>
             <Button onPress={() => setAttempt((value) => value + 1)}>
               <Text>Try again</Text>

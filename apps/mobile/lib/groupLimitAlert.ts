@@ -5,6 +5,6 @@ export const groupLimitAlert = (error: unknown) =>
     ? {
         title: "Too many groups",
         message:
-          "You're already in as many groups as your account allows. Leave a group before creating or joining another.",
+          "You’re already in as many groups as your account allows. Leave a group before creating or joining another.",
       }
     : null;

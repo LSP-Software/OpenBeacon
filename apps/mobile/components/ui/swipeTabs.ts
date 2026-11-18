@@ -24,24 +24,3 @@ export const getSceneIndexFromOffset = ({
 
   return Math.min(Math.max(unclampedIndex, 0), sceneCount - 1);
 };
-
-export const getActiveSceneHeight = <T extends string>({
-  sceneHeights,
-  value,
-}: {
-  sceneHeights: Partial<Record<T, number>>;
-  value: T;
-}): number => {
-  const activeSceneHeight = sceneHeights[value];
-
-  if (typeof activeSceneHeight === "number" && activeSceneHeight > 0) {
-    return activeSceneHeight;
-  }
-
-  const fallbackSceneHeight = Object.values(sceneHeights).find(
-    (sceneHeight): sceneHeight is number =>
-      typeof sceneHeight === "number" && Number.isFinite(sceneHeight) && sceneHeight > 0,
-  );
-
-  return fallbackSceneHeight ?? 1;
-};

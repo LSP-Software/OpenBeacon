@@ -103,8 +103,8 @@ const AddDeviceScreen = () => {
         {(step === "scan" || step === "checking") && (
           <View className="gap-4">
             <Text className="text-secondary text-base">
-              On the new phone or tablet, sign in and choose “Yes, link with your other device”.
-              Then scan the code it shows.
+              On the new phone or tablet, sign in and choose “Link with your other device”. Then
+              scan the code it shows.
             </Text>
             {problem && <Text className="text-destructive-text text-base">{problem}</Text>}
             {permission?.granted ? (
@@ -126,7 +126,7 @@ const AddDeviceScreen = () => {
                   scan the code.
                 </Text>
                 <Button onPress={() => void tryCatch(Linking.openSettings())}>
-                  <Text>Open Settings</Text>
+                  <Text>Open settings</Text>
                 </Button>
               </View>
             ) : (

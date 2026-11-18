@@ -277,3 +277,29 @@ test("Notifications is listed, also on servers that don't send email", async () 
   expect(settings.map(({ label }) => label)).toContain("Notifications");
   expect(settings.map(({ label }) => label)).not.toContain("Email alerts");
 });
+
+test("a sign-out that throws lets the person try again", async () => {
+  signOutOfThisPhone.mockImplementationOnce(async () => {
+    throw new Error("Storage failed");
+  });
+  await renderScreen();
+  const signOut = () => settings.find((item) => item.label === "Sign out")?.onPress;
+  await act(async () => signOut()?.());
+  await press("Sign out?", "Sign out");
+
+  expect(settings.find((item) => item.label === "Signing out…")).toBeUndefined();
+  await act(async () => signOut()?.());
+  await press("Sign out?", "Sign out");
+  expect(removeCalls()).toEqual([false, false]);
+});
+
+test("the sign-out alert puts plain Sign out in the confirm slot, with removing this phone below it", async () => {
+  await renderScreen();
+  await act(async () => settings.find((item) => item.label === "Sign out")?.onPress?.());
+
+  expect(alerts.at(-1)?.actions.map(({ text }) => text)).toEqual([
+    "Cancel",
+    "Also remove this phone from your account",
+    "Sign out",
+  ]);
+});

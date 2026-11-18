@@ -59,7 +59,7 @@ const ForgotPassword = () => {
     const result = await emailCodes.requestPasswordReset(email);
     setLoading(false);
     if (result.error && result.error.status !== 429) {
-      Alert.alert("Couldn't send a code", emailCodeErrorMessage(result.error));
+      Alert.alert("Couldn’t send a code", emailCodeErrorMessage(result.error));
       return;
     }
     setStep({
@@ -86,7 +86,7 @@ const ForgotPassword = () => {
         setStep({ name: "email" });
         return;
       }
-      Alert.alert("Couldn't reset your password", reset.error.message);
+      Alert.alert("Couldn’t reset your password", reset.error.message);
       return;
     }
 
@@ -164,7 +164,7 @@ const ForgotPassword = () => {
               </Text>
               <Text className="text-secondary text-base">
                 {step.name === "email"
-                  ? "We'll email you a code to reset it"
+                  ? "We’ll email you a code to reset it"
                   : step.name === "code" || step.name === "signInCode"
                     ? "Enter the code from your email"
                     : "Choose a new password"}
@@ -175,7 +175,7 @@ const ForgotPassword = () => {
               {step.name === "email" ? (
                 <>
                   <Text className="text-secondary">
-                    A new password signs you back in, but it doesn't recover your encrypted location
+                    A new password signs you back in, but it doesn’t recover your encrypted location
                     history. Only your recovery phrase can do that, so keep it somewhere safe.
                   </Text>
                   <Input
@@ -199,11 +199,11 @@ const ForgotPassword = () => {
                   <EmailCodeEntry
                     email={step.email}
                     notice={step.notice}
-                    resentMessage="If this address has an account with a password, we've sent it a new code. Earlier codes no longer work."
+                    resentMessage="If this address has an account with a password, we’ve sent it a new code. Earlier codes no longer work."
                     description={
                       <Text className="text-secondary">
                         If <Text className="font-semibold">{step.email}</Text> has an OpenBeacon
-                        account with a password, we've sent it a 6-digit code. It expires in 10
+                        account with a password, we’ve sent it a 6-digit code. It expires in 10
                         minutes.
                         {isGoogleEnabled
                           ? " If you sign in with Google, use Continue with Google instead."
@@ -253,7 +253,7 @@ const ForgotPassword = () => {
                 <>
                   <Text className="text-secondary">
                     Choose a new password for <Text className="font-semibold">{step.email}</Text>{" "}
-                    within 5 minutes. Resetting signs your account out on every phone. It doesn't
+                    within 5 minutes. Resetting signs your account out on every phone. It doesn’t
                     recover encrypted location history. For that you need your recovery phrase.
                   </Text>
                   <Input
@@ -285,7 +285,11 @@ const ForgotPassword = () => {
             </View>
 
             <View className="items-center gap-4 pt-2">
-              <Link href={{ pathname: "/signIn", params: { joinCode: params.joinCode } }} asChild>
+              <Link
+                href={{ pathname: "/signIn", params: { joinCode: params.joinCode } }}
+                replace
+                asChild
+              >
                 <Pressable accessibilityRole="link">
                   <Text className="text-secondary">
                     Remembered it? <Text className="font-semibold text-primary-text">Sign in</Text>

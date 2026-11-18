@@ -7,7 +7,7 @@ export const imageFileNameFromUrl = (url: string | null | undefined) => {
   return parsed.success ? parsed.data : null;
 };
 
-export const imageCacheFile = (fileName: string) =>
+const imageCacheFile = (fileName: string) =>
   new File(Paths.cache, "images", imageFileNameSchema.parse(fileName));
 
 export const imageCacheGeneration = () => generation;

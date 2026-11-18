@@ -61,10 +61,10 @@ const RecoveryPhraseResetScreen = () => {
     }, [busy]),
   );
 
-  const reauthenticate = async () => {
+  const reauthenticate = async (message = "Nothing was reset. Confirm it’s you to carry on.") => {
     await gate.recheck();
     setStep("verify");
-    Alert.alert("Sign in again", "Nothing was reset. Confirm it’s you to carry on.");
+    Alert.alert("Sign in again", message);
   };
 
   const sendCode = async () => {
@@ -132,7 +132,9 @@ const RecoveryPhraseResetScreen = () => {
       return;
     }
     if (result.data.status === "reauthenticate") {
-      await reauthenticate();
+      await reauthenticate(
+        "Nothing was reset. Confirm it’s you, then write down the new phrase you’re shown.",
+      );
       return;
     }
     if (result.data.status === "confirmationExpired") {

@@ -17,9 +17,11 @@ import { authClient } from "../../lib/auth-client.ts";
 import { changePasswordFormSchema } from "../../lib/changePasswordSchema.ts";
 import { ensureDeviceKeyRegistration } from "../../lib/deviceKeys.ts";
 import { isSessionLinkRefused, signOutAfterRefusedSessionLink } from "../../lib/sessionLink.ts";
+import { useSingleFlight } from "../../lib/useSingleFlight.ts";
 
 const PasswordScreen = () => {
   const [saving, setSaving] = useState(false);
+  const submission = useSingleFlight<"change">();
   const accounts = useQuery({
     queryKey: ["auth", "accounts"],
     queryFn: async () => {
@@ -67,6 +69,10 @@ const PasswordScreen = () => {
     );
     router.back();
   };
+
+  const submit = form.handleSubmit((values) =>
+    submission.run("change", () => changePassword(values)),
+  );
 
   return (
     <View className="flex-1 bg-background">
@@ -125,9 +131,9 @@ const PasswordScreen = () => {
                 autoComplete="new-password"
                 textContentType="newPassword"
                 returnKeyType="done"
-                onSubmitEditing={form.handleSubmit(changePassword)}
+                onSubmitEditing={submit}
               />
-              <Button onPress={form.handleSubmit(changePassword)} disabled={saving}>
+              <Button onPress={submit} disabled={saving}>
                 <Text>{saving ? "Changing password…" : "Change password"}</Text>
               </Button>
             </View>

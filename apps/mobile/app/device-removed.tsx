@@ -7,7 +7,7 @@ import { Text } from "../components/ui/Text.tsx";
 const DeviceRemovedScreen = () => (
   <SafeAreaView className="flex-1 justify-between bg-background px-8 py-6">
     <View className="flex-1 justify-center gap-4">
-      <Text className="text-foreground text-3xl font-bold">
+      <Text accessibilityRole="header" className="text-foreground text-3xl font-bold">
         This phone was removed from your account
       </Text>
       <Text className="text-secondary text-base">

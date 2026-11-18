@@ -7,7 +7,7 @@ import {
 } from "expo-location";
 import { withOwnScreen } from "./ownScreen.ts";
 
-export type LocationPermissionStatus = "granted" | "denied" | "undetermined";
+type LocationPermissionStatus = "granted" | "denied" | "undetermined";
 
 export type LocationPermissionRequirement = "foreground" | "background" | "precise";
 

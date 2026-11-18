@@ -64,7 +64,7 @@ import { recordTrackingUpload } from "./trackingUploadTime.ts";
 import { notifyGroupEpochChange } from "./trackingEvents.ts";
 import {
   hasLocallyPausedSharing,
-  hasPendingSharingPause,
+  hasPendingSharingChange,
   syncLocationSharing,
 } from "./locationSharing.ts";
 
@@ -314,7 +314,7 @@ const reconcileTrackingKeysInternal = async ({
     const registered = await getRegisteredDeviceKey();
     if (
       registered &&
-      (hasPendingSharingPause(registered.userId) || hasLocallyPausedSharing(registered.userId))
+      (hasPendingSharingChange(registered.userId) || hasLocallyPausedSharing(registered.userId))
     ) {
       await syncSharingPreference();
       if (!isCurrent()) return false;
@@ -333,7 +333,7 @@ const reconcileTrackingKeysInternal = async ({
   if (
     cachedDevice &&
     trackingModule.listProvisionedEpochKeys().length > 0 &&
-    !hasPendingSharingPause(cachedDevice.userId) &&
+    !hasPendingSharingChange(cachedDevice.userId) &&
     !hasLocallyPausedSharing(cachedDevice.userId) &&
     trackingModule.isQueueOwner(getOwner(cachedDevice.userId), cachedDevice.deviceId)
   ) {
@@ -1026,7 +1026,7 @@ const flushPendingTrackingPointsInternal = async (
 
   if (signal.aborted) return;
   const device = await getRegisteredDeviceKey();
-  if (device && hasPendingSharingPause(device.userId)) return;
+  if (device && hasPendingSharingChange(device.userId)) return;
   const owner = await getQueueOwner(signal);
   const round = await startPlaceRound(trackingModule, owner, device);
   let afterId = 0;

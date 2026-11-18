@@ -15,8 +15,6 @@ type FormInputProps<TFieldValues extends FieldValues, TName extends FieldPath<TF
   label?: string;
   description?: string;
   fieldClassName?: string;
-  hideError?: boolean;
-  descriptionPosition?: "aboveInput" | "belowInput";
   inputRef?: ((instance: TextInput | null) => void) | RefObject<TextInput | null>;
 };
 
@@ -26,12 +24,10 @@ function Input<TFieldValues extends FieldValues, TName extends FieldPath<TFieldV
   label,
   description,
   fieldClassName,
-  hideError: _hideError = false,
   className,
   onBlur,
   onFocus,
   inputRef,
-  descriptionPosition: _descriptionPosition = "aboveInput",
   secureTextEntry,
   ...props
 }: FormInputProps<TFieldValues, TName>) {
@@ -55,7 +51,7 @@ function Input<TFieldValues extends FieldValues, TName extends FieldPath<TFieldV
 
             <View className={cn("relative", fieldClassName)}>
               <TextInput
-                {...field}
+                value={field.value}
                 autoComplete="off"
                 accessibilityLabel={props.accessibilityLabel ?? label}
                 onChangeText={field.onChange}

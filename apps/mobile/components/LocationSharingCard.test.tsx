@@ -102,7 +102,7 @@ mock.module("../lib/auth-client.ts", () => ({
 mock.module("../lib/locationSharing.ts", () => ({
   onSharingStateLoaded: () => () => {},
   changeLocationSharing: async () => {},
-  hasPendingSharingPause: () => pendingAccount !== null,
+  hasPendingSharingChange: () => pendingAccount !== null,
   getPendingSharingChanges: () => ({ device: null, account: pendingAccount }),
   hasLocallyPausedSharing: () => locallyPaused,
   hasRejectedSharingChange: () => rejectedChange,

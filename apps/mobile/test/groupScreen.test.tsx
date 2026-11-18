@@ -323,13 +323,13 @@ test("shows loading rather than not found while checking a group missing from th
   });
   const rendered = JSON.stringify(root.container.toJSON());
   expect(rendered).toContain("Loading");
-  expect(rendered).not.toContain("Group not found");
+  expect(rendered).not.toContain("We couldn’t load this group.");
   await act(async () => {
     root.unmount();
   });
 });
 
-test("shows not found when the group can't be checked, for example offline", async () => {
+test("says the group couldn't be loaded when it can't be checked, for example offline", async () => {
   fetchGroups = async () => {
     throw new Error("Network request failed");
   };
@@ -338,7 +338,7 @@ test("shows not found when the group can't be checked, for example offline", asy
   await act(async () => {
     root.render(<GroupScreen />);
   });
-  expect(JSON.stringify(root.container.toJSON())).toContain("Group not found");
+  expect(JSON.stringify(root.container.toJSON())).toContain("We couldn’t load this group.");
   expect(replace).not.toHaveBeenCalled();
   await act(async () => {
     root.unmount();

@@ -8,7 +8,7 @@ import { isDeviceRemovedError } from "./deviceRemovedError.ts";
 
 export class SessionLinkChallengeUnopenableError extends Error {
   constructor() {
-    super("This phone couldn't confirm it's yours. Sign in again.");
+    super("This phone couldn’t confirm it’s yours. Sign in again.");
   }
 }
 

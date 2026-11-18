@@ -14,7 +14,7 @@ import { deleteSavedDeviceLink } from "./savedDeviceLink.ts";
 import { secretOwner } from "./secretStorage.ts";
 
 export const NOT_A_DEVICE_CODE_MESSAGE =
-  "That isn’t an OpenBeacon setup code. On your new phone, choose “Link with your other phone”.";
+  "That isn’t an OpenBeacon setup code. On your new phone, choose “Link with your other device”.";
 export const DEVICE_KEY_MISMATCH_MESSAGE =
   "This code doesn’t match the phone that made it, so nothing was shared. Show a fresh code on your new phone and try again.";
 export const APPROVER_MISSING_HISTORY_KEY_MESSAGE =

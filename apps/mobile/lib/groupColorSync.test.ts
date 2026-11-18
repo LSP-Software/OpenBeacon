@@ -114,7 +114,7 @@ test("aborts and reports an unreachable server after five seconds", async () => 
   expect(updateColor.mock.calls[0]?.[1].signal.aborted).toBe(false);
   jest.advanceTimersByTime(1);
 
-  await expect(pending).rejects.toThrow("Couldn't reach the server");
+  await expect(pending).rejects.toThrow("Couldn’t reach the server");
   expect(getGroupColor("family")).toBe(GROUP_COLOR_PALETTE[0]);
   jest.useRealTimers();
 });

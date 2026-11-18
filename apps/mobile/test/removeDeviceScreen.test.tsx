@@ -14,10 +14,12 @@ const View = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
 
 mock.module("expo-router", () => ({
   router: { back: () => {} },
-  useLocalSearchParams: () => ({ deviceId: "device-2", name: "Old phone" }),
+  useLocalSearchParams: () => ({ deviceId: "device-2", name: "Old tablet" }),
   useNavigation: () => ({ isFocused: () => true }),
 }));
+let devices: { id: string; name: string }[] = [{ id: "device-2", name: "Old phone" }];
 mock.module("@tanstack/react-query", () => ({
+  useQuery: () => ({ data: devices, isError: false, isPending: false }),
   useMutation: () => ({ mutateAsync: removeDevice }),
   useQueryClient: () => ({ invalidateQueries: async () => {} }),
 }));
@@ -51,7 +53,7 @@ mock.module("../lib/alert.ts", () => ({
 mock.module("../lib/api.ts", () => ({
   trpc: {
     account: {
-      listDevices: { queryKey: () => [] },
+      listDevices: { queryKey: () => [], queryOptions: () => ({}) },
       removeDevice: { mutationOptions: () => ({}) },
     },
     groupMembership: {
@@ -93,6 +95,7 @@ const removeAndCollectAlerts = async () => {
 };
 
 beforeEach(() => {
+  devices = [{ id: "device-2", name: "Old phone" }];
   alerts.length = 0;
   recheck.mockClear();
   removeDevice.mockReset();
@@ -141,4 +144,27 @@ test("a lost session says the person was signed out instead of showing UNAUTHORI
       message: "You’ve been signed out. Sign in again to keep using this phone.",
     },
   ]);
+});
+
+test("names the device from the account, not from the link", async () => {
+  const root = createRoot();
+  await act(async () => root.render(<RemoveDeviceScreen />));
+  const button = root.container.queryAll((item) => item.type === "mock-button")[0];
+  if (!button) throw new Error("Missing remove button");
+  await act(async () => (button.props as { onPress: () => void }).onPress());
+  await act(async () => root.unmount());
+
+  expect(alerts[0]?.[0]).toBe("Remove Old phone?");
+});
+
+test("a device that is no longer on the account can't be removed", async () => {
+  devices = [];
+  const root = createRoot();
+  await act(async () => root.render(<RemoveDeviceScreen />));
+  const text = JSON.stringify(root.container.toJSON());
+  const buttons = root.container.queryAll((item) => item.type === "mock-button");
+  await act(async () => root.unmount());
+
+  expect(text).toContain("This device is no longer on your account.");
+  expect(buttons).toHaveLength(0);
 });

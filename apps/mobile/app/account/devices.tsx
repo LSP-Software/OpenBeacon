@@ -116,7 +116,7 @@ const DevicesScreen = () => {
                 <Link
                   href={{
                     pathname: "/account/remove-device",
-                    params: { deviceId: editing.id, name: editing.name },
+                    params: { deviceId: editing.id },
                   }}
                   onPress={() => setEditing(null)}
                   asChild

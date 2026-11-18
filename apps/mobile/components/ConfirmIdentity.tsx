@@ -1,15 +1,18 @@
+import { zodResolver } from "@hookform/resolvers/zod";
 import { tryCatch } from "@openbeacon/shared";
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { View } from "react-native";
+import { z } from "zod";
 import { Alert } from "../lib/alert.ts";
 import { confirmWithPhoneLock, phoneScreenLockQueryOptions } from "../lib/appLock.ts";
 import { trpc } from "../lib/api.ts";
 import { isNativeGoogleSignInConfigured, signInWithGoogle } from "../lib/auth.ts";
 import { authClient, saveSessionTokenToRevoke } from "../lib/auth-client.ts";
 import { ensureDeviceKeyRegistration } from "../lib/deviceKeys.ts";
+import { endSession } from "../lib/endSession.ts";
 import { readSignInError, signInCodeEntryError, signInWithPassword } from "../lib/emailCodes.ts";
 import { isDeviceRemovedError } from "../lib/deviceRemovedError.ts";
 import { passwordErrorMessage } from "../lib/passwordErrorMessage.ts";
@@ -29,7 +32,12 @@ export const ConfirmIdentity = ({ onConfirmed }: { onConfirmed: () => void }) =>
     password: string;
     notice: string | undefined;
   } | null>(null);
-  const form = useForm<{ password: string }>({ defaultValues: { password: "" } });
+  const form = useForm<{ password: string }>({
+    resolver: zodResolver(
+      z.object({ password: z.string().min(1, { message: "Password is required" }) }),
+    ),
+    defaultValues: { password: "" },
+  });
   const google = methods.data?.google === true && isNativeGoogleSignInConfigured;
 
   const finishConfirming = async (previous: { token: string; userId: string }) => {
@@ -42,7 +50,7 @@ export const ConfirmIdentity = ({ onConfirmed }: { onConfirmed: () => void }) =>
     }
     if (currentSession.user.id !== previous.userId) {
       await tryCatch(saveSessionTokenToRevoke(previous.token));
-      await tryCatch(authClient.signOut());
+      await tryCatch(endSession({ reason: "signedOut" }));
       router.replace("/");
       Alert.alert(
         "Signed in to a different account",

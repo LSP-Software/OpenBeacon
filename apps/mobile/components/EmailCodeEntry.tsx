@@ -23,12 +23,12 @@ export const EmailCodeEntry = ({
   onSubmit,
   onResend,
   notice,
-  resentMessage = "We've sent a new code. Earlier codes no longer work.",
+  resentMessage = "We’ve sent a new code. Earlier codes no longer work.",
   repeatedInvalidCodeHint = "If new codes keep being rejected, wait a few hours and try again.",
   description = (
     <Text className="text-secondary">
       We sent a 6-digit code to <Text className="font-semibold">{email}</Text>. It expires in 10
-      minutes. If it hasn't arrived, check your spam folder.
+      minutes. If it hasn’t arrived, check your spam folder.
     </Text>
   ),
 }: {

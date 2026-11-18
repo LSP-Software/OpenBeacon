@@ -6,6 +6,7 @@ import {
   minServerApiCompatibilityLevel,
 } from "@openbeacon/shared";
 import type { ApiCompatibilityProblem } from "./apiCompatibility.ts";
+import { appVersion } from "./versions.ts";
 
 const stored = new Map<string, string>();
 
@@ -258,6 +259,7 @@ describe("apiCompatibilityFetch", () => {
     expect(JSON.parse(stored.get("api_compatibility") ?? "null")).toEqual({
       serverUrl: "https://api.example.test",
       appLevel: apiCompatibilityLevel,
+      appVersion,
       problem: "appTooOld",
       serverVersion: null,
       message: null,
@@ -682,10 +684,11 @@ describe("refreshApiCompatibilityInBackground", () => {
 });
 
 describe("saved result", () => {
-  test("is only restored for the same server and app level", async () => {
+  test("is only restored for the same server, app level and app version", async () => {
     const saved = {
       serverUrl: "https://api.example.test",
       appLevel: apiCompatibilityLevel,
+      appVersion,
       problem: "serverTooOld",
       serverVersion: "0.1.0",
       message: null,
@@ -716,6 +719,11 @@ describe("saved result", () => {
     );
     const olderApp = await importFresh("older-app");
     expect(olderApp.getApiCompatibility()).toBeNull();
+
+    stored.set("api_compatibility", JSON.stringify({ ...saved, appVersion: "0.0.1" }));
+    const updatedApp = await importFresh("updated-app");
+    expect(updatedApp.getApiCompatibility()).toBeNull();
+    expect(stored.has("api_compatibility")).toBe(false);
 
     stored.set("api_compatibility", "{not json");
     const corrupt = await importFresh("corrupt");

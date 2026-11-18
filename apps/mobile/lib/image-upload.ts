@@ -12,7 +12,7 @@ import { errorReason } from "./errorReason.ts";
 import { imageCacheGeneration, writeCachedImage } from "./imageCache.ts";
 import { GroupKeyUnavailableError, ImageStorageError } from "./imageUploadErrors.ts";
 
-export const computeSha256Base64 = async (bytes: Uint8Array<ArrayBuffer>): Promise<string> => {
+const computeSha256Base64 = async (bytes: Uint8Array<ArrayBuffer>): Promise<string> => {
   const hashBuffer = await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, bytes);
   const hashBytes = new Uint8Array(hashBuffer);
   let binary = "";

@@ -49,7 +49,7 @@ export default function ServerUrl() {
     }
     Alert.alert(
       verdict === null
-        ? "Couldn't reach this server"
+        ? "Couldn’t reach this server"
         : verdict === "appTooOld"
           ? "Update the app first"
           : "This server needs updating",
@@ -57,7 +57,7 @@ export default function ServerUrl() {
         ? "Check the address, that the server is running and that it has a valid HTTPS certificate."
         : verdict === "appTooOld"
           ? "This server needs a newer version of OpenBeacon. Update the app before using it."
-          : `This server is running version ${serverVersion}, which is too old for this app. Ask whoever runs it to update it. You won't be able to share your location until it's updated.`,
+          : `This server is running version ${serverVersion}, which is too old for this app. Ask whoever runs it to update it. You won’t be able to share your location until it’s updated.`,
       [
         { text: "Cancel", style: "cancel" },
         { text: "Save anyway", onPress: () => void save() },

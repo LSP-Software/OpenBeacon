@@ -42,8 +42,8 @@ export const ApiCompatibilityGate = () => {
       : problem === "serverTooOld"
         ? selfHosted
           ? "Your server needs updating"
-          : "We're updating OpenBeacon"
-        : "The app and server don't match";
+          : "We’re updating OpenBeacon"
+        : "The app and server don’t match";
 
   useEffect(() => {
     void refreshApiCompatibility({ userRequested: false });
@@ -108,20 +108,20 @@ export const ApiCompatibilityGate = () => {
             </Text>
             {compatibility.problem === "appTooOld" && (
               <Text className="text-lg">
-                This version of OpenBeacon is out of date, so your family can't see your location.
+                This version of OpenBeacon is out of date, so your family can’t see your location.
                 Update the app to start sharing again.
               </Text>
             )}
             {compatibility.problem === "serverTooOld" && (
               <Text className="text-lg">
                 {selfHosted
-                  ? "Your OpenBeacon server is out of date, so your location isn't being shared. Ask whoever runs your server to update it."
-                  : "We're updating OpenBeacon's servers. Your location isn't being shared right now. Try again in a little while."}
+                  ? "Your OpenBeacon server is out of date, so your location isn’t being shared. Ask whoever runs your server to update it."
+                  : "We’re updating OpenBeacon’s servers. Your location isn’t being shared right now. Try again in a little while."}
               </Text>
             )}
             {compatibility.problem === "outOfSync" && (
               <Text className="text-lg">
-                OpenBeacon asked your server for something it doesn't have. Please tell us, and
+                OpenBeacon asked your server for something it doesn’t have. Please tell us, and
                 include the versions below.
               </Text>
             )}
@@ -156,7 +156,7 @@ export const ApiCompatibilityGate = () => {
             </Button>
             {unreachable && (
               <Text className="text-secondary" accessibilityLiveRegion="polite">
-                Couldn't reach your server. Check your internet connection and try again.
+                Couldn’t reach your server. Check your internet connection and try again.
               </Text>
             )}
             {compatibility.problem === "outOfSync" && (

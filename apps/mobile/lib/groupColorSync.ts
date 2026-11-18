@@ -36,7 +36,7 @@ export const saveGroupColor = async ({
   clearTimeout(timeout);
   if (result.error) {
     throw controller.signal.aborted
-      ? new Error("Couldn't reach the server. Try again.")
+      ? new Error("Couldn’t reach the server. Try again.")
       : result.error;
   }
   setGroupColor(groupId, color);

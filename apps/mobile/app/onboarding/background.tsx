@@ -127,7 +127,7 @@ const BackgroundLocationStepScreen = () => {
           ? "Allow location"
           : promptsInApp
             ? "Continue"
-            : "Open Settings",
+            : "Open settings",
         onPress: allow,
         loading: asking,
         disabled: state === null,

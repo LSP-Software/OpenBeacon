@@ -1,7 +1,7 @@
 import * as DialogPrimitive from "@rn-primitives/dialog";
 import { X } from "lucide-react-native";
 import * as React from "react";
-import { Platform, Text, View, type ViewProps } from "react-native";
+import { Platform, View, type ViewProps } from "react-native";
 import { FadeIn, FadeOut } from "react-native-reanimated";
 import { FullWindowOverlay as RNFullWindowOverlay } from "react-native-screens";
 import { cn } from "../../lib/cn.ts";
@@ -10,11 +10,7 @@ import { Icon } from "./Icon.tsx";
 
 const Dialog = DialogPrimitive.Root;
 
-const DialogTrigger = DialogPrimitive.Trigger;
-
 const DialogPortal = DialogPrimitive.Portal;
-
-const DialogClose = DialogPrimitive.Close;
 
 const FullWindowOverlay = Platform.OS === "ios" ? RNFullWindowOverlay : React.Fragment;
 
@@ -72,9 +68,10 @@ const DialogContent = ({
             <DialogPrimitive.Close
               className="absolute right-3 top-3 size-10 items-center justify-center rounded-full bg-secondary"
               hitSlop={4}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
             >
               <Icon as={X} className="text-foreground size-5 shrink-0" />
-              <Text className="sr-only">Close</Text>
             </DialogPrimitive.Close>
           )}
         </DialogPrimitive.Content>
@@ -119,15 +116,4 @@ const DialogDescription = ({
   );
 };
 
-export {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogOverlay,
-  DialogPortal,
-  DialogTitle,
-  DialogTrigger,
-};
+export { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle };

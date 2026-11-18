@@ -78,6 +78,7 @@ const TabsLayout = () => {
     <>
       <Tabs
         initialRouteName="groups/list"
+        backBehavior="history"
         tabBar={(props) => <TabBar {...props} groupsBadge={unseenGroupIds.size > 0} />}
         screenOptions={{
           headerShown: false,

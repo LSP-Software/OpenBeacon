@@ -83,9 +83,9 @@ const createRecoveryKeys = ({
 };
 
 export const HISTORY_KEY_ON_OTHER_DEVICE_MESSAGE =
-  "This phone doesn't have your account's history key yet. Set up your recovery phrase on your other phone.";
+  "This phone doesn’t have your account’s history key yet. Set up your recovery phrase on your other phone.";
 export const SETUP_KEYS_MISMATCH_MESSAGE =
-  "This phone's saved keys don't match your account, so your phrase wasn't set up.";
+  "This phone’s saved keys don’t match your account, so your phrase wasn’t set up.";
 
 const sealEscrowsForHeldKeys = async ({
   historyKeys,
@@ -181,7 +181,7 @@ export const backfillHistoryWraps = async ({
     const storedHistoryKey = await getStoredHistoryKey(historyKey);
     if (!storedHistoryKey) return wrapped;
     if (getHistoryPublicKey(storedHistoryKey) !== historyKey.publicKey) {
-      throw new Error("The server's history key doesn't match this device.");
+      throw new Error("The server’s history key doesn’t match this device.");
     }
     const wraps = [];
     for (const { deviceWrap, epochId } of page.epochs) {
@@ -210,9 +210,9 @@ export const backfillHistoryWraps = async ({
   return wrapped;
 };
 
-export const PHRASE_MISMATCH_MESSAGE = "That phrase doesn't match this account.";
+export const PHRASE_MISMATCH_MESSAGE = "That phrase doesn’t match this account.";
 export const RECOVERY_DATA_MISMATCH_MESSAGE =
-  "Your account's recovery data doesn't match your phrase, so nothing was restored.";
+  "Your account’s recovery data doesn’t match your phrase, so nothing was restored.";
 
 export const restoreFromRecoveryPhrase = async (phrase: RecoveryPhrase) => {
   const device = await ensureDeviceKeyRegistration();
@@ -261,7 +261,7 @@ export const restoreFromRecoveryPhrase = async (phrase: RecoveryPhrase) => {
 export const MISSING_HISTORY_KEYS_MESSAGE =
   "This phone needs your current recovery phrase first. Restore it, then try again.";
 export const HISTORY_KEYS_MISMATCH_MESSAGE =
-  "This phone's saved keys don't match your account, so your phrase wasn't changed. Restore your current recovery phrase, then try again.";
+  "This phone’s saved keys don’t match your account, so your phrase wasn’t changed. Restore your current recovery phrase, then try again.";
 export const RECOVERY_CHANGED_MESSAGE =
   "Your recovery phrase changed on another phone, so nothing was changed here. Go back and try again.";
 

@@ -11,6 +11,7 @@ import { z } from "zod";
 import { healthAnnouncementsSchema, saveAnnouncements } from "./announcements.ts";
 import { getBaseUrl } from "./currentServer.ts";
 import { storage } from "./storage.ts";
+import { appVersion } from "./versions.ts";
 
 const problemSchema = z.enum(["appTooOld", "serverTooOld", "outOfSync"]);
 
@@ -158,6 +159,7 @@ const storageKey = "api_compatibility";
 const savedSchema = z.object({
   serverUrl: z.string(),
   appLevel: z.number(),
+  appVersion: z.string(),
   problem: problemSchema,
   serverVersion: z.string().nullable(),
   message: z.string().max(280).nullable().catch(null),
@@ -165,7 +167,10 @@ const savedSchema = z.object({
   notified: z.boolean(),
 });
 
-type ApiCompatibilityState = Omit<z.infer<typeof savedSchema>, "serverUrl" | "appLevel">;
+type ApiCompatibilityState = Omit<
+  z.infer<typeof savedSchema>,
+  "serverUrl" | "appLevel" | "appVersion"
+>;
 
 const loadSaved = (): ApiCompatibilityState | null => {
   const raw = storage.getString(storageKey);
@@ -177,7 +182,11 @@ const loadSaved = (): ApiCompatibilityState | null => {
     storage.remove(storageKey);
     return null;
   }
-  if (saved.serverUrl !== getBaseUrl() || saved.appLevel !== apiCompatibilityLevel) {
+  if (
+    saved.serverUrl !== getBaseUrl() ||
+    saved.appLevel !== apiCompatibilityLevel ||
+    saved.appVersion !== appVersion
+  ) {
     storage.remove(storageKey);
     return null;
   }
@@ -198,7 +207,12 @@ const setState = (next: ApiCompatibilityState | null) => {
   if (next) {
     storage.set(
       storageKey,
-      JSON.stringify({ serverUrl: getBaseUrl(), appLevel: apiCompatibilityLevel, ...next }),
+      JSON.stringify({
+        serverUrl: getBaseUrl(),
+        appLevel: apiCompatibilityLevel,
+        appVersion,
+        ...next,
+      }),
     );
   } else {
     storage.remove(storageKey);

@@ -26,7 +26,11 @@ export const InAppNoticeBanner = () => {
     >
       <View className="flex-row items-center gap-2 rounded-2xl border border-border bg-card p-4 shadow-lg">
         <Link href={notice.href} asChild>
-          <Pressable className="flex-1 gap-0.5" onPress={() => dismissInAppNotice(notice.id)}>
+          <Pressable
+            accessibilityRole="link"
+            className="flex-1 gap-0.5"
+            onPress={() => dismissInAppNotice(notice.id)}
+          >
             <Text className="font-semibold text-foreground">{notice.title}</Text>
             {notice.body ? <Text className="text-tertiary">{notice.body}</Text> : null}
           </Pressable>

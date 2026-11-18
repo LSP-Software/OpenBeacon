@@ -1,4 +1,5 @@
 import { Alert } from "../../lib/alert.ts";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
@@ -7,6 +8,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { z } from "zod";
 import { ScreenHeader } from "../../components/headers/ScreenHeader.tsx";
 import { Button } from "../../components/ui/Button.tsx";
 import { Input } from "../../components/ui/Input.tsx";
@@ -24,7 +26,12 @@ const DeleteAccountScreen = () => {
   const verificationMethods = useQuery(trpc.account.deletionVerificationMethods.queryOptions());
   const [isGoogleVerifying, setIsGoogleVerifying] = useState(false);
   const [immediate, setImmediate] = useState(false);
-  const deletionForm = useForm<{ password: string }>({ defaultValues: { password: "" } });
+  const deletionForm = useForm<{ password: string }>({
+    resolver: zodResolver(
+      z.object({ password: z.string().min(1, { message: "Password is required" }) }),
+    ),
+    defaultValues: { password: "" },
+  });
 
   const requestAccountDeletion = (
     verification: { password: string } | { google: { state: string; code: string } },

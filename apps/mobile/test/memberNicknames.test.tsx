@@ -297,3 +297,56 @@ test("a removal can't be submitted twice while the new epoch is being built", as
   buildRemoval = async () => ({});
   await act(async () => root.unmount());
 });
+
+test("removing a member names them by the nickname shown on their card", async () => {
+  const root = createRoot();
+  pending = false;
+  records = { member: { name: "Gran", ciphertext: "saved" } };
+  buttons = [];
+  group.members.push({ id: "self", role: "OWNER", userId: "owner", name: "Owner", image: null });
+  await act(async () => root.render(<MembersTab groupId="group" live={live()} />));
+  await act(async () => button("Gran, Member").onPress());
+  await act(async () => button("Remove from group").onPress());
+
+  expect(getAlerts().at(-1)?.title).toBe("Remove Gran?");
+  group.members.pop();
+  await act(async () => root.unmount());
+});
+
+test("an owner can leave without choosing a new owner when another owner stays", async () => {
+  const root = createRoot();
+  pending = false;
+  records = {};
+  buttons = [];
+  group.members[0] = { ...group.members[0]!, role: "OWNER" };
+  group.members.push({ id: "self", role: "OWNER", userId: "owner", name: "Owner", image: null });
+  await act(async () => root.render(<MembersTab groupId="group" live={live()} />));
+  await act(async () => button("Owner, Owner").onPress());
+  await act(async () => button("Leave group").onPress());
+
+  expect(getAlerts().at(-1)?.title).toBe("Leave group?");
+  expect(buttons.some((item) => item.label === "Continue")).toBe(false);
+  group.members.pop();
+  group.members[0] = { ...group.members[0]!, role: "MEMBER" };
+  await act(async () => root.unmount());
+});
+
+test("tapping Save nickname twice saves once", async () => {
+  const root = createRoot();
+  pending = false;
+  records = {};
+  buttons = [];
+  mutate.mockClear();
+  await act(async () => root.render(<MembersTab groupId="group" live={live()} />));
+  await act(async () => button("Alice, Member").onPress());
+  await act(async () => button("Edit nickname").onPress());
+  await act(async () => changeInput("Mum"));
+  const save = button("Save nickname");
+  await act(async () => {
+    save.onPress();
+    save.onPress();
+  });
+
+  expect(mutate).toHaveBeenCalledTimes(1);
+  await act(async () => root.unmount());
+});

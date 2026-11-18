@@ -1,5 +1,5 @@
 import { tryCatch } from "@openbeacon/shared";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router, useLocalSearchParams, useNavigation } from "expo-router";
 import { useEffect, useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
@@ -15,7 +15,10 @@ import { needsFreshSignIn } from "../../lib/needsFreshSignIn.ts";
 import { userMessage } from "../../lib/userMessage.ts";
 
 const RemoveDeviceScreen = () => {
-  const { deviceId, name } = useLocalSearchParams<{ deviceId: string; name: string }>();
+  const { deviceId } = useLocalSearchParams<{ deviceId: string }>();
+  const devices = useQuery(trpc.account.listDevices.queryOptions());
+  const device = devices.data?.find((item) => item.id === deviceId);
+  const name = device?.name ?? "this device";
   const [step, setStep] = useState<"verify" | "ready" | "removing">("verify");
   const gate = useIdentityGate();
   const navigation = useNavigation();
@@ -32,6 +35,7 @@ const RemoveDeviceScreen = () => {
   }, [step, gate.decision]);
 
   const remove = async () => {
+    const removedName = name;
     setStep("removing");
     const result = await tryCatch(removeDevice.mutateAsync({ deviceId }));
     if (needsFreshSignIn(result.error)) {
@@ -50,7 +54,7 @@ const RemoveDeviceScreen = () => {
       queryKey: trpc.groupMembership.listMemberDevices.pathKey(),
     });
     if (navigation.isFocused()) router.back();
-    Alert.alert("Device removed", `${name} was signed out and won’t receive new locations.`);
+    Alert.alert("Device removed", `${removedName} was signed out and won’t receive new locations.`);
   };
 
   const confirmRemove = () =>
@@ -89,8 +93,22 @@ const RemoveDeviceScreen = () => {
             </Text>
           </View>
 
-          {step === "verify" && gate.decision === null && <LoadingIndicator />}
-          {step === "verify" && gate.decision === "confirm" && (
+          {devices.isPending && <LoadingIndicator />}
+          {devices.isError && !devices.data && (
+            <>
+              <Text className="text-tertiary">
+                We couldn’t load your devices. Check your connection and try again.
+              </Text>
+              <Button variant="secondary" onPress={() => devices.refetch()}>
+                <Text>Try again</Text>
+              </Button>
+            </>
+          )}
+          {devices.data && !device && step !== "removing" && (
+            <Text className="text-tertiary">This device is no longer on your account.</Text>
+          )}
+          {device && step === "verify" && gate.decision === null && <LoadingIndicator />}
+          {device && step === "verify" && gate.decision === "confirm" && (
             <ConfirmIdentity
               onConfirmed={() => {
                 void gate.refresh();
@@ -99,7 +117,7 @@ const RemoveDeviceScreen = () => {
             />
           )}
 
-          {(step === "ready" || step === "removing") && (
+          {(step === "removing" || (device && step === "ready")) && (
             <Button variant="destructive" onPress={confirmRemove} disabled={step === "removing"}>
               <Text>{step === "removing" ? "Removing…" : `Remove ${name}`}</Text>
             </Button>

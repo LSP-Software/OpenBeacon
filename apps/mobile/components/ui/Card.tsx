@@ -1,28 +1,17 @@
-import { cva, type VariantProps } from "class-variance-authority";
 import { View, type ViewProps } from "react-native";
 import { cn } from "../../lib/cn.ts";
 import { Text, TextClassContext } from "./Text.tsx";
 
-const cardVariants = cva("flex flex-col gap-4 rounded-2xl border py-5", {
-  variants: {
-    variant: {
-      default: "bg-card border-border",
-      warning: "bg-warning border-warning-border",
-    },
-  },
-  defaultVariants: {
-    variant: "default",
-  },
-});
-
-function Card({
-  className,
-  variant,
-  ...props
-}: ViewProps & React.RefAttributes<View> & VariantProps<typeof cardVariants>) {
+function Card({ className, ...props }: ViewProps & React.RefAttributes<View>) {
   return (
     <TextClassContext.Provider value="text-card-foreground">
-      <View className={cn(cardVariants({ variant }), className)} {...props} />
+      <View
+        className={cn(
+          "flex flex-col gap-4 rounded-2xl border border-border bg-card py-5",
+          className,
+        )}
+        {...props}
+      />
     </TextClassContext.Provider>
   );
 }
@@ -56,8 +45,4 @@ function CardContent({ className, ...props }: ViewProps & React.RefAttributes<Vi
   return <View className={cn("px-5", className)} {...props} />;
 }
 
-function CardFooter({ className, ...props }: ViewProps & React.RefAttributes<View>) {
-  return <View className={cn("flex flex-row items-center px-5", className)} {...props} />;
-}
-
-export { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, cardVariants };
+export { Card, CardContent, CardDescription, CardHeader, CardTitle };
