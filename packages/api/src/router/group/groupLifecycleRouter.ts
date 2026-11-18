@@ -125,10 +125,6 @@ export const groupLifecycleRouter = {
         return createdGroup;
       });
 
-      if (!group) {
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to create group" });
-      }
-
       return {
         message: "Group created successfully",
         newGroup: {

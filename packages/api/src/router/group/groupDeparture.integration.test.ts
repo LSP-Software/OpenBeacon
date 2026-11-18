@@ -48,7 +48,6 @@ const caller = (userId: string, deviceId: string) =>
     withDeviceActive({
       cache,
       db: prisma,
-      clientIp: "127.0.0.1",
       deviceId,
       session: { user: { id: userId }, session: { id: `${userId}-session` } },
     }) as Parameters<typeof router.createCaller>[0],
@@ -527,32 +526,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         name: "Emptied",
         initialEpoch: bundle(initial),
       });
-      await owner.groupInvites.send({
-        groupId: emptiedGroupId,
-        invites: [{ email: memberEmail, role: "MEMBER" }],
-      });
-      const invite = (await member.groupInvites.list()).find(
-        (item) => item.group.id === emptiedGroupId,
+      const self = (await owner.groupMembership.members({ groupId: emptiedGroupId })).find(
+        (item) => item.user.id === ownerId,
       )!;
-      const joinContext = await member.groupInvites.acceptanceContext({ inviteId: invite.id });
-      const joined = createNextGroupEpoch({
-        creator: { deviceId: memberDevice, privateKey: memberKey.privateKey },
-        previousEpoch: joinContext.latestEpoch!,
-        recipients: joinContext.recipients,
-      });
-      await member.groupInvites.accept({ inviteId: invite.id, nextEpoch: bundle(joined) });
-      await prisma.groupMember.delete({
-        where: { userId_groupId: { userId: ownerId, groupId: emptiedGroupId } },
-      });
-
-      const self = (await member.groupMembership.members({ groupId: emptiedGroupId })).find(
-        (item) => item.user.id === memberId,
-      )!;
-      await member.groupMembership.remove({
-        groupId: emptiedGroupId,
-        memberId: self.id,
-        nextEpoch: bundle(joined),
-      });
+      await owner.groupMembership.remove({ groupId: emptiedGroupId, memberId: self.id });
 
       expect(await prisma.group.count({ where: { id: emptiedGroupId } })).toBe(0);
       expect(await prisma.groupEpoch.count({ where: { groupId: emptiedGroupId } })).toBe(0);

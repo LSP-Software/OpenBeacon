@@ -393,13 +393,6 @@ export const groupInvitesRouter = {
           },
         });
 
-        if (!createdMember.group) {
-          throw new TRPCError({
-            code: "INTERNAL_SERVER_ERROR",
-            message: "Failed to accept invite, group does not exist.",
-          });
-        }
-
         const deletedInvite = await tx.groupMemberInvite.deleteMany({
           where: { id: input.inviteId, recipientId: ctx.session.user.id },
         });

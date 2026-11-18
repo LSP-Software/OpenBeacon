@@ -73,7 +73,7 @@ export const groupMembershipRouter = {
     return { ...group, groupMembers: [ctx.groupMember] };
   }),
   removalContext: groupMemberProcedure
-    .input(z.object({ groupId: z.string().min(1), memberId: z.string().min(1) }))
+    .input(z.object({ groupId: z.string().min(1), memberId: z.string().min(1).max(128) }))
     .query(async ({ ctx, input }) => {
       if (
         ctx.groupMember.id !== input.memberId &&
@@ -137,7 +137,7 @@ export const groupMembershipRouter = {
     .input(
       z.object({
         groupId: z.string().min(1),
-        memberId: z.string().min(1),
+        memberId: z.string().min(1).max(128),
         ciphertext: sealedPersonalDataSchema.nullable(),
         expectedCiphertext: sealedPersonalDataSchema.nullable(),
       }),
@@ -411,7 +411,7 @@ export const groupMembershipRouter = {
     .input(
       z.object({
         groupId: z.string().min(1),
-        memberId: z.string().min(1),
+        memberId: z.string().min(1).max(128),
         role: z.enum(GroupRole),
       }),
     )
