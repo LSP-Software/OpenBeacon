@@ -30,6 +30,7 @@ import { groupEditorProcedure } from "../../procedures/auth/group.ts";
 import { protectedProcedure } from "../../procedures/auth/runtime.ts";
 import { imageKeySelect, toStoredImageKey } from "../../lib/imageKeys.ts";
 import type { GroupListItem } from "../../types/GroupListItem.ts";
+import { isAdminOrEditor, notAdminOrEditorError } from "../../lib/groupRoles.ts";
 
 const creatorCanAdmit = async (
   db: Pick<Prisma.TransactionClient, "groupMember">,
@@ -40,10 +41,7 @@ const creatorCanAdmit = async (
     where: { userId_groupId: { userId: invite.creatorId, groupId: invite.groupId } },
     select: { role: true, user: { select: { pendingDeletion: true } } },
   });
-  return (
-    !creator?.user.pendingDeletion &&
-    (creator?.role === GroupRole.ADMIN || creator?.role === GroupRole.EDITOR)
-  );
+  return !creator?.user.pendingDeletion && isAdminOrEditor(creator?.role);
 };
 
 const sharedCodeHash = (code: string) =>
@@ -142,14 +140,9 @@ export const groupInvitesRouter = {
           where: { userId_groupId: { userId: ctx.session.user.id, groupId: input.groupId } },
           include: { user: { select: { pendingDeletion: true } } },
         });
-        if (
-          actor?.user.pendingDeletion ||
-          (actor?.role !== GroupRole.ADMIN && actor?.role !== GroupRole.EDITOR)
-        )
-          throw new TRPCError({
-            code: "FORBIDDEN",
-            message: "You are not an Admin or Editor of this group",
-          });
+        if (actor?.user.pendingDeletion || !isAdminOrEditor(actor?.role)) {
+          throw notAdminOrEditorError();
+        }
         await assertRoomToInvite({
           db: tx,
           groupId: input.groupId,
@@ -581,14 +574,8 @@ export const groupInvitesRouter = {
           where: { userId_groupId: { userId: ctx.session.user.id, groupId: input.groupId } },
           include: { user: { select: { pendingDeletion: true } } },
         });
-        if (
-          actor?.user.pendingDeletion ||
-          (actor?.role !== GroupRole.ADMIN && actor?.role !== GroupRole.EDITOR)
-        ) {
-          throw new TRPCError({
-            code: "FORBIDDEN",
-            message: "You are not an Admin or Editor of this group",
-          });
+        if (!actor || actor.user.pendingDeletion || !isAdminOrEditor(actor.role)) {
+          throw notAdminOrEditorError();
         }
         if (
           actor.role === GroupRole.EDITOR &&

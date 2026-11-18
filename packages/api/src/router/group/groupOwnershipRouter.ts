@@ -10,13 +10,12 @@ import z from "zod";
 import { recordGroupEvent } from "../../lib/groupHistory.ts";
 import { ReasonError } from "../../lib/reasonError.ts";
 import {
-  accountSeats,
+  freeSeats,
   groupSeats,
   lockAccounts,
   noFreeSeatsError,
   seatCount,
   seatsEnforced,
-  seatsUsed,
 } from "../../lib/seats.ts";
 import { groupMemberProcedure } from "../../procedures/auth/group.ts";
 import { protectedProcedure } from "../../procedures/auth/runtime.ts";
@@ -49,6 +48,7 @@ const offerGone = () =>
 
 export const groupOwnershipRouter = {
   offer: groupMemberProcedure
+    .meta({ rateLimit: { limit: 10, windowMs: 3_600_000 } })
     .input(z.object({ groupId: z.string().min(1).max(128), memberId: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
       const noticeId = await ctx.db.$transaction(async (tx) => {
@@ -74,6 +74,7 @@ export const groupOwnershipRouter = {
             message: "This account is being deleted.",
           });
         }
+        if (group.ownershipOfferedToId === member.userId) return null;
         const offeredAt = await readDatabaseTime(tx);
         await tx.group.update({
           where: { id: input.groupId },
@@ -90,7 +91,7 @@ export const groupOwnershipRouter = {
         });
         return notice.id;
       });
-      ctx.push?.accountNotice(noticeId);
+      if (noticeId) ctx.push?.accountNotice(noticeId);
     }),
   cancel: groupMemberProcedure.mutation(async ({ ctx, input }) => {
     await ctx.db.$transaction(async (tx) => {
@@ -144,12 +145,10 @@ export const groupOwnershipRouter = {
       });
       if (member?.role !== GroupRole.ADMIN || member.user.pendingDeletion) throw offerGone();
       if (seatsEnforced(ctx)) {
-        const [seats, used, needed] = await Promise.all([
-          accountSeats(tx, ctx.session.user.id),
-          seatsUsed(tx, ctx.session.user.id),
+        const [{ free }, needed] = await Promise.all([
+          freeSeats(tx, ctx.session.user.id),
           groupSeats(tx, input.groupId),
         ]);
-        const free = Math.max(0, seats - used);
         if (needed > free) {
           throw noFreeSeatsError(
             `Taking over this group needs ${seatCount(needed)} and you have ${free} free. Add seats first.`,

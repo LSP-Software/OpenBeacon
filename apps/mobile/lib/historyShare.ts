@@ -12,17 +12,12 @@ type HistoryShareSetting = {
   groups: ReadonlyArray<{ groupId: string; historyShare: HistoryShare | null }>;
 };
 
-const choices: Record<
-  Exclude<HistoryShare, "MAXIMUM">,
-  { label: string; amount: string; period: string | null }
-> = {
-  LAST_LOCATION: { label: "Last location only", amount: "only your location now", period: null },
-  HOURS_6: { label: "6 hours", amount: "6 hours of history", period: "the last 6 hours" },
-  DAY_1: { label: "1 day", amount: "1 day of history", period: "the last day" },
-  WEEK_1: { label: "1 week", amount: "1 week of history", period: "the last week" },
+const choices: Record<Exclude<HistoryShare, "MAXIMUM">, { label: string; amount: string }> = {
+  LAST_LOCATION: { label: "Last location only", amount: "only your location now" },
+  HOURS_6: { label: "6 hours", amount: "6 hours of history" },
+  DAY_1: { label: "1 day", amount: "1 day of history" },
+  WEEK_1: { label: "1 week", amount: "1 week of history" },
 };
-
-export const serverHistoryDays = ({ historyDays }: { historyDays?: number }) => historyDays ?? 14;
 
 export const historyShareLabel = (share: HistoryShare, historyDays: number) =>
   share === "MAXIMUM" ? `Maximum (${historyDays} days)` : choices[share].label;
@@ -40,8 +35,9 @@ export const historyShareNote = (name: string | null, share: HistoryShare) => {
       ? "You share only your location now"
       : `${name} shares only their location now`;
   }
-  const period = choices[share].period;
-  if (period === null) return null;
+  const period = { HOURS_6: "the last 6 hours", DAY_1: "the last day", WEEK_1: "the last week" }[
+    share
+  ];
   return name === null ? `You share ${period}` : `${name} shares ${period}`;
 };
 

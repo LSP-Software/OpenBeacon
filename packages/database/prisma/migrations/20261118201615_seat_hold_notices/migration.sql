@@ -11,4 +11,5 @@ ALTER TYPE "AccountNoticeType" ADD VALUE 'SEATS_ENDING_SOON';
 ALTER TYPE "AccountNoticeType" ADD VALUE 'SEAT_HOLD_COMING';
 
 -- AlterTable
-ALTER TABLE "AccountNotice" ADD COLUMN     "holdsFrom" TIMESTAMP(3);
+ALTER TABLE "AccountNotice" ADD COLUMN     "emailedAt" TIMESTAMP(3),
+ADD COLUMN     "holdsFrom" TIMESTAMP(3);

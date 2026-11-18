@@ -36,6 +36,7 @@ mock.module("expo-router", () => ({ useRouter: () => ({ replace: () => {} }) }))
 mock.module("@react-navigation/native", () => ({ useIsFocused: () => true }));
 mock.module("lucide-react-native", () => ({
   CirclePauseIcon: () => null,
+  CircleSlashIcon: () => null,
   CrownIcon: () => null,
   EllipsisVerticalIcon: () => null,
   LogOutIcon: () => null,

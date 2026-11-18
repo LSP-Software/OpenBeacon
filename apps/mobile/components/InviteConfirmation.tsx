@@ -11,12 +11,13 @@ import {
   buildAcceptSharedInviteInput,
   submitEpochChange,
 } from "../lib/groupEncryption.ts";
-import { groupLimitAlert } from "../lib/groupLimitAlert.ts";
+import { limitAlert } from "../lib/limitAlert.ts";
 import { historyShareAmount } from "../lib/historyShare.ts";
 import { useHistoryShare } from "../hooks/useHistoryShare.ts";
 import { storeOwnImageKeyInGroup } from "../lib/imageKeys.ts";
 import { initials } from "../lib/initials.ts";
 import type { InviteToConfirm } from "../lib/inviteTypes.ts";
+import { pluralize } from "../lib/pluralize.ts";
 import { requestTrackingSync } from "../lib/trackingEvents.ts";
 import { useSingleFlight } from "../lib/useSingleFlight.ts";
 import { HistoryShareChoices } from "./HistoryShareChoices.tsx";
@@ -75,7 +76,7 @@ export const InviteConfirmation = ({
               submit: (input) => trpcClient.groupInvites.accept.mutate(input),
             }),
       );
-      const limit = groupLimitAlert(result.error);
+      const limit = limitAlert(result.error);
       if (limit) {
         Alert.alert(limit.title, limit.message);
         return;
@@ -221,7 +222,7 @@ export const InviteConfirmation = ({
         </View>
         <View className="mt-2 rounded-full bg-secondary px-3 py-1">
           <Text className="text-sm text-secondary-foreground">
-            {group.memberCount} {group.memberCount === 1 ? "member" : "members"}
+            {pluralize(group.memberCount, "member")}
           </Text>
         </View>
         {alreadyMember ? (

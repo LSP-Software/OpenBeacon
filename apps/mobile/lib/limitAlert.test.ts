@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { groupLimitAlert } from "./groupLimitAlert.ts";
+import { limitAlert } from "./limitAlert.ts";
 
-describe("groupLimitAlert", () => {
+describe("limitAlert", () => {
   test("explains the group limit when the server refuses with GROUP_LIMIT_REACHED", () => {
     expect(
-      groupLimitAlert({
+      limitAlert({
         message: "An account can be in at most 16 groups.",
         data: { code: "PRECONDITION_FAILED", reason: "GROUP_LIMIT_REACHED" },
       }),
@@ -17,7 +17,7 @@ describe("groupLimitAlert", () => {
 
   test("shows the server's message when the owner has no free seats or the group is full", () => {
     expect(
-      groupLimitAlert({
+      limitAlert({
         message: "Your account has no seats. Add seats to create a group.",
         data: { code: "PRECONDITION_FAILED", reason: "NO_FREE_SEATS" },
       }),
@@ -26,7 +26,7 @@ describe("groupLimitAlert", () => {
       message: "Your account has no seats. Add seats to create a group.",
     });
     expect(
-      groupLimitAlert({
+      limitAlert({
         message: "This group is full. A group can have up to 64 phones.",
         data: { code: "PRECONDITION_FAILED", reason: "GROUP_FULL" },
       }),
@@ -37,8 +37,8 @@ describe("groupLimitAlert", () => {
   });
 
   test("leaves other errors to the screen", () => {
-    expect(groupLimitAlert({ data: { code: "PRECONDITION_FAILED", reason: null } })).toBeNull();
-    expect(groupLimitAlert({ data: { code: "FORBIDDEN", reason: "NOT_GROUP_MEMBER" } })).toBeNull();
-    expect(groupLimitAlert(new Error("Network request failed"))).toBeNull();
+    expect(limitAlert({ data: { code: "PRECONDITION_FAILED", reason: null } })).toBeNull();
+    expect(limitAlert({ data: { code: "FORBIDDEN", reason: "NOT_GROUP_MEMBER" } })).toBeNull();
+    expect(limitAlert(new Error("Network request failed"))).toBeNull();
   });
 });

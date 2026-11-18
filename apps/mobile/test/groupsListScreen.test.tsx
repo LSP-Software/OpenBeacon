@@ -59,11 +59,14 @@ mock.module("lucide-react-native", () => ({
   MailIcon: () => null,
   PlusIcon: () => null,
   QrCodeIcon: () => null,
-  ShieldIcon: () => null,
   UsersIcon: () => null,
 }));
 mock.module("../lib/api.ts", () => ({
   trpc: {
+    account: {
+      seats: { queryKey: () => ["seats"] },
+      usage: { queryKey: () => ["usage"] },
+    },
     groupMembership: {
       list: { queryOptions: () => ({ queryKey: ["groups"] }), queryKey: () => ["groups"] },
     },

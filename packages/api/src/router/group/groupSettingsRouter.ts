@@ -1,4 +1,4 @@
-import { GroupEventType, GroupRole, Prisma } from "@openbeacon/database";
+import { GroupEventType, Prisma } from "@openbeacon/database";
 import { resolveHistoryShare, tryCatch } from "@openbeacon/shared";
 import {
   confirmGroupImageUploadSchema,
@@ -26,6 +26,7 @@ import {
 import { deleteFile, deleteImagePrefix } from "../../lib/storage.ts";
 import { protectedProcedure } from "../../procedures/auth/runtime.ts";
 import { groupMemberProcedure, groupEditorProcedure } from "../../procedures/auth/group.ts";
+import { isAdminOrEditor, notAdminOrEditorError } from "../../lib/groupRoles.ts";
 
 export const groupSettingsRouter = {
   setHistoryShare: groupMemberProcedure
@@ -91,12 +92,7 @@ export const groupSettingsRouter = {
         const actor = await tx.groupMember.findUnique({
           where: { userId_groupId: { userId: ctx.session.user.id, groupId: input.groupId } },
         });
-        if (actor?.role !== GroupRole.ADMIN && actor?.role !== GroupRole.EDITOR) {
-          throw new TRPCError({
-            code: "FORBIDDEN",
-            message: "Only Admins and Editors can rename the group.",
-          });
-        }
+        if (!isAdminOrEditor(actor?.role)) throw notAdminOrEditorError();
         if (group && group.name !== input.name) {
           await recordGroupEvent(tx, {
             data: {
@@ -217,12 +213,7 @@ export const groupSettingsRouter = {
               const member = await tx.groupMember.findUnique({
                 where: { userId_groupId: { userId, groupId: input.groupId } },
               });
-              if (member?.role !== GroupRole.ADMIN && member?.role !== GroupRole.EDITOR) {
-                throw new TRPCError({
-                  code: "FORBIDDEN",
-                  message: "You are not an Admin or Editor of this group.",
-                });
-              }
+              if (!isAdminOrEditor(member?.role)) throw notAdminOrEditorError();
               if (
                 input.expectedFileName !== undefined &&
                 imageFileName(group.image) !== input.expectedFileName

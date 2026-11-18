@@ -26,9 +26,9 @@ export const SeatHoldBanner = ({
         return (
           <View
             key={group.id}
-            className="mb-2 gap-2 rounded-xl border border-amber-600 dark:border-amber-400 bg-card p-4"
+            className="mb-2 gap-2 rounded-2xl border border-warning-accent bg-card p-4"
           >
-            <Text className="font-semibold text-amber-700 dark:text-amber-400">
+            <Text className="font-semibold text-warning-text">
               This phone is on hold in {group.name}
             </Text>
             <Text>
@@ -48,7 +48,13 @@ export const SeatHoldBanner = ({
                   </Button>
                 </Link>
               ) : null}
-              {group.ownerId === userId ? null : (
+              {group.ownerId === userId ? (
+                <Link href="/account/usage" asChild>
+                  <Button size="sm" variant="secondary">
+                    <Text>See usage</Text>
+                  </Button>
+                </Link>
+              ) : (
                 <Link href="/account/devices" asChild>
                   <Button size="sm" variant="secondary">
                     <Text>Your phones</Text>

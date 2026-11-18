@@ -137,9 +137,13 @@ object TrackingRuntime {
     val deviceId = queueDeviceId(context) ?: return SeatHoldNotice()
     val stored = context.getSharedPreferences("openbeacon_tracking_seat_holds", Context.MODE_PRIVATE)
       .getString(org.json.JSONArray(listOf(owner, deviceId)).toString(), null) ?: return SeatHoldNotice()
-    val notice = org.json.JSONObject(stored)
-    val names = { key: String -> notice.getJSONArray(key).let { list -> (0 until list.length()).map(list::getString) } }
-    return SeatHoldNotice(sharing = names("sharing"), held = names("held"))
+    return SeatHoldNotice.parse(stored)
+  }
+
+  fun clearSeatHoldNotices(context: Context) {
+    synchronized(captureLock) {
+      check(context.getSharedPreferences("openbeacon_tracking_seat_holds", Context.MODE_PRIVATE).edit().clear().commit())
+    }
   }
 
   fun setSeatHoldNotice(context: Context, owner: String, deviceId: String, notice: SeatHoldNotice): Boolean {

@@ -1,4 +1,4 @@
-import { maxAccountSeats } from "@openbeacon/api/limits.ts";
+import { limits, maxAccountSeats } from "@openbeacon/api/limits.ts";
 import { z } from "zod";
 
 const maxHoursAgo = 24 * 366;
@@ -12,7 +12,7 @@ export const seatsUsage = `Usage:
 
 <seats> is a whole number from 0 to ${maxAccountSeats}.
 end-period ends the account's paid period now, or [hours-ago] hours ago (up to ${maxHoursAgo}).
-The account keeps its seats for a 7-day grace period, at most once every 6 months, then has 0.
+The account keeps its seats for a ${limits.gracePeriodDays}-day grace period, at most once every ${limits.graceCooldownMonths} months, then has 0.
 renew clears the paid period's end. reset-grace forgets the last grace period, so the next
 end-period gets one again.`;
 

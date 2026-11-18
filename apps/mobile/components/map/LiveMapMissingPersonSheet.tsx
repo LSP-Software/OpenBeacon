@@ -1,6 +1,9 @@
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "expo-router";
 import { EyeIcon, HistoryIcon } from "lucide-react-native";
 import { Pressable, View } from "react-native";
+import { trpc } from "../../lib/api.ts";
+import { authClient } from "../../lib/auth-client.ts";
 import { deviceIconFor } from "../../lib/deviceIcons.ts";
 import type {
   MapHiddenPerson,
@@ -44,6 +47,17 @@ export const LiveMapMissingPersonSheet = ({
   const hidden = "hiddenGroups" in person ? person : null;
   const hiddenGroupNames = hidden?.hiddenGroups.map((group) => group.name) ?? [];
   const name = person.isSelf ? "You" : person.name;
+  const { data: session } = authClient.useSession();
+  const groups = useQuery({ ...trpc.groupMembership.list.queryOptions(), enabled: onHold });
+  const personGroups =
+    groups.data?.filter(
+      (group) => !group.onHold && group.members.some((member) => member.userId === person.userId),
+    ) ?? [];
+  const ownedGroupNames = personGroups
+    .filter((group) => group.ownerId === session?.user.id)
+    .map((group) => group.name);
+  const joinNames = (names: readonly string[]) =>
+    names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : (names[0] ?? "");
 
   return (
     <LiveMapBottomSheet
@@ -105,12 +119,29 @@ export const LiveMapMissingPersonSheet = ({
           </Link>
         </View>
       ) : onHold ? (
-        <View className="mt-3 rounded-xl bg-background p-3">
-          <Text className="text-sm">
-            {person.isSelf
-              ? "Your phones are on hold, because the group’s owner has no free seats for them. Open Groups to see what you can do."
-              : `${person.name}’s phones are on hold, because the group’s owner has no free seat for them. Their location shows again on its own once a seat is free.`}
-          </Text>
+        <View className="mt-3 gap-3">
+          <View className="rounded-xl bg-secondary p-3">
+            <Text className="text-sm">
+              {ownedGroupNames.length > 0
+                ? `${person.isSelf ? "Your phones are" : `${person.name}’s phones are`} on hold, because you don’t have enough seats for them in ${joinNames(ownedGroupNames)}. Add seats or remove a phone from your groups to free one.`
+                : person.isSelf
+                  ? "Your phones are on hold, because the group’s owner has no free seats for them. Ask the owner to add seats, or remove a phone you no longer use."
+                  : `${person.name}’s phones are on hold, because the group’s owner has no free seat for them. Their location shows again on its own once a seat is free.`}
+            </Text>
+          </View>
+          {ownedGroupNames.length > 0 ? (
+            <Link href="/account/usage" asChild>
+              <Button variant="secondary" accessibilityRole="link">
+                <Text>See usage</Text>
+              </Button>
+            </Link>
+          ) : person.isSelf ? (
+            <Link href="/account/devices" asChild>
+              <Button variant="secondary" accessibilityRole="link">
+                <Text>Your phones</Text>
+              </Button>
+            </Link>
+          ) : null}
         </View>
       ) : waitingForLocation ? (
         <View className="mt-3 gap-3">
@@ -149,12 +180,8 @@ export const LiveMapMissingPersonSheet = ({
         <View className="mt-3 gap-3">
           <View className="rounded-xl bg-secondary p-3">
             <Text className="text-sm">
-              {person.name} is only in{" "}
-              {hiddenGroupNames.length > 1
-                ? `${hiddenGroupNames.slice(0, -1).join(", ")} and ${hiddenGroupNames.at(-1)}`
-                : hiddenGroupNames[0]}
-              , which you’ve hidden on the map. They can still see you, and you’re still sharing
-              your location with them.
+              {person.name} is only in {joinNames(hiddenGroupNames)}, which you’ve hidden on the
+              map. They can still see you, and you’re still sharing your location with them.
             </Text>
           </View>
           <View className="flex-row flex-wrap gap-2">

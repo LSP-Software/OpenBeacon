@@ -1,5 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { type DeviceChallengePurpose, Prisma, type PrismaClient } from "@openbeacon/database";
+import type { DeviceChallengePurpose, PrismaClient } from "@openbeacon/database";
 import {
   decodeBase64,
   sealDeviceActivationChallenge,
@@ -8,7 +8,7 @@ import {
 import { tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import z from "zod";
-import { activateDevice } from "../lib/deviceActivation.ts";
+import { activateDevice, lockActivatingAccount } from "../lib/deviceActivation.ts";
 import {
   requireFreshSession,
   setupDeviceProcedure,
@@ -159,9 +159,7 @@ export const deviceRouter = createTRPCRouter({
       await ctx.db.deviceChallenge.deleteMany({ where: { deviceId, purpose: "activation" } });
       const answered = await isCorrectAnswer({ answer: input.answer, challenge: stored });
       return ctx.db.$transaction(async (tx) => {
-        await tx.$queryRaw(
-          Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR NO KEY UPDATE`,
-        );
+        await lockActivatingAccount(tx, userId);
         const currentHistoryKey = await tx.accountHistoryKey.findFirst({
           orderBy: { version: "desc" },
           select: { version: true },

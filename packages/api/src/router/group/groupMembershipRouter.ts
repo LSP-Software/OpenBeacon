@@ -12,6 +12,7 @@ import { protectedProcedure } from "../../procedures/auth/runtime.ts";
 import type { GroupListItem } from "../../types/GroupListItem.ts";
 import { ReasonError } from "../../lib/reasonError.ts";
 import { removeGroupMemberWithOwnerGuard } from "./assertGroupMemberCanBeRemoved.ts";
+import { isAdminOrEditor } from "../../lib/groupRoles.ts";
 
 export const groupMembershipRouter = {
   list: protectedProcedure.query(async ({ ctx }) => {
@@ -79,11 +80,7 @@ export const groupMembershipRouter = {
   removalContext: groupMemberProcedure
     .input(z.object({ groupId: z.string().min(1), memberId: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
-      if (
-        ctx.groupMember.id !== input.memberId &&
-        ctx.groupMember.role !== GroupRole.ADMIN &&
-        ctx.groupMember.role !== GroupRole.EDITOR
-      ) {
+      if (ctx.groupMember.id !== input.memberId && !isAdminOrEditor(ctx.groupMember.role)) {
         throw new TRPCError({
           code: "FORBIDDEN",
           message: "You cannot remove this member.",
@@ -247,12 +244,7 @@ export const groupMembershipRouter = {
           FOR UPDATE
         `);
           const actor = actors[0];
-          if (
-            !actor ||
-            (actor.id !== input.memberId &&
-              actor.role !== GroupRole.ADMIN &&
-              actor.role !== GroupRole.EDITOR)
-          ) {
+          if (!actor || (actor.id !== input.memberId && !isAdminOrEditor(actor.role))) {
             throw new TRPCError({
               code: "FORBIDDEN",
               message: "You cannot remove this member.",

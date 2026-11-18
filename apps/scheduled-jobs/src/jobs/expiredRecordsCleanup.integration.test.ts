@@ -119,11 +119,23 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Expired records 
       data: [
         { name: "oldNotice", createdAt: at(-day - 60_000) },
         { name: "newNotice", createdAt: at(-day + 60_000) },
-      ].map(({ name, createdAt }) => ({
+        {
+          name: "graceNotice",
+          createdAt: at(-3 * day),
+          type: "SEATS_ENDING" as const,
+          holdsFrom: at(4 * day),
+        },
+        {
+          name: "heldNotice",
+          createdAt: at(-8 * day),
+          type: "SEAT_HOLD_COMING" as const,
+          holdsFrom: at(-day),
+        },
+      ].map(({ name, ...notice }) => ({
         id: `${prefix}-${name}`,
         userId: memberId,
         type: "NEW_SIGN_IN" as const,
-        createdAt,
+        ...notice,
       })),
     });
     await prisma.feedback.createMany({
@@ -165,6 +177,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Expired records 
       "newFeedback",
     ]);
     expect(await ids(prisma.accountNotice.findMany({ where: { userId: memberId } }))).toEqual([
+      "graceNotice",
       "newNotice",
     ]);
   });

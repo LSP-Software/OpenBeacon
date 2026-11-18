@@ -29,7 +29,6 @@ import {
   groupByDay,
   markGroupHistorySeen,
 } from "../../../../lib/groupHistory.ts";
-import { serverHistoryDays } from "../../../../lib/historyShare.ts";
 
 const eventIcons = {
   GROUP_CREATED: SparklesIcon,
@@ -167,7 +166,7 @@ const HistoryTab = ({ groupId, active }: { groupId: string; active: boolean }) =
     items: history.data.pages.flatMap((page) => page.items),
     now: new Date(),
   });
-  const historyDays = serverHistoryDays(history.data.pages[0] ?? {});
+  const historyDays = history.data.pages[0]?.historyDays;
 
   return (
     <View className="gap-2 pt-1">
@@ -189,8 +188,8 @@ const HistoryTab = ({ groupId, active }: { groupId: string; active: boolean }) =
       ) : null}
       {sections.length === 0 ? (
         <Text className="py-6 text-center text-tertiary">
-          {filters.find((filter) => filter.category === category)?.empty} in the last {historyDays}{" "}
-          days.
+          {filters.find((filter) => filter.category === category)?.empty}
+          {historyDays ? ` in the last ${historyDays} days` : ""}.
         </Text>
       ) : null}
       {sections.map((section) => (
@@ -262,9 +261,11 @@ const HistoryTab = ({ groupId, active }: { groupId: string; active: boolean }) =
           <Text>Show older</Text>
         </Button>
       ) : null}
-      <Text className="mt-3 text-center text-sm text-tertiary">
-        History is kept for {historyDays} days.
-      </Text>
+      {historyDays ? (
+        <Text className="mt-3 text-center text-sm text-tertiary">
+          History is kept for {historyDays} days.
+        </Text>
+      ) : null}
     </View>
   );
 };

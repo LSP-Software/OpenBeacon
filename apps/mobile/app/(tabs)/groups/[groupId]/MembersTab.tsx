@@ -6,6 +6,7 @@ import { skipToken, useMutation, useQuery, useQueryClient } from "@tanstack/reac
 import { useRouter } from "expo-router";
 import {
   CirclePauseIcon,
+  CircleSlashIcon,
   CrownIcon,
   EllipsisVerticalIcon,
   LogOutIcon,
@@ -44,8 +45,9 @@ import { getBatteryVisual } from "../../../../lib/batteryVisual.ts";
 import { buildMemberLiveStatuses } from "../../../../lib/buildMemberLiveStatuses.ts";
 import { deviceIconFor } from "../../../../lib/deviceIcons.ts";
 import { buildRemoveGroupMemberInput, submitEpochChange } from "../../../../lib/groupEncryption.ts";
-import { canEditGroup, groupRoles, roleLabel } from "../../../../lib/groupRoles.ts";
+import { canEditGroup, type GroupRole, groupRoles, roleLabel } from "../../../../lib/groupRoles.ts";
 import { forgetHiddenMapGroup } from "../../../../lib/hiddenMapGroups.ts";
+import { pluralize } from "../../../../lib/pluralize.ts";
 import { timeSince } from "../../../../lib/timeSince.ts";
 import { requestTrackingSync } from "../../../../lib/trackingEvents.ts";
 import { useSingleFlight } from "../../../../lib/useSingleFlight.ts";
@@ -66,7 +68,7 @@ const MembersTab = ({
   const updateNickname = useMutation(trpc.groupMembership.updateNickname.mutationOptions());
   const [changingRole, setChangingRole] = useState<{
     memberId: string;
-    role: (typeof groupRoles)[number];
+    role: GroupRole;
   } | null>(null);
   const [addMemberDialogOpen, setAddMemberDialogOpen] = useState(false);
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
@@ -247,6 +249,7 @@ const MembersTab = ({
         open={addMemberDialogOpen}
         setOpen={setAddMemberDialogOpen}
         groupId={groupId}
+        isOwner={selfIsOwner}
         canInviteEditors={self?.role === "ADMIN"}
       />
       <Dialog
@@ -323,9 +326,7 @@ const MembersTab = ({
         </DialogContent>
       </Dialog>
       <View className="flex-row items-center justify-between pb-3">
-        <Text variant="label">
-          {members?.length ?? 0} {members?.length === 1 ? "member" : "members"}
-        </Text>
+        <Text variant="label">{pluralize(members?.length ?? 0, "member")}</Text>
         {canManage && (
           <Button size="sm" className="rounded-full" onPress={() => setAddMemberDialogOpen(true)}>
             <Icon as={UserPlusIcon} className="size-4 text-white" />
@@ -333,6 +334,11 @@ const MembersTab = ({
           </Button>
         )}
       </View>
+      {group?.onHold ? (
+        <Text className="text-secondary pb-3 text-sm">
+          Locations are hidden while this phone is on hold in {group.name}.
+        </Text>
+      ) : null}
       <View className="overflow-hidden rounded-2xl border border-border bg-card">
         {memberStatuses.map((member, index) => (
           <Pressable
@@ -380,6 +386,7 @@ const MembersTab = ({
               </View>
               <MemberStatus
                 arrivalsOff={arrivalsOffLabel(member.user.id)}
+                locationHidden={group?.onHold === true}
                 member={member}
                 sharingPaused={
                   liveStatus.sharing?.some((device) => device.userId === member.user.id) === true &&
@@ -445,7 +452,9 @@ const MembersTab = ({
                     setSelectedMemberId(null);
                     Alert.alert(
                       "Change role?",
-                      `Make ${selectedMember.user.name} ${roleLabel(role)}?`,
+                      group?.ownershipOfferedToId === selectedMember.user.id
+                        ? `Make ${selectedMember.user.name} ${roleLabel(role)}? This also cancels the request for them to become the owner.`
+                        : `Make ${selectedMember.user.name} ${roleLabel(role)}?`,
                       [
                         { text: "Cancel", style: "cancel" },
                         {
@@ -569,12 +578,14 @@ const MembersTab = ({
 
 const MemberStatus = ({
   arrivalsOff,
+  locationHidden,
   member,
   sharingOnHold,
   sharingPaused,
 }: {
   arrivalsOff: string | null;
-  member: ReturnType<typeof buildMemberLiveStatuses<(typeof groupRoles)[number]>>[number];
+  locationHidden: boolean;
+  member: ReturnType<typeof buildMemberLiveStatuses<GroupRole>>[number];
   sharingOnHold: boolean;
   sharingPaused: boolean;
 }) => {
@@ -587,15 +598,15 @@ const MemberStatus = ({
 
   return (
     <View className="gap-1 pr-2">
-      {sharingPaused ? (
+      {locationHidden ? null : sharingPaused ? (
         <View className="flex-row items-center gap-1.5 self-start rounded-full bg-warning px-2.5 py-1">
           <Icon as={CirclePauseIcon} className="text-warning-text size-3.5" />
           <Text className="text-warning-text text-xs font-semibold">Location sharing paused</Text>
         </View>
       ) : sharingOnHold ? (
-        <View className="flex-row items-center gap-1.5 self-start rounded-full bg-warning px-2.5 py-1">
-          <Icon as={CirclePauseIcon} className="text-warning-text size-3.5" />
-          <Text className="text-warning-text text-xs font-semibold">On hold</Text>
+        <View className="flex-row items-center gap-1.5 self-start rounded-full bg-secondary px-2.5 py-1">
+          <Icon as={CircleSlashIcon} className="text-secondary size-3.5" />
+          <Text className="text-secondary text-xs font-semibold">On hold</Text>
         </View>
       ) : member.activeDeviceCount >= 2 && member.devices.length > 0 ? (
         member.devices.map((device) => {

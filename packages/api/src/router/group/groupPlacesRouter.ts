@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@openbeacon/database";
-import { GroupEventType, GroupRole, Prisma } from "@openbeacon/database";
+import { GroupEventType, Prisma } from "@openbeacon/database";
 import {
   createPlaceSchema,
   deletePlaceSchema,
@@ -21,6 +21,7 @@ import {
 import { limits } from "../../lib/limits.ts";
 import { ReasonError } from "../../lib/reasonError.ts";
 import { groupEditorProcedure, groupMemberProcedure } from "../../procedures/auth/group.ts";
+import { isAdminOrEditor, notAdminOrEditorError } from "../../lib/groupRoles.ts";
 
 const placeSelect = {
   id: true,
@@ -179,6 +180,7 @@ export const groupPlacesRouter = {
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: `A group can have at most ${limits.placesPerGroup} places.`,
+          cause: new ReasonError("PLACE_LIMIT_REACHED"),
         });
       }
       return await writePlace({
@@ -305,12 +307,7 @@ const writePlace = async <T extends object>({
       groupLock: "FOR NO KEY UPDATE",
       userId,
     });
-    if (needsAdmin && member.role !== GroupRole.ADMIN && member.role !== GroupRole.EDITOR) {
-      throw new TRPCError({
-        code: "FORBIDDEN",
-        message: "You are not an Admin or Editor of this group",
-      });
-    }
+    if (needsAdmin && !isAdminOrEditor(member.role)) throw notAdminOrEditorError();
     await assertActiveDevices(tx, { deviceIds: [deviceId], userId });
     if (geometries.length > 0) {
       await assertLatestGroupEpoch(tx, {

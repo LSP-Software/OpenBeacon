@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, mock, test } from "bun:test";
+import { afterAll, describe, expect, mock, spyOn, test } from "bun:test";
 import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
 import {
@@ -304,6 +304,16 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         ...noFreeSeats,
         message: `Name ${owner.id} owns this group and is using all 3 of their seats. Ask Name ${owner.id} to add seats or to remove someone.`,
       });
+      await prisma.user.update({ where: { id: owner.id }, data: { seats: 2 } });
+      await expect(caller(editor).groupInvites.createShared({ groupId })).rejects.toMatchObject({
+        message: `Name ${owner.id} owns this group and is using 3 seats but has 2. Ask Name ${owner.id} to add seats or to remove someone.`,
+      });
+      expect(await caller(owner).groupInvites.seats({ groupId })).toMatchObject({
+        used: 3,
+        free: 0,
+        message:
+          "You're using 3 seats but have 2. Add seats or remove someone to invite more people.",
+      });
     });
 
     test("a joiner with two phones can't join with only one free seat, and is told before trying", async () => {
@@ -375,11 +385,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       for (const groupId of [await createGroup(owner), await createGroup(owner)]) {
         await joinWithCode(member, await invite(owner, groupId));
       }
-      expect(await caller(owner).account.seats()).toMatchObject({
-        seats: 4,
-        used: 4,
-        enforced: true,
-      });
+      expect((await caller(owner).account.usage()).seats).toMatchObject({ seats: 4, used: 4 });
     });
 
     test("a 65th seat in a group is refused, on hosted and self-hosted servers", async () => {
@@ -488,10 +494,16 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await expect(
         caller(user, { allowSelfSetSeats: true, selfHosted: true }).account.setSeats({ seats: 5 }),
       ).rejects.toMatchObject(forbidden);
-      expect(await caller(user).account.seats()).toMatchObject({ selfSetAllowed: false, seats: 2 });
+      expect((await caller(user).account.usage()).seats).toMatchObject({
+        selfSetAllowed: false,
+        seats: 2,
+      });
 
       const allowed = caller(user, { allowSelfSetSeats: true });
-      expect(await allowed.account.seats()).toMatchObject({ selfSetAllowed: true, max: 1_024 });
+      expect((await allowed.account.usage()).seats).toMatchObject({
+        selfSetAllowed: true,
+        max: 1_024,
+      });
       await expect(allowed.account.setSeats({ seats: 1_025 })).rejects.toMatchObject({
         code: "BAD_REQUEST",
       });
@@ -515,7 +527,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         free: null,
         seats: null,
       });
-      expect(await caller(owner, selfHosted).account.seats()).toMatchObject({ enforced: false });
+      expect(await caller(owner, selfHosted).account.seats()).toEqual({ grace: null });
+      expect((await caller(owner, selfHosted).account.usage()).seats).toBeNull();
       expect(await heldDeviceIds({ groupId, selfHosted: true })).toEqual(new Set());
 
       const membership = await prisma.groupMember.update({
@@ -650,7 +663,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const graceEndsAt = new Date(endedAt.getTime() + 7 * 86_400_000);
 
       const seats = await caller(owner).account.seats();
-      expect(seats).toMatchObject({ seats: 2, paidPeriodEndsAt: endedAt });
+      expect((await caller(owner).account.usage()).seats).toMatchObject({
+        seats: 2,
+        paidPeriodEndsAt: endedAt,
+      });
       expect(seats.grace?.endsAt).toEqual(graceEndsAt);
       expect(seats.grace?.holds.map(({ deviceId }) => deviceId).toSorted()).toEqual(
         [owner.deviceIds[0], member.deviceIds[0]].toSorted(),
@@ -670,7 +686,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         prisma.accountNotice.findMany({
           where: { userId: { in: [owner.id, member.id] } },
           select: { userId: true, type: true, groupId: true, holdsFrom: true },
-          orderBy: { createdAt: "asc" },
+          orderBy: [{ createdAt: "asc" }, { type: "asc" }],
         });
       await warn(new Date());
       await warn(new Date());
@@ -701,7 +717,73 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(await heldDeviceIds({ groupId, selfHosted: false })).toEqual(
         new Set([owner.deviceIds[0], member.deviceIds[0]]),
       );
-      expect(await caller(owner).account.seats()).toMatchObject({ seats: 0, grace: null });
+      expect(await caller(owner).account.seats()).toEqual({ grace: null });
+      expect((await caller(owner).account.usage()).seats?.seats).toBe(0);
+    });
+
+    test("a first run inside a grace period's last day sends the warning without a reminder", async () => {
+      const owner = await createUser({ seats: 2 });
+      const member = await createUser();
+      const groupId = await createGroup(owner);
+      await joinWithCode(member, await invite(owner, groupId));
+      await prisma.user.update({
+        where: { id: owner.id },
+        data: { paidPeriodEndsAt: new Date(Date.now() - 6.5 * 86_400_000) },
+      });
+      const reminders: boolean[] = [];
+      for (const hoursLater of [0, 1, 2]) {
+        await sendSeatGraceWarnings({
+          db: prisma,
+          now: new Date(Date.now() + hoursLater * 3_600_000),
+          sendEmail: async (email) => {
+            if (email.userId === owner.id) reminders.push(email.reminder);
+          },
+        });
+      }
+      expect(
+        (await prisma.accountNotice.findMany({ where: { userId: owner.id } })).map(
+          ({ type }) => type,
+        ),
+      ).toEqual(["SEATS_ENDING"]);
+      expect(reminders).toEqual([false]);
+    });
+
+    test("a seats ending email that fails is sent once on the next run", async () => {
+      const owner = await createUser({ seats: 2 });
+      const member = await createUser();
+      const groupId = await createGroup(owner);
+      await joinWithCode(member, await invite(owner, groupId));
+      await prisma.user.update({
+        where: { id: owner.id },
+        data: { paidPeriodEndsAt: new Date(Date.now() - 3_600_000) },
+      });
+      const reminders: boolean[] = [];
+      let failing = true;
+      const warn = () =>
+        sendSeatGraceWarnings({
+          db: prisma,
+          now: new Date(),
+          sendEmail: async (email) => {
+            if (email.userId !== owner.id) return;
+            if (failing) throw new Error("Email provider unavailable");
+            reminders.push(email.reminder);
+          },
+        });
+      const consoleError = spyOn(console, "error").mockImplementation(() => {});
+      await warn();
+      consoleError.mockRestore();
+      expect(reminders).toEqual([]);
+      expect(
+        await prisma.accountNotice.findMany({
+          where: { userId: owner.id },
+          select: { type: true, emailedAt: true },
+        }),
+      ).toEqual([{ type: "SEATS_ENDING", emailedAt: null }]);
+
+      failing = false;
+      await warn();
+      await warn();
+      expect(reminders).toEqual([false]);
     });
 
     test("a second grace period within 6 months isn't given", async () => {
@@ -717,7 +799,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         },
       });
 
-      expect(await caller(owner).account.seats()).toMatchObject({ seats: 0, grace: null });
+      expect(await caller(owner).account.seats()).toEqual({ grace: null });
+      expect((await caller(owner).account.usage()).seats?.seats).toBe(0);
       expect(await heldDeviceIds({ groupId, selfHosted: false })).toEqual(
         new Set([owner.deviceIds[0], member.deviceIds[0]]),
       );
@@ -865,9 +948,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(ended.paidPeriodEndsAt).toBeInstanceOf(Date);
       expect((await caller(owner).account.seats()).grace).not.toBeNull();
       await caller(owner, { allowSelfSetSeats: true }).account.setPaidPeriodEnded({ ended: false });
-      expect(await caller(owner).account.seats()).toMatchObject({
+      expect(await caller(owner).account.seats()).toEqual({ grace: null });
+      expect((await caller(owner).account.usage()).seats).toMatchObject({
         paidPeriodEndsAt: null,
-        grace: null,
         seats: 2,
       });
     });

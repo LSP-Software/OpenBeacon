@@ -20,6 +20,17 @@ export const devicePendingError = () =>
     cause: new DevicePendingError(),
   });
 
+export const lockActivatingAccount = async (
+  db: Pick<Prisma.TransactionClient, "$queryRaw" | "group">,
+  userId: string,
+) => {
+  const owners = await db.group.findMany({
+    where: { groupMembers: { some: { userId } } },
+    select: { ownerId: true },
+  });
+  await lockAccounts(db, [userId, ...owners.map(({ ownerId }) => ownerId)]);
+};
+
 export const activateDevice = async ({
   activatedBy,
   db,
@@ -31,14 +42,7 @@ export const activateDevice = async ({
   deviceId: string;
   userId: string;
 }) => {
-  const owners = await db.group.findMany({
-    where: { groupMembers: { some: { userId } } },
-    select: { ownerId: true },
-  });
-  await lockAccounts(
-    db,
-    owners.map(({ ownerId }) => ownerId),
-  );
+  await lockActivatingAccount(db, userId);
   await lockUserGroups(db, userId);
   const activated = await db.userDevice.updateMany({
     data: { activatedAt: new Date(), activatedBy },

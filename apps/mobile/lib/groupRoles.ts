@@ -1,6 +1,6 @@
 import type { RouterOutputs } from "./api.ts";
 
-type GroupRole = RouterOutputs["groupMembership"]["list"][number]["members"][number]["role"];
+export type GroupRole = RouterOutputs["groupMembership"]["list"][number]["members"][number]["role"];
 
 export const groupRoles = ["ADMIN", "EDITOR", "MEMBER"] as const satisfies readonly GroupRole[];
 

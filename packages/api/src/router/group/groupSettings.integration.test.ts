@@ -160,7 +160,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const second = members.find((member) => member.userId === users[1])!;
       const ordinary = caller(users[2]!);
       await expect(ordinary.groupSettings.rename({ groupId, name: "No" })).rejects.toThrow(
-        "Only Admins and Editors can rename the group.",
+        "You are not an Admin or Editor of this group",
       );
       await expect(ordinary.groupLifecycle.delete({ groupId })).rejects.toThrow(
         "You are not the owner of this group",

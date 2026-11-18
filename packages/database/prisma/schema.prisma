@@ -123,6 +123,7 @@ model AccountNotice {
   devicePlatform  String?
   deletionDate    DateTime?
   holdsFrom       DateTime?
+  emailedAt       DateTime?
   turnedOffEmail  NotificationType[] @default([])
   turnedOffPhone  NotificationType[] @default([])
   groupId         String?

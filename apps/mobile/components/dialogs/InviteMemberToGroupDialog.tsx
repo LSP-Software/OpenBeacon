@@ -3,13 +3,14 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { inviteMemberToGroupSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { Link } from "expo-router";
 import { LinkIcon, MailIcon, PlusIcon, QrCodeIcon, Trash2Icon } from "lucide-react-native";
 import { useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { Pressable, View } from "react-native";
 import type z from "zod";
 import { trpc } from "../../lib/api.ts";
-import { groupLimitAlert } from "../../lib/groupLimitAlert.ts";
+import { limitAlert } from "../../lib/limitAlert.ts";
 import { SharedInvite } from "./SharedInvite.tsx";
 import { FormSelectInput } from "../formInputs/FormSelectInput.tsx";
 import { Button } from "../ui/Button.tsx";
@@ -24,6 +25,7 @@ interface InviteMemberToGroupDialogProps {
   setOpen: (open: boolean) => void;
   groupId: string;
   canInviteEditors: boolean;
+  isOwner: boolean;
 }
 
 export const InviteMemberToGroupDialog = ({
@@ -31,6 +33,7 @@ export const InviteMemberToGroupDialog = ({
   setOpen,
   groupId,
   canInviteEditors,
+  isOwner,
 }: InviteMemberToGroupDialogProps) => {
   const [value, setValue] = useState("email");
   const seats = useQuery({
@@ -52,6 +55,18 @@ export const InviteMemberToGroupDialog = ({
               {blocked.blockedBy === "GROUP_FULL" ? "Group full" : "No free seats"}
             </Text>
             <Text className="text-secondary">{blocked.message}</Text>
+            <View className="mt-2 gap-2">
+              {isOwner && blocked.blockedBy !== "GROUP_FULL" ? (
+                <Link href="/account/usage" asChild>
+                  <Button onPress={() => setOpen(false)}>
+                    <Text>See usage</Text>
+                  </Button>
+                </Link>
+              ) : null}
+              <Button variant="secondary" onPress={() => setOpen(false)}>
+                <Text>Done</Text>
+              </Button>
+            </View>
           </View>
         ) : (
           <Tabs value={value} onValueChange={setValue}>
@@ -134,7 +149,7 @@ export const InviteMembersInputs = ({
       }),
     );
     if (result.error) {
-      const limit = groupLimitAlert(result.error);
+      const limit = limitAlert(result.error);
       Alert.alert(limit?.title ?? "Unable to send invitation", result.error.message);
       return;
     }

@@ -1,14 +1,10 @@
 import type { PrismaClient } from "@openbeacon/database";
 import { limits, maxAccountSeats } from "./limits.ts";
-import {
-  seatAccountSelect,
-  seatPeriod,
-  seatsEndingHolds,
-  seatsEnforced,
-  type SeatHolds,
-} from "./seats.ts";
+import { seatAccountSelect, seatPeriod, seatsEnforced, type SeatHolds } from "./seats.ts";
 
-const unit = (one: string, other: string) => ({ one, other });
+type Unit = { one: string; other: string };
+
+const unit = (one: string, other: string): Unit => ({ one, other });
 
 export const readAccountUsage = async ({
   allowSelfSetSeats,
@@ -28,7 +24,7 @@ export const readAccountUsage = async ({
   userId: string;
 }) => {
   const enforced = seatsEnforced({ selfHosted });
-  const [account, memberships, ownPhones] = await Promise.all([
+  const [account, memberships, ownPhones, ownSeats] = await Promise.all([
     db.user.findUniqueOrThrow({ where: { id: userId }, select: seatAccountSelect }),
     db.groupMember.findMany({
       where: { userId },
@@ -42,60 +38,39 @@ export const readAccountUsage = async ({
       where: { userId, activatedAt: { not: null }, revokedAt: null },
       select: { id: true, name: true },
     }),
+    enforced ? seatHolds.seatsOf(userId) : Promise.resolve([]),
   ]);
   const period = seatPeriod(account, now);
-  const ownedGroupIds = enforced
-    ? memberships.filter(({ group }) => group.ownerId === userId).map(({ group }) => group.id)
-    : [];
-  const [seatRows, graceHolds] = await Promise.all([
-    db.groupMember.findMany({
-      where: { groupId: { in: ownedGroupIds } },
-      select: {
-        groupId: true,
-        createdAt: true,
-        user: {
-          select: {
-            id: true,
-            name: true,
-            devices: {
-              where: { activatedAt: { not: null }, revokedAt: null },
-              select: { id: true, name: true, activatedAt: true },
-            },
-          },
-        },
-      },
-    }),
-    enforced && period.grace
-      ? seatsEndingHolds({ db, ownerId: userId, seats: period.seats })
-      : Promise.resolve([]),
-  ]);
-  const holdsFrom = (groupId: string, phoneId: string) =>
-    period.grace && graceHolds.some((hold) => hold.groupId === groupId && hold.deviceId === phoneId)
-      ? period.grace.endsAt
-      : null;
+  const seatDevices = await db.userDevice.findMany({
+    where: { id: { in: ownSeats.map(({ deviceId }) => deviceId) } },
+    select: { id: true, name: true, user: { select: { name: true } } },
+  });
 
   const groups = await Promise.all(
     memberships.map(async ({ group }) => {
       const held = await seatHolds.heldIn(group.id, group.ownerId);
       const isOwner = group.ownerId === userId;
-      const phones = ownedGroupIds.includes(group.id)
-        ? seatRows
-            .filter((row) => row.groupId === group.id)
-            .flatMap((row) =>
-              row.user.devices.map((phone) => ({
-                takenAt: Math.max(row.createdAt.getTime(), phone.activatedAt?.getTime() ?? 0),
-                deviceId: phone.id,
-                deviceName: phone.name,
-                userId: row.user.id,
-                memberName: row.user.name,
-                isThisPhone: phone.id === deviceId,
-                onHold: held.has(phone.id),
-                holdsFrom: holdsFrom(group.id, phone.id),
-              })),
-            )
-            .sort((a, b) => a.takenAt - b.takenAt || a.deviceId.localeCompare(b.deviceId))
-            .map(({ takenAt: _takenAt, ...phone }) => phone)
-        : null;
+      const phones =
+        enforced && isOwner
+          ? ownSeats
+              .filter((seat) => seat.groupId === group.id)
+              .flatMap((seat) => {
+                const device = seatDevices.find(({ id }) => id === seat.deviceId);
+                return device
+                  ? [
+                      {
+                        deviceId: seat.deviceId,
+                        deviceName: device.name,
+                        userId: seat.userId,
+                        memberName: device.user.name,
+                        isThisPhone: seat.deviceId === deviceId,
+                        onHold: seat.held,
+                        holdsFrom: period.grace && !seat.held ? period.grace.endsAt : null,
+                      },
+                    ]
+                  : [];
+              })
+          : null;
       return {
         id: group.id,
         name: group.name,
@@ -127,7 +102,7 @@ export const readAccountUsage = async ({
     used: number;
     max: number;
     onHold: number;
-    unit: { one: string; other: string };
+    unit: Unit;
   }> = [
     ...(enforced
       ? [
@@ -155,7 +130,7 @@ export const readAccountUsage = async ({
     id: string;
     label: string;
     value: number;
-    unit: { one: string; other: string };
+    unit: Unit;
   }> = [
     {
       id: "history",

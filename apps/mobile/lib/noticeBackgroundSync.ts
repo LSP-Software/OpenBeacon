@@ -24,7 +24,9 @@ export const getNoticesCursor = (userId: string) => readCursor(cursorKey(userId)
 
 export const getAccountNoticesCursor = (userId: string) => readCursor(accountCursorKey(userId));
 
-const accountLink = (screen: "devices" | "password" | "recovery" | "delete" | "notifications") => ({
+const accountLink = (
+  screen: "devices" | "password" | "recovery" | "delete" | "notifications" | "usage",
+) => ({
   href: `/account/${screen}` as const,
   url: `openbeacon:///account/${screen}`,
 });
@@ -108,8 +110,8 @@ export const describeAccountNotice = (notice: AccountNotices["notices"][number])
           notice.type === "SEATS_ENDING"
             ? "Your seats have ended"
             : "Phones in your groups go on hold tomorrow",
-        body: `${notice.holdsFrom ? `From ${shortDate(notice.holdsFrom)}, phones` : "Phones"} in the groups you own go on hold until you renew your seats. Open the map to see which.`,
-        link: { href: "/(tabs)/map" as const, url: "openbeacon:///map" },
+        body: `${notice.holdsFrom ? `From ${shortDate(notice.holdsFrom)}, phones` : "Phones"} in the groups you own go on hold until you renew your seats. Open Account › Usage to see which.`,
+        link: accountLink("usage"),
       };
     case "SEAT_HOLD_COMING":
       return {

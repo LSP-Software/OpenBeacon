@@ -38,6 +38,10 @@ class OpenBeaconTrackingModule : Module() {
         TrackingRuntime.setSeatHoldNotice(requireContext(), owner, deviceId, SeatHoldNotice(sharing, held))
       }
 
+      Function("clearSeatHoldNotices") {
+        TrackingRuntime.clearSeatHoldNotices(requireContext())
+      }
+
       Function("setHistoryShare") { owner: String, deviceId: String, account: String, groups: Map<String, String> ->
         TrackingRuntime.setHistoryShare(requireContext(), owner, deviceId, account, groups)
       }

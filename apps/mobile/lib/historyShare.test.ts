@@ -5,7 +5,6 @@ import {
   historyShareLabel,
   historyShareNote,
   senderHistoryStart,
-  serverHistoryDays,
   shortensHistory,
 } from "./historyShare.ts";
 
@@ -82,11 +81,6 @@ describe("wording", () => {
   test("the maximum shows the server's history length", () => {
     expect(historyShareLabel("MAXIMUM", 45)).toBe("Maximum (45 days)");
     expect(historyShareLabel("DAY_1", 45)).toBe("1 day");
-  });
-
-  test("servers that don't send a history length kept 14 days", () => {
-    expect(serverHistoryDays({ historyDays: 30 })).toBe(30);
-    expect(serverHistoryDays({})).toBe(14);
   });
 });
 

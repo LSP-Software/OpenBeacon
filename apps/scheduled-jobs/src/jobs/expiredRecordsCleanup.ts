@@ -78,6 +78,7 @@ export const runExpiredRecordsCleanup = async () => {
             DELETE FROM "AccountNotice" WHERE id IN (
               SELECT id FROM "AccountNotice"
               WHERE "createdAt" < (${dayAgo}::timestamptz AT TIME ZONE 'UTC')
+                AND ("holdsFrom" IS NULL OR "holdsFrom" < (${nowIso}::timestamptz AT TIME ZONE 'UTC'))
               LIMIT 1000
             )
           `,

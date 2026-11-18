@@ -36,13 +36,7 @@ import { deviceRemovedError } from "../lib/deviceRemoved.ts";
 import { deviceUnverifiedError } from "../lib/deviceUnverified.ts";
 import { removeUserDevice, toAlertDevice } from "../lib/removeDevice.ts";
 import { limits, maxAccountSeats } from "../lib/limits.ts";
-import {
-  seatAccountSelect,
-  seatPeriod,
-  seatsEndingHolds,
-  seatsEnforced,
-  seatsUsed,
-} from "../lib/seats.ts";
+import { seatAccountSelect, seatPeriod, seatsEndingHolds, seatsEnforced } from "../lib/seats.ts";
 import {
   freshSessionProcedure,
   protectedProcedure,
@@ -462,25 +456,17 @@ export const accountRouter = {
     }),
   seats: protectedProcedure.query(async ({ ctx }) => {
     const userId = ctx.session.user.id;
-    const [account, used] = await Promise.all([
-      ctx.db.user.findUniqueOrThrow({ where: { id: userId }, select: seatAccountSelect }),
-      seatsUsed(ctx.db, userId),
-    ]);
-    const enforced = seatsEnforced(ctx);
-    const period = seatPeriod(account, new Date());
+    const now = new Date();
+    const period = seatPeriod(
+      await ctx.db.user.findUniqueOrThrow({ where: { id: userId }, select: seatAccountSelect }),
+      now,
+    );
     return {
-      enforced,
-      selfSetAllowed: ctx.allowSelfSetSeats && !ctx.selfHosted,
-      seats: period.seats,
-      paidSeats: account.seats,
-      used,
-      max: maxAccountSeats,
-      paidPeriodEndsAt: enforced ? account.paidPeriodEndsAt : null,
       grace:
-        enforced && period.grace
+        seatsEnforced(ctx) && period.grace
           ? {
               endsAt: period.grace.endsAt,
-              holds: await seatsEndingHolds({ db: ctx.db, ownerId: userId, seats: period.seats }),
+              holds: await seatsEndingHolds({ db: ctx.db, now, ownerId: userId }),
             }
           : null,
     };

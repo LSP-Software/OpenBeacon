@@ -1,4 +1,4 @@
-const pluralize = (value: number, unit: string) => `${value} ${unit}${value === 1 ? "" : "s"}`;
+import { pluralize } from "./pluralize.ts";
 
 const elapsedSecondsSince = (input: Date | string | number, now: number) => {
   const timestamp = new Date(input).getTime();

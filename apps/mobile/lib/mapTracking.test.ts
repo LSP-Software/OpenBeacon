@@ -2353,3 +2353,40 @@ test("a slower group's stale snapshot cannot bring back a pin another group repo
   expect(session.getLivePositions()).toEqual([]);
   session.destroy();
 });
+
+describe("seat holds across groups", () => {
+  const sharingIn = async (held: Record<string, boolean>) => {
+    const { session } = createSession({
+      listGroups: async () => [{ id: "group-1" }, { id: "group-2" }],
+      getLatest: async (groupId) => ({
+        points: [],
+        sharing: [
+          {
+            deviceId: "tablet",
+            userId: "alex",
+            paused: false,
+            onHold: held[groupId] ?? false,
+            revisionPrefix: "",
+          },
+        ],
+      }),
+    });
+    session.setActive(true);
+    await session.tick();
+    const sharing = session.getStatus().sharing;
+    session.destroy();
+    return sharing;
+  };
+
+  test("a phone on hold in one group but sharing in another isn't on hold", async () => {
+    expect(await sharingIn({ "group-1": true, "group-2": false })).toEqual([
+      expect.objectContaining({ deviceId: "tablet", onHold: false }),
+    ]);
+  });
+
+  test("a phone on hold in every group it shares with is on hold", async () => {
+    expect(await sharingIn({ "group-1": true, "group-2": true })).toEqual([
+      expect.objectContaining({ deviceId: "tablet", onHold: true }),
+    ]);
+  });
+});

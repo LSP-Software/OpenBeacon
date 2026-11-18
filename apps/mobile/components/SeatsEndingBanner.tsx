@@ -1,6 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "expo-router";
 import { View } from "react-native";
 import { trpc } from "../lib/api.ts";
+import { pluralize } from "../lib/pluralize.ts";
+import { Button } from "./ui/Button.tsx";
 import { Text } from "./ui/Text.tsx";
 
 export const SeatsEndingBanner = ({ subscribed }: { subscribed: boolean }) => {
@@ -11,26 +14,19 @@ export const SeatsEndingBanner = ({ subscribed }: { subscribed: boolean }) => {
     dateStyle: "medium",
     timeStyle: "short",
   });
-  const groupNames = [...new Set(grace.holds.map((hold) => hold.groupName))];
 
   return (
-    <View className="mb-2 gap-2 rounded-xl border border-amber-600 dark:border-amber-400 bg-card p-4">
-      <Text className="font-semibold text-amber-700 dark:text-amber-400">
-        Your seats have ended
-      </Text>
+    <View className="mb-2 gap-2 rounded-2xl border border-warning-accent bg-card p-4">
+      <Text className="font-semibold text-warning-text">Your seats have ended</Text>
       <Text>
-        Your groups keep working until {endsAt}. Then these phones go on hold until you renew your
-        seats:
+        {pluralize(grace.holds.length, "phone")} in your groups{" "}
+        {grace.holds.length === 1 ? "goes" : "go"} on hold on {endsAt} unless you renew your seats.
       </Text>
-      {groupNames.map((groupName) => (
-        <Text key={groupName}>
-          <Text className="font-semibold">{groupName}: </Text>
-          {grace.holds
-            .filter((hold) => hold.groupName === groupName)
-            .map((hold) => `${hold.memberName} (${hold.deviceName})`)
-            .join(", ")}
-        </Text>
-      ))}
+      <Link href="/account/usage" asChild>
+        <Button size="sm" className="self-start">
+          <Text>See usage</Text>
+        </Button>
+      </Link>
     </View>
   );
 };

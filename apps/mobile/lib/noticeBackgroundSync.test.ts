@@ -169,8 +169,8 @@ describe("account notices", () => {
     const date = holdsFrom.toLocaleDateString(undefined, { day: "numeric", month: "short" });
     expect(describeAccountNotice(account("SEATS_ENDING", { holdsFrom }))).toMatchObject({
       title: "Your seats have ended",
-      body: `From ${date}, phones in the groups you own go on hold until you renew your seats. Open the map to see which.`,
-      link: { url: "openbeacon:///map" },
+      body: `From ${date}, phones in the groups you own go on hold until you renew your seats. Open Account › Usage to see which.`,
+      link: { url: "openbeacon:///account/usage" },
     });
     expect(describeAccountNotice(account("SEATS_ENDING_SOON", { holdsFrom })).title).toBe(
       "Phones in your groups go on hold tomorrow",

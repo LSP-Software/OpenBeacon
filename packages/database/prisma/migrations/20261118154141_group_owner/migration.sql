@@ -21,8 +21,9 @@ UPDATE "Group" AS "group"
 SET "ownerId" = (
   SELECT "member"."userId"
   FROM "GroupMember" AS "member"
+  JOIN "User" AS "user" ON "user"."id" = "member"."userId"
   WHERE "member"."groupId" = "group"."id"
-  ORDER BY "member"."role", "member"."createdAt", "member"."id"
+  ORDER BY "user"."pendingDeletion", "member"."role", "member"."createdAt", "member"."id"
   LIMIT 1
 );
 

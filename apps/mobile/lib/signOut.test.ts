@@ -152,6 +152,7 @@ mock.module("./groupColor.ts", () => ({ clearGroupColors: () => {} }));
 mock.module("./imageKeySelfCheck.ts", () => ({ resetImageKeyCheck: () => {} }));
 mock.module("./trackingKeyCheck.ts", () => ({ clearTrackingKeyCheck: () => {} }));
 mock.module("./trackingUploadTime.ts", () => ({ clearTrackingUploadTimes: () => {} }));
+mock.module("./seatHolds.ts", () => ({ clearSeatHolds: async () => {} }));
 
 const { cancelDeviceKeyRegistrations, ensureDeviceKeyRegistration } =
   await import("./deviceKeys.ts");

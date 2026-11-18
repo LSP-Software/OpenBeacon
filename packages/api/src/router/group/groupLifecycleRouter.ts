@@ -6,12 +6,11 @@ import { deleteGroup } from "../../lib/deleteGroup.ts";
 import { persistGroupEpoch } from "../../lib/groupEpochs.ts";
 import { assertAccountBelowGroupLimit } from "../../lib/groupLimit.ts";
 import {
-  accountSeats,
   activatedDevices,
+  freeSeats,
   noFreeSeatsError,
   seatCount,
   seatsEnforced,
-  seatsUsed,
 } from "../../lib/seats.ts";
 import { groupOwnerProcedure } from "../../procedures/auth/group.ts";
 import { protectedProcedure } from "../../procedures/auth/runtime.ts";
@@ -82,12 +81,10 @@ export const groupLifecycleRouter = {
           throw new TRPCError({ code: "UNAUTHORIZED" });
         await assertAccountBelowGroupLimit(tx, ctx.session.user.id);
         if (seatsEnforced(ctx)) {
-          const [seats, used, needed] = await Promise.all([
-            accountSeats(tx, ctx.session.user.id),
-            seatsUsed(tx, ctx.session.user.id),
+          const [{ free, seats }, needed] = await Promise.all([
+            freeSeats(tx, ctx.session.user.id),
             activatedDevices(tx, ctx.session.user.id),
           ]);
-          const free = Math.max(0, seats - used);
           if (seats === 0) {
             throw noFreeSeatsError("Your account has no seats. Add seats to create a group.");
           }

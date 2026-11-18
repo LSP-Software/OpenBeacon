@@ -6,9 +6,12 @@ import { hasLocallyPausedSharing } from "./locationSharing.ts";
 import { showEventNotice } from "./notifications.ts";
 import { parseJson } from "./parseJson.ts";
 import { storage } from "./storage.ts";
+import { getCheckedMembership, getMembershipSignature } from "./trackingKeyCheck.ts";
 import { loadTrackingModule } from "./trackingModule.ts";
 
-const heldKey = (userId: string) => `seatHolds.held.${JSON.stringify([baseUrl, userId])}`;
+const HELD_KEY_PREFIX = "seatHolds.held.";
+
+const heldKey = (userId: string) => `${HELD_KEY_PREFIX}${JSON.stringify([baseUrl, userId])}`;
 
 export const noteHeldGroups = async ({
   deviceId,
@@ -19,10 +22,23 @@ export const noteHeldGroups = async ({
   heldGroupIds: string[];
   userId: string;
 }) => {
-  const stored = z.array(z.string()).safeParse(parseJson(storage.getString(heldKey(userId)) ?? ""));
+  const stored = z
+    .object({ held: z.array(z.string()), membership: z.string().nullable() })
+    .safeParse(parseJson(storage.getString(heldKey(userId)) ?? ""));
   const previous = stored.success ? stored.data : null;
-  if (heldGroupIds.length === 0 && (previous === null || previous.length === 0)) {
-    storage.set(heldKey(userId), JSON.stringify(heldGroupIds));
+  if (heldGroupIds.length === 0 && (previous === null || previous.held.length === 0)) {
+    if (previous === null) {
+      storage.set(heldKey(userId), JSON.stringify({ held: [], membership: null }));
+    }
+    return;
+  }
+  const membership = getCheckedMembership();
+  if (
+    previous &&
+    previous.held.length === heldGroupIds.length &&
+    heldGroupIds.every((groupId) => previous.held.includes(groupId)) &&
+    (membership === null || membership === previous.membership)
+  ) {
     return;
   }
   const groups: RouterOutputs["groupMembership"]["list"] =
@@ -37,11 +53,14 @@ export const noteHeldGroups = async ({
     );
     if (applied === false) return;
   }
-  storage.set(heldKey(userId), JSON.stringify(heldGroupIds));
+  storage.set(
+    heldKey(userId),
+    JSON.stringify({ held: heldGroupIds, membership: getMembershipSignature(groups) }),
+  );
   await queryClient.invalidateQueries({ queryKey: trpc.groupMembership.list.queryKey() });
   const paused = hasLocallyPausedSharing(userId);
   const lifted = groups.filter(
-    (group) => previous?.includes(group.id) && !heldGroupIds.includes(group.id),
+    (group) => previous?.held.includes(group.id) && !heldGroupIds.includes(group.id),
   );
   for (const group of lifted) {
     await showEventNotice({
@@ -58,4 +77,13 @@ export const noteHeldGroups = async ({
       },
     });
   }
+};
+
+export const clearSeatHolds = async () => {
+  for (const key of storage.getAllKeys()) {
+    if (key.startsWith(HELD_KEY_PREFIX)) storage.remove(key);
+  }
+  if (Platform.OS !== "android") return;
+  const trackingModule = await loadTrackingModule();
+  trackingModule?.clearSeatHoldNotices();
 };

@@ -70,6 +70,8 @@ export const recordTrackingKeyCheck = ({
   storage.set(KEY_CHECK_KEY, `${Date.now()} ${scope}`);
 };
 
+export const getCheckedMembership = () => checkedMembership;
+
 export const hasMembershipChanged = (membership: string) =>
   checkedMembership !== null && checkedMembership !== membership;
 

@@ -118,8 +118,8 @@ mock.module("../lib/imageKeys.ts", () => ({
     return true;
   },
 }));
-mock.module("../lib/groupLimitAlert.ts", () => ({
-  groupLimitAlert: () =>
+mock.module("../lib/limitAlert.ts", () => ({
+  limitAlert: () =>
     limitReached ? { title: "Too many groups", message: "Leave a group first." } : null,
 }));
 mock.module("../lib/trackingEvents.ts", () => ({
@@ -245,7 +245,7 @@ test("shows who invited you, the group and its size before asking", async () => 
     "Alex Smith",
     "invited you to join",
     "Smith Family",
-    '"4"," ","members"',
+    '"4 members"',
     "Do you want to join this group?",
   ])
     expect(text).toContain(expected);
@@ -272,7 +272,7 @@ test("joining without changing it follows the account setting", async () => {
 test("a group of one says member, not members", async () => {
   showPreview({ group: { ...preview.group, memberCount: 1 } });
   const text = output(await render(code));
-  expect(text).toContain('"1"," ","member"');
+  expect(text).toContain('"1 member"');
   expect(text).not.toContain('"members"');
 });
 

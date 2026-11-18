@@ -1,8 +1,8 @@
-import { GroupRole } from "@openbeacon/database";
 import { TRPCError } from "@trpc/server";
 import z from "zod";
 import { ReasonError } from "../../lib/reasonError.ts";
 import { protectedProcedure } from "./runtime.ts";
+import { isAdminOrEditor, notAdminOrEditorError } from "../../lib/groupRoles.ts";
 
 export const groupMemberProcedure = protectedProcedure
   .input(z.object({ groupId: z.string().min(1).max(128) }))
@@ -35,12 +35,7 @@ export const groupMemberProcedure = protectedProcedure
   });
 
 export const groupEditorProcedure = groupMemberProcedure.use(async ({ ctx, next }) => {
-  if (ctx.groupMember.role !== GroupRole.ADMIN && ctx.groupMember.role !== GroupRole.EDITOR) {
-    throw new TRPCError({
-      code: "FORBIDDEN",
-      message: "You are not an Admin or Editor of this group",
-    });
-  }
+  if (!isAdminOrEditor(ctx.groupMember.role)) throw notAdminOrEditorError();
 
   return next({
     ctx: { ...ctx, user: ctx.session.user },

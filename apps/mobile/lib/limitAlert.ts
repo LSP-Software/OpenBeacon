@@ -1,6 +1,6 @@
 import { errorReason } from "./errorReason.ts";
 
-export const groupLimitAlert = (error: unknown) => {
+export const limitAlert = (error: unknown) => {
   const reason = errorReason(error);
   if (reason === "GROUP_LIMIT_REACHED") {
     return {

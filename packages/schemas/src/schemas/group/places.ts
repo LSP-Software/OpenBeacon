@@ -3,6 +3,8 @@ import z from "zod";
 import { isVisibleName } from "../account/fields.ts";
 import { groupPayloadNonceSchema } from "./tracking.ts";
 
+export const MAX_PLACES_PER_GROUP = 50;
+
 const singleEmojiPattern =
   /^(?:\p{Regional_Indicator}{2}|[#*0-9]\u{FE0F}?\u{20E3}|\p{Extended_Pictographic}(?:\u{FE0F}|\p{Emoji_Modifier})?(?:[\u{E0020}-\u{E007E}]+\u{E007F})?(?:\u{200D}\p{Extended_Pictographic}(?:\u{FE0F}|\p{Emoji_Modifier})?)*)$/u;
 
@@ -62,6 +64,7 @@ export const reEncryptPlacesSchema = z.object({
       }),
     )
     .min(1)
+    .max(MAX_PLACES_PER_GROUP)
     .refine((places) => new Set(places.map(({ placeId }) => placeId)).size === places.length, {
       message: "Each place can only be re-encrypted once per request",
     }),

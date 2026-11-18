@@ -6,7 +6,7 @@ const migrationsPath = `${import.meta.dir}/../prisma/migrations`;
 const target = "20261118154141_group_owner";
 
 describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("group owner migration", () => {
-  test("each group's earliest-joined OWNER becomes its owner and every role is renamed", async () => {
+  test("each group's earliest-joined OWNER not being deleted becomes its owner and every role is renamed", async () => {
     const schema = `migration_${crypto.randomUUID().replaceAll("-", "")}`;
     const sql = new SQL(process.env["DATABASE_URL"] ?? "");
     const connection = await sql.reserve();
@@ -24,10 +24,14 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("group owner migr
           ('ben', 'Ben', 'ben@example.test', now()),
           ('cat', 'Cat', 'cat@example.test', now()),
           ('dan', 'Dan', 'dan@example.test', now());
+        INSERT INTO "User" ("id", "name", "email", "updatedAt", "pendingDeletion") VALUES
+          ('eve', 'Eve', 'eve@example.test', now(), true);
         INSERT INTO "Group" ("id", "name", "updatedAt") VALUES
           ('single', 'One owner', now()),
           ('several', 'Several owners', now()),
-          ('empty', 'No members', now());
+          ('empty', 'No members', now()),
+          ('leaving', 'Owner leaving', now()),
+          ('allLeaving', 'Every owner leaving', now());
         INSERT INTO "GroupMember" ("id", "userId", "groupId", "role", "joinedEpochNumber", "createdAt", "updatedAt") VALUES
           ('single-ann', 'ann', 'single', 'MEMBER', 1, '2026-01-01', now()),
           ('single-ben', 'ben', 'single', 'OWNER', 1, '2026-01-02', now()),
@@ -35,7 +39,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("group owner migr
           ('several-ann', 'ann', 'several', 'OWNER', 1, '2026-02-03', now()),
           ('several-ben', 'ben', 'several', 'ADMIN', 1, '2026-02-01', now()),
           ('several-cat', 'cat', 'several', 'OWNER', 1, '2026-02-02', now()),
-          ('several-dan', 'dan', 'several', 'MEMBER', 1, '2026-02-04', now());
+          ('several-dan', 'dan', 'several', 'MEMBER', 1, '2026-02-04', now()),
+          ('leaving-eve', 'eve', 'leaving', 'OWNER', 1, '2026-03-01', now()),
+          ('leaving-dan', 'dan', 'leaving', 'OWNER', 1, '2026-03-02', now()),
+          ('allLeaving-eve', 'eve', 'allLeaving', 'OWNER', 1, '2026-04-01', now()),
+          ('allLeaving-ann', 'ann', 'allLeaving', 'MEMBER', 1, '2026-04-02', now());
         INSERT INTO "GroupEvent" ("id", "groupId", "type", "subjectUserId", "role") VALUES
           ('made-owner', 'several', 'ROLE_CHANGED', 'ann', 'OWNER'),
           ('made-admin', 'several', 'ROLE_CHANGED', 'ben', 'ADMIN');
@@ -44,12 +52,18 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("group owner migr
       await migrate(target);
 
       expect(await connection.unsafe(`SELECT "id", "ownerId" FROM "Group" ORDER BY "id"`)).toEqual([
+        { id: "allLeaving", ownerId: "ann" },
+        { id: "leaving", ownerId: "dan" },
         { id: "several", ownerId: "cat" },
         { id: "single", ownerId: "ben" },
       ]);
       expect(
         await connection.unsafe(`SELECT "id", "role" FROM "GroupMember" ORDER BY "id"`),
       ).toEqual([
+        { id: "allLeaving-ann", role: "ADMIN" },
+        { id: "allLeaving-eve", role: "ADMIN" },
+        { id: "leaving-dan", role: "ADMIN" },
+        { id: "leaving-eve", role: "ADMIN" },
         { id: "several-ann", role: "ADMIN" },
         { id: "several-ben", role: "EDITOR" },
         { id: "several-cat", role: "ADMIN" },

@@ -11,7 +11,7 @@ import type z from "zod";
 import { trpc } from "../../lib/api.ts";
 import { buildCreateGroupInput, submitEpochChange } from "../../lib/groupEncryption.ts";
 import { uploadNewGroupImage } from "../../lib/groupImageUpload.ts";
-import { groupLimitAlert } from "../../lib/groupLimitAlert.ts";
+import { limitAlert } from "../../lib/limitAlert.ts";
 import { cleanupTempFile } from "../../lib/image-upload.ts";
 import { storeOwnImageKeyInGroup } from "../../lib/imageKeys.ts";
 import { pickImage, processImage } from "../../lib/pickImage.ts";
@@ -77,7 +77,7 @@ export const CreateGroupDialog = ({
         })(),
       );
 
-      const limit = groupLimitAlert(result.error);
+      const limit = limitAlert(result.error);
       if (limit) {
         Alert.alert(limit.title, limit.message);
         return;

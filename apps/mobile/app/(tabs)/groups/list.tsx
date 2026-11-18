@@ -9,7 +9,6 @@ import {
   MailIcon,
   PlusIcon,
   QrCodeIcon,
-  ShieldIcon,
   UsersIcon,
 } from "lucide-react-native";
 import { useState } from "react";
@@ -33,6 +32,7 @@ import { type RouterOutputs, trpc } from "../../../lib/api.ts";
 import { cn } from "../../../lib/cn.ts";
 import { getGroupColor } from "../../../lib/groupColor.ts";
 import { initials } from "../../../lib/initials.ts";
+import { pluralize } from "../../../lib/pluralize.ts";
 
 export default function GroupsScreen() {
   const [createGroupDialogOpen, setCreateGroupDialogOpen] = useState(false);
@@ -139,6 +139,12 @@ const OwnershipOffers = ({ offers }: { offers: RouterOutputs["groupOwnership"]["
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: trpc.groupOwnership.offers.queryKey() }),
       queryClient.invalidateQueries({ queryKey: trpc.groupMembership.list.queryKey() }),
+      ...(answer === "accept"
+        ? [
+            queryClient.invalidateQueries({ queryKey: trpc.account.usage.queryKey() }),
+            queryClient.invalidateQueries({ queryKey: trpc.account.seats.queryKey() }),
+          ]
+        : []),
     ]);
     if (result.error) {
       Alert.alert(
@@ -156,7 +162,7 @@ const OwnershipOffers = ({ offers }: { offers: RouterOutputs["groupOwnership"]["
           icon={CrownIcon}
           tone="primary"
           title={`Become the owner of ${offer.groupName}?`}
-          description={`${offer.owner.name} asked you to take over ${offer.groupName}. The owner’s account pays for every seat in the group, so it will use ${offer.seats} ${offer.seats === 1 ? "seat" : "seats"} of yours (one for each phone or tablet in it). Only the owner can delete the group or hand it on. ${offer.owner.name} stays an Admin.`}
+          description={`${offer.owner.name} asked you to take over ${offer.groupName}. The owner’s account pays for every seat in the group, so it will use ${pluralize(offer.seats, "seat")} of yours (one for each phone or tablet in it). Only the owner can delete the group or hand it on. ${offer.owner.name} stays an Admin.`}
         >
           <Button
             className="flex-1"
@@ -260,7 +266,7 @@ export const GroupList = ({
           href={`/groups/${group.id}`}
           key={group.id}
           asChild
-          accessibilityLabel={`${group.name}, ${group.members.length} ${group.members.length === 1 ? "member" : "members"}${unseenGroupIds.has(group.id) ? ", new activity" : ""}`}
+          accessibilityLabel={`${group.name}, ${pluralize(group.members.length, "member")}${unseenGroupIds.has(group.id) ? ", new activity" : ""}`}
         >
           <Pressable
             className={cn(
@@ -306,7 +312,7 @@ export const GroupList = ({
                   ))}
                 </View>
                 <Text className="text-tertiary text-sm">
-                  {group.members.length} {group.members.length === 1 ? "member" : "members"}
+                  {pluralize(group.members.length, "member")}
                 </Text>
               </View>
             </View>

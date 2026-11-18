@@ -20,6 +20,7 @@ import { parseJson } from "./parseJson.ts";
 import { clearPendingJoinCodes } from "./pendingJoinCode.ts";
 import { readRegisteredDevice } from "./registeredDevice.ts";
 import { deleteSavedDeviceLink } from "./savedDeviceLink.ts";
+import { clearSeatHolds } from "./seatHolds.ts";
 import { invalidateSecretWrites } from "./secretStorage.ts";
 import { storage } from "./storage.ts";
 import { clearTrackingKeyCheck } from "./trackingKeyCheck.ts";
@@ -203,6 +204,7 @@ export const endSession = async ({
   clearGroupColors();
   clearTrackingUploadTimes();
   clearTrackingKeyCheck();
+  await tryCatch(clearSeatHolds());
   if (clears.compatibility) clearApiCompatibility();
   if (userId && clears.keyMaterial === "keepUntilExpiry") {
     recordLostSession({ userId, lostAt: Date.now() });

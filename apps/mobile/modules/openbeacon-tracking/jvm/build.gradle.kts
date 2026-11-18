@@ -10,7 +10,7 @@ dependencies {
   implementation("com.google.crypto.tink:tink:1.18.0")
   testImplementation(kotlin("test"))
   testImplementation("org.jetbrains.kotlin:kotlin-test-junit:2.1.20")
-  testImplementation("org.json:json:20250517")
+  implementation("org.json:json:20250517")
 }
 
 kotlin {

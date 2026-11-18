@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { GroupRole, Prisma, type PrismaClient } from "@openbeacon/database";
+import { Prisma, type PrismaClient } from "@openbeacon/database";
 import { MIN_ENCRYPTED_IMAGE_LENGTH } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
@@ -11,6 +11,7 @@ import {
   getPresignedUploadUrl,
   getUploadedFile,
 } from "./storage.ts";
+import { isAdminOrEditor, notAdminOrEditorError } from "./groupRoles.ts";
 
 export type ImageUploadType = "userAvatar" | "groupAvatar";
 
@@ -46,12 +47,7 @@ export const setPendingImageUploadForUser = async ({
       const member = await tx.groupMember.findUnique({
         where: { userId_groupId: { userId, groupId } },
       });
-      if (member?.role !== GroupRole.ADMIN && member?.role !== GroupRole.EDITOR) {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "You are not an Admin or Editor of this group",
-        });
-      }
+      if (!isAdminOrEditor(member?.role)) throw notAdminOrEditorError();
     }
     const lockKey = Math.abs(createHash("sha256").update(userId, "utf8").digest().readInt32BE(0));
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(${lockKey})`;

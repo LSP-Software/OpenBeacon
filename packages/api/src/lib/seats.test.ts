@@ -52,4 +52,18 @@ describe("seatPeriod", () => {
       ).seats,
     ).toBe(4);
   });
+
+  test("counts 6 months back to the same time of day, or the end of a shorter month", () => {
+    const given = (paidPeriodEndsAt: Date, lastGracePeriodStartedAt: Date) =>
+      seatPeriod({ seats: 4, paidPeriodEndsAt, lastGracePeriodStartedAt }, paidPeriodEndsAt)
+        .grace !== null;
+    const exactly = new Date("2026-05-18T12:00:00Z");
+    expect(given(endedAt, exactly)).toBe(true);
+    expect(given(endedAt, new Date(exactly.getTime() + 1))).toBe(false);
+    const monthEnd = new Date("2026-08-31T12:00:00Z");
+    expect(given(monthEnd, new Date("2026-02-28T12:00:00Z"))).toBe(true);
+    expect(given(monthEnd, new Date("2026-02-28T12:00:00.001Z"))).toBe(false);
+    expect(given(monthEnd, new Date("2026-03-01T12:00:00Z"))).toBe(false);
+    expect(given(new Date("2028-08-31T12:00:00Z"), new Date("2028-02-29T12:00:00Z"))).toBe(true);
+  });
 });

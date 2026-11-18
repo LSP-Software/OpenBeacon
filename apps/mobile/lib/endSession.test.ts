@@ -157,6 +157,7 @@ mock.module("./imageKeySelfCheck.ts", () => ({
 }));
 mock.module("./trackingKeyCheck.ts", () => ({ clearTrackingKeyCheck: () => {} }));
 mock.module("./trackingUploadTime.ts", () => ({ clearTrackingUploadTimes: () => {} }));
+mock.module("./seatHolds.ts", () => ({ clearSeatHolds: async () => {} }));
 
 const { ensureDeviceKeyRegistration } = await import("./deviceKeys.ts");
 const { handleDeviceRemoved, wipeAfterRemovingThisPhone } = await import("./deviceRemoved.ts");

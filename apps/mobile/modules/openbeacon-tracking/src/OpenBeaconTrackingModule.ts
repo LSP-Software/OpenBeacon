@@ -81,6 +81,7 @@ declare class OpenBeaconTrackingModule extends NativeModule<{
     resumeAfter: number | null,
   ): boolean;
   setSeatHoldNotice(owner: string, deviceId: string, sharing: string[], held: string[]): boolean;
+  clearSeatHoldNotices(): void;
   setHistoryShare(
     owner: string,
     deviceId: string,

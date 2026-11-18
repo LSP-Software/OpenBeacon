@@ -192,6 +192,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           select: { userId: true, type: true },
         }),
       ).toEqual([{ userId: admin, type: "OWNERSHIP_OFFERED" }]);
+      await caller(owner).groupOwnership.offer({ groupId, memberId: memberIdOf(admin) });
+      expect(await prisma.accountNotice.count({ where: { groupId } })).toBe(1);
       expect(await caller(admin).groupOwnership.offers()).toEqual([
         {
           groupId,

@@ -16,7 +16,12 @@ import {
   setupProcedure,
 } from "../procedures/auth/runtime.ts";
 import { createTRPCRouter } from "../trpcRuntime.ts";
-import { activateDevice, devicePendingError, lockThisDevice } from "../lib/deviceActivation.ts";
+import {
+  activateDevice,
+  devicePendingError,
+  lockActivatingAccount,
+  lockThisDevice,
+} from "../lib/deviceActivation.ts";
 import { ReasonError } from "../lib/reasonError.ts";
 
 const emailCodeProcedure = setupProcedure.use(requireFreshSession).use(({ ctx, next }) => {
@@ -246,6 +251,7 @@ export const accountRecoveryRouter = createTRPCRouter({
         });
       }
       await ctx.db.$transaction(async (tx) => {
+        await lockActivatingAccount(tx, userId);
         const thisDevice = await lockThisDevice({
           db: tx,
           deviceId,
