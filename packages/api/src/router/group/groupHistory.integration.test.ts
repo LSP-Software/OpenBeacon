@@ -3,6 +3,7 @@ import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
 import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
 import { readGroupHistory } from "../../lib/groupHistory.ts";
+import { limits } from "../../lib/limits.ts";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
 import { groupHistoryRouter } from "./groupHistoryRouter.ts";
 import { groupMembershipRouter } from "./groupMembershipRouter.ts";
@@ -142,14 +143,17 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await prisma.$disconnect();
     });
 
-    test("merges group events and place arrivals newest first, within the last 14 days", async () => {
-      await seedEvent("expired", ago(15 * day));
-      await seedTransition("expiredArrival", ago(14 * day + minute));
+    test("merges group events and place arrivals newest first, within the history limit", async () => {
+      await seedEvent("expired", ago((limits.historyDays + 1) * day));
+      await seedTransition("expiredArrival", ago(limits.historyDays * day + minute));
       await seedEvent("renamed", ago(3 * minute));
       await seedTransition("arrived", ago(2 * minute));
       await seedEvent("renamedAgain", ago(minute));
 
-      const { items, nextBefore } = await caller(member).groupHistory.list({ groupId });
+      const { historyDays, items, nextBefore } = await caller(member).groupHistory.list({
+        groupId,
+      });
+      expect(historyDays).toBe(limits.historyDays);
       expect(items.map(({ id }) => id.slice(prefix.length + 1))).toEqual([
         "renamedAgain",
         "arrived",
@@ -327,13 +331,13 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
 
     test("latest counts other people's group events since you joined, not arrivals or expired ones", async () => {
       await seedEvent("beforeJoin", ago(20 * minute));
-      await seedEvent("expired", ago(14 * day + minute));
+      await seedEvent("expired", ago(limits.historyDays * day + minute));
       await seedEvent("byMember", ago(5 * minute), member);
       await seedTransition("ownerArrivedEarly", ago(4 * minute), owner);
       await setJoinedAt(member, ago(10 * minute));
       expect(await caller(member).groupHistory.latest()).toEqual([{ groupId, latestAt: null }]);
 
-      await setJoinedAt(member, ago(15 * day));
+      await setJoinedAt(member, ago((limits.historyDays + 1) * day));
       expect(await caller(member).groupHistory.latest()).toEqual([
         {
           groupId,

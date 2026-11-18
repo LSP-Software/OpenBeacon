@@ -2,8 +2,8 @@ import { afterAll, beforeEach, expect, mock, spyOn, test } from "bun:test";
 import type { Prisma } from "@openbeacon/database";
 
 const databaseNow = new Date("2001-03-02T00:00:00.000Z");
-const cutoff = "2001-02-16T00:00:00.000Z";
-const cutoffHour = 272_856;
+const cutoff = "2001-01-31T00:00:00.000Z";
+const cutoffHour = 272_472;
 let backlog = 0;
 let failures: unknown[] = [];
 let epochs: Array<{ id: string; createdAt: Date }> = [];
@@ -133,7 +133,7 @@ beforeEach(() => {
   windowDeletes.length = 0;
 });
 
-test("deletes location points older than database time minus exactly 14 days in batches, then stale latest points and empty streams", async () => {
+test("deletes location points older than database time minus exactly 30 days in batches, then stale latest points and empty streams", async () => {
   backlog = 2_500;
   await createLocationHistoryCleanup()();
   expect(payloadDeletes).toEqual([
@@ -147,7 +147,7 @@ test("deletes location points older than database time minus exactly 14 days in 
   ]);
   expect(backlog).toBe(0);
   expect(windowDeletes).toHaveLength(1);
-  expect(windowDeletes[0]?.values).toContain(272_856 + 14 * 24 - 5);
+  expect(windowDeletes[0]?.values).toContain(cutoffHour + 30 * 24 - 5);
   expect(tidyDeletes).toEqual([{ table: "TrackingLatestPoint", values: [cutoff] }]);
   expect(streamLocks).toEqual([{ after: "0", limit: 1000 }]);
 });

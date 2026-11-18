@@ -3,6 +3,7 @@ import { prisma } from "@openbeacon/database";
 import { createDeviceKeyPair, generateGroupEpochKey } from "@openbeacon/encryption";
 import type { HistoryShare } from "@openbeacon/shared";
 import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
+import { limits } from "../../lib/limits.ts";
 import {
   encryptedTrackingPoint,
   storeTrackingPoints,
@@ -373,11 +374,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(Buffer.from(latest.payload.subarray(24)).toString("base64")).toBe(live.ciphertext);
     });
 
-    test("the account query returns the setting and each group's override for account sync", async () => {
+    test("the account query returns the setting, each group's override and the history length", async () => {
       await setAccount(sharerId, "WEEK_1");
       await setOverride(sharerId, clubId, "LAST_LOCATION");
       const sharing = await caller(sharerId, sharerDeviceId).account.locationSharing();
       expect(sharing.historyShare.account).toBe("WEEK_1");
+      expect(sharing.historyShare.historyDays).toBe(limits.historyDays);
       expect(sharing.historyShare.groups).toEqual(
         [
           { groupId: familyId, historyShare: null },

@@ -12,30 +12,35 @@ type HistoryShareSetting = {
   groups: ReadonlyArray<{ groupId: string; historyShare: HistoryShare | null }>;
 };
 
-const choices: Record<HistoryShare, { label: string; amount: string; period: string | null }> = {
+const choices: Record<
+  Exclude<HistoryShare, "MAXIMUM">,
+  { label: string; amount: string; period: string | null }
+> = {
   LAST_LOCATION: { label: "Last location only", amount: "only your location now", period: null },
   HOURS_6: { label: "6 hours", amount: "6 hours of history", period: "the last 6 hours" },
   DAY_1: { label: "1 day", amount: "1 day of history", period: "the last day" },
   WEEK_1: { label: "1 week", amount: "1 week of history", period: "the last week" },
-  MAXIMUM: { label: "Maximum (14 days)", amount: "up to 14 days of history", period: null },
 };
 
-export const historyShareChoices = HISTORY_SHARES.map((value) => ({
-  value,
-  label: choices[value].label,
-}));
+export const serverHistoryDays = ({ historyDays }: { historyDays?: number }) => historyDays ?? 14;
 
-export const historyShareLabel = (share: HistoryShare) => choices[share].label;
+export const historyShareLabel = (share: HistoryShare, historyDays: number) =>
+  share === "MAXIMUM" ? `Maximum (${historyDays} days)` : choices[share].label;
 
-export const historyShareAmount = (share: HistoryShare) => choices[share].amount;
+export const historyShareChoices = (historyDays: number) =>
+  HISTORY_SHARES.map((value) => ({ value, label: historyShareLabel(value, historyDays) }));
+
+export const historyShareAmount = (share: HistoryShare, historyDays: number) =>
+  share === "MAXIMUM" ? `up to ${historyDays} days of history` : choices[share].amount;
 
 export const historyShareNote = (name: string | null, share: HistoryShare) => {
-  const period = choices[share].period;
+  if (share === "MAXIMUM") return null;
   if (share === "LAST_LOCATION") {
     return name === null
       ? "You share only your location now"
       : `${name} shares only their location now`;
   }
+  const period = choices[share].period;
   if (period === null) return null;
   return name === null ? `You share ${period}` : `${name} shares ${period}`;
 };

@@ -26,8 +26,8 @@ FEATURES
 • Live map of everyone in your groups
 • Places such as home, school or work, with arrival and departure alerts
 • Pause sharing for 15 minutes, a few hours or until you turn it back on
-• Timeline: play back your group's day. Each person chooses how much of their history to share, from only their location now up to 14 days
-• See who can see your location now, and who could in the last 14 days
+• Timeline: play back your group's day. Each person chooses how much of their history to share, from only their location now up to 30 days
+• See who can see your location now, and who could in the last 30 days
 • Several groups, such as family and close friends, with owner, admin and member roles
 • Invite by email, link or QR code, and see what you're joining before you join
 • Use OpenBeacon on more than one phone or tablet

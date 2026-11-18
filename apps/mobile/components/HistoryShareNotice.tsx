@@ -34,7 +34,9 @@ export const HistoryShareNotice = ({ userId }: { userId: string }) => {
     <Dialog open={open} onOpenChange={(next) => !next && dismiss()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Your groups can see up to 14 days of your location history</DialogTitle>
+          <DialogTitle>
+            Your groups can see up to {setting?.historyDays} days of your location history
+          </DialogTitle>
           <DialogDescription>
             Members can play back where you’ve been in Timeline, from when they joined. You can
             share less, or only your location now, for all your groups or one group at a time.

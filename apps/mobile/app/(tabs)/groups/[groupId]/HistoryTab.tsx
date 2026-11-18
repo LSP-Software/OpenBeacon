@@ -29,6 +29,7 @@ import {
   groupByDay,
   markGroupHistorySeen,
 } from "../../../../lib/groupHistory.ts";
+import { serverHistoryDays } from "../../../../lib/historyShare.ts";
 
 const eventIcons = {
   GROUP_CREATED: SparklesIcon,
@@ -46,16 +47,16 @@ const eventIcons = {
 } as const;
 
 const filters = [
-  { label: "All", category: null, empty: "Nothing has happened in the last 14 days." },
+  { label: "All", category: null, empty: "Nothing has happened" },
   {
     label: "Arrivals",
     category: "arrivals",
-    empty: "No arrivals or departures in the last 14 days.",
+    empty: "No arrivals or departures",
   },
-  { label: "Members", category: "members", empty: "No member changes in the last 14 days." },
-  { label: "Roles", category: "roles", empty: "No role changes in the last 14 days." },
-  { label: "Group", category: "group", empty: "No group changes in the last 14 days." },
-  { label: "Places", category: "places", empty: "No place changes in the last 14 days." },
+  { label: "Members", category: "members", empty: "No member changes" },
+  { label: "Roles", category: "roles", empty: "No role changes" },
+  { label: "Group", category: "group", empty: "No group changes" },
+  { label: "Places", category: "places", empty: "No place changes" },
 ] as const;
 
 const HistoryTab = ({ groupId, active }: { groupId: string; active: boolean }) => {
@@ -166,6 +167,7 @@ const HistoryTab = ({ groupId, active }: { groupId: string; active: boolean }) =
     items: history.data.pages.flatMap((page) => page.items),
     now: new Date(),
   });
+  const historyDays = serverHistoryDays(history.data.pages[0] ?? {});
 
   return (
     <View className="gap-2 pt-1">
@@ -187,7 +189,8 @@ const HistoryTab = ({ groupId, active }: { groupId: string; active: boolean }) =
       ) : null}
       {sections.length === 0 ? (
         <Text className="py-6 text-center text-tertiary">
-          {filters.find((filter) => filter.category === category)?.empty}
+          {filters.find((filter) => filter.category === category)?.empty} in the last {historyDays}{" "}
+          days.
         </Text>
       ) : null}
       {sections.map((section) => (
@@ -259,7 +262,9 @@ const HistoryTab = ({ groupId, active }: { groupId: string; active: boolean }) =
           <Text>Show older</Text>
         </Button>
       ) : null}
-      <Text className="mt-3 text-center text-sm text-tertiary">History is kept for 14 days.</Text>
+      <Text className="mt-3 text-center text-sm text-tertiary">
+        History is kept for {historyDays} days.
+      </Text>
     </View>
   );
 };

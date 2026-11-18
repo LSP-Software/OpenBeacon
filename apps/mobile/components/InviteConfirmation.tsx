@@ -247,8 +247,12 @@ export const InviteConfirmation = ({
             {historyShare.setting ? (
               <View className="mt-3 flex-row flex-wrap items-center justify-center">
                 <Text className="text-center text-sm text-secondary">
-                  You’ll share: {historyShareAmount(joinShare ?? historyShare.setting.account)} (
-                  {joinShare ? "this group only" : "your account setting"}) ·{" "}
+                  You’ll share:{" "}
+                  {historyShareAmount(
+                    joinShare ?? historyShare.setting.account,
+                    historyShare.setting.historyDays,
+                  )}{" "}
+                  ({joinShare ? "this group only" : "your account setting"}) ·{" "}
                 </Text>
                 <Pressable
                   accessibilityRole="button"
@@ -268,6 +272,7 @@ export const InviteConfirmation = ({
                 {historyShare.setting ? (
                   <HistoryShareChoices
                     accountShare={historyShare.setting.account}
+                    historyDays={historyShare.setting.historyDays}
                     value={joinShare}
                     onChange={(value) => {
                       setJoinShare(value);

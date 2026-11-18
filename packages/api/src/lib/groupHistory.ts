@@ -6,7 +6,7 @@ import {
 } from "@openbeacon/database";
 import type { groupHistoryCategorySchema } from "@openbeacon/schemas";
 import type z from "zod";
-import { historyRetentionMs } from "./limits.ts";
+import { historyRetentionMs, limits } from "./limits.ts";
 import { placeTransitionSelect, toPlaceTransitionView } from "./placeTransitions.ts";
 
 const personSelect = { select: { id: true, name: true } } as const;
@@ -124,6 +124,7 @@ export const readGroupHistory = async ({
   const last = page.at(-1);
   const more = items.length > limit || events.length === limit || transitions.length === limit;
   return {
+    historyDays: limits.historyDays,
     items: page,
     nextBefore: more && last ? { at: last.at, id: last.id } : null,
   };

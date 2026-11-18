@@ -50,7 +50,7 @@ import { useAppLock } from "../../../lib/appLock.ts";
 import { authClient } from "../../../lib/auth-client.ts";
 import { getStoredDeviceId } from "../../../lib/deviceKeys.ts";
 import { historyLossRisk } from "../../../lib/historyLossRisk.ts";
-import { historyShareLabel } from "../../../lib/historyShare.ts";
+import { historyShareLabel, serverHistoryDays } from "../../../lib/historyShare.ts";
 import {
   getLocationPermissionWarningDescription,
   getLocationPermissionWarningTitle,
@@ -365,7 +365,10 @@ const AccountScreen = () => {
                     icon: HistoryIcon,
                     href: "/account/location-history",
                     value: historyShare.setting
-                      ? historyShareLabel(historyShare.setting.account)
+                      ? historyShareLabel(
+                          historyShare.setting.account,
+                          serverHistoryDays(historyShare.setting),
+                        )
                       : undefined,
                   },
                 ],

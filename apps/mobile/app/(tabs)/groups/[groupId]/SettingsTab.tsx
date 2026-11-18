@@ -73,6 +73,7 @@ const SettingsTab = ({ groupId }: { groupId: string }) => {
           </Text>
           <HistoryShareChoices
             accountShare={historyShare.setting.account}
+            historyDays={historyShare.setting.historyDays}
             value={groupHistoryShare(historyShare.setting, groupId).override}
             disabled={historyShare.saving}
             onChange={(override) => void historyShare.change({ groupId, override })}

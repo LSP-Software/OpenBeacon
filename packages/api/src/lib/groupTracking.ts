@@ -88,11 +88,8 @@ export const uploadGroupTrackingBatch = async ({
     );
     if (!state || state.paused || point.revisionPrefix !== state.revisionPrefix) return true;
     if (point.role === "LIVE") return false;
-    const capturedHour = Math.min(
-      Math.max(point.capturedHour ?? nowHour, nowHour - HISTORY_RETENTION_HOURS),
-      nowHour + 1,
-    );
-    return capturedHour < firstHour;
+    const capturedHour = Math.min(point.capturedHour ?? nowHour, nowHour + 1);
+    return capturedHour < Math.max(firstHour, nowHour - HISTORY_RETENTION_HOURS);
   });
   const kept = current.filter((point) => !discarded.includes(point));
 

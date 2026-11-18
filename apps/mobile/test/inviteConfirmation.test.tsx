@@ -139,7 +139,7 @@ mock.module("../components/ui/Button.tsx", () => ({
 mock.module("../hooks/useHistoryShare.ts", () => ({
   useHistoryShare: () => ({
     query: { isPending: false },
-    setting: { account: "WEEK_1", changedAt: null, groups: [] },
+    setting: { account: "WEEK_1", changedAt: null, groups: [], historyDays: 30 },
   }),
 }));
 mock.module("../components/ui/Dialog.tsx", () => ({
@@ -255,10 +255,10 @@ test("shows who invited you, the group and its size before asking", async () => 
 
 test("says how much history you'll share, from your account setting unless you change it for this group", async () => {
   const root = await render(code);
-  expect(output(root)).toContain('"1 week of history"," (","your account setting",") ·"');
+  expect(output(root)).toContain('"1 week of history"," ","(","your account setting",") ·"');
   await press(root, "Change");
   await press(root, "choose DAY_1");
-  expect(output(root)).toContain('"1 day of history"," (","this group only",") ·"');
+  expect(output(root)).toContain('"1 day of history"," ","(","this group only",") ·"');
   await press(root, "Join group");
   expect(acceptInputs).toEqual([{ historyShare: "DAY_1" }]);
 });

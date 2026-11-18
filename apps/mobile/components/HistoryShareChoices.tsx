@@ -5,11 +5,13 @@ import { ChoiceList } from "./ui/ChoiceList.tsx";
 export const HistoryShareChoices = ({
   accountShare,
   disabled = false,
+  historyDays,
   onChange,
   value,
 }: {
   accountShare?: HistoryShare;
   disabled?: boolean;
+  historyDays: number;
   onChange: (value: HistoryShare | null) => void;
   value: HistoryShare | null;
 }) => {
@@ -19,11 +21,14 @@ export const HistoryShareChoices = ({
           {
             value: null,
             title: "Use my account setting",
-            description: historyShareLabel(accountShare),
+            description: historyShareLabel(accountShare, historyDays),
           },
         ]
       : []),
-    ...historyShareChoices.map((choice) => ({ value: choice.value, title: choice.label })),
+    ...historyShareChoices(historyDays).map((choice) => ({
+      value: choice.value,
+      title: choice.label,
+    })),
   ];
   return (
     <ChoiceList

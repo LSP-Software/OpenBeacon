@@ -34,7 +34,7 @@ import { beginAccountDeletion, deleteAccountRecords } from "../lib/account-delet
 import { deviceRemovedError } from "../lib/deviceRemoved.ts";
 import { deviceUnverifiedError } from "../lib/deviceUnverified.ts";
 import { removeUserDevice, toAlertDevice } from "../lib/removeDevice.ts";
-import { maxAccountSeats } from "../lib/limits.ts";
+import { limits, maxAccountSeats } from "../lib/limits.ts";
 import { accountSeats, seatsEnforced, seatsUsed } from "../lib/seats.ts";
 import {
   freshSessionProcedure,
@@ -71,7 +71,12 @@ export const accountRouter = {
     return {
       account,
       device,
-      historyShare: { account: historyShare, changedAt: historyShareChangedAt, groups },
+      historyShare: {
+        account: historyShare,
+        changedAt: historyShareChangedAt,
+        groups,
+        historyDays: limits.historyDays,
+      },
       deviceId: ctx.deviceId,
       userId: ctx.session.user.id,
       serverTime: new Date(),

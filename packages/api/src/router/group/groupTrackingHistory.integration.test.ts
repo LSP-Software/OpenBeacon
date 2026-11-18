@@ -3,6 +3,7 @@ import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
 import { createDeviceKeyPair } from "@openbeacon/encryption";
 import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
+import { limits } from "../../lib/limits.ts";
 import { storeTrackingPoints } from "../../lib/trackingPoints.testUtil.ts";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
 import { groupTrackingRouter } from "./groupTrackingRouter.ts";
@@ -33,7 +34,7 @@ const caller = (userId: string, deviceId: string) =>
   ).groupTracking;
 
 const HOUR_MS = 3_600_000;
-const RETENTION_HOURS = 336;
+const RETENTION_HOURS = limits.historyDays * 24;
 const nowHour = () => Math.floor(Date.now() / HOUR_MS);
 const groupIds: string[] = [];
 

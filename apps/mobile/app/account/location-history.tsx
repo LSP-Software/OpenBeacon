@@ -37,6 +37,7 @@ const LocationHistoryScreen = () => {
           </Text>
           <HistoryShareChoices
             value={setting.account}
+            historyDays={setting.historyDays}
             disabled={saving}
             onChange={(account) => {
               if (account) void change({ account });

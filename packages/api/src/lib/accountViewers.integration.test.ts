@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { prisma } from "@openbeacon/database";
 import { readAccountViewers } from "./accountViewers.ts";
+import { limits } from "./limits.ts";
 
 const prefix = `account-viewers-${crypto.randomUUID()}`;
 const [me, alex, sam, jo, kim, old] = ["me", "alex", "sam", "jo", "kim", "old"].map(
@@ -56,7 +57,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             createdAt: ago(5),
           },
           { groupId: family, type: "MEMBER_LEFT" as const, subjectUserId: sam, createdAt: ago(2) },
-          { groupId: family, type: "MEMBER_LEFT" as const, subjectUserId: old, createdAt: ago(20) },
+          {
+            groupId: family,
+            type: "MEMBER_LEFT" as const,
+            subjectUserId: old,
+            createdAt: ago(limits.historyDays + 6),
+          },
           { groupId: former, type: "MEMBER_LEFT" as const, subjectUserId: me, createdAt: ago(1) },
           {
             groupId: former,

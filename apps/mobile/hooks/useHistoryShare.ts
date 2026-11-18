@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Alert } from "../lib/alert.ts";
 import { trpc, trpcClient } from "../lib/api.ts";
-import { historyShareLabel, shortensHistory } from "../lib/historyShare.ts";
+import { historyShareLabel, serverHistoryDays, shortensHistory } from "../lib/historyShare.ts";
 import type { HistoryShareChange } from "../lib/historyShareTypes.ts";
 import { syncLocationSharing } from "../lib/locationSharing.ts";
 
@@ -25,7 +25,7 @@ export const useHistoryShare = (enabled = true) => {
   const query = useQuery({
     ...trpc.account.locationSharing.queryOptions(),
     enabled,
-    select: (data) => data.historyShare,
+    select: (data) => ({ ...data.historyShare, historyDays: serverHistoryDays(data.historyShare) }),
   });
   const [saving, setSaving] = useState(false);
 
@@ -34,6 +34,7 @@ export const useHistoryShare = (enabled = true) => {
     if (!setting || saving) return false;
     const label = historyShareLabel(
       "account" in next ? next.account : (next.override ?? setting.account),
+      setting.historyDays,
     );
     const shortens = shortensHistory({
       groupIds: setting.groups.map(({ groupId }) => groupId),

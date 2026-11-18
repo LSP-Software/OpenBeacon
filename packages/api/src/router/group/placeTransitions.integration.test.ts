@@ -4,6 +4,7 @@ import { Prisma, prisma } from "@openbeacon/database";
 import { encodeBase64 } from "@openbeacon/encryption";
 import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
 import { countTrackingPoints, testClientPointId } from "../../lib/trackingPoints.testUtil.ts";
+import { limits } from "../../lib/limits.ts";
 import { encodeAlertsCursor } from "../../lib/placeTransitions.ts";
 import { tryCatch } from "@openbeacon/shared";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
@@ -256,7 +257,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const unknownPlace = transition({ placeId: `${prefix}-missing` });
       const future = transition({ occurredAt: new Date(now + 10 * minute) });
       const slightlyAhead = transition({ occurredAt: new Date(now + minute) });
-      const tooOld = transition({ occurredAt: new Date(now - 15 * day) });
+      const tooOld = transition({ occurredAt: new Date(now - (limits.historyDays + 1) * day) });
       const kept = transition({ direction: "LEAVE", placeId: schoolId });
       const result = await upload([
         otherGroupPlace,
@@ -623,10 +624,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       ]);
     });
 
-    test("recent returns the last 14 days newest first, in pages, for members only", async () => {
+    test("recent returns the history limit newest first, in pages, for members only", async () => {
       const now = Date.now();
       await seedTransitions([
-        { id: `${prefix}-expired`, createdAt: new Date(now - 15 * day) },
+        { id: `${prefix}-expired`, createdAt: new Date(now - (limits.historyDays + 1) * day) },
         ...Array.from({ length: 101 }, (_, index) => ({
           id: `${prefix}-recent-${String(index).padStart(3, "0")}`,
           createdAt: new Date(now - day + index * minute),

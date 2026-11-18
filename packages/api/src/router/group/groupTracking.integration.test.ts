@@ -11,6 +11,7 @@ import {
 } from "@openbeacon/encryption";
 import { TRACKING_POINT_KIND } from "@openbeacon/schemas";
 import { DevicePendingError } from "../../lib/deviceActivation.ts";
+import { limits } from "../../lib/limits.ts";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
 import { authRouter } from "../authRouter.ts";
 import { groupMembershipRouter } from "./groupMembershipRouter.ts";
@@ -277,17 +278,26 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
     await clearPoints();
   });
 
-  test("files each point under its recorded hour, clamped to the arrival window", async () => {
+  test("files each point under its recorded hour, discarding points older than the history limit", async () => {
     const nowHour = Math.floor(Date.now() / 3_600_000);
+    const retentionHours = limits.historyDays * 24;
     const sent = [
       point("hour-missing"),
       point("hour-late", { capturedHour: nowHour - 30 }),
-      point("hour-too-old", { capturedHour: nowHour - 400 }),
+      point("hour-oldest-kept", { capturedHour: nowHour - retentionHours }),
       point("hour-ahead", { capturedHour: nowHour + 1 }),
       point("hour-too-far-ahead", { capturedHour: nowHour + 5 }),
-      point("hour-stay-too-old", { capturedHour: nowHour - 500, role: "STAY" }),
+      point("hour-stay-day-inside", { capturedHour: nowHour - retentionHours + 24, role: "STAY" }),
     ];
-    expect((await upload(sent)).accepted).toHaveLength(sent.length);
+    const tooOld = [
+      point("hour-too-old", { capturedHour: nowHour - retentionHours - 1 }),
+      point("hour-day-outside", { capturedHour: nowHour - retentionHours - 24, role: "STAY" }),
+    ];
+    const result = await upload([...sent, ...tooOld]);
+    expect(result.accepted).toHaveLength(sent.length);
+    expect(result.discarded.sort()).toEqual(
+      tooOld.map(({ clientPointId }) => clientPointId).sort(),
+    );
     const stored = new Map(
       (await storedPoints()).map((row) => [
         row.pointId.toString(),
@@ -296,7 +306,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
     );
     const offsetOf = (sentPoint: (typeof sent)[number]) =>
       stored.get(pointIdOf(sentPoint.clientPointId))?.offset;
-    expect(sent.map(offsetOf)).toEqual([0, -30, -336, 1, 1, -336]);
+    expect(sent.map(offsetOf)).toEqual([0, -30, -retentionHours, 1, 1, -retentionHours + 24]);
     for (const { receivedHour } of stored.values()) {
       expect(Math.abs(receivedHour - nowHour)).toBeLessThanOrEqual(1);
     }
