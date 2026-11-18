@@ -15,7 +15,7 @@ afterAll(() => {
 
 const noon = Date.parse("2026-07-14T11:00:00Z");
 const device = (senderUserId: string, count: number, hour = "2026-07-14T10:00:00Z") => ({
-  hours: [{ count, hour: new Date(hour) }],
+  hours: [{ count, hour: Date.parse(hour) / 3_600_000 }],
   senderUserId,
 });
 const pick = ({
@@ -32,7 +32,6 @@ const pick = ({
     day: localDayOf(noon),
     devices,
     memberIds: ["ana", "ben", "cat", "dan"],
-    now: noon + 48 * 60 * 60_000,
     selectedUserId,
   });
 
@@ -96,21 +95,20 @@ describe("pickTimelinePeople", () => {
     ).toEqual(["ben", "ana", "cat", "dan"]);
   });
 
-  test("counts the hours from 3 hours before the day to 24 hours after, on a clock-change day", () => {
+  test("counts only the day's own hours, 23 of them on the day the clocks go forward", () => {
     const day = localDayOf(Date.parse("2026-03-29T12:00:00Z"));
     const hours = (counts: Array<[string, number]>) =>
-      counts.map(([hour, count]) => ({ count, hour: new Date(hour) }));
+      counts.map(([hour, count]) => ({ count, hour: Date.parse(hour) / 3_600_000 }));
     const result = pickTimelinePeople({
       chosen: null,
       day,
       devices: [
         {
           hours: hours([
-            ["2026-03-28T20:00:00Z", 1],
-            ["2026-03-28T21:00:00Z", 10],
+            ["2026-03-28T23:00:00Z", 1],
+            ["2026-03-29T00:00:00Z", 10],
             ["2026-03-29T22:00:00Z", 100],
-            ["2026-03-30T22:00:00Z", 1_000],
-            ["2026-03-30T23:00:00Z", 10_000],
+            ["2026-03-29T23:00:00Z", 1_000],
           ]),
           senderUserId: "ana",
         },
@@ -120,28 +118,11 @@ describe("pickTimelinePeople", () => {
         },
       ],
       memberIds: ["ana", "ben"],
-      now: Date.parse("2026-04-02T00:00:00Z"),
       selectedUserId: null,
     });
     expect(result.people).toEqual([
-      { points: 1_110, userId: "ana" },
+      { points: 110, userId: "ana" },
       { points: 7, userId: "ben" },
     ]);
-  });
-
-  test("stops counting at now", () => {
-    const day = localDayOf(noon);
-    const result = pickTimelinePeople({
-      chosen: null,
-      day,
-      devices: [
-        device("ana", 5, "2026-07-14T10:00:00Z"),
-        device("ana", 50, "2026-07-14T11:00:00Z"),
-      ],
-      memberIds: ["ana"],
-      now: noon,
-      selectedUserId: null,
-    });
-    expect(result.people).toEqual([{ points: 5, userId: "ana" }]);
   });
 });

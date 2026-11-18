@@ -25,6 +25,7 @@ struct CiphertextQueueRow {
   var lastError: String? = nil
   var status = CiphertextQueueRow.statusPending
   var role = CiphertextQueueRow.rolePoint
+  var capturedHour: Int64? = nil
 }
 
 struct PlaceTransitionRow {
@@ -106,7 +107,8 @@ final class TrackingDatabase {
         lastAttemptAt INTEGER,
         lastError TEXT,
         status TEXT NOT NULL,
-        role TEXT NOT NULL DEFAULT 'POINT'
+        role TEXT NOT NULL DEFAULT 'POINT',
+        capturedHour INTEGER
       )
       """
     )
@@ -118,6 +120,13 @@ final class TrackingDatabase {
       }
       try execute("DROP INDEX IF EXISTS ciphertext_queue_clientPointId")
       try execute("PRAGMA user_version = 1")
+    }
+    if try query("PRAGMA user_version") { sqlite3_column_int64($0, 0) }.first ?? 0 < 2 {
+      let columns = try query("PRAGMA table_info(ciphertext_queue)") { Self.text($0, 1) }
+      if !columns.contains("capturedHour") {
+        try execute("ALTER TABLE ciphertext_queue ADD COLUMN capturedHour INTEGER")
+      }
+      try execute("PRAGMA user_version = 2")
     }
     try execute("CREATE INDEX IF NOT EXISTS ciphertext_queue_clientPointId_id ON ciphertext_queue (clientPointId, id)")
     try execute("CREATE INDEX IF NOT EXISTS ciphertext_queue_status_id ON ciphertext_queue (status, id)")
@@ -256,12 +265,13 @@ final class TrackingDatabase {
       lastAttemptAt: integer(statement, 13),
       lastError: text(statement, 14),
       status: text(statement, 15) ?? CiphertextQueueRow.statusPending,
-      role: text(statement, 16) ?? CiphertextQueueRow.rolePoint
+      role: text(statement, 16) ?? CiphertextQueueRow.rolePoint,
+      capturedHour: integer(statement, 17)
     )
   }
 
   private static let ciphertextColumns =
-    "id, owner, clientPointId, captureId, groupId, epochId, senderDeviceId, kind, algorithm, nonce, ciphertext, queuedAt, attemptCount, lastAttemptAt, lastError, status, role"
+    "id, owner, clientPointId, captureId, groupId, epochId, senderDeviceId, kind, algorithm, nonce, ciphertext, queuedAt, attemptCount, lastAttemptAt, lastError, status, role, capturedHour"
 
   func insertCiphertexts(_ rows: [CiphertextQueueRow]) throws -> Int {
     try transaction {
@@ -293,14 +303,14 @@ final class TrackingDatabase {
         inserted += try execute(
           """
           INSERT INTO ciphertext_queue
-          (owner, clientPointId, captureId, groupId, epochId, senderDeviceId, kind, algorithm, nonce, ciphertext, queuedAt, attemptCount, lastAttemptAt, lastError, status, role)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (owner, clientPointId, captureId, groupId, epochId, senderDeviceId, kind, algorithm, nonce, ciphertext, queuedAt, attemptCount, lastAttemptAt, lastError, status, role, capturedHour)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           """,
           [
             .text(row.owner), .text(row.clientPointId), .text(row.captureId), .text(row.groupId), .text(row.epochId),
             .text(row.senderDeviceId), .text(row.kind), .text(row.algorithm), .text(row.nonce), .text(row.ciphertext),
             .integer(row.queuedAt), .integer(row.attemptCount), .integer(row.lastAttemptAt), .text(row.lastError), .text(row.status),
-            .text(row.role),
+            .text(row.role), .integer(row.capturedHour),
           ]
         )
       }

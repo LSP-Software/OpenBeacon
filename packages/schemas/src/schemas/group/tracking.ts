@@ -44,6 +44,7 @@ export const groupTrackingPointSchema = z.object({
       /^(s\d{1,9}\.\d{1,9}:)?[A-Za-z0-9+/]{10}[AEIMQUYcgkosw048]=$/,
       "Invalid client point ID.",
     ),
+  capturedHour: z.number().int().min(438_288).max(1_000_000).optional(),
   epochId: z.string().min(1).max(128),
   nonce: groupPayloadNonceSchema,
   role: z.enum(TRACKING_POINT_ROLES),
@@ -103,22 +104,22 @@ export const groupTrackingHistoryDaysSchema = z.object({
 export const groupTrackingHistoryRangeSchema = z
   .object({
     groupId: z.string().min(1),
-    from: z.date(),
-    to: z.date(),
+    fromHour: z.number().int().min(0).max(1_000_000),
+    toHour: z.number().int().min(0).max(1_000_000),
     cursor: z
       .object({
-        receivedAt: z.date(),
+        capturedHour: z.number().int().min(-2_147_483_648).max(2_147_483_647),
         streamId: z.string().regex(/^\d{1,19}$/),
         pointId: z.string().regex(/^-?\d{1,19}$/),
       })
       .optional(),
     limit: z.number().int().min(1).max(2_000).optional(),
   })
-  .refine((range) => range.from.getTime() < range.to.getTime(), {
-    message: "from must be before to",
-    path: ["to"],
+  .refine((range) => range.fromHour < range.toHour, {
+    message: "fromHour must be before toHour",
+    path: ["toHour"],
   })
-  .refine((range) => range.to.getTime() - range.from.getTime() <= 52 * 60 * 60_000, {
-    message: "A history range can be at most 52 hours long",
-    path: ["to"],
+  .refine((range) => range.toHour - range.fromHour <= 26, {
+    message: "A history range can be at most 26 hours long",
+    path: ["toHour"],
   });

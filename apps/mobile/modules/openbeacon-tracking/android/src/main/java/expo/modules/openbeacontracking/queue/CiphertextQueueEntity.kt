@@ -31,4 +31,5 @@ data class CiphertextQueueEntity(
   @ColumnInfo(name = "lastError") val lastError: String? = null,
   @ColumnInfo(name = "status") val status: String,
   @ColumnInfo(name = "role") val role: String = CiphertextQueueRow.ROLE_POINT,
+  @ColumnInfo(name = "capturedHour") val capturedHour: Int? = null,
 )

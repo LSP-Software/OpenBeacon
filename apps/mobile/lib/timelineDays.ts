@@ -1,5 +1,7 @@
 import type { TimelineDay } from "./timelineTypes.ts";
 
+const HOUR_MS = 60 * 60_000;
+
 export const localDayOf = (time: number): TimelineDay => {
   const date = new Date(time);
   const year = date.getFullYear();
@@ -19,8 +21,8 @@ export const buildTimelineDayPicker = ({
   windowStart,
 }: {
   devices: ReadonlyArray<{
-    firstReceivedAt: Date;
-    hours: ReadonlyArray<{ count: number; hour: Date }>;
+    firstHour: number;
+    hours: ReadonlyArray<{ count: number; hour: number }>;
     senderUserId: string;
   }>;
   now: number;
@@ -28,13 +30,13 @@ export const buildTimelineDayPicker = ({
   windowStart: Date;
 }) => {
   const shown = userId ? devices.filter((device) => device.senderUserId === userId) : devices;
-  const firstPointAt = Math.min(...shown.map((device) => device.firstReceivedAt.getTime()));
+  const firstPointAt = Math.min(...shown.map((device) => device.firstHour * HOUR_MS));
   const counts = new Map<string, number>();
   for (const device of shown) {
     for (const { count, hour } of device.hours) {
       const keys = new Set([
-        localDayOf(hour.getTime()).key,
-        localDayOf(hour.getTime() + 60 * 60_000 - 1).key,
+        localDayOf(hour * HOUR_MS).key,
+        localDayOf((hour + 1) * HOUR_MS - 1).key,
       ]);
       for (const key of keys) counts.set(key, (counts.get(key) ?? 0) + count);
     }

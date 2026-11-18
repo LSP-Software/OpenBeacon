@@ -13,9 +13,9 @@ type RangePage = RouterOutputs["groupTracking"]["historyRange"];
 
 const HOUR_MS = 60 * 60_000;
 
-export const timelineFetchWindow = (day: TimelineDay, now: number) => ({
-  from: day.start - 3 * HOUR_MS,
-  to: Math.min(day.end + 24 * HOUR_MS, now),
+export const timelineFetchWindow = (day: TimelineDay) => ({
+  fromHour: Math.floor(day.start / HOUR_MS),
+  toHour: Math.ceil(day.end / HOUR_MS),
 });
 
 export const loadTimelineDay = async ({
@@ -24,7 +24,6 @@ export const loadTimelineDay = async ({
   fetchRange,
   groupId,
   listEpochs,
-  now,
   onPersonReady,
   onProgress,
   signal,
@@ -37,7 +36,6 @@ export const loadTimelineDay = async ({
   fetchRange: (input: RouterInputs["groupTracking"]["historyRange"]) => Promise<RangePage>;
   groupId: string;
   listEpochs: (cursor: number | null) => Promise<EpochWraps>;
-  now: number;
   onPersonReady?: (ready: {
     devices: TimelineDeviceData[];
     joinStart: number | null;
@@ -52,22 +50,19 @@ export const loadTimelineDay = async ({
   const stopIfCancelled = () => {
     if (signal?.aborted) throw new Error("Timeline load cancelled.");
   };
-  const range = timelineFetchWindow(day, now);
-  const from = new Date(range.from);
-  const to = new Date(range.to);
+  const range = timelineFetchWindow(day);
 
   const streams = new Map<string, RangePage["streams"][number]>();
   const encrypted: RangePage["points"] = [];
   const seen = new Set<string>();
   let cursor: RangePage["cursor"] = null;
-  while (from < to) {
+  for (;;) {
     stopIfCancelled();
     const page: RangePage = await fetchRange({
+      ...range,
       cursor: cursor ?? undefined,
-      from,
       groupId,
       limit: 2_000,
-      to,
     });
     for (const stream of page.streams) streams.set(stream.id, stream);
     for (const point of [...page.lookback, ...page.points]) {
@@ -154,14 +149,19 @@ export const loadTimelineDay = async ({
               ...metadata,
               algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
               ciphertext: point.ciphertext,
-              createdAt: point.receivedAt,
+              createdAt: new Date(point.capturedHour * HOUR_MS),
               nonce: point.nonce,
             },
             epochKey,
             expectedMetadata: metadata,
           });
+          const decoded = decodeTrackingPoint(decrypted.bytes.expose());
+          if (Math.floor(decoded.time / HOUR_MS) !== point.capturedHour) {
+            device.undecryptable += 1;
+            continue;
+          }
           device.points.push({
-            ...decodeTrackingPoint(decrypted.bytes.expose()),
+            ...decoded,
             pointId: point.pointId,
             revisionPrefix: stream.revisionPrefix,
             streamId: stream.id,

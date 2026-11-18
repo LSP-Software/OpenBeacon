@@ -26,7 +26,7 @@ export const deleteTrackingPointsInBatches = async ({
           SELECT "point"."streamId", "point"."pointId"
           FROM "TrackingPoint" AS "point"
           WHERE "point"."streamId" = "stream"."id" AND (${points})
-          ORDER BY "point"."receivedAt"
+          ORDER BY "point"."capturedHour"
           LIMIT ${take}
           FOR UPDATE SKIP LOCKED
         ) AS "batch"

@@ -3,31 +3,27 @@ import type { TimelineDay } from "./timelineTypes.ts";
 
 export const MAX_TIMELINE_POINTS = 12_000;
 
-const HOUR_MS = 60 * 60_000;
-
 export const pickTimelinePeople = ({
   chosen,
   day,
   devices,
   memberIds,
-  now,
   selectedUserId,
 }: {
   chosen: readonly string[] | null;
   day: TimelineDay;
   devices: ReadonlyArray<{
-    hours: ReadonlyArray<{ count: number; hour: Date }>;
+    hours: ReadonlyArray<{ count: number; hour: number }>;
     senderUserId: string;
   }>;
   memberIds: readonly string[];
-  now: number;
   selectedUserId: string | null;
 }) => {
-  const { from, to } = timelineFetchWindow(day, now);
+  const { fromHour, toHour } = timelineFetchWindow(day);
   const points = new Map(memberIds.map((userId) => [userId, 0]));
   for (const device of devices) {
     const inWindow = device.hours
-      .filter(({ hour }) => hour.getTime() < to && hour.getTime() + HOUR_MS > from)
+      .filter(({ hour }) => hour >= fromHour && hour < toHour)
       .reduce((total, { count }) => total + count, 0);
     points.set(device.senderUserId, (points.get(device.senderUserId) ?? 0) + inWindow);
   }

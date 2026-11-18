@@ -9,6 +9,7 @@ export const testClientPointId = (seed: string | number, revisionPrefix = "") =>
 };
 
 export const encryptedTrackingPoint = ({
+  capturedHour,
   clientPointId,
   epochId,
   epochKey,
@@ -17,6 +18,7 @@ export const encryptedTrackingPoint = ({
   role = "POINT",
   senderDeviceId,
 }: {
+  capturedHour?: number;
   clientPointId: string;
   epochId: string;
   epochKey: EpochKeyMaterial;
@@ -34,6 +36,7 @@ export const encryptedTrackingPoint = ({
     senderDeviceId,
   });
   return {
+    ...(capturedHour === undefined ? {} : { capturedHour }),
     ciphertext: encrypted.ciphertext,
     clientPointId,
     epochId,
@@ -74,14 +77,19 @@ export const storeTrackingPoints = async (
   db: Pick<Prisma.TransactionClient, "$queryRaw">,
   {
     count = 1,
-    receivedAt = new Date(),
+    receivedHour = Math.floor(Date.now() / 3_600_000),
+    capturedHour = receivedHour,
     ...stream
-  }: Parameters<typeof storeTrackingStream>[1] & { count?: number; receivedAt?: Date },
+  }: Parameters<typeof storeTrackingStream>[1] & {
+    capturedHour?: number;
+    count?: number;
+    receivedHour?: number;
+  },
 ) => {
   const streamId = await storeTrackingStream(db, stream);
   await db.$queryRaw(Prisma.sql`
-    INSERT INTO "TrackingPoint" ("streamId", "pointId", "receivedAt", "payload")
-    SELECT ${streamId}, (random() * 9e18)::bigint, (${receivedAt.toISOString()}::timestamptz AT TIME ZONE 'UTC'), '\\x00'::bytea
+    INSERT INTO "TrackingPoint" ("streamId", "pointId", "receivedHour", "capturedHour", "payload")
+    SELECT ${streamId}, (random() * 9e18)::bigint, ${receivedHour}, ${capturedHour}, '\\x00'::bytea
     FROM generate_series(1, ${count})
   `);
   return streamId;
@@ -129,8 +137,9 @@ export const storeUploadedTrackingPoint = async (
   const { pointId, revisionPrefix } = parseClientPointId(clientPointId);
   const streamId = await storeTrackingStream(db, { ...stream, revisionPrefix });
   await db.$queryRaw(Prisma.sql`
-    INSERT INTO "TrackingPoint" ("streamId", "pointId", "receivedAt", "payload")
-    VALUES (${streamId}, ${pointId}, (now() AT TIME ZONE 'UTC'), '\\x00'::bytea)
+    INSERT INTO "TrackingPoint" ("streamId", "pointId", "receivedHour", "capturedHour", "payload")
+    VALUES (${streamId}, ${pointId}, floor(extract(epoch FROM now()) / 3600)::int4,
+      floor(extract(epoch FROM now()) / 3600)::int4, '\\x00'::bytea)
   `);
 };
 

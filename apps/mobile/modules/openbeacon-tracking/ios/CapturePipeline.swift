@@ -119,7 +119,8 @@ final class CapturePipeline {
         nonce: encrypted.nonce,
         ciphertext: encrypted.ciphertext,
         queuedAt: queuedAt,
-        role: role
+        role: role,
+        capturedHour: role == CiphertextQueueRow.roleLive ? nil : Int64((Double(point.timestampMillis) / 3_600_000).rounded(.down))
       )
     }
 

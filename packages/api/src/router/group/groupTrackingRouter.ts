@@ -255,11 +255,11 @@ export const groupTrackingRouter = {
       return await readGroupTrackingHistoryRange({
         cursor: input.cursor,
         db: ctx.db,
-        from: input.from,
+        fromHour: input.fromHour,
         groupId: input.groupId,
         joinedEpochNumber: ctx.groupMember.joinedEpochNumber,
         limit: input.limit ?? 1_000,
-        to: input.to,
+        toHour: input.toHour,
       });
     }),
 } satisfies TRPCRouterRecord;

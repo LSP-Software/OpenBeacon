@@ -11,12 +11,13 @@ export const createLocationHistoryCleanup =
   ({ batchSize = 1_000, runLimit = 500_000 }: { batchSize?: number; runLimit?: number } = {}) =>
   async () => {
     const cutoff = await retentionCutoff();
+    const cutoffHour = Math.floor(new Date(cutoff).getTime() / 3_600_000);
     const result = await tryCatch(
       (async () => {
         const deleted = await deleteTrackingPointsInBatches({
           db: services.db,
           streams: Prisma.sql`"stream"."createdAt" < (${cutoff}::timestamptz AT TIME ZONE 'UTC')`,
-          points: Prisma.sql`"point"."receivedAt" < (${cutoff}::timestamptz AT TIME ZONE 'UTC')`,
+          points: Prisma.sql`"point"."capturedHour" <= ${cutoffHour} AND "point"."receivedHour" < ${cutoffHour}`,
           batchSize,
           limit: runLimit,
         });

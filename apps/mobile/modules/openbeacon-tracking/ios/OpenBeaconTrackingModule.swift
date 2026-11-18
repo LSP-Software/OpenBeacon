@@ -216,6 +216,7 @@ public class OpenBeaconTrackingModule: Module {
             "lastError": row.lastError as Any? ?? NSNull(),
             "status": row.status,
             "role": row.role,
+            "capturedHour": row.capturedHour.map { Double($0) as Any } ?? NSNull(),
           ]
         }
     }

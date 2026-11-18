@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { buildTimelineDayPicker, localDayOf } from "./timelineDays.ts";
+import { timelineFetchWindow } from "./timelineLoad.ts";
 
 const HOUR_MS = 60 * 60_000;
 const originalTimeZone = process.env.TZ;
@@ -14,7 +15,9 @@ afterAll(() => {
 });
 
 const hours = (...entries: Array<[string, number]>) =>
-  entries.map(([hour, count]) => ({ count, hour: new Date(hour) }));
+  entries.map(([hour, count]) => ({ count, hour: hourOf(hour) }));
+
+const hourOf = (time: string) => Math.floor(Date.parse(time) / HOUR_MS);
 
 describe("localDayOf", () => {
   test("the day the clocks go forward is 23 hours long", () => {
@@ -37,12 +40,37 @@ describe("localDayOf", () => {
   });
 });
 
+describe("timelineFetchWindow", () => {
+  const windowOf = (time: string) => {
+    const { fromHour, toHour } = timelineFetchWindow(localDayOf(Date.parse(time)));
+    return [new Date(fromHour * HOUR_MS).toISOString(), toHour - fromHour];
+  };
+
+  test("a normal day asks for its own 24 UTC hours", () => {
+    expect(windowOf("2026-07-14T12:00:00Z")).toEqual(["2026-07-13T23:00:00.000Z", 24]);
+  });
+
+  test("the day the clocks go back asks for 25 hours and the day they go forward for 23", () => {
+    expect(windowOf("2026-10-25T12:00:00Z")).toEqual(["2026-10-24T23:00:00.000Z", 25]);
+    expect(windowOf("2026-03-29T12:00:00Z")).toEqual(["2026-03-29T00:00:00.000Z", 23]);
+  });
+
+  test("a +5:30 day takes in both half hours at its edges", () => {
+    process.env.TZ = "Asia/Kolkata";
+    try {
+      expect(windowOf("2026-07-14T06:00:00Z")).toEqual(["2026-07-13T18:00:00.000Z", 25]);
+    } finally {
+      process.env.TZ = "Europe/London";
+    }
+  });
+});
+
 describe("buildTimelineDayPicker", () => {
   test("groups UTC hours into local days when the clocks go forward", () => {
     const days = buildTimelineDayPicker({
       devices: [
         {
-          firstReceivedAt: new Date("2026-03-28T23:10:00Z"),
+          firstHour: hourOf("2026-03-28T23:10:00Z"),
           hours: hours(
             ["2026-03-28T23:00:00Z", 1],
             ["2026-03-29T22:00:00Z", 2],
@@ -67,7 +95,7 @@ describe("buildTimelineDayPicker", () => {
     const days = buildTimelineDayPicker({
       devices: [
         {
-          firstReceivedAt: new Date("2026-10-24T22:05:00Z"),
+          firstHour: hourOf("2026-10-24T22:05:00Z"),
           hours: hours(
             ["2026-10-24T22:00:00Z", 1],
             ["2026-10-24T23:00:00Z", 2],
@@ -92,12 +120,12 @@ describe("buildTimelineDayPicker", () => {
     const days = buildTimelineDayPicker({
       devices: [
         {
-          firstReceivedAt: new Date("2026-07-02T18:00:00Z"),
+          firstHour: hourOf("2026-07-02T18:00:00Z"),
           hours: hours(["2026-07-02T18:00:00Z", 3], ["2026-07-04T09:00:00Z", 5]),
           senderUserId: "alice",
         },
         {
-          firstReceivedAt: new Date("2026-07-04T08:00:00Z"),
+          firstHour: hourOf("2026-07-04T08:00:00Z"),
           hours: hours(["2026-07-04T08:00:00Z", 7]),
           senderUserId: "bob",
         },
@@ -118,12 +146,12 @@ describe("buildTimelineDayPicker", () => {
     const days = buildTimelineDayPicker({
       devices: [
         {
-          firstReceivedAt: new Date("2026-07-02T18:00:00Z"),
+          firstHour: hourOf("2026-07-02T18:00:00Z"),
           hours: hours(["2026-07-02T18:00:00Z", 3]),
           senderUserId: "alice",
         },
         {
-          firstReceivedAt: new Date("2026-07-03T08:00:00Z"),
+          firstHour: hourOf("2026-07-03T08:00:00Z"),
           hours: hours(["2026-07-03T08:00:00Z", 7]),
           senderUserId: "bob",
         },
@@ -155,7 +183,7 @@ describe("buildTimelineDayPicker in zones offset by part of an hour", () => {
     buildTimelineDayPicker({
       devices: [
         {
-          firstReceivedAt: new Date(receivedAt),
+          firstHour: hourOf(receivedAt),
           hours: hours([`${receivedAt.slice(0, 13)}:00:00Z`, 3]),
           senderUserId: "alice",
         },

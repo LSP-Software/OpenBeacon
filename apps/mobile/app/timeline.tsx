@@ -196,11 +196,10 @@ const TimelineView = ({
             day,
             devices: daysQuery.data.devices,
             memberIds: members.map((member) => member.userId),
-            now: daysQuery.dataUpdatedAt,
             selectedUserId: personId,
           })
         : null,
-    [chosenPeople, day, daysQuery.data, daysQuery.dataUpdatedAt, members, personId],
+    [chosenPeople, day, daysQuery.data, members, personId],
   );
   const {
     joinStart,

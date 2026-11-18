@@ -298,6 +298,7 @@ class OpenBeaconTrackingModule : Module() {
       "nonce" to nonce,
       "ciphertext" to ciphertext,
       "role" to role,
+      "capturedHour" to capturedHour?.toDouble(),
       "queuedAt" to queuedAt.toDouble(),
       "attemptCount" to attemptCount.toDouble(),
       "lastAttemptAt" to lastAttemptAt?.toDouble(),

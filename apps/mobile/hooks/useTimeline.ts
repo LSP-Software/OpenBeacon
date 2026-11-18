@@ -71,7 +71,6 @@ export const useTimelineDay = ({
             { cursor, deviceId: device.deviceId, groupId },
             { signal },
           ),
-        now,
         onPersonReady: ({ devices, joinStart }) => {
           if (signal.aborted) return;
           setPartial((current) => ({

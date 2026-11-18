@@ -3,11 +3,13 @@ import type { Prisma } from "@openbeacon/database";
 
 const databaseNow = new Date("2001-03-02T00:00:00.000Z");
 const cutoff = "2001-02-16T00:00:00.000Z";
+const cutoffHour = 272_856;
 let backlog = 0;
 let failures: unknown[] = [];
 let epochs: Array<{ id: string; createdAt: Date }> = [];
 const payloadDeletes: Array<{
-  cutoff: unknown;
+  capturedCutoff: unknown;
+  receivedCutoff: unknown;
   fromStream: unknown;
   limit: number;
   streamCutoff: unknown;
@@ -36,9 +38,10 @@ const queryRaw = mock(async (query: TemplateStringsArray | Prisma.Sql, ...args: 
   if (strings.join("?").trimStart().startsWith('DELETE FROM "TrackingPoint"')) {
     const failure = failures.shift();
     if (failure) throw failure;
-    const [pointCutoff, limit, streamCutoff, fromStream] = values;
+    const [capturedCutoff, receivedCutoff, limit, streamCutoff, fromStream] = values;
     payloadDeletes.push({
-      cutoff: pointCutoff,
+      capturedCutoff,
+      receivedCutoff,
       fromStream,
       limit: Number(limit),
       streamCutoff,
@@ -125,9 +128,13 @@ test("deletes location points older than database time minus exactly 14 days in 
   backlog = 2_500;
   await createLocationHistoryCleanup()();
   expect(payloadDeletes).toEqual([
-    { cutoff, fromStream: "0", limit: 1000, streamCutoff: cutoff },
-    { cutoff, fromStream: "1000", limit: 1000, streamCutoff: cutoff },
-    { cutoff, fromStream: "1000", limit: 1000, streamCutoff: cutoff },
+    ...["0", "1000", "1000"].map((fromStream) => ({
+      capturedCutoff: cutoffHour,
+      receivedCutoff: cutoffHour,
+      fromStream,
+      limit: 1000,
+      streamCutoff: cutoff,
+    })),
   ]);
   expect(backlog).toBe(0);
   expect(tidyDeletes).toEqual([{ table: "TrackingLatestPoint", values: [cutoff] }]);

@@ -572,12 +572,13 @@ model TrackingStream {
 model TrackingPoint {
   streamId   BigInt
   stream     TrackingStream @relation(fields: [streamId], references: [id], onDelete: Cascade)
-  pointId    BigInt
-  receivedAt DateTime       @default(now())
-  payload    Bytes
+  pointId      BigInt
+  receivedHour Int
+  capturedHour Int
+  payload      Bytes
 
   @@id([streamId, pointId])
-  @@index([streamId, receivedAt])
+  @@index([streamId, capturedHour])
 }
 
 model TrackingLatestPoint {

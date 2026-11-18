@@ -133,6 +133,7 @@ private fun CiphertextQueueRow.toEntity(): CiphertextQueueEntity =
     lastError = lastError,
     status = status,
     role = role,
+    capturedHour = capturedHour,
   )
 
 private fun CiphertextQueueEntity.toRow(): CiphertextQueueRow =
@@ -154,4 +155,5 @@ private fun CiphertextQueueEntity.toRow(): CiphertextQueueRow =
     lastError = lastError,
     status = status,
     role = role,
+    capturedHour = capturedHour,
   )

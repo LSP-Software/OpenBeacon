@@ -28,6 +28,7 @@ export type CiphertextQueueItem = {
   nonce: string;
   ciphertext: string;
   role: (typeof TRACKING_POINT_ROLES)[number];
+  capturedHour: number | null;
   queuedAt: number;
   attemptCount: number;
   lastAttemptAt: number | null;

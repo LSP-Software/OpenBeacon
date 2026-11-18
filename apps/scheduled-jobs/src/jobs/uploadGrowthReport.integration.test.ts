@@ -52,8 +52,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("upload growth re
         RETURNING id
       `;
       await prisma.$executeRaw`
-        INSERT INTO "TrackingPoint" ("streamId", "pointId", "receivedAt", "payload")
-        SELECT ${stream!.id}, ${hoursAgo * 1_000} + i, (${ago(hoursAgo).toISOString()}::timestamptz AT TIME ZONE 'UTC'), '\\x00'::bytea
+        INSERT INTO "TrackingPoint" ("streamId", "pointId", "receivedHour", "capturedHour", "payload")
+        SELECT ${stream!.id}, ${hoursAgo * 1_000} + i, ${Math.floor(ago(hoursAgo).getTime() / 3_600_000)},
+          ${Math.floor(ago(hoursAgo).getTime() / 3_600_000)}, '\\x00'::bytea
         FROM generate_series(1, ${count}) AS i
       `;
     };

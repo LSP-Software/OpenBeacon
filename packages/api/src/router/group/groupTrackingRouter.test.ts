@@ -96,9 +96,9 @@ const createCaller = async ({
       }
       if (sql.includes('INSERT INTO "TrackingPoint"')) {
         return (insertPointsMock ?? storedPoints())(
-          query.values[1] as string[],
+          query.values[2] as string[],
           sql.includes("DO UPDATE"),
-          query.values[0] as string[],
+          query.values[1] as string[],
         );
       }
       if (sql.includes('INSERT INTO "Tracking')) return [];

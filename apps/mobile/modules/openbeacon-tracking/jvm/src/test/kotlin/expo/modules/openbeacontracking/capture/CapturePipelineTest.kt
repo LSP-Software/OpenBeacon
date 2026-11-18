@@ -311,6 +311,32 @@ class CapturePipelineTest {
   }
 
   @Test
+  fun historyRowsCarryTheUtcHourTheyWereRecordedInAndAStayKeepsItsArrivalHour() {
+    val keys = InMemoryEpochKeyStore()
+    keys.replaceAll(listOf(ProvisionedEpochKey("group_a", "epoch_a", ByteArray(32), "device_1", "trackingPoint")))
+    val queue = InMemoryCiphertextQueue()
+    val pipeline = CapturePipeline(epochKeyStore = keys, ciphertextQueue = queue, queueOwner = { "owner" }, bootId = "boot")
+    val start = at("2026-07-13T18:50:00.000Z")
+    val hour = 3_600_000L
+    for (minute in 0L..20L) {
+      pipeline.onFix(51.5 + minute * 0.003, -0.1, start + minute * 60_000L, 5.0, 80, false, fixId = minute + 1, accuracyMeters = 5.0, live = false)
+    }
+    for (minute in 21L..80L) {
+      pipeline.onFix(51.56, -0.1, start + minute * 60_000L, 0.0, 80, false, fixId = minute + 1, accuracyMeters = 5.0, live = minute == 80L)
+    }
+
+    val rows = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 100)
+    val points = rows.filter { it.role == CiphertextQueueRow.ROLE_POINT }
+    assertEquals(points.map { (decrypt(it).first / hour).toInt() }, points.map { it.capturedHour })
+    assertTrue(points.mapNotNull { it.capturedHour }.toSet().size == 2)
+    val stay = rows.single { it.role == CiphertextQueueRow.ROLE_STAY }
+    val (arrivedAt, stayUntil) = decrypt(stay)
+    assertTrue(stayUntil!! / hour > arrivedAt / hour)
+    assertEquals((arrivedAt / hour).toInt(), stay.capturedHour)
+    assertEquals(listOf<Int?>(null), rows.filter { it.role == CiphertextQueueRow.ROLE_LIVE }.map { it.capturedHour })
+  }
+
+  @Test
   fun stayUpdatesReuseTheArrivalIdAndReplaceOnlyPendingRows() {
     val keys = InMemoryEpochKeyStore()
     keys.replaceAll(listOf(ProvisionedEpochKey("group_a", "epoch_a", ByteArray(32), "device_1", "trackingPoint")))

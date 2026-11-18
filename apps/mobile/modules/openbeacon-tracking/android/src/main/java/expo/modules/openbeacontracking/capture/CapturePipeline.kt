@@ -147,6 +147,7 @@ class CapturePipeline(
           queuedAt = queuedAt,
           status = CiphertextQueueRow.STATUS_PENDING,
           role = role,
+          capturedHour = if (role == CiphertextQueueRow.ROLE_LIVE) null else point.timestampMillis.floorDiv(HOUR_MILLIS).toInt(),
         )
       }
 
@@ -173,5 +174,6 @@ class CapturePipeline(
 
   private companion object {
     const val POINT_ID_BYTES = 8
+    const val HOUR_MILLIS = 3_600_000L
   }
 }

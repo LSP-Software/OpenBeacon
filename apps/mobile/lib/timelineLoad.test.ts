@@ -52,7 +52,7 @@ const encryptPoint = ({
   epochKey,
   payload,
   pointId,
-  receivedAt,
+  recordedAt,
   senderDeviceId = "alice-phone",
   streamId,
 }: {
@@ -60,7 +60,7 @@ const encryptPoint = ({
   epochKey: EpochKeyMaterial;
   payload: Uint8Array;
   pointId: string;
-  receivedAt: number;
+  recordedAt: number;
   senderDeviceId?: string;
   streamId: string;
 }) => {
@@ -73,10 +73,10 @@ const encryptPoint = ({
     senderDeviceId,
   });
   return {
+    capturedHour: Math.floor(recordedAt / HOUR_MS),
     ciphertext: encrypted.ciphertext,
     nonce: encrypted.nonce,
     pointId,
-    receivedAt: new Date(receivedAt),
     streamId,
   };
 };
@@ -113,7 +113,7 @@ describe("loadTimelineDay", () => {
       epochKey,
       payload: stay.bytes,
       pointId: "1",
-      receivedAt: dayStart - 30 * HOUR_MS,
+      recordedAt: stay.decoded.time,
       streamId: "10",
     });
     const late = encryptPoint({
@@ -121,7 +121,7 @@ describe("loadTimelineDay", () => {
       epochKey,
       payload: movingPoint(dayStart + 2 * HOUR_MS, 51.6),
       pointId: "3",
-      receivedAt: dayStart - HOUR_MS,
+      recordedAt: dayStart + 2 * HOUR_MS,
       streamId: "10",
     });
     const early = encryptPoint({
@@ -129,23 +129,23 @@ describe("loadTimelineDay", () => {
       epochKey,
       payload: movingPoint(dayStart + HOUR_MS, 51.5),
       pointId: "2",
-      receivedAt: dayStart + 3 * HOUR_MS,
+      recordedAt: dayStart + HOUR_MS,
       streamId: "10",
     });
     const requests: Array<RouterInputs["groupTracking"]["historyRange"]> = [];
     const pages: RangePage[] = [
       {
-        cursor: { pointId: "3", receivedAt: late.receivedAt, streamId: "10" },
+        cursor: { capturedHour: early.capturedHour, pointId: "2", streamId: "10" },
         hasMore: true,
         lookback: [lookback],
-        points: [late],
+        points: [early],
         streams: [stream("10", "epoch-1")],
       },
       {
-        cursor: { pointId: "2", receivedAt: early.receivedAt, streamId: "10" },
+        cursor: { capturedHour: late.capturedHour, pointId: "3", streamId: "10" },
         hasMore: false,
         lookback: [],
-        points: [early],
+        points: [late],
         streams: [stream("10", "epoch-1")],
       },
     ];
@@ -166,7 +166,6 @@ describe("loadTimelineDay", () => {
         epochs: [epoch("epoch-1", 1, dayStart - 40 * HOUR_MS)],
         nextCursor: null,
       }),
-      now: dayStart + 30 * HOUR_MS,
       onProgress: (value) => progress.push(value),
       unwrapEpoch: async () => epochKey,
       userIds: ["alice"],
@@ -175,20 +174,15 @@ describe("loadTimelineDay", () => {
       },
     });
 
+    const fromHour = dayStart / HOUR_MS;
     expect(requests).toEqual([
+      { cursor: undefined, fromHour, groupId, limit: 2_000, toHour: fromHour + 24 },
       {
-        cursor: undefined,
-        from: new Date(dayStart - 3 * HOUR_MS),
+        cursor: { capturedHour: early.capturedHour, pointId: "2", streamId: "10" },
+        fromHour,
         groupId,
         limit: 2_000,
-        to: new Date(dayStart + 30 * HOUR_MS),
-      },
-      {
-        cursor: { pointId: "3", receivedAt: late.receivedAt, streamId: "10" },
-        from: new Date(dayStart - 3 * HOUR_MS),
-        groupId,
-        limit: 2_000,
-        to: new Date(dayStart + 30 * HOUR_MS),
+        toHour: fromHour + 24,
       },
     ]);
     expect(progress).toEqual([
@@ -209,7 +203,7 @@ describe("loadTimelineDay", () => {
     });
   });
 
-  test("asks for the day from 3 hours before to 24 hours after, capped at now", async () => {
+  test("asks only for the day's own UTC hours, even for today", async () => {
     const requests: Array<RouterInputs["groupTracking"]["historyRange"]> = [];
     await loadTimelineDay({
       day,
@@ -219,15 +213,65 @@ describe("loadTimelineDay", () => {
       },
       groupId,
       listEpochs: async () => ({ epochs: [], nextCursor: null }),
-      now: dayStart + 5 * HOUR_MS,
       unwrapEpoch: async () => null,
       userIds: ["alice"],
       yieldToUi: async () => {},
     });
 
-    expect(requests.map(({ from, to }) => [from.getTime(), to.getTime()])).toEqual([
-      [dayStart - 3 * HOUR_MS, dayStart + 5 * HOUR_MS],
+    expect(requests.map(({ fromHour, toHour }) => [fromHour, toHour])).toEqual([
+      [dayStart / HOUR_MS, dayStart / HOUR_MS + 24],
     ]);
+  });
+
+  test("a point filed under a different hour than its encrypted time counts as undecryptable", async () => {
+    const epochKey = generateGroupEpochKey();
+    const recorded = (
+      pointId: string,
+      time: number,
+      capturedHour = Math.floor(time / HOUR_MS),
+    ) => ({
+      ...encryptPoint({
+        epochId: "epoch-1",
+        epochKey,
+        payload: movingPoint(time, 51.5),
+        pointId,
+        recordedAt: time,
+        streamId: "10",
+      }),
+      capturedHour,
+    });
+    const hour = dayStart / HOUR_MS;
+
+    const result = await loadTimelineDay({
+      day,
+      fetchRange: async () => ({
+        cursor: null,
+        hasMore: false,
+        lookback: [recorded("moved-from-yesterday", dayStart - HOUR_MS, hour - 2)],
+        points: [
+          recorded("on-the-hour", dayStart + 2 * HOUR_MS),
+          recorded("last-moment", dayStart + 3 * HOUR_MS - 1),
+          recorded("moved-later", dayStart + 4 * HOUR_MS - 1, hour + 4),
+          recorded("moved-earlier", dayStart + 5 * HOUR_MS, hour + 4),
+          recorded("moved-to-another-day", dayStart - 20 * HOUR_MS, hour + 6),
+        ],
+        streams: [stream("10", "epoch-1")],
+      }),
+      groupId,
+      listEpochs: async () => ({
+        epochs: [epoch("epoch-1", 1, dayStart - 40 * HOUR_MS)],
+        nextCursor: null,
+      }),
+      unwrapEpoch: async () => epochKey,
+      userIds: ["alice"],
+      yieldToUi: async () => {},
+    });
+
+    expect(result.devices[0]?.points.map(({ pointId }) => pointId)).toEqual([
+      "on-the-hour",
+      "last-moment",
+    ]);
+    expect(result.devices[0]?.undecryptable).toBe(4);
   });
 
   test("skips and counts points with a missing key or bad ciphertext", async () => {
@@ -237,7 +281,7 @@ describe("loadTimelineDay", () => {
       epochKey,
       payload: movingPoint(dayStart + HOUR_MS, 51.5),
       pointId: "1",
-      receivedAt: dayStart + HOUR_MS,
+      recordedAt: dayStart + HOUR_MS,
       streamId: "20",
     });
     const tampered = {
@@ -246,7 +290,7 @@ describe("loadTimelineDay", () => {
         epochKey,
         payload: movingPoint(dayStart + 2 * HOUR_MS, 51.5),
         pointId: "2",
-        receivedAt: dayStart + 2 * HOUR_MS,
+        recordedAt: dayStart + 2 * HOUR_MS,
         streamId: "20",
       }),
       nonce: good.nonce,
@@ -256,7 +300,7 @@ describe("loadTimelineDay", () => {
       epochKey,
       payload: movingPoint(dayStart + 3 * HOUR_MS, 51.5),
       pointId: "3",
-      receivedAt: dayStart + 3 * HOUR_MS,
+      recordedAt: dayStart + 3 * HOUR_MS,
       senderDeviceId: "someone-else",
       streamId: "20",
     });
@@ -265,7 +309,7 @@ describe("loadTimelineDay", () => {
       epochKey: generateGroupEpochKey(),
       payload: movingPoint(dayStart + 4 * HOUR_MS, 51.5),
       pointId: "4",
-      receivedAt: dayStart + 4 * HOUR_MS,
+      recordedAt: dayStart + 4 * HOUR_MS,
       streamId: "10",
     });
     const garbage = encryptPoint({
@@ -273,7 +317,7 @@ describe("loadTimelineDay", () => {
       epochKey,
       payload: new Uint8Array(23),
       pointId: "5",
-      receivedAt: dayStart + 5 * HOUR_MS,
+      recordedAt: dayStart + 5 * HOUR_MS,
       streamId: "20",
     });
 
@@ -294,7 +338,6 @@ describe("loadTimelineDay", () => {
         ],
         nextCursor: null,
       }),
-      now: day.end,
       unwrapEpoch: async (wraps) => (wraps.epochId === "epoch-2" ? epochKey : null),
       userIds: ["alice"],
       yieldToUi: async () => {},
@@ -324,7 +367,6 @@ describe("loadTimelineDay", () => {
         }
         return { epochs: [epoch("epoch-5", 5, dayStart - HOUR_MS)], nextCursor: 5 };
       },
-      now: day.end,
       unwrapEpoch: async () => generateGroupEpochKey(),
       userIds: ["alice"],
       yieldToUi: async () => {},
@@ -334,9 +376,8 @@ describe("loadTimelineDay", () => {
     expect(result.joinStart).toBeNull();
   });
 
-  test("keeps every point of the last batch before the range so a later stay wins", async () => {
+  test("keeps every point of the last hour before the range so a later stay wins", async () => {
     const epochKey = generateGroupEpochKey();
-    const batchAt = dayStart - 10 * 60_000;
     const stay = encryptPoint({
       epochId: "epoch-1",
       epochKey,
@@ -350,7 +391,7 @@ describe("loadTimelineDay", () => {
         time: dayStart - 15 * 60_000,
       }),
       pointId: "1",
-      receivedAt: batchAt,
+      recordedAt: dayStart - 15 * 60_000,
       streamId: "10",
     });
     const moving = encryptPoint({
@@ -358,7 +399,7 @@ describe("loadTimelineDay", () => {
       epochKey,
       payload: movingPoint(dayStart - 20 * 60_000, 51.4),
       pointId: "2",
-      receivedAt: batchAt,
+      recordedAt: dayStart - 20 * 60_000,
       streamId: "10",
     });
     const fetched = [stay, moving];
@@ -366,7 +407,7 @@ describe("loadTimelineDay", () => {
     const result = await loadTimelineDay({
       day,
       fetchRange: async () => ({
-        cursor: { pointId: "2", receivedAt: new Date(batchAt), streamId: "10" },
+        cursor: { capturedHour: moving.capturedHour, pointId: "2", streamId: "10" },
         hasMore: false,
         lookback: fetched,
         points: [moving],
@@ -377,7 +418,6 @@ describe("loadTimelineDay", () => {
         epochs: [epoch("epoch-1", 1, dayStart - 40 * HOUR_MS)],
         nextCursor: null,
       }),
-      now: dayStart + 9 * HOUR_MS,
       unwrapEpoch: async () => epochKey,
       userIds: ["alice"],
       yieldToUi: async () => {},
@@ -413,7 +453,7 @@ describe("loadTimelineDay", () => {
           epochKey,
           payload: movingPoint(dayStart + (index + 1) * HOUR_MS, 51.5),
           pointId: `${userId}-${index}`,
-          receivedAt: dayStart + (index + 1) * HOUR_MS,
+          recordedAt: dayStart + (index + 1) * HOUR_MS,
           senderDeviceId: `${userId}-phone`,
           streamId: userId,
         }),
@@ -443,7 +483,6 @@ describe("loadTimelineDay", () => {
         ],
         nextCursor: null,
       }),
-      now: day.end,
       onPersonReady: ({ devices, joinStart, userId }) =>
         events.push(
           `ready ${userId}: ${devices.map((device) => `${device.deviceId} ${device.points.length}`).join(", ")} from ${joinStart}`,
@@ -507,7 +546,7 @@ describe("loadTimelineDay", () => {
         epochKey,
         payload: movingPoint(dayStart + hour * HOUR_MS, 51.5),
         pointId: epochId,
-        receivedAt: dayStart + hour * HOUR_MS,
+        recordedAt: dayStart + hour * HOUR_MS,
         streamId: epochId,
       });
 
@@ -525,7 +564,6 @@ describe("loadTimelineDay", () => {
         epochs: [epoch("epoch-2", 2, dayStart - 10 * HOUR_MS), joinEpoch],
         nextCursor: null,
       }),
-      now: day.end,
       unwrapEpoch: async (wraps) => {
         const fromDevice = deviceKeys.get(wraps.epochId);
         if (fromDevice) return fromDevice;
@@ -557,7 +595,7 @@ describe("loadTimelineDay", () => {
         epochKey,
         payload: movingPoint(dayStart + index * HOUR_MS, 51.5),
         pointId: String(index),
-        receivedAt: dayStart + index * HOUR_MS,
+        recordedAt: dayStart + index * HOUR_MS,
         senderDeviceId: `${userId}-phone`,
         streamId: userId,
       }),
@@ -582,7 +620,6 @@ describe("loadTimelineDay", () => {
           epochs: [epoch("epoch-1", 1, dayStart - 40 * HOUR_MS)],
           nextCursor: null,
         }),
-        now: day.end,
         onPersonReady: ({ userId }) => {
           events.push(`ready ${userId}`);
           controller.abort();
@@ -609,7 +646,6 @@ describe("loadTimelineDay", () => {
         },
         groupId,
         listEpochs: async () => ({ epochs: [], nextCursor: null }),
-        now: day.end,
         signal: controller.signal,
         unwrapEpoch: async () => null,
         userIds: ["alice"],
