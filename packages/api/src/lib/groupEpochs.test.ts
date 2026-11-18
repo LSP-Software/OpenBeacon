@@ -11,7 +11,7 @@ const ephemeralA = createDeviceKeyPair().publicKey;
 const ephemeralB = createDeviceKeyPair().publicKey;
 
 describe("group epoch helpers", () => {
-  test("registers a device without persisting a private key", async () => {
+  test("registers a first device as an activated phone and asks its groups to rotate", async () => {
     const create = mock(async ({ data }: { data: Record<string, unknown> }) => ({
       createdAt: new Date("2026-03-26T12:00:00.000Z"),
       id: data.id as string,

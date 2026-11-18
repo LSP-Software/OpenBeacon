@@ -1211,11 +1211,15 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("password alerts"
           origin: "http://localhost:3000",
           [clientIpHeader]: nextIp(),
         },
-        body: JSON.stringify({ currentPassword, newPassword: "a brand new passphrase" }),
+        body: JSON.stringify({
+          currentPassword,
+          newPassword: "a brand new passphrase",
+          revokeOtherSessions: true,
+        }),
       }),
     );
     await Promise.all(tasks.splice(0));
-    return response.status;
+    return { status: response.status, body: await response.json() };
   };
 
   test("a reset sends one alert, even with the other alerts turned off", async () => {
@@ -1247,7 +1251,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("password alerts"
   test("a password change sends one alert, and its phone notice skips the phone that changed it", async () => {
     const { email, userId } = await createPasswordAccount("change-alert");
 
-    expect(await changePassword(await signIn(email), password)).toBe(200);
+    expect((await changePassword(await signIn(email), password)).status).toBe(200);
     expect(alerts).toEqual([{ to: email, userId, alert: { type: "password-changed" } }]);
     const [device] = await prisma.userDevice.findMany({ where: { userId }, select: { id: true } });
     expect(
@@ -1258,10 +1262,38 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("password alerts"
     ).toEqual([{ type: "PASSWORD_CHANGED", excludeDeviceId: device?.id ?? "missing" }]);
   });
 
+  test("the app's password change signs out every other session and gives this phone a new one to link", async () => {
+    const { email, userId } = await createPasswordAccount("change-revokes");
+    const changingCookie = await signIn(email);
+    await signIn(email);
+    await signIn(email, "pending");
+    const [changingDevice] = await prisma.userDevice.findMany({
+      where: { userId },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    });
+
+    const { status, body } = await changePassword(changingCookie, password);
+
+    expect(status).toBe(200);
+    const { token } = z.object({ token: z.string() }).parse(body);
+    expect(
+      await prisma.session.findMany({ where: { userId }, select: { token: true, deviceId: true } }),
+    ).toEqual([{ token, deviceId: null }]);
+    expect(alerts).toEqual([{ to: email, userId, alert: { type: "password-changed" } }]);
+    expect(
+      await prisma.accountNotice.findMany({
+        where: { userId },
+        select: { type: true, excludeDeviceId: true },
+      }),
+    ).toEqual([{ type: "PASSWORD_CHANGED", excludeDeviceId: changingDevice?.id ?? "missing" }]);
+    expect(await signsInWith(email, "a brand new passphrase")).toBe(true);
+  });
+
   test("a failed password change sends no alert", async () => {
     const { email } = await createPasswordAccount("change-alert-wrong");
 
-    expect(await changePassword(await signIn(email), "not the password")).toBe(400);
+    expect((await changePassword(await signIn(email), "not the password")).status).toBe(400);
     expect(alerts).toEqual([]);
   });
 
@@ -1327,7 +1359,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("password alerts"
     const { email } = await createPasswordAccount("alert-failure");
     alertFailure = new Error("SMTP is down");
 
-    expect(await changePassword(await signIn(email), password)).toBe(200);
+    expect((await changePassword(await signIn(email), password)).status).toBe(200);
     expect((await resetPassword(await resetTokenFor(email), "another new passphrase")).status).toBe(
       200,
     );

@@ -12,6 +12,40 @@ export const findIntegrationTestFiles = async (root: string): Promise<string[]> 
     .filter((file) => !file.includes("node_modules/"))
     .sort();
 
+export const redisRestartTestFile = "packages/cache/src/cache/redisRestart.integration.test.ts";
+
+export const findUnmatchedIntegrationFiles = ({
+  filesUsingIntegrationFlag,
+  files,
+}: {
+  filesUsingIntegrationFlag: string[];
+  files: string[];
+}) =>
+  filesUsingIntegrationFlag.filter(
+    (file) => /\.test\.[cm]?[jt]sx?$/.test(file) && !files.includes(file),
+  );
+
+export const listFilesUsingIntegrationFlag = async (root: string) =>
+  (await Bun.$`git grep -l -z --untracked -e OPENBEACON_INTEGRATION`.cwd(root).nothrow().text())
+    .split("\0")
+    .filter((file) => file !== "");
+
+export const findSkippedTests = (junitXml: string) =>
+  [...junitXml.matchAll(/<testcase name="([^"]*)"[^>]*\bfile="([^"]*)"[^>]*>\s*<skipped\b/g)].map(
+    ([, name, file]) => ({ name: name ?? "", file: file ?? "" }),
+  );
+
+export const checkSkippedTests = ({
+  skipped,
+  redisRestartContainer,
+}: {
+  skipped: { name: string; file: string }[];
+  redisRestartContainer: string | undefined;
+}) => ({
+  unexpected: skipped.filter((test) => redisRestartContainer || test.file !== redisRestartTestFile),
+  redisRestartSkipped: skipped.some((test) => test.file === redisRestartTestFile),
+});
+
 export const envFileFromArgs = (args: string[]) =>
   args.findLast((arg) => arg.startsWith("--env-file="))?.slice("--env-file=".length) ?? ".env.ci";
 

@@ -303,7 +303,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       }
     });
 
-    test("only an owner can delete a group image and a storage failure leaves the group", async () => {
+    test("only an owner can delete a group, and a failure deleting its picture keeps the group", async () => {
       const imageGroupId = `${prefix}-image-group`;
       const path = `user/${users[0]}/uploads/group/${imageGroupId}/avatar`;
       await prisma.group.create({

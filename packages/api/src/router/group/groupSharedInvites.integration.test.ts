@@ -135,7 +135,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(await prisma.pendingUpload.count({ where: { userId: users[1]! } })).toBe(0);
     });
 
-    test("outsiders can't create or check invites; expiry and code hashing are enforced", async () => {
+    test("someone outside the group can't create or check invites; expiry and code hashing are enforced", async () => {
       await expect(caller(users[1]!).groupInvites.createShared({ groupId })).rejects.toMatchObject(
         notMember,
       );

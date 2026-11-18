@@ -770,7 +770,6 @@ describe("secrets never reach the server", () => {
       expect(await readThroughHistoryWraps(resettingPhone, epoch)).toBe(keyOf(epoch));
     }
 
-    const serialized = JSON.stringify(serverInputs);
     const secrets = [
       ...[firstPhrase, changedPhrase, resetPhrase].map((phrase) =>
         deriveRecoveryKeyPair(phrase).privateKey.expose(),
@@ -781,6 +780,9 @@ describe("secrets never reach the server", () => {
       resettingPhone.device.privateKey.expose(),
       ...epochs.map(({ epochKey }) => epochKey.expose()),
     ];
-    expectNoSecretsIn(serialized, { secrets, phrases: [firstPhrase, changedPhrase, resetPhrase] });
+    expectNoSecretsIn(
+      { serverInputs, storage: storageValues },
+      { secrets, phrases: [firstPhrase, changedPhrase, resetPhrase] },
+    );
   });
 });

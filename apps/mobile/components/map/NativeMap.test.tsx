@@ -38,7 +38,7 @@ import {
   setNativeMapSelfHeadingDegrees,
   setNativeMapProjectedPoint,
   setNativeMapProjectionWait,
-} from "./nativeMapTestHarness.tsx";
+} from "./nativeMap.testUtil.tsx";
 
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -503,7 +503,7 @@ const defaultSignedUrl = {
   url: "https://cached.example/pmtiles-1",
 };
 
-describe("NativeMap integration harness", () => {
+describe("NativeMap over a fake MapLibre", () => {
   beforeEach(() => {
     testPlatform.OS = "ios";
     mapAssetUrls = null;

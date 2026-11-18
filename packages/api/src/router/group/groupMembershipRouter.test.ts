@@ -1,101 +1,151 @@
-import { describe, expect, mock, test } from "bun:test";
-import { GroupRole, type Prisma } from "@openbeacon/database";
+import { expect, mock, test } from "bun:test";
+import { OpenBeaconCache } from "@openbeacon/cache";
+import { FakeRedis, testRedisHashSecret } from "@openbeacon/cache/testing";
+import { createTRPCRouter } from "../../trpcRuntime.ts";
+import { groupMembershipRouter } from "./groupMembershipRouter.ts";
 
-const importGroupMemberRemovalModule = async () =>
-  import(
-    `./assertGroupMemberCanBeRemoved.ts?test=${Math.random().toString(36).slice(2)}`
-  ) as Promise<typeof import("./assertGroupMemberCanBeRemoved.ts")>;
+class TestCache extends OpenBeaconCache {
+  protected override createRedisClient(): FakeRedis {
+    return new FakeRedis();
+  }
+}
 
-describe("group membership removal guard", () => {
-  test("rejects removing the only owner", async () => {
-    const { removeGroupMemberWithOwnerGuard } = await importGroupMemberRemovalModule();
-    const queryRaw = mock(async () => [{ deleted: false, memberExists: true }]);
-
-    await expect(
-      removeGroupMemberWithOwnerGuard({
-        db: {
-          $queryRaw: queryRaw,
-        },
-        groupId: "group-1",
-        memberId: "member-1",
-      }),
-    ).rejects.toThrow("Cannot remove the only owner from the group.");
-    expect(queryRaw).toHaveBeenCalledTimes(1);
+test("nicknames are scoped to the caller's membership and targets in the same group", async () => {
+  const findMany = mock(async () => []);
+  const createMany = mock(async () => ({ count: 1 }));
+  const deleteMany = mock(async () => ({ count: 0 }));
+  const updateMany = mock(async () => ({ count: 1 }));
+  const findFirst = mock(async () => ({ id: "target" }));
+  const router = createTRPCRouter({ groupMembership: groupMembershipRouter });
+  const caller = router.createCaller({
+    cache: new TestCache({
+      redisUrl: "redis://localhost:6379",
+      hashSecret: testRedisHashSecret,
+      now: () => 0,
+    }),
+    clientIp: "127.0.0.1",
+    session: { user: { id: "user" } },
+    deviceId: "device",
+    deviceActive: true,
+    db: {
+      groupMember: {
+        findUnique: async () => ({ id: "owner", userId: "user", role: "MEMBER" }),
+        findFirst,
+      },
+      personalGroupNickname: { findMany, createMany, updateMany, deleteMany },
+    },
+  } as unknown as Parameters<typeof router.createCaller>[0]);
+  await caller.groupMembership.nicknames({ groupId: "group" });
+  expect(findMany).toHaveBeenCalledWith({
+    where: { ownerId: "owner" },
+    select: { targetId: true, ciphertext: true },
   });
-
-  test("allows removing an owner when another owner remains", async () => {
-    const { removeGroupMemberWithOwnerGuard } = await importGroupMemberRemovalModule();
-    const queryRaw = mock(async () => [{ deleted: true, memberExists: true }]);
-
-    await expect(
-      removeGroupMemberWithOwnerGuard({
-        db: {
-          $queryRaw: queryRaw,
-        },
-        groupId: "group-1",
-        memberId: "member-1",
-      }),
-    ).resolves.toBeUndefined();
+  await caller.groupMembership.updateNickname({
+    groupId: "group",
+    memberId: "target",
+    ciphertext: "opaque",
+    expectedCiphertext: null,
   });
-
-  test("embeds the owner guard in the SQL statement", async () => {
-    const { removeGroupMemberWithOwnerGuard } = await importGroupMemberRemovalModule();
-    let sqlQuery: Prisma.Sql | undefined;
-    const queryRaw = mock(async () => [{ deleted: true, memberExists: true }]);
-
-    await expect(
-      removeGroupMemberWithOwnerGuard({
-        db: {
-          $queryRaw: async (query) => {
-            sqlQuery = query;
-            return queryRaw(query);
-          },
-        },
-        groupId: "group-1",
-        memberId: "member-1",
-      }),
-    ).resolves.toBeUndefined();
-    expect(sqlQuery?.strings.join("")).toContain("target_member.role <> ");
-    expect(sqlQuery?.strings.join("")).toContain("COUNT(*) FROM owner_rows");
-    expect(sqlQuery?.values).toContain(GroupRole.OWNER);
+  expect(findFirst).toHaveBeenCalledWith({
+    where: { id: "target", groupId: "group" },
+    select: { id: true },
   });
-
-  test("uses current Prisma table and column names", async () => {
-    const { removeGroupMemberWithOwnerGuard } = await importGroupMemberRemovalModule();
-    let sqlQuery: Prisma.Sql | undefined;
-
-    await expect(
-      removeGroupMemberWithOwnerGuard({
-        db: {
-          $queryRaw: async (query) => {
-            sqlQuery = query;
-            return [{ deleted: true, memberExists: true }];
-          },
-        },
-        groupId: "group-1",
-        memberId: "member-1",
-      }),
-    ).resolves.toBeUndefined();
-
-    const queryText = sqlQuery?.strings.join("");
-    expect(queryText).toContain('FROM "GroupMember" AS member');
-    expect(queryText).toContain('WHERE member."groupId" = ');
-    expect(queryText).not.toContain('"group_members"');
-    expect(queryText).not.toContain('"group_id"');
+  await caller.groupMembership.updateNickname({
+    groupId: "group",
+    memberId: "target",
+    ciphertext: "new-device-ciphertext",
+    expectedCiphertext: "old-device-ciphertext",
   });
-
-  test("rejects removing a missing member", async () => {
-    const { removeGroupMemberWithOwnerGuard } = await importGroupMemberRemovalModule();
-    const queryRaw = mock(async () => [{ deleted: false, memberExists: false }]);
-
-    await expect(
-      removeGroupMemberWithOwnerGuard({
-        db: {
-          $queryRaw: queryRaw,
-        },
-        groupId: "group-1",
-        memberId: "member-1",
-      }),
-    ).rejects.toThrow("Group member not found");
+  expect(updateMany).toHaveBeenCalledWith({
+    where: { ownerId: "owner", targetId: "target", ciphertext: "old-device-ciphertext" },
+    data: { ciphertext: "new-device-ciphertext" },
   });
+  createMany.mockImplementationOnce(async () => ({ count: 0 }));
+  await expect(
+    caller.groupMembership.updateNickname({
+      groupId: "group",
+      memberId: "target",
+      ciphertext: "new",
+      expectedCiphertext: null,
+    }),
+  ).rejects.toThrow("Nickname changed");
+  updateMany.mockImplementationOnce(async () => ({ count: 0 }));
+  await expect(
+    caller.groupMembership.updateNickname({
+      groupId: "group",
+      memberId: "target",
+      ciphertext: "new",
+      expectedCiphertext: "stale",
+    }),
+  ).rejects.toThrow("Nickname changed");
+  await expect(
+    caller.groupMembership.updateNickname({
+      groupId: "group",
+      memberId: "target",
+      ciphertext: null,
+      expectedCiphertext: "stale",
+    }),
+  ).rejects.toThrow("Nickname changed");
+  expect(deleteMany).toHaveBeenCalledWith({
+    where: { ownerId: "owner", targetId: "target", ciphertext: "stale" },
+  });
+  expect(createMany).toHaveBeenCalledWith({
+    data: { ownerId: "owner", targetId: "target", ciphertext: "opaque" },
+    skipDuplicates: true,
+  });
+});
+
+test("group colors are scoped to the caller's own memberships", async () => {
+  const findMany = mock(async () => [{ ciphertext: "opaque", owner: { groupId: "group" } }]);
+  const upsert = mock(async () => ({}));
+  const updateMany = mock(async () => ({ count: 1 }));
+  const router = createTRPCRouter({ groupMembership: groupMembershipRouter });
+  const caller = router.createCaller({
+    cache: new TestCache({
+      redisUrl: "redis://localhost:6379",
+      hashSecret: testRedisHashSecret,
+      now: () => 0,
+    }),
+    clientIp: "127.0.0.1",
+    session: { user: { id: "user" } },
+    deviceId: "device",
+    deviceActive: true,
+    db: {
+      groupMember: {
+        findUnique: async () => ({ id: "owner", userId: "user", role: "MEMBER" }),
+      },
+      personalGroupColor: { findMany, upsert, updateMany },
+    },
+  } as unknown as Parameters<typeof router.createCaller>[0]);
+  expect(await caller.groupMembership.colors()).toEqual([
+    { groupId: "group", ciphertext: "opaque" },
+  ]);
+  expect(findMany).toHaveBeenCalledWith({
+    where: { owner: { userId: "user" } },
+    select: { ciphertext: true, owner: { select: { groupId: true } } },
+  });
+  await caller.groupMembership.updateColor({ groupId: "group", ciphertext: "next" });
+  expect(upsert).toHaveBeenCalledWith({
+    where: { ownerId: "owner" },
+    create: { ownerId: "owner", ciphertext: "next" },
+    update: { ciphertext: "next" },
+  });
+  await caller.groupMembership.updateColor({
+    groupId: "group",
+    ciphertext: "resealed",
+    expectedCiphertext: "next",
+  });
+  expect(updateMany).toHaveBeenCalledWith({
+    where: { ownerId: "owner", ciphertext: "next" },
+    data: { ciphertext: "resealed" },
+  });
+  expect(upsert).toHaveBeenCalledTimes(1);
+  updateMany.mockImplementationOnce(async () => ({ count: 0 }));
+  await expect(
+    caller.groupMembership.updateColor({
+      groupId: "group",
+      ciphertext: "resealed",
+      expectedCiphertext: "stale",
+    }),
+  ).rejects.toThrow("Group colour changed");
 });

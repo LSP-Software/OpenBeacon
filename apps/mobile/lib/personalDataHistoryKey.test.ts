@@ -696,6 +696,9 @@ describe("secrets", () => {
       freshPhone.device.privateKey.expose(),
       deriveRecoveryKeyPair(phrase).privateKey.expose(),
     ];
-    expectNoSecretsIn(serialized, { secrets, phrases: [phrase] });
+    expectNoSecretsIn(
+      { serverInputs, storage: [setupPhone.storage, freshPhone.storage] },
+      { secrets, phrases: [phrase] },
+    );
   });
 });

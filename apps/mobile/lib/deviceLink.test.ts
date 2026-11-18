@@ -149,7 +149,7 @@ describe("device link on the phones", () => {
 
     expect(saved.psk).toEqual(psk);
     expect(serverInputs.length).toBeGreaterThan(0);
-    expectNoSecretsIn(JSON.stringify(serverInputs), { secrets: [psk], phrases: [] });
+    expectNoSecretsIn(serverInputs, { secrets: [psk], phrases: [] });
   });
 
   test("the new phone forgets its saved link once the handover is stored", async () => {
