@@ -10,6 +10,7 @@ import type {
   TimelineDay,
   TimelineDecryptProgress,
   TimelineDeviceData,
+  TimelineSender,
 } from "../lib/timelineTypes.ts";
 
 export const useTimelineDays = (groupId: string, userId?: string) => {
@@ -35,7 +36,7 @@ export const useTimelineDay = ({
 }: {
   day: TimelineDay | null;
   groupId: string;
-  senders: ReadonlyArray<{ firstHour: number | null; userId: string }>;
+  senders: readonly TimelineSender[];
   userIds: readonly string[];
   windowStart: Date | null;
 }) => {

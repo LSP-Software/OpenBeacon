@@ -49,11 +49,12 @@ import { pickPersonDevices, timelineDayStats, timelinePositionAt } from "../lib/
 import { pickTimelinePeople } from "../lib/timelineBudget.ts";
 import { rememberTimelineGroup } from "../lib/timelineGroup.ts";
 import { timelineLaneRuns, timelineRoute } from "../lib/timelineMap.ts";
+import type { TimelineSender } from "../lib/timelineTypes.ts";
 
 const SPEEDS = [60, 300, 900] as const;
 const STEP_MS = 15 * 60_000;
 const DRAW_IN_MS = 1200;
-const NO_SENDERS: ReadonlyArray<{ firstHour: number | null; userId: string }> = [];
+const NO_SENDERS: readonly TimelineSender[] = [];
 
 const TimelineScreen = () => {
   const { groupId, userId } = useLocalSearchParams<{ groupId: string; userId?: string }>();

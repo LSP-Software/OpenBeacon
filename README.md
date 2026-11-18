@@ -45,6 +45,7 @@ OpenBeacon is available on **Android 8.0 and newer**. An iPhone app is on the [r
 - Live map of everyone in your groups, with one pin per phone
 - Places such as home or school, with alerts when someone arrives or leaves
 - Pause sharing for a set time or until you turn it back on
+- Timeline: play back where people in a group have been, one day at a time. Each person chooses how much of their own history their groups can see, from only their location now up to 14 days
 - See who can see your location now, and who could in the last 14 days
 - Several groups, with owner, admin and member roles
 - Invite by email, link or QR code

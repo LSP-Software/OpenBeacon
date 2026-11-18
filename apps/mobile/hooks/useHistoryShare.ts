@@ -1,10 +1,10 @@
-import type { HistoryShare } from "@openbeacon/shared";
 import { tryCatch } from "@openbeacon/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Alert } from "../lib/alert.ts";
 import { trpc, trpcClient } from "../lib/api.ts";
 import { historyShareLabel, shortensHistory } from "../lib/historyShare.ts";
+import type { HistoryShareChange } from "../lib/historyShareTypes.ts";
 import { syncLocationSharing } from "../lib/locationSharing.ts";
 
 const confirmShortening = (label: string) =>
@@ -29,9 +29,7 @@ export const useHistoryShare = (enabled = true) => {
   });
   const [saving, setSaving] = useState(false);
 
-  const change = async (
-    next: { account: HistoryShare } | { groupId: string; override: HistoryShare | null },
-  ) => {
+  const change = async (next: HistoryShareChange) => {
     const setting = query.data;
     if (!setting || saving) return false;
     const label = historyShareLabel(

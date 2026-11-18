@@ -37,15 +37,27 @@ export const groupSettingsRouter = {
         await tx.$queryRaw(
           Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR NO KEY UPDATE`,
         );
-        const updated = await tx.groupMember.updateManyAndReturn({
-          where: { userId, groupId: input.groupId },
+        const previous = await tx.groupMember.findUnique({
+          where: { userId_groupId: { userId, groupId: input.groupId } },
+          select: { historyShare: true, user: { select: { historyShare: true } } },
+        });
+        if (!previous) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "You are not a member of this group" });
+        }
+        const deletedBefore = await deleteHistoryOutsideShare({
+          db: tx,
+          groupIds: [input.groupId],
+          historyShare: resolveHistoryShare({
+            account: previous.user.historyShare,
+            group: previous.historyShare,
+          }),
+          userId,
+        });
+        const member = await tx.groupMember.update({
+          where: { userId_groupId: { userId, groupId: input.groupId } },
           data: { historyShare: input.historyShare },
           select: { historyShare: true, user: { select: { historyShare: true } } },
         });
-        const member = updated[0];
-        if (!member) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "You are not a member of this group" });
-        }
         await tx.user.update({
           where: { id: userId },
           data: { historyShareChangedAt: new Date() },
@@ -64,7 +76,7 @@ export const groupSettingsRouter = {
           groupId: input.groupId,
           override: member.historyShare,
           historyShare,
-          deletedPoints,
+          deletedPoints: deletedBefore + deletedPoints,
         };
       });
     }),

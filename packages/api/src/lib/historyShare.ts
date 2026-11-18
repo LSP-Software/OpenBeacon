@@ -2,13 +2,11 @@ import { Prisma } from "@openbeacon/database";
 import { HISTORY_SHARES, historyShareFirstHour, type HistoryShare } from "@openbeacon/shared";
 import { deleteTrackingPointsInBatches } from "./trackingCleanup.ts";
 
-const INT4_MAX = 2_147_483_647;
-
 export const effectiveHistoryShareSql = Prisma.sql`COALESCE("member"."historyShare", "account"."historyShare")`;
 
 export const historyFirstHour = (share: HistoryShare, nowHour: number, maximumFirstHour: number) =>
   share === "LAST_LOCATION"
-    ? INT4_MAX
+    ? 2_147_483_647
     : (historyShareFirstHour(share, nowHour) ?? maximumFirstHour);
 
 export const historyFirstHourSql = (nowHour: number, maximumFirstHour: number) =>

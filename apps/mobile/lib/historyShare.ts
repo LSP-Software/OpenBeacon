@@ -4,8 +4,8 @@ import {
   resolveHistoryShare,
   type HistoryShare,
 } from "@openbeacon/shared";
-
-const HOUR_MS = 3_600_000;
+import type { HistoryShareChange } from "./historyShareTypes.ts";
+import type { TimelineSender } from "./timelineTypes.ts";
 
 type HistoryShareSetting = {
   account: HistoryShare;
@@ -51,7 +51,7 @@ export const shortensHistory = ({
   setting,
 }: {
   groupIds: readonly string[];
-  next: { account: HistoryShare } | { groupId: string; override: HistoryShare | null };
+  next: HistoryShareChange;
   setting: HistoryShareSetting;
 }) =>
   groupIds.some((groupId) => {
@@ -65,10 +65,7 @@ export const shortensHistory = ({
     return isShorterHistoryShare(after, share);
   });
 
-export const senderHistoryStart = (
-  senders: ReadonlyArray<{ firstHour: number | null; userId: string }>,
-  userId: string,
-) => {
+export const senderHistoryStart = (senders: readonly TimelineSender[], userId: string) => {
   const firstHour = senders.find((sender) => sender.userId === userId)?.firstHour ?? null;
-  return firstHour === null ? null : firstHour * HOUR_MS;
+  return firstHour === null ? null : firstHour * 3_600_000;
 };

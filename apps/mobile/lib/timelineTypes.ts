@@ -31,6 +31,8 @@ export type TimelineDeviceHours = {
   senderUserId: string;
 };
 
+export type TimelineSender = { firstHour: number | null; userId: string };
+
 export type TimelineDay = {
   end: number;
   key: string;

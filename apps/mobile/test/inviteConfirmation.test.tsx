@@ -133,7 +133,10 @@ mock.module("../components/ui/Button.tsx", () => ({
   }) => React.createElement("pressable", { disabled: disabled ?? false, onPress }, children),
 }));
 mock.module("../hooks/useHistoryShare.ts", () => ({
-  useHistoryShare: () => ({ setting: { account: "WEEK_1", changedAt: null, groups: [] } }),
+  useHistoryShare: () => ({
+    query: { isPending: false },
+    setting: { account: "WEEK_1", changedAt: null, groups: [] },
+  }),
 }));
 mock.module("../components/ui/Dialog.tsx", () => ({
   Dialog: ({ open, children }: { open: boolean; children: React.ReactNode }) =>

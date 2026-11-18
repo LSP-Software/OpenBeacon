@@ -300,7 +300,7 @@ export const InviteConfirmation = ({
             <Button
               onPress={join}
               loading={action.pendingKey === "join"}
-              disabled={action.pendingKey === "decline"}
+              disabled={action.pendingKey === "decline" || historyShare.query.isPending}
             >
               <Text>Join Group</Text>
             </Button>

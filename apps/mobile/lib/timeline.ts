@@ -7,6 +7,7 @@ import type {
   TimelinePoint,
   TimelinePosition,
   TimelineSegment,
+  TimelineSender,
 } from "./timelineTypes.ts";
 
 export const SAME_STOP_METERS = 100;
@@ -109,7 +110,7 @@ export const buildTimeline = ({
   devices: readonly TimelineDeviceData[];
   joinStart: number | null;
   now: number;
-  senders?: ReadonlyArray<{ firstHour: number | null; userId: string }>;
+  senders?: readonly TimelineSender[];
   windowStart: number;
 }) => {
   const historyStart = Math.max(windowStart, joinStart ?? windowStart);

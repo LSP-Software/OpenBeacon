@@ -258,6 +258,22 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       ).toEqual([10, 0]);
     });
 
+    test("lengthening never brings back points that aged out of the old window before the job ran", async () => {
+      await setAccount(sharerId, "DAY_1");
+      await setOverride(sharerId, clubId, "HOURS_6");
+      for (const groupId of groupIds) {
+        for (const hoursAgo of [0, 10, 30]) await store(groupId, nowHour() - hoursAgo);
+      }
+      const sharer = caller(sharerId, sharerDeviceId);
+
+      await sharer.account.setHistoryShare({ historyShare: "WEEK_1" });
+      expect(await storedHours(familyId)).toEqual([10, 0]);
+      expect(await storedHours(clubId)).toEqual([30, 10, 0]);
+
+      await sharer.groupSettings.setHistoryShare({ groupId: clubId, historyShare: "MAXIMUM" });
+      expect(await storedHours(clubId)).toEqual([0]);
+    });
+
     test("a group override deletes only in its group, and clearing it falls back to the account", async () => {
       await setAccount(sharerId, "WEEK_1");
       for (const groupId of groupIds) {

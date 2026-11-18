@@ -185,21 +185,35 @@ export const accountRouter = {
         await tx.$queryRaw(
           Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR NO KEY UPDATE`,
         );
+        const following = (
+          await tx.groupMember.findMany({
+            where: { userId, historyShare: null },
+            select: { groupId: true },
+          })
+        ).map(({ groupId }) => groupId);
+        const previous = await tx.user.findUniqueOrThrow({
+          where: { id: userId },
+          select: { historyShare: true },
+        });
+        const deletedBefore = await deleteHistoryOutsideShare({
+          db: tx,
+          groupIds: following,
+          historyShare: previous.historyShare,
+          userId,
+        });
         const account = await tx.user.update({
           where: { id: userId },
           data: { historyShare: input.historyShare, historyShareChangedAt: new Date() },
           select: { historyShare: true, historyShareChangedAt: true },
         });
-        const following = await tx.groupMember.findMany({
-          where: { userId, historyShare: null },
-          select: { groupId: true },
-        });
-        const deletedPoints = await deleteHistoryOutsideShare({
-          db: tx,
-          groupIds: following.map(({ groupId }) => groupId),
-          historyShare: input.historyShare,
-          userId,
-        });
+        const deletedPoints =
+          deletedBefore +
+          (await deleteHistoryOutsideShare({
+            db: tx,
+            groupIds: following,
+            historyShare: input.historyShare,
+            userId,
+          }));
         return {
           historyShare: account.historyShare,
           changedAt: account.historyShareChangedAt,
