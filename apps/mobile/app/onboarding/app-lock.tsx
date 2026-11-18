@@ -8,6 +8,7 @@ import {
   useAdvanceOnboardingOnce,
 } from "../../components/onboarding/OnboardingScreen.tsx";
 import { Icon } from "../../components/ui/Icon.tsx";
+import { useAppForeground } from "../../hooks/useAppForeground.ts";
 import { Alert } from "../../lib/alert.ts";
 import { hasScreenLock, turnOnAppLock } from "../../lib/appLock.ts";
 import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
@@ -22,6 +23,8 @@ const AppLockStepScreen = () => {
     staleTime: 0,
   });
   const unavailable = screenLock.data === false;
+
+  useAppForeground(() => void screenLock.refetch());
 
   const turnOn = async () => {
     setTurningOn(true);

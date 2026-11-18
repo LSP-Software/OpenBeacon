@@ -14,6 +14,7 @@ import {
   type LocationPermissionState,
   openLocationSettings,
   requestBackgroundLocationPermissions,
+  requestForegroundLocationPermissions,
 } from "../../lib/locationPermissions.ts";
 import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 import { useLocationPermissions } from "../../providers/LocationPermissionProvider.tsx";
@@ -45,8 +46,25 @@ const BackgroundLocationStepScreen = () => {
 
   const promptsInApp = state?.canRequestBackgroundInApp ?? false;
   const needsForegroundFirst = state?.missing.includes("foreground") ?? false;
+  const asksForLocationFirst = state?.foregroundStatus === "undetermined";
+
+  const allowLocationFirst = async () => {
+    setAsking(true);
+    const result = await tryCatch(requestForegroundLocationPermissions());
+    await refreshLocationPermissionState();
+    setAsking(false);
+    if (result.data?.foregroundStatus !== "granted") {
+      advance("background");
+      return;
+    }
+    setState(result.data);
+  };
 
   const allow = async () => {
+    if (asksForLocationFirst) {
+      await allowLocationFirst();
+      return;
+    }
     if (!promptsInApp) {
       await tryCatch(openLocationSettings());
       return;
@@ -75,11 +93,11 @@ const BackgroundLocationStepScreen = () => {
             heading: "In Settings → OpenBeacon → Location, choose",
             options: ["Never", "Ask Next Time Or When I Share", "While Using the App", "Always"],
             pick: "Always",
-            hint: "Keep Precise Location switched on. We’ll open Settings for you. Come back when you’re done and we’ll carry on.",
+            hint: "Keep “Precise Location” switched on. We’ll open Settings for you. Come back when you’re done and we’ll carry on.",
           }
       : {
           heading: promptsInApp
-            ? `When your ${noun} asks, choose`
+            ? "On the next screen, choose"
             : "In Settings → Permissions → Location, choose",
           options: [
             "Allow all the time",
@@ -89,8 +107,8 @@ const BackgroundLocationStepScreen = () => {
           ],
           pick: "Allow all the time",
           hint: promptsInApp
-            ? "Keep Use precise location switched on."
-            : "Keep Use precise location switched on. We’ll open Settings for you. Come back when you’re done and we’ll carry on.",
+            ? "Keep “Use precise location” switched on. Come back when you’re done and we’ll carry on."
+            : "Keep “Use precise location” switched on. We’ll open Settings for you. Come back when you’re done and we’ll carry on.",
         };
 
   return (
@@ -98,12 +116,18 @@ const BackgroundLocationStepScreen = () => {
       step="background"
       title="Keep sharing when the app is closed"
       description={
-        needsForegroundFirst
-          ? "Location is off for OpenBeacon, so there’s nothing to share yet. Turn it on in Settings so your family can see where you are, even when the app is closed."
-          : "Without this, your family only sees you while OpenBeacon is open on your screen. The sharing notice stays on either way."
+        asksForLocationFirst
+          ? "OpenBeacon can’t use your location yet. Allow it first, then you can keep sharing when the app is closed."
+          : needsForegroundFirst
+            ? "Location is off for OpenBeacon, so there’s nothing to share yet. Turn it on in Settings so your family can see where you are, even when the app is closed."
+            : "Without this, your family only sees you while OpenBeacon is open on your screen. The sharing notice stays on either way."
       }
       primary={{
-        label: promptsInApp ? "Continue" : "Open Settings",
+        label: asksForLocationFirst
+          ? "Allow location"
+          : promptsInApp
+            ? "Continue"
+            : "Open Settings",
         onPress: allow,
         loading: asking,
         disabled: state === null,
@@ -114,53 +138,57 @@ const BackgroundLocationStepScreen = () => {
         disabled: asking,
       }}
     >
-      <View className="gap-2">
-        <Text className="text-muted-foreground text-xs font-semibold uppercase tracking-wide">
-          {choices.heading}
-        </Text>
-        <View className="overflow-hidden rounded-3xl border border-border bg-card">
-          {choices.options.map((option, index) => {
-            const chosen = option === choices.pick;
-            return (
-              <View
-                key={option}
-                accessible={chosen}
-                accessibilityLabel={chosen ? `Choose ${option}` : undefined}
-                importantForAccessibility={chosen ? "yes" : "no-hide-descendants"}
-                accessibilityElementsHidden={!chosen}
-                className={cn(
-                  "flex-row items-center gap-3 px-4 py-3.5",
-                  index < choices.options.length - 1 && "border-b border-border/50",
-                  chosen && "bg-primary/5",
-                )}
-              >
-                <View
-                  className={cn(
-                    "size-5 items-center justify-center rounded-full border-2",
-                    chosen ? "border-primary" : "border-muted-foreground/50",
-                  )}
-                >
-                  {chosen && <View className="size-2.5 rounded-full bg-primary" />}
-                </View>
-                <Text
-                  className={cn(
-                    "flex-1 text-base",
-                    chosen ? "text-foreground font-semibold" : "text-muted-foreground",
-                  )}
-                >
-                  {option}
-                </Text>
-                {chosen && (
-                  <View className="rounded-full bg-primary px-2.5 py-0.5">
-                    <Text className="text-xs font-bold text-white">Pick this</Text>
+      {!asksForLocationFirst && (
+        <>
+          <View className="gap-2">
+            <Text className="text-muted-foreground text-xs font-semibold uppercase tracking-wide">
+              {choices.heading}
+            </Text>
+            <View className="overflow-hidden rounded-3xl border border-border bg-card">
+              {choices.options.map((option, index) => {
+                const chosen = option === choices.pick;
+                return (
+                  <View
+                    key={option}
+                    accessible={chosen}
+                    accessibilityLabel={chosen ? `Choose ${option}` : undefined}
+                    importantForAccessibility={chosen ? "yes" : "no-hide-descendants"}
+                    accessibilityElementsHidden={!chosen}
+                    className={cn(
+                      "flex-row items-center gap-3 px-4 py-3.5",
+                      index < choices.options.length - 1 && "border-b border-border/50",
+                      chosen && "bg-primary/5",
+                    )}
+                  >
+                    <View
+                      className={cn(
+                        "size-5 items-center justify-center rounded-full border-2",
+                        chosen ? "border-primary" : "border-muted-foreground/50",
+                      )}
+                    >
+                      {chosen && <View className="size-2.5 rounded-full bg-primary" />}
+                    </View>
+                    <Text
+                      className={cn(
+                        "flex-1 text-base",
+                        chosen ? "text-foreground font-semibold" : "text-muted-foreground",
+                      )}
+                    >
+                      {option}
+                    </Text>
+                    {chosen && (
+                      <View className="rounded-full bg-primary px-2.5 py-0.5">
+                        <Text className="text-xs font-bold text-white">Pick this</Text>
+                      </View>
+                    )}
                   </View>
-                )}
-              </View>
-            );
-          })}
-        </View>
-      </View>
-      <OnboardingNote text={choices.hint} />
+                );
+              })}
+            </View>
+          </View>
+          <OnboardingNote text={choices.hint} />
+        </>
+      )}
     </OnboardingScreen>
   );
 };
