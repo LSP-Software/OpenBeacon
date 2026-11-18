@@ -20,11 +20,11 @@ export const PromptCard = ({
   <Card>
     <CardHeader className="flex flex-row items-start gap-3">
       <View
-        className={`size-10 items-center justify-center rounded-full ${tone === "warning" ? "bg-warning-accent/15" : "bg-primary/10"}`}
+        className={`size-10 items-center justify-center rounded-full ${tone === "warning" ? "bg-warning-accent/15" : "bg-primary-soft"}`}
       >
         <Icon
           as={icon}
-          className={`size-5 ${tone === "warning" ? "text-warning-accent" : "text-primary"}`}
+          className={`size-5 ${tone === "warning" ? "text-warning-text" : "text-primary-text"}`}
         />
       </View>
       <View className="flex-1 gap-1.5">
@@ -32,10 +32,10 @@ export const PromptCard = ({
           <Text>{title}</Text>
         </CardTitle>
         <CardDescription>
-          <Text className="text-muted-foreground">{description}</Text>
+          <Text className="text-secondary text-sm">{description}</Text>
         </CardDescription>
       </View>
     </CardHeader>
-    <CardContent className="flex flex-row gap-3">{children}</CardContent>
+    <CardContent className="flex flex-row flex-wrap gap-2">{children}</CardContent>
   </Card>
 );

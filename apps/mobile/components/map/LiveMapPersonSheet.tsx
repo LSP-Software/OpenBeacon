@@ -79,7 +79,7 @@ export const LiveMapPersonSheet = ({
             </Avatar>
             <View className="min-w-0 flex-1 gap-1">
               <Text className="text-foreground text-xl font-bold">{name}</Text>
-              <Text className="text-muted text-sm">
+              <Text className="text-secondary text-sm">
                 {isMultiDevice
                   ? `${devices.length} devices`
                   : updatedAge === null
@@ -116,7 +116,7 @@ export const LiveMapPersonSheet = ({
             </View>
           ) : null}
           {otherSharedGroupNames.length > 0 ? (
-            <Text className="text-muted-foreground mt-2 text-sm">
+            <Text className="text-tertiary mt-2 text-sm">
               Also in {otherSharedGroupNames.join(", ")}
             </Text>
           ) : null}
@@ -146,7 +146,9 @@ export const LiveMapPersonSheet = ({
             asChild
           >
             <Pressable accessibilityRole="link" className="min-h-11 justify-center self-start">
-              <Text className="font-semibold text-destructive">Open {unreadableGroup.name}</Text>
+              <Text className="font-semibold text-destructive-text">
+                Open {unreadableGroup.name}
+              </Text>
             </Pressable>
           </Link>
         </View>
@@ -185,7 +187,9 @@ const PersonDeviceRow = ({ device, onPress }: { device: PersonDevice; onPress: (
         </Text>
         <Text
           className={
-            device.unreadable && !device.paused ? "text-destructive text-sm" : "text-muted text-sm"
+            device.unreadable && !device.paused
+              ? "text-destructive-text text-sm"
+              : "text-secondary text-sm"
           }
           numberOfLines={1}
         >

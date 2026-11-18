@@ -290,7 +290,11 @@ export const InviteConfirmation = ({
           <>
             {backButton}
             {invite.kind === "email" ? (
-              <Button variant="outline" onPress={decline} loading={action.pendingKey === "decline"}>
+              <Button
+                variant="secondary"
+                onPress={decline}
+                loading={action.pendingKey === "decline"}
+              >
                 <Text>Decline invite</Text>
               </Button>
             ) : null}

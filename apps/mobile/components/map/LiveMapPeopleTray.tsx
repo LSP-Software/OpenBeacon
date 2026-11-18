@@ -62,8 +62,8 @@ export const LiveMapPeopleTray = ({
       onLayout={(event) => onHeightChange(event.nativeEvent.layout.height)}
     >
       {people.connectionLost ? (
-        <View className="mx-3 mb-2 rounded-lg border border-amber-600 px-3 py-1.5 dark:border-amber-400">
-          <Text className="text-xs text-amber-700 dark:text-amber-400">
+        <View className="mx-3 mb-2 rounded-lg border border-warning-accent px-3 py-1.5">
+          <Text className="text-xs text-warning-text">
             Can’t reach the server. Locations shown may be out of date.
           </Text>
         </View>
@@ -94,7 +94,7 @@ export const LiveMapPeopleTray = ({
               <Text
                 className={cn(
                   "text-xs font-semibold",
-                  isProblem ? "text-destructive" : "text-foreground",
+                  isProblem ? "text-destructive-text" : "text-foreground",
                 )}
               >
                 {section.people.length} {chipLabel}
@@ -132,8 +132,8 @@ export const LiveMapPeopleTray = ({
               className={cn(
                 "mb-1 text-[11px] font-bold uppercase",
                 section.status === "cantRead"
-                  ? "text-destructive"
-                  : "text-muted dark:text-muted-foreground",
+                  ? "text-destructive-text"
+                  : "text-secondary dark:text-tertiary",
               )}
             >
               {section.label}
@@ -172,12 +172,12 @@ export const LiveMapPeopleTray = ({
             key={section.key}
             className={cn((sections.length > 0 || index > 0) && "ml-3 border-l border-border pl-3")}
           >
-            <Text className="mb-1 text-[11px] font-bold uppercase text-muted dark:text-muted-foreground">
+            <Text className="mb-1 text-[11px] font-bold uppercase text-secondary dark:text-tertiary">
               {section.label}
             </Text>
             <View className="h-16 flex-row items-center gap-2 px-1">
               <ActivityIndicator size="small" />
-              <Text className="text-xs text-muted dark:text-muted-foreground">
+              <Text className="text-xs text-secondary dark:text-tertiary">
                 {countPeople(section.count)}
               </Text>
             </View>
@@ -230,7 +230,7 @@ const TrayPerson = memo(
         {person.isSelf ? "You" : person.name.trim().split(/\s+/)[0] || person.name}
       </Text>
       {age !== null ? (
-        <Text className="text-[10px] leading-3 text-muted dark:text-muted-foreground">{age}</Text>
+        <Text className="text-[10px] leading-3 text-secondary dark:text-tertiary">{age}</Text>
       ) : null}
     </Pressable>
   ),

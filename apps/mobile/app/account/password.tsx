@@ -6,9 +6,8 @@ import { Link, router } from "expo-router";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import type { z } from "zod";
-import { BackButton } from "../../components/headers/BackButton.tsx";
+import { ScreenHeader } from "../../components/headers/ScreenHeader.tsx";
 import { Button } from "../../components/ui/Button.tsx";
 import { Input } from "../../components/ui/Input.tsx";
 import { Text } from "../../components/ui/Text.tsx";
@@ -71,13 +70,7 @@ const PasswordScreen = () => {
 
   return (
     <View className="flex-1 bg-background">
-      <SafeAreaView edges={["top"]} className="border-b border-border bg-background px-6 py-4">
-        <View className="flex-row items-center justify-between">
-          <BackButton />
-          <Text className="text-foreground text-2xl font-bold">Password</Text>
-          <View className="w-10" />
-        </View>
-      </SafeAreaView>
+      <ScreenHeader title="Password" />
 
       <KeyboardAvoidingView
         className="flex-1"
@@ -92,7 +85,7 @@ const PasswordScreen = () => {
           {hasPassword && (
             <View className="gap-2">
               <Text className="text-foreground text-3xl font-bold">Change password</Text>
-              <Text className="text-muted-foreground text-base leading-6">
+              <Text className="text-tertiary text-base leading-6">
                 Enter your current password, then choose a new one.
               </Text>
             </View>
@@ -147,12 +140,12 @@ const PasswordScreen = () => {
           )}
           <View className="gap-4">
             {hasPassword && (
-              <Text className="text-muted-foreground text-base leading-6">
+              <Text className="text-tertiary text-base leading-6">
                 Lost a phone or tablet? Sign out everywhere else without changing your password.
               </Text>
             )}
             <Link href="/account/sign-out-others" replace asChild>
-              <Button variant="outline">
+              <Button variant="secondary">
                 <Text>Sign out of all other sessions</Text>
               </Button>
             </Link>
@@ -160,7 +153,7 @@ const PasswordScreen = () => {
           {hasPassword && signInCodes.isError && (
             <View className="gap-4">
               <Text className="text-foreground text-xl font-bold">Sign-in codes</Text>
-              <Text className="text-muted-foreground text-base leading-6">
+              <Text className="text-tertiary text-base leading-6">
                 We couldn’t load this setting. Check your connection and try again.
               </Text>
             </View>
@@ -170,13 +163,13 @@ const PasswordScreen = () => {
             (signInCodes.data.on || signInCodes.data.canTurnOn) && (
               <View className="gap-4">
                 <Text className="text-foreground text-xl font-bold">Sign-in codes</Text>
-                <Text className="text-muted-foreground text-base leading-6">
+                <Text className="text-tertiary text-base leading-6">
                   {signInCodes.data.on
                     ? "On. Signing in on a new phone also needs a code we email you."
                     : "Off. Turn on to also need a code from your email when you sign in on a new phone, so your password alone isn’t enough."}
                 </Text>
                 <Link href="/account/sign-in-codes" asChild>
-                  <Button variant="outline">
+                  <Button variant="secondary">
                     <Text>Manage sign-in codes</Text>
                   </Button>
                 </Link>

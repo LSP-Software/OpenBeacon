@@ -35,7 +35,7 @@ export const LiveMapPlaceSheet = ({
           <Text className="text-foreground text-2xl font-bold" numberOfLines={1}>
             {place.name}
           </Text>
-          <Text className="text-muted-foreground" numberOfLines={1}>
+          <Text className="text-tertiary" numberOfLines={1}>
             {place.groupName} · {formatPlaceSize(place.radiusMeters)}
           </Text>
         </View>
@@ -44,11 +44,9 @@ export const LiveMapPlaceSheet = ({
     onDismiss={onDismiss}
     onHeightChange={onHeightChange}
   >
-    <Text className="mt-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-      Here now
-    </Text>
+    <Text className="mt-2 text-xs font-bold uppercase tracking-wider text-tertiary">Here now</Text>
     {here.length === 0 ? (
-      <Text className="py-2 text-muted-foreground">Nobody here now</Text>
+      <Text className="py-2 text-tertiary">Nobody here now</Text>
     ) : (
       <ScrollView style={{ maxHeight: 180 }} bounces={false} overScrollMode="never">
         {here.map((marker) => (
@@ -70,14 +68,14 @@ export const LiveMapPlaceSheet = ({
           href={{ pathname: "/place", params: { groupId: place.groupId, placeId: place.id } }}
           asChild
         >
-          <Button variant="outline" className="flex-1">
+          <Button variant="secondary" className="flex-1">
             <Icon as={PencilIcon} size={18} className="text-primary-text" />
             <Text>Edit</Text>
           </Button>
         </Link>
-        <Button variant="outline" className="flex-1 border-destructive" onPress={onDelete}>
-          <Icon as={Trash2Icon} size={18} className="text-destructive" />
-          <Text className="text-destructive">Delete</Text>
+        <Button variant="secondary" className="flex-1 border-destructive" onPress={onDelete}>
+          <Icon as={Trash2Icon} size={18} className="text-destructive-text" />
+          <Text className="text-destructive-text">Delete</Text>
         </Button>
       </View>
     ) : null}
@@ -98,14 +96,14 @@ const MuteEveryoneRow = ({
     <View className="mt-3 flex-row items-center gap-4 border-t border-border py-4">
       <View className="flex-1 gap-0.5">
         <Text className="text-foreground text-base font-semibold">Mute everyone here</Text>
-        <Text className="text-muted-foreground text-sm">
+        <Text className="text-tertiary text-sm">
           {mutes.isError ? "Couldn’t load this setting." : "Only changes your alerts"}
         </Text>
       </View>
       {mutes.isError ? (
         <Button
           size="sm"
-          variant="outline"
+          variant="secondary"
           loading={mutes.isFetching}
           onPress={() => void mutes.refetch()}
         >

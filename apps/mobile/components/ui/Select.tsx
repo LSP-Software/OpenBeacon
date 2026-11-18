@@ -29,7 +29,7 @@ function SelectValue({
       ref={ref}
       className={cn(
         "text-foreground line-clamp-1 flex flex-row items-center gap-2 text-sm",
-        !value && "text-muted-foreground",
+        !value && "text-tertiary",
         className,
       )}
       {...props}
@@ -61,7 +61,7 @@ function SelectTrigger({
       {...props}
     >
       {children}
-      <Icon as={ChevronDown} aria-hidden={true} className="text-muted-foreground size-4" />
+      <Icon as={ChevronDown} aria-hidden={true} className="text-tertiary size-4" />
     </SelectPrimitive.Trigger>
   );
 }
@@ -113,7 +113,7 @@ function SelectLabel({
 }: SelectPrimitive.LabelProps & React.RefAttributes<SelectPrimitive.LabelRef>) {
   return (
     <SelectPrimitive.Label
-      className={cn("text-muted-foreground px-2 py-2 text-xs sm:py-1.5", className)}
+      className={cn("text-tertiary px-2 py-2 text-xs sm:py-1.5", className)}
       {...props}
     />
   );
@@ -135,7 +135,7 @@ function SelectItem({
     >
       <View className="absolute right-2 flex size-3.5 items-center justify-center">
         <SelectPrimitive.ItemIndicator>
-          <Icon as={Check} className="text-muted-foreground size-4 shrink-0" />
+          <Icon as={Check} className="text-tertiary size-4 shrink-0" />
         </SelectPrimitive.ItemIndicator>
       </View>
       <SelectPrimitive.ItemText className="text-foreground group-active:text-accent-foreground select-none text-sm" />

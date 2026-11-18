@@ -7,7 +7,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
 import { OnboardingProgress } from "../../components/onboarding/OnboardingScreen.tsx";
 import { Button } from "../../components/ui/Button.tsx";
-import { RadioCardGroup } from "../../components/ui/RadioCardGroup.tsx";
+import { ChoiceList } from "../../components/ui/ChoiceList.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { Alert } from "../../lib/alert.ts";
 import { trpc } from "../../lib/api.ts";
@@ -152,7 +152,7 @@ const SetUpPhoneScreen = () => {
           <Text accessibilityRole="header" className="text-foreground text-3xl font-bold">
             Bring your history to this {noun}
           </Text>
-          <Text className="text-muted-foreground text-base leading-6">
+          <Text className="text-tertiary text-base leading-6">
             You’re signed in, but this {noun} can’t see anyone’s location until it’s set up. You
             can’t skip this step: it keeps your family’s locations safe if someone else learns your
             password.
@@ -162,11 +162,11 @@ const SetUpPhoneScreen = () => {
         {status.isPending && <LoadingIndicator />}
         {status.isError && (
           <View className="gap-4">
-            <Text className="text-muted-foreground text-base leading-6">
+            <Text className="text-tertiary text-base leading-6">
               We couldn’t reach the server. Check your connection and try again.
             </Text>
             <Button
-              variant="outline"
+              variant="secondary"
               onPress={() => {
                 if (isUnauthorizedError(status.error)) checkSessionAfterUnauthorized();
                 void status.refetch();
@@ -178,7 +178,7 @@ const SetUpPhoneScreen = () => {
         )}
 
         {status.data && noOtherPhone && (
-          <Text className="text-muted-foreground text-base leading-6">
+          <Text className="text-tertiary text-base leading-6">
             None of your other devices are signed in, so you’ll need your recovery phrase or to
             start fresh.
           </Text>
@@ -189,7 +189,7 @@ const SetUpPhoneScreen = () => {
             <Text accessibilityRole="header" className="font-semibold">
               How do you want to set up this {noun}?
             </Text>
-            <RadioCardGroup
+            <ChoiceList
               accessibilityLabel="Setup method"
               options={options.map((option) => ({ ...option, value: option.id }))}
               selected={selected.id}
@@ -203,7 +203,7 @@ const SetUpPhoneScreen = () => {
           </View>
         )}
 
-        <Button variant="outline" onPress={confirmCancel} disabled={cancelling}>
+        <Button variant="secondary" onPress={confirmCancel} disabled={cancelling}>
           <Text>{cancelling ? "Cancelling…" : `Cancel and remove this ${noun}`}</Text>
         </Button>
       </ScrollView>

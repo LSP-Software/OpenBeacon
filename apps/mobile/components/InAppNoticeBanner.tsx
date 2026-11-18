@@ -28,7 +28,7 @@ export const InAppNoticeBanner = () => {
         <Link href={notice.href} asChild>
           <Pressable className="flex-1 gap-0.5" onPress={() => dismissInAppNotice(notice.id)}>
             <Text className="font-semibold text-foreground">{notice.title}</Text>
-            {notice.body ? <Text className="text-muted-foreground">{notice.body}</Text> : null}
+            {notice.body ? <Text className="text-tertiary">{notice.body}</Text> : null}
           </Pressable>
         </Link>
         <Pressable
@@ -37,7 +37,7 @@ export const InAppNoticeBanner = () => {
           hitSlop={12}
           onPress={() => dismissInAppNotice(notice.id)}
         >
-          <Icon as={XIcon} size={18} className="text-muted-foreground" />
+          <Icon as={XIcon} size={18} className="text-tertiary" />
         </Pressable>
       </View>
     </View>

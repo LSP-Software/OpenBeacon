@@ -24,14 +24,14 @@ export const GroupMapColorPicker = ({ groupId }: { groupId: string }) => {
     <View className="gap-3 rounded-lg border border-border bg-card p-4">
       <View className="gap-1">
         <Text className="text-foreground font-medium">Map marker color</Text>
-        <Text className="text-muted-foreground text-sm">
+        <Text className="text-tertiary text-sm">
           Used for this group's ring on the live map. Only you see this color.
         </Text>
       </View>
       {sync.isError ? (
         <View className="gap-2">
-          <Text className="text-destructive text-sm">Couldn't load your saved color.</Text>
-          <Button variant="outline" onPress={() => sync.refetch()}>
+          <Text className="text-destructive-text text-sm">Couldn't load your saved color.</Text>
+          <Button variant="secondary" onPress={() => sync.refetch()}>
             <Text>Try again</Text>
           </Button>
         </View>

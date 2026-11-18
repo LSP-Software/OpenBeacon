@@ -146,7 +146,7 @@ export default function HomeScreen() {
         {session && failures > 0 && (
           <View className="absolute bottom-0 left-0 right-0 gap-3 px-8 pb-12">
             <AnnouncementBanner />
-            <Text className="text-center text-muted" accessibilityLiveRegion="polite">
+            <Text className="text-center text-secondary" accessibilityLiveRegion="polite">
               {hasCustomServerUrl()
                 ? `Couldn't connect to ${baseUrl}. Check your connection and that your server is running. Trying again automatically.`
                 : "Couldn't connect to OpenBeacon. Check your connection. Trying again automatically."}
@@ -154,12 +154,12 @@ export default function HomeScreen() {
             <Button onPress={() => setAttempt((value) => value + 1)}>
               <Text>Try again</Text>
             </Button>
-            <Button variant="outline" loading={signingOut} onPress={signOut}>
+            <Button variant="secondary" loading={signingOut} onPress={signOut}>
               <Text>Sign out</Text>
             </Button>
             {hasCustomServerUrl() && (
               <Link href="/serverUrl" asChild>
-                <Button variant="outline">
+                <Button variant="secondary">
                   <Text>Change server</Text>
                 </Button>
               </Link>
@@ -202,7 +202,9 @@ export default function HomeScreen() {
             <BeaconIcon size={96} color={colors.primary} />
             <View className="items-center gap-4">
               <Text className="font-bold text-5xl">OPENBEACON</Text>
-              <Text className="text-xl text-muted text-center">Your family.{"\n"}Your data.</Text>
+              <Text className="text-xl text-secondary text-center">
+                Your family.{"\n"}Your data.
+              </Text>
             </View>
           </View>
 
@@ -211,7 +213,7 @@ export default function HomeScreen() {
               <Button onPress={() => router.push("/signIn")}>
                 <Text>Sign In</Text>
               </Button>
-              <Button variant="outline" onPress={() => router.push("/signUp")}>
+              <Button variant="secondary" onPress={() => router.push("/signUp")}>
                 <Text>Create Account</Text>
               </Button>
             </View>
@@ -222,7 +224,7 @@ export default function HomeScreen() {
               accessibilityRole="button"
               accessibilityLabel="Configure custom server"
             >
-              <Text className="text-sm text-muted">Using a self-hosted server?</Text>
+              <Text className="text-sm text-secondary">Using a self-hosted server?</Text>
             </Pressable>
           </View>
         </SafeAreaView>

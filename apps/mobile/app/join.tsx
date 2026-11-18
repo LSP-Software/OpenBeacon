@@ -82,7 +82,7 @@ const Join = () => {
               </Button>
             </Link>
             <Link href={{ pathname: "/signUp", params: { joinCode: code } }} asChild>
-              <Button variant="outline">
+              <Button variant="secondary">
                 <Text>Create account</Text>
               </Button>
             </Link>
@@ -101,7 +101,7 @@ const Join = () => {
                 }}
               />
             ) : null}
-            <Button variant="outline" onPress={scan}>
+            <Button variant="secondary" onPress={scan}>
               <Text>{scanning ? "Close scanner" : "Scan QR code"}</Text>
             </Button>
             <TextInput
@@ -110,7 +110,7 @@ const Join = () => {
               onChangeText={setCode}
               autoCapitalize="characters"
               autoCorrect={false}
-              className="rounded-lg border border-border bg-input text-foreground placeholder:text-secondary dark:placeholder:text-muted-foreground p-4"
+              className="rounded-lg border border-border bg-input text-foreground placeholder:text-tertiary p-4"
               placeholder="Enter join code"
             />
             <Button onPress={() => review(code, "Enter the complete join code.")}>

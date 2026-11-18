@@ -144,7 +144,7 @@ export const TimelineScrubber = ({
           ? ticks.map((tick) => (
               <Text
                 key={tick.hour}
-                className="absolute text-[11px] text-muted"
+                className="absolute text-[11px] text-secondary"
                 style={{
                   left: Math.min(Math.max(xOf(tick.at) - 8, 0), width - 16),
                   width: 16,

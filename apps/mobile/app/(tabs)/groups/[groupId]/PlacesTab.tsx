@@ -22,6 +22,7 @@ import { useCachedGroup } from "../../../../hooks/useCachedGroup.ts";
 import { useMemberNames } from "../../../../hooks/useMemberNames.ts";
 import { Alert } from "../../../../lib/alert.ts";
 import { trpc } from "../../../../lib/api.ts";
+import { cn } from "../../../../lib/cn.ts";
 import { authClient } from "../../../../lib/auth-client.ts";
 import type { LiveMapPosition } from "../../../../lib/mapTrackingTypes.ts";
 import { describePeopleHere, formatPlaceSize, peopleAtPlace } from "../../../../lib/places.ts";
@@ -104,10 +105,10 @@ const PlacesTab = ({
     return (
       <View className="gap-3 rounded-2xl border border-border bg-card p-5">
         <Text className="text-foreground text-lg font-semibold">Couldn’t load places</Text>
-        <Text className="text-muted-foreground">Check your connection and try again.</Text>
+        <Text className="text-tertiary">Check your connection and try again.</Text>
         <Button
           size="sm"
-          variant="outline"
+          variant="secondary"
           className="self-start"
           loading={places.isFetching}
           onPress={() => void places.refetch()}
@@ -144,9 +145,9 @@ const PlacesTab = ({
 
   const arrivalsOffNotice =
     sharing.data?.enabled === false ? (
-      <View className="flex-row gap-3 rounded-2xl border border-amber-500 bg-amber-50 p-4 dark:border-amber-400 dark:bg-amber-950">
-        <Icon as={InfoIcon} size={20} className="mt-0.5 text-amber-800 dark:text-amber-300" />
-        <Text className="flex-1 text-amber-900 dark:text-amber-200">
+      <View className="flex-row gap-3 rounded-2xl border border-warning-border bg-warning p-4">
+        <Icon as={InfoIcon} size={20} className="mt-0.5 text-warning-text" />
+        <Text className="flex-1 text-warning-text">
           Arrivals and departures are off on this phone. {groupName} sees “Arrivals off” for{" "}
           {thisDeviceName ? `your ${thisDeviceName}` : "this phone"}.
         </Text>
@@ -156,8 +157,8 @@ const PlacesTab = ({
   const arrivalsSwitchCard = (
     <View className="flex-row items-center gap-4 rounded-2xl border border-border bg-card p-4">
       <View className="flex-1 gap-1">
-        <Text className="text-foreground text-lg font-semibold">Share arrivals and departures</Text>
-        <Text className="text-sm text-muted-foreground">
+        <Text className="text-foreground font-semibold">Share arrivals and departures</Text>
+        <Text className="text-sm text-tertiary">
           {sharing.isError
             ? "Couldn’t load this setting."
             : `Only this phone. When it arrives at or leaves a place, ${groupName} gets an alert.`}
@@ -166,7 +167,7 @@ const PlacesTab = ({
       {sharing.isError ? (
         <Button
           size="sm"
-          variant="outline"
+          variant="secondary"
           loading={sharing.isFetching}
           onPress={() => void sharing.refetch()}
         >
@@ -201,21 +202,21 @@ const PlacesTab = ({
       <View className="gap-4">
         {arrivalsOffNotice}
         <View className="gap-4 rounded-2xl border border-border bg-card p-5">
-          <View className="size-12 items-center justify-center rounded-full border border-primary/15 bg-primary/10">
-            <Icon as={MapPinIcon} size={20} className="text-primary" />
+          <View className="size-12 items-center justify-center rounded-full bg-primary-soft">
+            <Icon as={MapPinIcon} size={20} className="text-primary-text" />
           </View>
           <Text className="text-foreground text-2xl font-bold">
             {canManage ? "Add your first place" : "No places yet"}
           </Text>
-          <Text className="text-sm leading-6 text-muted-foreground">
+          <Text className="text-sm text-secondary">
             {canManage
               ? `Add places like home or school. When someone’s phone arrives or leaves, the rest of ${groupName} gets an alert.`
               : `Owners and admins can add places like home or school. When someone’s phone arrives or leaves, the rest of ${groupName} gets an alert.`}
           </Text>
-          <Text className="text-sm leading-6 text-muted-foreground">
+          <Text className="text-sm text-secondary">
             Each phone shows the group’s places and can turn off its own arrivals and departures.
           </Text>
-          {canManage ? addPlaceButton("Add place", "h-12") : null}
+          {canManage ? addPlaceButton("Add place", "self-start") : null}
         </View>
         {sharing.data?.enabled === false || sharing.isError ? arrivalsSwitchCard : null}
       </View>
@@ -223,83 +224,91 @@ const PlacesTab = ({
   }
 
   return (
-    <View className="gap-4 pt-1">
+    <View className="gap-3">
       {arrivalsOffNotice}
       <View className="flex-row items-center justify-between gap-3">
-        <View className="flex-row items-baseline gap-2">
-          <Text className="text-foreground text-xl font-bold">Places</Text>
-          <Text className="text-muted-foreground">{placeCount}</Text>
-        </View>
-        <View className="flex-row items-center gap-3">
+        <Text variant="label">
+          {placeCount} {placeCount === 1 ? "place" : "places"}
+        </Text>
+        <View className="flex-row items-center gap-2">
           <Link href={{ pathname: "/place-alerts", params: { groupId } }} asChild>
-            <Button size="sm" variant="outline" className="w-10 px-0" accessibilityLabel="Alerts">
-              <Icon as={BellIcon} size={18} className="text-primary-text" />
+            <Button size="sm" variant="secondary" className="rounded-full">
+              <Icon as={BellIcon} className="text-foreground size-4" />
+              <Text>Alerts</Text>
             </Button>
           </Link>
-          {canManage ? addPlaceButton("Add place") : null}
+          {canManage ? addPlaceButton("Add place", "rounded-full") : null}
         </View>
       </View>
-      {places.data.map((place) => {
-        if (!place.geometry) {
-          return (
-            <View
-              key={place.id}
-              className="flex-row items-center gap-4 rounded-2xl border border-dashed border-border bg-card p-4"
-            >
-              <View className="size-12 items-center justify-center rounded-xl bg-secondary">
-                <Text className="text-2xl">{place.emoji}</Text>
-              </View>
-              <View className="flex-1 gap-1">
-                <Text className="text-foreground text-lg font-semibold">{place.name}</Text>
-                <View className="flex-row items-center gap-1">
-                  <Icon as={HourglassIcon} size={14} className="text-muted-foreground" />
-                  <Text className="flex-1 text-sm text-muted-foreground">
-                    Syncing, this can take a few minutes
-                  </Text>
+      <View className="overflow-hidden rounded-2xl border border-border bg-card">
+        {places.data.map((place, index) => {
+          if (!place.geometry) {
+            return (
+              <View
+                key={place.id}
+                className={cn(
+                  "flex-row items-center gap-4 p-4",
+                  index > 0 && "border-t border-border/60",
+                )}
+              >
+                <View className="size-12 items-center justify-center rounded-xl bg-secondary">
+                  <Text className="text-2xl">{place.emoji}</Text>
+                </View>
+                <View className="flex-1 gap-1">
+                  <Text className="text-foreground text-lg font-semibold">{place.name}</Text>
+                  <View className="flex-row items-center gap-1">
+                    <Icon as={HourglassIcon} size={14} className="text-tertiary" />
+                    <Text className="flex-1 text-sm text-tertiary">
+                      Syncing, this can take a few minutes
+                    </Text>
+                  </View>
                 </View>
               </View>
-            </View>
-          );
-        }
-        const here = peopleAtPlace({
-          geometry: place.geometry,
-          now,
-          people: livePositions,
-        }).map((person) => memberName(person.userId) ?? "Someone");
-        return (
-          <Link
-            key={place.id}
-            href={{ pathname: "/(tabs)/map", params: { placeId: place.id } }}
-            asChild
-          >
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`${place.name}, ${formatPlaceSize(place.geometry.radiusMeters)}, ${describePeopleHere(here)}. Show on map`}
-              className="flex-row items-center gap-4 rounded-2xl border border-border bg-card p-4 active:bg-secondary"
+            );
+          }
+          const here = peopleAtPlace({
+            geometry: place.geometry,
+            now,
+            people: livePositions,
+          }).map((person) => memberName(person.userId) ?? "Someone");
+          return (
+            <Link
+              key={place.id}
+              href={{ pathname: "/(tabs)/map", params: { placeId: place.id } }}
+              asChild
             >
-              <View className="size-12 items-center justify-center rounded-xl bg-primary/10">
-                <Text className="text-2xl">{place.emoji}</Text>
-              </View>
-              <View className="flex-1 gap-0.5">
-                <Text className="text-foreground text-lg font-semibold">{place.name}</Text>
-                <Text className="text-sm text-muted-foreground">
-                  {formatPlaceSize(place.geometry.radiusMeters)}
-                </Text>
-                <Text
-                  className={
-                    here.length > 0
-                      ? "text-sm font-semibold text-emerald-700 dark:text-emerald-400"
-                      : "text-sm text-muted-foreground"
-                  }
-                >
-                  {describePeopleHere(here)}
-                </Text>
-              </View>
-              <Icon as={ChevronRightIcon} size={20} className="text-muted-foreground" />
-            </Pressable>
-          </Link>
-        );
-      })}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`${place.name}, ${formatPlaceSize(place.geometry.radiusMeters)}, ${describePeopleHere(here)}. Show on map`}
+                className={cn(
+                  "flex-row items-center gap-4 p-4 active:bg-secondary/60",
+                  index > 0 && "border-t border-border/60",
+                )}
+              >
+                <View className="size-12 items-center justify-center rounded-xl bg-secondary">
+                  <Text className="text-2xl">{place.emoji}</Text>
+                </View>
+                <View className="flex-1 gap-0.5">
+                  <Text className="text-foreground text-lg font-semibold">{place.name}</Text>
+                  <Text className="text-sm text-tertiary">
+                    {formatPlaceSize(place.geometry.radiusMeters)}
+                  </Text>
+                  <Text
+                    className={
+                      here.length > 0
+                        ? "text-sm font-semibold text-success"
+                        : "text-sm text-tertiary"
+                    }
+                  >
+                    {describePeopleHere(here)}
+                  </Text>
+                </View>
+                <Icon as={ChevronRightIcon} size={20} className="text-tertiary" />
+              </Pressable>
+            </Link>
+          );
+        })}
+      </View>
       {arrivalsSwitchCard}
     </View>
   );

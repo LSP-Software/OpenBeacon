@@ -1,8 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "expo-router";
 import { Platform, ScrollView, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { BackButton } from "../../components/headers/BackButton.tsx";
+import { ScreenHeader } from "../../components/headers/ScreenHeader.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { useMapVersion } from "../../hooks/useMapVersion.ts";
 import { trpc } from "../../lib/api.ts";
@@ -16,13 +15,7 @@ const AboutScreen = () => {
 
   return (
     <View className="flex-1 bg-background">
-      <SafeAreaView edges={["top"]} className="border-b border-border bg-background px-6 py-4">
-        <View className="flex-row items-center justify-between">
-          <BackButton />
-          <Text className="text-foreground text-2xl font-bold">About</Text>
-          <View className="w-10" />
-        </View>
-      </SafeAreaView>
+      <ScreenHeader title="About" />
       <ScrollView contentContainerClassName="gap-5 px-6 py-6">
         <Link href="https://openbeacon.net/privacy" className="text-primary-text">
           Privacy policy

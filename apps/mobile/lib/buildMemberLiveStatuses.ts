@@ -9,7 +9,7 @@ export const buildMemberLiveStatuses = ({
   memberDevices?: readonly MapMemberDevice[];
   members: readonly {
     id: string;
-    role: string;
+    role: "OWNER" | "ADMIN" | "MEMBER";
     nickname?: string | null;
     user: {
       id: string;

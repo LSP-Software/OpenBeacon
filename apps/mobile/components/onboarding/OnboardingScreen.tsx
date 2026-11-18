@@ -79,7 +79,7 @@ export const OnboardingProgress = ({ step }: { step: OnboardingStep }) => {
         ))}
       </View>
       <Text
-        className="text-muted-foreground w-14 text-right text-sm"
+        className="text-tertiary w-14 text-right text-sm"
         accessibilityLabel={`Step ${position.number} of ${position.total}`}
       >
         {position.number} of {position.total}
@@ -125,7 +125,7 @@ export const OnboardingScreen = ({
         <Text accessibilityRole="header" className="text-foreground text-3xl font-bold">
           {title}
         </Text>
-        <Text className="text-muted-foreground text-base leading-6">{description}</Text>
+        <Text className="text-tertiary text-base leading-6">{description}</Text>
       </View>
       {children}
     </ScrollView>
@@ -173,7 +173,7 @@ export const OnboardingPoint = ({
     </View>
     <View className="flex-1 gap-1">
       <Text className="text-foreground text-base font-semibold">{title}</Text>
-      <Text className="text-muted-foreground text-sm leading-5">{description}</Text>
+      <Text className="text-tertiary text-sm leading-5">{description}</Text>
     </View>
   </View>
 );

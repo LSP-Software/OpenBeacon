@@ -4,10 +4,9 @@ import { TRPCClientError } from "@trpc/client";
 import { Link, router, useNavigation } from "expo-router";
 import { useEffect, useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { ConfirmIdentity } from "../../components/ConfirmIdentity.tsx";
 import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
-import { BackButton } from "../../components/headers/BackButton.tsx";
+import { ScreenHeader } from "../../components/headers/ScreenHeader.tsx";
 import { Button } from "../../components/ui/Button.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { useIdentityGate } from "../../hooks/useIdentityGate.ts";
@@ -73,13 +72,7 @@ const SignOutOtherSessionsScreen = () => {
 
   return (
     <View className="flex-1 bg-background">
-      <SafeAreaView edges={["top"]} className="border-b border-border bg-background px-6 py-4">
-        <View className="flex-row items-center justify-between">
-          {step === "signingOut" ? <View className="w-10" /> : <BackButton />}
-          <Text className="text-foreground text-2xl font-bold">Sign out others</Text>
-          <View className="w-10" />
-        </View>
-      </SafeAreaView>
+      <ScreenHeader title="Sign out others" hideBack={step === "signingOut"} />
 
       <KeyboardAvoidingView
         className="flex-1"
@@ -92,12 +85,12 @@ const SignOutOtherSessionsScreen = () => {
           showsVerticalScrollIndicator={false}
         >
           <View className="gap-2">
-            <Text className="text-muted-foreground text-base leading-6">
+            <Text className="text-tertiary text-base leading-6">
               Each phone or tablet where you’re signed in is a session. This signs out every session
               except this device. Use it if you’ve lost a phone or tablet, or think someone else is
               signed in.
             </Text>
-            <Text className="text-muted-foreground text-base leading-6">
+            <Text className="text-tertiary text-base leading-6">
               Signed-out phones and tablets still show under Devices on the Account tab, but they
               must sign in again to see anything new.
             </Text>
@@ -105,19 +98,19 @@ const SignOutOtherSessionsScreen = () => {
 
           {methods.data?.password && (
             <View className="gap-4">
-              <Text className="text-muted-foreground text-base leading-6">
+              <Text className="text-tertiary text-base leading-6">
                 If someone else might know your password, change it instead. That signs out your
                 other sessions too.
               </Text>
               <Link href="/account/password" replace asChild>
-                <Button variant="outline" disabled={step === "signingOut"}>
+                <Button variant="secondary" disabled={step === "signingOut"}>
                   <Text>Change password</Text>
                 </Button>
               </Link>
             </View>
           )}
           {methods.data?.password === false && (
-            <Text className="text-muted-foreground text-base leading-6">
+            <Text className="text-tertiary text-base leading-6">
               If someone else might be using your Google account, change your Google password first,
               or they could sign in again.
             </Text>

@@ -49,7 +49,7 @@ const LocationStepScreen = () => {
             <View className="h-36 w-full items-center justify-center rounded-3xl border border-border bg-secondary/60">
               <View className="size-28 rounded-full border border-dashed border-muted bg-muted/15" />
             </View>
-            <Text className="text-muted-foreground text-sm">Approximate</Text>
+            <Text className="text-tertiary text-sm">Approximate</Text>
           </View>
         </View>
       }

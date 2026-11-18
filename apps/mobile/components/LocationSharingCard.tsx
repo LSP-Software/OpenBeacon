@@ -164,7 +164,7 @@ export const LocationSharingCard = ({
         </View>
         <View className="flex-1 gap-1">
           <CardTitle>Location sharing{paused ? " paused" : ""}</CardTitle>
-          <Text className="text-sm text-muted-foreground">
+          <Text className="text-sm text-tertiary">
             {accountPaused
               ? "Paused on all your devices"
               : paused
@@ -179,7 +179,7 @@ export const LocationSharingCard = ({
       </CardHeader>
       <CardContent className="gap-3">
         {paused ? (
-          <Text className="text-sm text-muted-foreground">
+          <Text className="text-sm text-tertiary">
             {stoppedLocally
               ? update.isPending
                 ? "Pausing…"
@@ -193,18 +193,18 @@ export const LocationSharingCard = ({
                 }.${thisDevice ? " You can still see your groups’ locations." : ""}`}
           </Text>
         ) : pendingHere && thisDevice && !update.isPending ? (
-          <Text className="text-sm text-muted-foreground">
+          <Text className="text-sm text-tertiary">
             Sharing resumed on this phone. We’ll update your groups when you’re back online.
           </Text>
         ) : null}
         {rejectedHere && !update.isPending ? (
-          <Text className="text-sm text-muted-foreground">
+          <Text className="text-sm text-tertiary">
             Your last change to location sharing couldn’t be applied, so this shows the current
             setting. Try again if you still want to change it.
           </Text>
         ) : null}
         {!thisDevice && pending?.account ? (
-          <Text className="text-sm text-muted-foreground">
+          <Text className="text-sm text-tertiary">
             Your change to all devices is waiting to reach your other devices.
           </Text>
         ) : null}
@@ -230,7 +230,7 @@ export const LocationSharingCard = ({
             </Button>
           ) : null}
           <Button
-            variant={paused ? "outline" : "default"}
+            variant={paused ? "secondary" : "default"}
             size="sm"
             disabled={update.isPending}
             onPress={() => {
@@ -249,7 +249,7 @@ export const LocationSharingCard = ({
           </Button>
         </View>
         {accountPaused && devicePaused ? (
-          <Text className="text-sm text-muted-foreground">
+          <Text className="text-sm text-tertiary">
             {device?.name ?? "This device"} also has its own pause. It will stay paused when the
             account resumes.
           </Text>
@@ -282,7 +282,7 @@ export const LocationSharingCard = ({
               </Button>
             </View>
             <ScrollView contentContainerClassName="gap-4" style={{ maxHeight: 480, flexShrink: 1 }}>
-              <Text className="text-sm text-muted-foreground">
+              <Text className="text-sm text-tertiary">
                 Paused devices disappear from your groups’ maps. Members can see that sharing is
                 paused. You can still see their locations.
               </Text>
@@ -317,7 +317,7 @@ export const LocationSharingCard = ({
               ) : null}
               {device ? <Text className="font-semibold">Pause on {device.name}</Text> : null}
               {scope === "account" ? (
-                <Text className="text-sm text-muted-foreground">
+                <Text className="text-sm text-tertiary">
                   Includes devices added during the pause. Devices already paused will stay paused
                   when the account resumes.
                 </Text>
@@ -364,7 +364,7 @@ export const LocationSharingCard = ({
                 ))}
               </View>
               {duration !== null ? (
-                <Text className="text-sm text-muted-foreground">
+                <Text className="text-sm text-tertiary">
                   {formatResumeTime(
                     toDeviceClock(new Date(now + duration * 60_000)),
                     toDeviceClock(new Date(now)),

@@ -21,7 +21,7 @@ export const SettingsContainer = ({
       {categories.map((category) => {
         return (
           <View key={category.label}>
-            <Text className="mb-1 text-lg font-medium text-muted-foreground">{category.label}</Text>
+            <Text className="mb-1 text-lg font-medium text-tertiary">{category.label}</Text>
             <View className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
               {category.settings.map((setting, settingIndex) => {
                 const isLastSetting = settingIndex === category.settings.length - 1;
@@ -34,14 +34,14 @@ export const SettingsContainer = ({
                     }`}
                   >
                     <View className="flex flex-1 flex-row items-center gap-3">
-                      <Icon as={setting.icon} className="text-muted-foreground size-6" />
+                      <Icon as={setting.icon} className="text-tertiary size-6" />
                       <Text
-                        className={`flex-1 font-medium ${setting.href ? "text-foreground" : "text-muted-foreground"}`}
+                        className={`flex-1 font-medium ${setting.href ? "text-foreground" : "text-tertiary"}`}
                       >
                         {setting.label}
                       </Text>
                     </View>
-                    <Icon as={ChevronRightIcon} className="text-muted-foreground size-6" />
+                    <Icon as={ChevronRightIcon} className="text-tertiary size-6" />
                   </View>
                 );
 

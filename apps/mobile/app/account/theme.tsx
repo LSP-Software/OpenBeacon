@@ -1,7 +1,6 @@
 import { CheckIcon, MoonIcon, SmartphoneIcon, SunIcon } from "lucide-react-native";
 import { Pressable, ScrollView, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { BackButton } from "../../components/headers/BackButton.tsx";
+import { ScreenHeader } from "../../components/headers/ScreenHeader.tsx";
 import { Icon } from "../../components/ui/Icon.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { cn } from "../../lib/cn.ts";
@@ -49,7 +48,7 @@ const ThemePreferenceSection = ({
     <View className="gap-3">
       <View className="gap-1">
         <Text className="text-foreground text-xl font-semibold">{title}</Text>
-        <Text className="text-muted-foreground text-sm">{description}</Text>
+        <Text className="text-tertiary text-sm">{description}</Text>
       </View>
       <View
         accessibilityRole="radiogroup"
@@ -78,12 +77,12 @@ const ThemePreferenceSection = ({
               >
                 <Icon
                   as={themeOption.icon}
-                  className={selected ? "text-primary size-5" : "text-muted-foreground size-5"}
+                  className={selected ? "text-primary size-5" : "text-tertiary size-5"}
                 />
               </View>
               <View className="flex-1 gap-1">
                 <Text className="text-foreground text-base font-medium">{themeOption.label}</Text>
-                <Text className="text-muted-foreground text-sm">{themeOption.description}</Text>
+                <Text className="text-tertiary text-sm">{themeOption.description}</Text>
               </View>
               <View
                 className={cn(
@@ -109,13 +108,7 @@ const ThemeScreen = () => {
 
   return (
     <View className="flex-1 bg-background">
-      <SafeAreaView edges={["top"]} className="border-b border-border bg-background px-6 py-4">
-        <View className="flex-row items-center justify-between">
-          <BackButton />
-          <Text className="text-foreground text-2xl font-bold">Theme</Text>
-          <View className="w-10" />
-        </View>
-      </SafeAreaView>
+      <ScreenHeader title="Theme" />
 
       <ScrollView
         className="flex-1"
@@ -124,7 +117,7 @@ const ThemeScreen = () => {
       >
         <View className="gap-2">
           <Text className="text-foreground text-3xl font-bold">Appearance</Text>
-          <Text className="text-muted-foreground text-base leading-6">
+          <Text className="text-tertiary text-base leading-6">
             Choose how OpenBeacon looks, and whether the map should match or use its own palette.
           </Text>
         </View>

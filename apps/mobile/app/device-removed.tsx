@@ -10,7 +10,7 @@ const DeviceRemovedScreen = () => (
       <Text className="text-foreground text-3xl font-bold">
         This phone was removed from your account
       </Text>
-      <Text className="text-muted-foreground text-base leading-6">
+      <Text className="text-tertiary text-base leading-6">
         Its keys, saved locations and queued uploads have been deleted from this phone. To use it
         again, sign in and set it up. It’ll be added as a new device.
       </Text>

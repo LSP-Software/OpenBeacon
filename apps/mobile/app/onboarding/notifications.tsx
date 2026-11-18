@@ -25,9 +25,9 @@ const ExampleNotification = ({ title, body }: { title: string; body?: string }) 
         <BeaconIcon size={24} color={colors.primary} />
       </View>
       <View className="flex-1 gap-0.5">
-        <Text className="text-muted-foreground text-xs">OpenBeacon</Text>
+        <Text className="text-tertiary text-xs">OpenBeacon</Text>
         <Text className="text-foreground text-sm font-semibold">{title}</Text>
-        {body && <Text className="text-muted-foreground text-sm">{body}</Text>}
+        {body && <Text className="text-tertiary text-sm">{body}</Text>}
       </View>
     </View>
   );

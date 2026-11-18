@@ -128,7 +128,7 @@ export const InviteMembersInputs = ({
   return (
     <View className="flex flex-col gap-4">
       <View className="flex flex-col gap-2">
-        <Text className="text-foreground font-semibold text-md">Email Addresses</Text>
+        <Text className="text-foreground font-semibold">Email Addresses</Text>
         <Text className="text-secondary text-sm">
           If there are accounts associated with the provided emails an invite will be sent to them.
         </Text>
@@ -162,14 +162,14 @@ export const InviteMembersInputs = ({
                   className="h-10 w-10 items-center justify-center"
                   onPress={() => handleRemoveInvite(index)}
                 >
-                  <Icon as={Trash2Icon} className="text-destructive size-5" />
+                  <Icon as={Trash2Icon} className="text-destructive-text size-5" />
                 </Pressable>
               </View>
             );
           })}
         </View>
         <Button
-          variant="outline"
+          variant="secondary"
           size="sm"
           onPress={handleAddNewInvite}
           className="mt-2 h-12 rounded-xl border-border bg-card"
@@ -179,7 +179,7 @@ export const InviteMembersInputs = ({
         </Button>
       </View>
       <View className="flex flex-col gap-2 rounded-xl p-2">
-        <Text className="text-md font-semibold">Role Permissions:</Text>
+        <Text className=" font-semibold">Role Permissions:</Text>
         <View className="flex flex-col">
           <Text className="text-secondary text-sm">
             <Text className="font-semibold">Member:</Text> Can view locations of all family members

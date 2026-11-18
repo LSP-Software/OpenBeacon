@@ -2,8 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { CheckIcon } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { BackButton } from "../../components/headers/BackButton.tsx";
+import { ScreenHeader } from "../../components/headers/ScreenHeader.tsx";
 import { Button } from "../../components/ui/Button.tsx";
 import { Icon } from "../../components/ui/Icon.tsx";
 import { Text } from "../../components/ui/Text.tsx";
@@ -26,20 +25,14 @@ const MapStorageScreen = () => {
 
   return (
     <View className="flex-1 bg-background">
-      <SafeAreaView edges={["top"]} className="border-b border-border bg-background px-6 py-4">
-        <View className="flex-row items-center justify-between">
-          <BackButton />
-          <Text className="text-foreground text-2xl font-bold">Map storage</Text>
-          <View className="w-10" />
-        </View>
-      </SafeAreaView>
+      <ScreenHeader title="Map storage" />
 
       <ScrollView
         className="flex-1"
         contentContainerClassName="gap-8 px-6 py-6 pb-32"
         showsVerticalScrollIndicator={false}
       >
-        <Text className="text-muted-foreground text-base leading-6">
+        <Text className="text-tertiary text-base leading-6">
           Parts of the map you’ve looked at are saved on this phone, so the map opens faster and
           still shows those areas without a connection. They are deleted when you sign out.
         </Text>
@@ -47,7 +40,7 @@ const MapStorageScreen = () => {
         <View className="gap-3">
           <View className="gap-1">
             <Text className="text-foreground text-xl font-semibold">Space for saved maps</Text>
-            <Text className="text-muted-foreground text-sm">
+            <Text className="text-tertiary text-sm">
               When it’s full, the areas you looked at longest ago are removed first.
             </Text>
           </View>
@@ -91,7 +84,7 @@ const MapStorageScreen = () => {
             })}
           </View>
           {changeSize.isError ? (
-            <Text accessibilityLiveRegion="polite" className="text-destructive text-sm">
+            <Text accessibilityLiveRegion="polite" className="text-destructive-text text-sm">
               Couldn’t change the space for saved maps. Try again.
             </Text>
           ) : null}
@@ -99,14 +92,14 @@ const MapStorageScreen = () => {
 
         <View className="gap-3">
           <Button
-            variant="outline"
+            variant="secondary"
             loading={deleteSavedMap.isPending}
             onPress={() => deleteSavedMap.mutate()}
           >
             <Text>Delete saved maps</Text>
           </Button>
           {deleteSavedMap.isSuccess || deleteSavedMap.isError ? (
-            <Text accessibilityLiveRegion="polite" className="text-muted-foreground text-sm">
+            <Text accessibilityLiveRegion="polite" className="text-tertiary text-sm">
               {deleteSavedMap.isSuccess
                 ? "Saved maps deleted. Areas you look at again will be downloaded."
                 : "Couldn’t delete saved maps. Try again."}

@@ -118,10 +118,10 @@ export const ApiCompatibilityGate = () => {
               <Text className="text-lg">{compatibility.message}</Text>
             )}
             <View className="bg-primary/10 rounded-lg p-4 border border-primary/15 gap-1">
-              <Text className="text-sm text-muted">App version {appVersion}</Text>
-              {selfHosted && <Text className="text-sm text-muted">Server {baseUrl}</Text>}
+              <Text className="text-sm text-secondary">App version {appVersion}</Text>
+              {selfHosted && <Text className="text-sm text-secondary">Server {baseUrl}</Text>}
               {compatibility.problem !== "appTooOld" && (
-                <Text className="text-sm text-muted">Server version {serverVersion}</Text>
+                <Text className="text-sm text-secondary">Server version {serverVersion}</Text>
               )}
             </View>
             {compatibility.problem === "serverTooOld" && selfHosted && (
@@ -141,24 +141,24 @@ export const ApiCompatibilityGate = () => {
               </Button>
             )}
             {!switchedServer && (
-              <Button variant="outline" loading={checking} onPress={tryAgain}>
+              <Button variant="secondary" loading={checking} onPress={tryAgain}>
                 <Text>Try again</Text>
               </Button>
             )}
             {unreachable && !switchedServer && (
-              <Text className="text-muted" accessibilityLiveRegion="polite">
+              <Text className="text-secondary" accessibilityLiveRegion="polite">
                 Couldn't reach your server. Check your internet connection and try again.
               </Text>
             )}
             {compatibility.problem === "outOfSync" && (
               <Link href="/account/contact-us" asChild>
-                <Button variant="outline">
+                <Button variant="secondary">
                   <Text>Contact us</Text>
                 </Button>
               </Link>
             )}
             <Link href="/serverUrl" asChild>
-              <Button variant="outline">
+              <Button variant="secondary">
                 <Text>Use a different server</Text>
               </Button>
             </Link>

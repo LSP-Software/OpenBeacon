@@ -43,17 +43,17 @@ export const RecoveryCoverage = ({ userId }: { userId: string | undefined }) => 
           <View key={group.id} className="gap-1 rounded-xl border border-border bg-card p-4">
             <Text className="font-semibold">{group.name}</Text>
             {groupRecovery?.isError || status.isError ? (
-              <Text className="text-muted-foreground">Unable to check this group.</Text>
+              <Text className="text-tertiary">Unable to check this group.</Text>
             ) : status.data && historyKeyVersion === undefined ? (
-              <Text className="text-muted-foreground">History isn’t protected yet.</Text>
+              <Text className="text-tertiary">History isn’t protected yet.</Text>
             ) : !result ? (
-              <Text className="text-muted-foreground">Checking…</Text>
+              <Text className="text-tertiary">Checking…</Text>
             ) : result.status === "complete" ? (
-              <Text className="text-muted-foreground">All history is protected.</Text>
+              <Text className="text-tertiary">All history is protected.</Text>
             ) : result.status === "none" ? (
-              <Text className="text-muted-foreground">History isn’t protected yet.</Text>
+              <Text className="text-tertiary">History isn’t protected yet.</Text>
             ) : (
-              <Text className="text-muted-foreground">
+              <Text className="text-tertiary">
                 History from{" "}
                 {result.protectedFrom.toLocaleDateString(undefined, { dateStyle: "medium" })} is
                 protected. Older history is protected once a phone that can still read it has your

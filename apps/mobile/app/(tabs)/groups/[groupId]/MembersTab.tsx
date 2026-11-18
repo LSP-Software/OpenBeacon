@@ -4,13 +4,22 @@ import { accountNameSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import { skipToken, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import { MapPinIcon, PlusCircleIcon } from "lucide-react-native";
+import {
+  CirclePauseIcon,
+  EllipsisVerticalIcon,
+  LogOutIcon,
+  MapPinIcon,
+  PencilIcon,
+  UserMinusIcon,
+  UserPlusIcon,
+} from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, TextInput, View } from "react-native";
 import { InviteMemberToGroupDialog } from "../../../../components/dialogs/InviteMemberToGroupDialog.tsx";
 import { LoadingIndicator } from "../../../../components/LoadingIndicator.tsx";
 import { DecryptedAvatarImage } from "../../../../components/image/DecryptedAvatarImage.tsx";
 import { Avatar, AvatarFallback } from "../../../../components/ui/Avatar.tsx";
+import { BottomSheet } from "../../../../components/ui/BottomSheet.tsx";
 import { Button } from "../../../../components/ui/Button.tsx";
 import {
   Dialog,
@@ -19,6 +28,7 @@ import {
   DialogTitle,
 } from "../../../../components/ui/Dialog.tsx";
 import { Icon } from "../../../../components/ui/Icon.tsx";
+import { SegmentedControl } from "../../../../components/ui/SegmentedControl.tsx";
 import { Text } from "../../../../components/ui/Text.tsx";
 import { useCachedGroup } from "../../../../hooks/useCachedGroup.ts";
 import type { useLiveTrackingPositions } from "../../../../hooks/useLiveTrackingPositions.ts";
@@ -28,6 +38,7 @@ import {
   encryptPersonalNickname,
 } from "../../../../lib/personalNicknames.ts";
 import { authClient } from "../../../../lib/auth-client.ts";
+import { cn } from "../../../../lib/cn.ts";
 import { getBatteryVisual } from "../../../../lib/batteryVisual.ts";
 import { buildMemberLiveStatuses } from "../../../../lib/buildMemberLiveStatuses.ts";
 import { deviceIconFor } from "../../../../lib/deviceIcons.ts";
@@ -56,6 +67,7 @@ const MembersTab = ({
     role: "OWNER" | "ADMIN" | "MEMBER";
   } | null>(null);
   const [addMemberDialogOpen, setAddMemberDialogOpen] = useState(false);
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const [successorDialogOpen, setSuccessorDialogOpen] = useState(false);
   const [successorMemberId, setSuccessorMemberId] = useState<string | null>(null);
   const { data: session } = authClient.useSession();
@@ -110,6 +122,7 @@ const MembersTab = ({
     positions: livePositions,
   });
   const self = members?.find((member) => member.user.id === session?.user.id);
+  const selectedMember = memberStatuses.find((member) => member.id === selectedMemberId);
   const canManage = self?.role === "OWNER" || self?.role === "ADMIN";
   const confirmRemoval = (
     member: { id: string; user: { id: string; name: string } },
@@ -179,7 +192,7 @@ const MembersTab = ({
   }
 
   return (
-    <View className="gap-4 pt-1">
+    <View className="gap-3">
       <InviteMemberToGroupDialog
         open={addMemberDialogOpen}
         setOpen={setAddMemberDialogOpen}
@@ -208,7 +221,7 @@ const MembersTab = ({
             value={nickname}
             onChangeText={setNickname}
             placeholder="Nickname"
-            className="rounded-lg border border-border bg-input text-foreground p-4"
+            className="h-[52px] rounded-lg border border-border-strong bg-input px-4 text-base text-foreground"
           />
           <Button
             disabled={updateNickname.isPending || nicknameQuery.isPending || nicknameQuery.isError}
@@ -296,129 +309,203 @@ const MembersTab = ({
           </Button>
         </DialogContent>
       </Dialog>
-      {canManage && (
-        <Button size="sm" onPress={() => setAddMemberDialogOpen(true)} className="self-start">
-          <Icon as={PlusCircleIcon} size={20} className="text-white" />
-          <Text>Invite member</Text>
-        </Button>
-      )}
-      <View className="flex-row items-center justify-between px-1">
-        <Text className="text-lg font-semibold text-foreground">Members</Text>
-        <Text className="text-sm text-muted-foreground">{members?.length ?? 0}</Text>
+      <View className="flex-row items-center justify-between">
+        <Text variant="label">
+          {members?.length ?? 0} {members?.length === 1 ? "member" : "members"}
+        </Text>
+        {canManage && (
+          <Button size="sm" className="rounded-full" onPress={() => setAddMemberDialogOpen(true)}>
+            <Icon as={UserPlusIcon} className="size-4 text-white" />
+            <Text>Invite</Text>
+          </Button>
+        )}
       </View>
-      {memberStatuses.map((member) => (
-        <View key={member.id} className="gap-3 rounded-2xl border border-border bg-card p-4">
-          <MemberCard
-            arrivalsOff={arrivalsOffLabel(member.user.id)}
-            member={member}
-            sharingPaused={
-              liveStatus.sharing?.some((device) => device.userId === member.user.id) === true &&
-              liveStatus.sharing.every(
-                (device) => device.userId !== member.user.id || device.paused,
-              )
-            }
-          />
-          {self?.role === "OWNER" && member.id !== self.id && (
-            <View
-              className="flex-row rounded-2xl bg-secondary p-1"
-              accessibilityRole="radiogroup"
-              accessibilityLabel={`Role for ${member.user.name}`}
-            >
-              {(["OWNER", "ADMIN", "MEMBER"] as const).map((role) => (
-                <Pressable
-                  key={role}
-                  accessibilityRole="radio"
-                  accessibilityState={{
-                    checked: member.role === role,
-                    disabled: changingRole !== null || member.role === role,
-                  }}
-                  disabled={changingRole !== null || member.role === role}
-                  className={`flex-1 items-center rounded-xl px-2 py-3 ${member.role === role ? "bg-primary" : ""}`}
-                  onPress={() =>
-                    Alert.alert("Change role?", `Make ${member.user.name} ${role.toLowerCase()}?`, [
-                      { text: "Cancel", style: "cancel" },
-                      {
-                        text: "Change",
-                        onPress: async () => {
-                          setChangingRole({ memberId: member.id, role });
-                          const result = await tryCatch(
-                            updateRole.mutateAsync({
-                              groupId,
-                              memberId: member.id,
-                              role,
-                            }),
-                          );
-                          if (result.error) {
-                            setChangingRole(null);
-                            Alert.alert("Unable to change role", result.error.message);
-                            return;
-                          }
-                          await queryClient.invalidateQueries({
-                            queryKey: trpc.groupMembership.list.queryKey(),
-                          });
-                          setChangingRole(null);
-                        },
-                      },
-                    ])
-                  }
-                >
-                  {changingRole?.memberId === member.id && changingRole.role === role ? (
-                    <ActivityIndicator size="small" />
-                  ) : (
-                    <Text
-                      className={
-                        member.role === role ? "text-white font-semibold" : "text-foreground"
-                      }
-                    >
-                      {role.charAt(0) + role.slice(1).toLowerCase()}
-                    </Text>
-                  )}
-                </Pressable>
-              ))}
-            </View>
-          )}
-          <View className="flex-row gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1"
-              disabled={
-                nicknameQuery.isPending || nicknameQuery.isError || nicknameQuery.isFetching
-              }
-              onPress={() => {
-                if (nicknameQuery.isPending || nicknameQuery.isError || nicknameQuery.isFetching)
-                  return;
-                setNicknameMember({
-                  id: member.id,
-                  name: member.user.name,
-                  nickname: member.nickname,
-                });
-                setNickname(member.nickname ?? "");
-              }}
-            >
-              <Text>Edit nickname</Text>
-            </Button>
-            {(member.id === self?.id ||
-              (canManage && (self?.role === "OWNER" || member.role === "MEMBER"))) && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex-1"
-                disabled={removal.isPending}
-                loading={removal.pendingKey === member.id}
-                onPress={() => confirmRemoval(member)}
-              >
-                <Text>{member.id === self?.id ? "Leave group" : "Remove member"}</Text>
-              </Button>
+      <View className="overflow-hidden rounded-2xl border border-border bg-card">
+        {memberStatuses.map((member, index) => (
+          <Pressable
+            key={member.id}
+            accessibilityRole="button"
+            accessibilityLabel={`${member.nickname ?? member.user.name}, ${ROLE_LABELS[member.role]}`}
+            accessibilityHint="Opens actions for this member"
+            onPress={() => setSelectedMemberId(member.id)}
+            className={cn(
+              "flex-row items-start gap-3 py-3.5 pl-4 pr-2 active:bg-secondary/60",
+              index > 0 && "border-t border-border/60",
             )}
-          </View>
-        </View>
-      ))}
+          >
+            <Avatar alt={member.nickname ?? member.user.name} className="size-11">
+              <DecryptedAvatarImage url={member.user.image} />
+              <AvatarFallback>
+                <Text className="font-bold">
+                  {(member.nickname ?? member.user.name).slice(0, 2)}
+                </Text>
+              </AvatarFallback>
+            </Avatar>
+            <View className="flex-1 gap-1">
+              <View className="flex-row items-center gap-2">
+                <Text className="text-foreground shrink text-lg font-semibold" numberOfLines={1}>
+                  {member.nickname ?? member.user.name}
+                </Text>
+                {member.id === self?.id ? (
+                  <View className="rounded-full bg-secondary px-2 py-0.5">
+                    <Text className="text-secondary text-xs font-semibold">You</Text>
+                  </View>
+                ) : null}
+                <View className="flex-1" />
+                {changingRole?.memberId === member.id ? (
+                  <ActivityIndicator size="small" />
+                ) : (
+                  <Text className="text-tertiary text-sm">{ROLE_LABELS[member.role]}</Text>
+                )}
+                <Icon as={EllipsisVerticalIcon} className="text-secondary size-5" />
+              </View>
+              <MemberStatus
+                arrivalsOff={arrivalsOffLabel(member.user.id)}
+                member={member}
+                sharingPaused={
+                  liveStatus.sharing?.some((device) => device.userId === member.user.id) === true &&
+                  liveStatus.sharing.every(
+                    (device) => device.userId !== member.user.id || device.paused,
+                  )
+                }
+              />
+            </View>
+          </Pressable>
+        ))}
+      </View>
+      <BottomSheet
+        visible={selectedMember !== undefined}
+        onClose={() => setSelectedMemberId(null)}
+        closeLabel="Close member actions"
+      >
+        {selectedMember ? (
+          <>
+            <View className="flex-row items-center gap-3">
+              <Avatar alt={selectedMember.nickname ?? selectedMember.user.name} className="size-12">
+                <DecryptedAvatarImage url={selectedMember.user.image} />
+                <AvatarFallback>
+                  <Text className="font-bold">
+                    {(selectedMember.nickname ?? selectedMember.user.name).slice(0, 2)}
+                  </Text>
+                </AvatarFallback>
+              </Avatar>
+              <View className="flex-1">
+                <Text
+                  accessibilityRole="header"
+                  className="text-foreground text-xl font-bold"
+                  numberOfLines={1}
+                >
+                  {selectedMember.nickname ?? selectedMember.user.name}
+                </Text>
+                <Text className="text-secondary text-sm">{ROLE_LABELS[selectedMember.role]}</Text>
+              </View>
+            </View>
+            {self?.role === "OWNER" && selectedMember.id !== self.id ? (
+              <View className="gap-2">
+                <Text variant="label">Role</Text>
+                <SegmentedControl
+                  accessibilityLabel={`Role for ${selectedMember.user.name}`}
+                  options={(["OWNER", "ADMIN", "MEMBER"] as const).map((role) => ({
+                    value: role,
+                    label: ROLE_LABELS[role],
+                  }))}
+                  selected={selectedMember.role}
+                  disabled={changingRole !== null}
+                  onChange={(role) => {
+                    if (role === selectedMember.role) return;
+                    setSelectedMemberId(null);
+                    Alert.alert(
+                      "Change role?",
+                      `Make ${selectedMember.user.name} ${role.toLowerCase()}?`,
+                      [
+                        { text: "Cancel", style: "cancel" },
+                        {
+                          text: "Change",
+                          onPress: async () => {
+                            setChangingRole({ memberId: selectedMember.id, role });
+                            const result = await tryCatch(
+                              updateRole.mutateAsync({
+                                groupId,
+                                memberId: selectedMember.id,
+                                role,
+                              }),
+                            );
+                            if (result.error) {
+                              setChangingRole(null);
+                              Alert.alert("Unable to change role", result.error.message);
+                              return;
+                            }
+                            await queryClient.invalidateQueries({
+                              queryKey: trpc.groupMembership.list.queryKey(),
+                            });
+                            setChangingRole(null);
+                          },
+                        },
+                      ],
+                    );
+                  }}
+                />
+              </View>
+            ) : null}
+            <View className="overflow-hidden rounded-2xl border border-border">
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{
+                  disabled:
+                    nicknameQuery.isPending || nicknameQuery.isError || nicknameQuery.isFetching,
+                }}
+                disabled={
+                  nicknameQuery.isPending || nicknameQuery.isError || nicknameQuery.isFetching
+                }
+                onPress={() => {
+                  setSelectedMemberId(null);
+                  setNicknameMember({
+                    id: selectedMember.id,
+                    name: selectedMember.user.name,
+                    nickname: selectedMember.nickname,
+                  });
+                  setNickname(selectedMember.nickname ?? "");
+                }}
+                className="min-h-[52px] flex-row items-center gap-3 px-4 py-3 active:bg-secondary/60"
+              >
+                <Icon as={PencilIcon} className="text-secondary size-5" />
+                <View className="flex-1">
+                  <Text className="text-foreground font-medium">Edit nickname</Text>
+                  <Text className="text-tertiary text-sm">Only you see nicknames</Text>
+                </View>
+              </Pressable>
+              {(selectedMember.id === self?.id ||
+                (canManage && (self?.role === "OWNER" || selectedMember.role === "MEMBER"))) && (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: removal.isPending }}
+                  disabled={removal.isPending}
+                  onPress={() => {
+                    setSelectedMemberId(null);
+                    confirmRemoval(selectedMember);
+                  }}
+                  className="min-h-[52px] flex-row items-center gap-3 border-t border-border/60 px-4 py-3 active:bg-secondary/60"
+                >
+                  <Icon
+                    as={selectedMember.id === self?.id ? LogOutIcon : UserMinusIcon}
+                    className="text-destructive-text size-5"
+                  />
+                  <Text className="text-destructive-text font-medium">
+                    {selectedMember.id === self?.id ? "Leave group" : "Remove from group"}
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+          </>
+        ) : null}
+      </BottomSheet>
     </View>
   );
 };
 
-const MemberCard = ({
+const ROLE_LABELS = { OWNER: "Owner", ADMIN: "Admin", MEMBER: "Member" } as const;
+
+const MemberStatus = ({
   arrivalsOff,
   member,
   sharingPaused,
@@ -435,84 +522,63 @@ const MemberCard = ({
     : null;
 
   return (
-    <View className="py-1">
-      <View className="flex flex-row items-center gap-3">
-        <View className="flex-row items-center gap-3">
-          <Avatar alt={member.nickname ?? member.user.name} className="size-12">
-            <DecryptedAvatarImage url={member.user.image} />
-            <AvatarFallback>
-              <Text className="font-bold">{(member.nickname ?? member.user.name).slice(0, 2)}</Text>
-            </AvatarFallback>
-          </Avatar>
+    <View className="gap-1 pr-2">
+      {sharingPaused ? (
+        <View className="flex-row items-center gap-1.5 self-start rounded-full bg-warning px-2.5 py-1">
+          <Icon as={CirclePauseIcon} className="text-warning-text size-3.5" />
+          <Text className="text-warning-text text-xs font-semibold">Location sharing paused</Text>
         </View>
-        <View className="flex-1 gap-1">
-          <Text className="text-foreground text-xl font-bold">
-            {member.nickname ?? member.user.name}
-          </Text>
-          <Text className="text-muted-foreground">{member.role}</Text>
-          <View className="flex-row items-start gap-1">
-            <Icon as={MapPinIcon} className="text-secondary mt-1 size-4" />
-            <View className="flex-col items-start">
-              {sharingPaused ? (
-                <Text className="text-md text-muted">Location sharing paused</Text>
-              ) : member.timestamp ? (
-                <Text className="text-md text-muted">
-                  Location updated {timeSince(member.timestamp)}
-                </Text>
-              ) : (
-                <Text className="text-md text-muted">Location unavailable</Text>
-              )}
-            </View>
-          </View>
-          {member.activeDeviceCount >= 2 && member.devices.length > 0 ? (
-            member.devices.map((device) => {
-              const deviceBattery = getBatteryVisual({
-                batteryLevel: device.battery.level,
-                charging: device.battery.charging,
-              });
-              const updated = timeSince(device.timestamp);
-              return (
-                <View
-                  key={device.deviceId}
-                  accessible
-                  accessibilityLabel={[
-                    device.name ?? "Device",
-                    `updated ${updated}`,
-                    deviceBattery.label && `battery ${deviceBattery.label}`,
-                  ]
-                    .filter(Boolean)
-                    .join(", ")}
-                  className="flex-row items-center gap-2"
-                >
-                  <Icon
-                    as={deviceIconFor(device.icon ?? "phone", device.platform).icon}
-                    className="text-muted-foreground size-4"
-                  />
-                  <Text className="text-muted shrink text-sm" numberOfLines={1}>
-                    {device.name ?? "Device"} · {updated}
-                  </Text>
-                  <Icon as={deviceBattery.icon} size={16} className={deviceBattery.colorClass} />
-                  {deviceBattery.label ? (
-                    <Text className={`${deviceBattery.colorClass} text-sm`}>
-                      {deviceBattery.label}
-                    </Text>
-                  ) : null}
-                </View>
-              );
-            })
-          ) : sharingPaused ? null : batteryVisual?.label ? (
-            <View className="flex-row items-center gap-2">
-              <Icon as={batteryVisual.icon} size={20} className={batteryVisual.colorClass} />
-              <Text className={`${batteryVisual.colorClass} text-sm`}>
-                Battery: {batteryVisual.label}
+      ) : member.activeDeviceCount >= 2 && member.devices.length > 0 ? (
+        member.devices.map((device) => {
+          const deviceBattery = getBatteryVisual({
+            batteryLevel: device.battery.level,
+            charging: device.battery.charging,
+          });
+          const updated = timeSince(device.timestamp);
+          return (
+            <View
+              key={device.deviceId}
+              accessible
+              accessibilityLabel={[
+                device.name ?? "Device",
+                `updated ${updated}`,
+                deviceBattery.label && `battery ${deviceBattery.label}`,
+              ]
+                .filter(Boolean)
+                .join(", ")}
+              className="flex-row items-center gap-2"
+            >
+              <Icon
+                as={deviceIconFor(device.icon ?? "phone", device.platform).icon}
+                className="text-tertiary size-4"
+              />
+              <Text className="text-secondary flex-1 text-sm" numberOfLines={1}>
+                {device.name ?? "Device"}, {updated}
               </Text>
+              <Icon as={deviceBattery.icon} className={`${deviceBattery.colorClass} size-4`} />
+              {deviceBattery.label ? (
+                <Text className={`${deviceBattery.colorClass} text-sm`}>{deviceBattery.label}</Text>
+              ) : null}
             </View>
-          ) : (
-            <Text className="text-muted text-sm">Battery unavailable</Text>
-          )}
-          {arrivalsOff ? <Text className="text-muted text-sm">{arrivalsOff}</Text> : null}
+          );
+        })
+      ) : (
+        <View className="flex-row flex-wrap items-center gap-x-4 gap-y-1">
+          <View className="flex-row items-center gap-1.5">
+            <Icon as={MapPinIcon} className="text-tertiary size-4" />
+            <Text className="text-secondary text-sm">
+              {member.timestamp ? `Updated ${timeSince(member.timestamp)}` : "Location unavailable"}
+            </Text>
+          </View>
+          {batteryVisual?.label ? (
+            <View className="flex-row items-center gap-1.5">
+              <Icon as={batteryVisual.icon} className={`${batteryVisual.colorClass} size-4`} />
+              <Text className={`${batteryVisual.colorClass} text-sm`}>{batteryVisual.label}</Text>
+            </View>
+          ) : null}
         </View>
-      </View>
+      )}
+      {arrivalsOff ? <Text className="text-tertiary text-sm">{arrivalsOff}</Text> : null}
     </View>
   );
 };

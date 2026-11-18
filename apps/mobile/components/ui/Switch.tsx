@@ -19,9 +19,9 @@ export const Switch = ({
       accessibilityLabel={accessibilityLabel}
       value={value}
       disabled={disabled}
-      trackColor={{ true: colors.primary }}
+      trackColor={{ true: colors.primary, false: colors.inputBorder }}
       // Android's SwitchCompat tints the on thumb with the AppCompat accent (teal) unless thumbColor is set.
-      thumbColor={Platform.OS === "android" && value ? colors.primary : undefined}
+      thumbColor={Platform.OS === "android" ? "#FFFFFF" : undefined}
       onValueChange={onValueChange}
     />
   );

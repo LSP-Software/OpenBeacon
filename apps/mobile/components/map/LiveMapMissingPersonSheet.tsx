@@ -57,7 +57,7 @@ export const LiveMapMissingPersonSheet = ({
           </Avatar>
           <View className="min-w-0 flex-1 gap-1">
             <Text className="text-foreground text-xl font-bold">{name}</Text>
-            <Text className="text-muted dark:text-muted-foreground text-sm">
+            <Text className="text-secondary dark:text-tertiary text-sm">
               {paused
                 ? "Location sharing paused"
                 : waitingForLocation
@@ -81,7 +81,7 @@ export const LiveMapMissingPersonSheet = ({
           </Text>
           {person.isSelf ? (
             <Link href="/(tabs)/account/overview" asChild>
-              <Button variant="outline" className="mt-3">
+              <Button variant="secondary" className="mt-3">
                 <Text>Manage sharing</Text>
               </Button>
             </Link>
@@ -123,7 +123,7 @@ export const LiveMapMissingPersonSheet = ({
                     <Text className="text-foreground font-semibold" numberOfLines={1}>
                       {device.name}
                     </Text>
-                    <Text className="text-muted text-sm" numberOfLines={1}>
+                    <Text className="text-secondary text-sm" numberOfLines={1}>
                       {device.paused ? "Location sharing paused" : "Waiting for location"}
                     </Text>
                   </View>
@@ -173,7 +173,9 @@ export const LiveMapMissingPersonSheet = ({
             asChild
           >
             <Pressable accessibilityRole="link" className="min-h-11 justify-center self-start">
-              <Text className="font-semibold text-destructive">Open {unreadable.groupName}</Text>
+              <Text className="font-semibold text-destructive-text">
+                Open {unreadable.groupName}
+              </Text>
             </Pressable>
           </Link>
         </View>
@@ -187,7 +189,7 @@ export const LiveMapMissingPersonSheet = ({
         </View>
       )}
       {hidden ? null : (
-        <Text className="text-muted dark:text-muted-foreground mt-2 text-sm">
+        <Text className="text-secondary dark:text-tertiary mt-2 text-sm">
           In {person.groupNames.join(", ")}
         </Text>
       )}

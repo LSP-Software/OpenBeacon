@@ -91,12 +91,8 @@ export const PlaceSizeSlider = ({
         />
       </View>
       <View className="flex-row justify-between">
-        <Text className="text-xs text-muted-foreground">
-          {formatPlaceDistance(PLACE_RADIUS_MIN)}
-        </Text>
-        <Text className="text-xs text-muted-foreground">
-          {formatPlaceDistance(PLACE_RADIUS_MAX)}
-        </Text>
+        <Text className="text-xs text-tertiary">{formatPlaceDistance(PLACE_RADIUS_MIN)}</Text>
+        <Text className="text-xs text-tertiary">{formatPlaceDistance(PLACE_RADIUS_MAX)}</Text>
       </View>
       <View className="flex-row gap-2">
         {PLACE_SIZE_STOPS.map((stop) => {
@@ -115,7 +111,7 @@ export const PlaceSizeSlider = ({
               <Text className={cn("font-semibold", selected ? "text-primary" : "text-foreground")}>
                 {stop.label}
               </Text>
-              <Text className="text-xs text-muted-foreground">
+              <Text className="text-xs text-tertiary">
                 {formatPlaceDistance(stop.radiusMeters)}
               </Text>
             </Pressable>

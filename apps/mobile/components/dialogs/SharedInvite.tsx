@@ -92,7 +92,7 @@ export const SharedInvite = ({
               <Text selectable>{invite.data.code}</Text>
               <View className="flex-row gap-2">
                 <Button
-                  variant="outline"
+                  variant="secondary"
                   onPress={async () => {
                     const result = await tryCatch(Clipboard.setStringAsync(invite.data.code));
                     if (result.error) {

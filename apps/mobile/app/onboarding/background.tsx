@@ -141,7 +141,7 @@ const BackgroundLocationStepScreen = () => {
       {!asksForLocationFirst && (
         <>
           <View className="gap-2">
-            <Text className="text-muted-foreground text-xs font-semibold uppercase tracking-wide">
+            <Text className="text-tertiary text-xs font-semibold uppercase tracking-wide">
               {choices.heading}
             </Text>
             <View className="overflow-hidden rounded-3xl border border-border bg-card">
@@ -163,7 +163,7 @@ const BackgroundLocationStepScreen = () => {
                     <View
                       className={cn(
                         "size-5 items-center justify-center rounded-full border-2",
-                        chosen ? "border-primary" : "border-muted-foreground/50",
+                        chosen ? "border-primary" : "border-border-strong/50",
                       )}
                     >
                       {chosen && <View className="size-2.5 rounded-full bg-primary" />}
@@ -171,7 +171,7 @@ const BackgroundLocationStepScreen = () => {
                     <Text
                       className={cn(
                         "flex-1 text-base",
-                        chosen ? "text-foreground font-semibold" : "text-muted-foreground",
+                        chosen ? "text-foreground font-semibold" : "text-tertiary",
                       )}
                     >
                       {option}

@@ -115,7 +115,7 @@ const OnboardingDoneScreen = () => {
                   "size-4",
                   row.tone === "on" && "text-primary",
                   row.tone === "missing" && "text-warning-accent",
-                  row.tone === "off" && "text-muted-foreground",
+                  row.tone === "off" && "text-tertiary",
                 )}
               />
             </View>
@@ -142,12 +142,12 @@ const OnboardingDoneScreen = () => {
                 <Text className="text-primary-text text-sm font-semibold">{row.value}</Text>
               </Pressable>
             ) : (
-              <Text className="text-muted-foreground text-sm">{row.value}</Text>
+              <Text className="text-tertiary text-sm">{row.value}</Text>
             )}
           </View>
         ))}
       </View>
-      <Text className="text-muted-foreground text-center text-sm">
+      <Text className="text-tertiary text-center text-sm">
         You can change any of these in Account.
       </Text>
     </OnboardingScreen>

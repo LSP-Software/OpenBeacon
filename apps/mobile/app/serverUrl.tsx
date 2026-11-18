@@ -91,7 +91,7 @@ export default function ServerUrl() {
 
           <View className="gap-5">
             <Text className="font-bold text-5xl">Custom{"\n"}server</Text>
-            <Text className="text-lg text-muted">
+            <Text className="text-lg text-secondary">
               Point OpenBeacon at your own self-hosted backend, for example
               https://beacon.example.com. It must use https:// with a valid certificate.
             </Text>
@@ -116,7 +116,7 @@ export default function ServerUrl() {
             />
 
             <View className="bg-primary/10 rounded-lg p-4 border border-primary/15">
-              <Text className="text-sm text-muted">
+              <Text className="text-sm text-secondary">
                 Changing server signs you out on this phone. Changes take effect after restarting
                 the app.
               </Text>
@@ -130,7 +130,7 @@ export default function ServerUrl() {
               <Text>Save</Text>
             </Button>
             {hasCustomServerUrl() && (
-              <Button variant="outline" loading={clearing} onPress={handleClear}>
+              <Button variant="secondary" loading={clearing} onPress={handleClear}>
                 <Text>Use Default Server</Text>
               </Button>
             )}
@@ -140,7 +140,7 @@ export default function ServerUrl() {
 
           <View className="gap-2">
             <Text className="font-semibold text-lg">Self-hosting OpenBeacon</Text>
-            <Text className="text-muted">
+            <Text className="text-secondary">
               OpenBeacon is fully open source. You can run your own backend using Docker behind
               HTTPS.
             </Text>

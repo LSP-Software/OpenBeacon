@@ -118,7 +118,7 @@ export const LocationSharingPausedBanner = ({
         <Text className="flex-1 text-sm font-medium">Your location sharing is paused</Text>
         <Button
           size="sm"
-          variant="outline"
+          variant="secondary"
           loading={resume.isPending}
           onPress={async () => {
             setFailure(null);
@@ -135,7 +135,7 @@ export const LocationSharingPausedBanner = ({
           <Text>Resume</Text>
         </Button>
       </View>
-      {failure ? <Text className="text-sm text-muted-foreground">{failure}</Text> : null}
+      {failure ? <Text className="text-sm text-tertiary">{failure}</Text> : null}
     </View>
   );
 };

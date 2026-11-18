@@ -6,9 +6,8 @@ import { Link } from "expo-router";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { Pressable, ScrollView, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { z } from "zod";
-import { BackButton } from "../../components/headers/BackButton.tsx";
+import { ScreenHeader } from "../../components/headers/ScreenHeader.tsx";
 import { LocationSharingCard } from "../../components/LocationSharingCard.tsx";
 import { isSharingPaused } from "@openbeacon/shared";
 import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
@@ -61,13 +60,7 @@ const DevicesScreen = () => {
 
   return (
     <View className="flex-1 bg-background">
-      <SafeAreaView edges={["top"]} className="border-b border-border bg-background px-6 py-4">
-        <View className="flex-row items-center justify-between">
-          <BackButton />
-          <Text className="text-foreground text-2xl font-bold">Devices</Text>
-          <View className="w-10" />
-        </View>
-      </SafeAreaView>
+      <ScreenHeader title="Devices" />
 
       <Dialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
         <DialogContent className="max-h-[90%]">
@@ -99,7 +92,7 @@ const DevicesScreen = () => {
                   >
                     <Icon
                       as={option.icon}
-                      className={selected ? "text-primary size-6" : "text-muted-foreground size-6"}
+                      className={selected ? "text-primary size-6" : "text-tertiary size-6"}
                     />
                   </Pressable>
                 );
@@ -114,7 +107,7 @@ const DevicesScreen = () => {
               />
             ) : null}
             {editing?.isCurrent ? (
-              <Text className="text-muted-foreground text-sm leading-5">
+              <Text className="text-tertiary text-sm leading-5">
                 To remove this phone, sign out on the Account tab and choose to remove it.
               </Text>
             ) : (
@@ -141,10 +134,10 @@ const DevicesScreen = () => {
         <LoadingIndicator />
       ) : devices.isError ? (
         <View className="flex-1 items-center justify-center gap-4 px-6">
-          <Text className="text-muted-foreground text-center">
+          <Text className="text-tertiary text-center">
             We couldn’t load your devices. Check your connection and try again.
           </Text>
-          <Button variant="outline" onPress={() => devices.refetch()}>
+          <Button variant="secondary" onPress={() => devices.refetch()}>
             <Text>Try again</Text>
           </Button>
         </View>
@@ -154,7 +147,7 @@ const DevicesScreen = () => {
           contentContainerClassName="gap-4 px-6 py-6 pb-32"
           showsVerticalScrollIndicator={false}
         >
-          <Text className="text-muted-foreground text-base leading-6">
+          <Text className="text-tertiary text-base leading-6">
             Phones and tablets signed in to your account. Tap one to manage location sharing, rename
             it, change its icon or remove it.
           </Text>
@@ -196,13 +189,13 @@ const DevicesScreen = () => {
                       )}
                       {!device.activatedAt && (
                         <View className="rounded-full bg-muted px-2 py-0.5">
-                          <Text className="text-muted-foreground text-xs font-medium">
+                          <Text className="text-tertiary text-xs font-medium">
                             Waiting for setup
                           </Text>
                         </View>
                       )}
                     </View>
-                    <Text className="text-muted-foreground text-sm">
+                    <Text className="text-tertiary text-sm">
                       {[
                         device.model,
                         `Added ${device.createdAt.toLocaleDateString(undefined, { dateStyle: "medium" })}`,
@@ -210,12 +203,12 @@ const DevicesScreen = () => {
                         .filter(Boolean)
                         .join(" · ")}
                     </Text>
-                    <Text className="text-muted-foreground text-sm">
+                    <Text className="text-tertiary text-sm">
                       {device.isCurrent || lastActive === "now"
                         ? "Active now"
                         : `Last active ${lastActive} ago`}
                     </Text>
-                    <Text className="text-muted-foreground text-sm">
+                    <Text className="text-tertiary text-sm">
                       {!device.activatedAt
                         ? "Can’t see anyone’s location until it’s set up"
                         : isSharingPaused(device, serverNow()) ||
@@ -242,7 +235,7 @@ const DevicesScreen = () => {
             })}
           </View>
           <Link href="/account/add-device" asChild>
-            <Button variant="outline">
+            <Button variant="secondary">
               <Text>Add a device</Text>
             </Button>
           </Link>

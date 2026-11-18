@@ -150,7 +150,7 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
           </DialogHeader>
           <DialogFooter>
             <Button
-              variant="outline"
+              variant="secondary"
               onPress={() => {
                 setIsPermissionDialogOpen(false);
               }}

@@ -7,10 +7,10 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { BackButton } from "../../components/headers/BackButton.tsx";
+import { ScreenHeader } from "../../components/headers/ScreenHeader.tsx";
 import { Button } from "../../components/ui/Button.tsx";
 import { Input } from "../../components/ui/Input.tsx";
-import { RadioCardGroup } from "../../components/ui/RadioCardGroup.tsx";
+import { ChoiceList } from "../../components/ui/ChoiceList.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { trpc } from "../../lib/api.ts";
 import { endSession } from "../../lib/endSession.ts";
@@ -98,13 +98,7 @@ const DeleteAccountScreen = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
-      <SafeAreaView edges={["top"]} className="border-b border-border bg-background px-6 py-4">
-        <View className="flex-row items-center justify-between">
-          <BackButton />
-          <Text className="text-foreground text-2xl font-bold">Delete account</Text>
-          <View className="w-10" />
-        </View>
-      </SafeAreaView>
+      <ScreenHeader title="Delete account" />
       <ScrollView
         contentContainerClassName="gap-4 p-6"
         automaticallyAdjustKeyboardInsets
@@ -119,7 +113,7 @@ const DeleteAccountScreen = () => {
           where you are the only owner before continuing.
         </Text>
         <Text className="font-semibold">Choose when to delete your account:</Text>
-        <RadioCardGroup
+        <ChoiceList
           accessibilityLabel="Deletion timing"
           options={[
             {
@@ -173,7 +167,7 @@ const DeleteAccountScreen = () => {
             !verificationMethods.data.google && (
               <Text>No verification method is available. Please contact support.</Text>
             )}
-          <Button variant="outline" onPress={() => router.back()}>
+          <Button variant="secondary" onPress={() => router.back()}>
             <Text>Cancel</Text>
           </Button>
         </View>

@@ -401,7 +401,7 @@ export const NativeMap = ({
         accessibilityLiveRegion="polite"
       >
         <ActivityIndicator />
-        <Text className="text-center text-muted-foreground">
+        <Text className="text-center text-tertiary">
           The server is still preparing the map. It will appear here when it's ready.
         </Text>
       </View>
@@ -414,7 +414,7 @@ export const NativeMap = ({
         className="flex-1 items-center justify-center bg-background px-8"
         accessibilityLiveRegion="polite"
       >
-        <Text className="text-center text-muted-foreground">
+        <Text className="text-center text-tertiary">
           You’re offline. The map will appear when you reconnect.
         </Text>
       </View>
@@ -427,10 +427,10 @@ export const NativeMap = ({
         className="flex-1 items-center justify-center gap-4 bg-background px-8"
         accessibilityLiveRegion="polite"
       >
-        <Text className="text-center text-muted-foreground">
+        <Text className="text-center text-tertiary">
           We couldn’t load the map. Check your connection and try again.
         </Text>
-        <Button variant="outline" loading={map.isFetching} onPress={map.retryUrl}>
+        <Button variant="secondary" loading={map.isFetching} onPress={map.retryUrl}>
           <Text>Try again</Text>
         </Button>
       </View>
@@ -628,7 +628,7 @@ export const NativeMap = ({
           <Icon
             as={MapPinIcon}
             size={20}
-            className={showSymbols ? "text-foreground" : "text-muted"}
+            className={showSymbols ? "text-foreground" : "text-secondary"}
           />
         </Pressable>
         {canHideGroups ? (

@@ -97,7 +97,7 @@ const NameThisPhoneScreen = () => {
       {devices.isPending ? (
         <LoadingIndicator />
       ) : devices.isError ? (
-        <Text className="text-muted-foreground text-base leading-6">
+        <Text className="text-tertiary text-base leading-6">
           We couldn’t load this {noun}’s details. Check your connection and try again, or skip and
           name it later in Account → Devices.
         </Text>
@@ -159,7 +159,7 @@ const NameThisPhoneScreen = () => {
                 >
                   <Icon
                     as={deviceIconFor(icon, Platform.OS).icon}
-                    className={selected ? "text-primary size-6" : "text-muted-foreground size-6"}
+                    className={selected ? "text-primary size-6" : "text-tertiary size-6"}
                   />
                 </Pressable>
               );

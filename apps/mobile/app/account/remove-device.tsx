@@ -4,10 +4,9 @@ import { TRPCClientError } from "@trpc/client";
 import { router, useLocalSearchParams, useNavigation } from "expo-router";
 import { useEffect, useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { ConfirmIdentity } from "../../components/ConfirmIdentity.tsx";
 import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
-import { BackButton } from "../../components/headers/BackButton.tsx";
+import { ScreenHeader } from "../../components/headers/ScreenHeader.tsx";
 import { Button } from "../../components/ui/Button.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { useIdentityGate } from "../../hooks/useIdentityGate.ts";
@@ -71,13 +70,7 @@ const RemoveDeviceScreen = () => {
 
   return (
     <View className="flex-1 bg-background">
-      <SafeAreaView edges={["top"]} className="border-b border-border bg-background px-6 py-4">
-        <View className="flex-row items-center justify-between">
-          {step === "removing" ? <View className="w-10" /> : <BackButton />}
-          <Text className="text-foreground text-2xl font-bold">Remove device</Text>
-          <View className="w-10" />
-        </View>
-      </SafeAreaView>
+      <ScreenHeader title="Remove device" hideBack={step === "removing"} />
 
       <KeyboardAvoidingView
         className="flex-1"
@@ -90,12 +83,12 @@ const RemoveDeviceScreen = () => {
           showsVerticalScrollIndicator={false}
         >
           <View className="gap-2">
-            <Text className="text-muted-foreground text-base leading-6">
+            <Text className="text-tertiary text-base leading-6">
               Remove {name} if it’s lost or stolen, or you don’t use it any more. It will be signed
               out, it won’t receive new locations, and it will delete its keys and data the next
               time it connects.
             </Text>
-            <Text className="text-muted-foreground text-base leading-6">
+            <Text className="text-tertiary text-base leading-6">
               Anything it has already seen can’t be taken back. If someone else might know your
               password, change it too.
             </Text>

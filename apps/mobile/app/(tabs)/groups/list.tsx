@@ -1,7 +1,14 @@
 import { useIsFocused } from "@react-navigation/native";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "expo-router";
-import { ChevronRightIcon, PlusIcon, ShieldIcon } from "lucide-react-native";
+import {
+  ChevronRightIcon,
+  LockIcon,
+  MailIcon,
+  PlusIcon,
+  QrCodeIcon,
+  UsersIcon,
+} from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -12,13 +19,13 @@ import { RefreshablePage } from "../../../components/RefreshablePage.tsx";
 import { DecryptedAvatarImage } from "../../../components/image/DecryptedAvatarImage.tsx";
 import { Avatar, AvatarFallback } from "../../../components/ui/Avatar.tsx";
 import { Button } from "../../../components/ui/Button.tsx";
-import { Card, CardDescription, CardHeader, CardTitle } from "../../../components/ui/Card.tsx";
 import { Icon } from "../../../components/ui/Icon.tsx";
 import { Text } from "../../../components/ui/Text.tsx";
 import { useGroupColorRevision } from "../../../hooks/useGroupColorRevision.ts";
 import { useRefetchWhileFocused } from "../../../hooks/useRefetchWhileFocused.ts";
 import { useUnseenGroupHistory } from "../../../hooks/useUnseenGroupHistory.ts";
 import { type RouterOutputs, trpc } from "../../../lib/api.ts";
+import { cn } from "../../../lib/cn.ts";
 import { getGroupColor } from "../../../lib/groupColor.ts";
 import { initials } from "../../../lib/initials.ts";
 
@@ -47,11 +54,11 @@ export default function GroupsScreen() {
     return (
       <SafeAreaView className="flex-1 items-center justify-center gap-4 bg-background px-6">
         <AnnouncementBanner className="self-stretch" />
-        <Text className="text-center text-muted-foreground">
+        <Text className="text-center text-tertiary">
           We couldn’t load your groups. Check your connection and try again.
         </Text>
         <Button
-          variant="outline"
+          variant="secondary"
           loading={groups.isFetching}
           onPress={() => Promise.all([groups.refetch(), invites.refetch()])}
         >
@@ -63,27 +70,40 @@ export default function GroupsScreen() {
 
   return (
     <RefreshablePage>
-      <SafeAreaView className="flex-1 bg-background px-6 py-4" edges={["top"]}>
+      <SafeAreaView className="flex-1 bg-background px-4 pb-32" edges={["top"]}>
         <CreateGroupDialog open={createGroupDialogOpen} setOpen={setCreateGroupDialogOpen} />
-        <View className="flex-row items-center justify-between pb-10">
-          <Text className="text-foreground font-bold text-3xl">Your Groups</Text>
-          <Pressable
-            className="w-10 h-10 rounded-full items-center justify-center bg-primary"
-            accessibilityRole="button"
-            accessibilityLabel="Create new group"
-            onPress={() => setCreateGroupDialogOpen(true)}
-          >
-            <PlusIcon color="white" size={16} />
-          </Pressable>
+        <View className="flex-row items-center justify-between px-1 pb-4 pt-3">
+          <Text accessibilityRole="header" className="text-foreground text-3xl font-bold">
+            Groups
+          </Text>
+          {groups.data.length > 0 && (
+            <View className="flex-row gap-2">
+              <Link href="/join" asChild>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="rounded-full"
+                  accessibilityLabel="Join a group with a QR code or join code"
+                >
+                  <Icon as={QrCodeIcon} className="text-foreground size-4" />
+                  <Text>Join</Text>
+                </Button>
+              </Link>
+              <Button
+                size="sm"
+                className="rounded-full"
+                accessibilityLabel="Create new group"
+                onPress={() => setCreateGroupDialogOpen(true)}
+              >
+                <Icon as={PlusIcon} className="size-4 text-white" />
+                <Text>New</Text>
+              </Button>
+            </View>
+          )}
         </View>
         <AnnouncementBanner className="mb-4" />
-        <Link href="/join" asChild>
-          <Button variant="outline" className="mb-4">
-            <Text>Scan QR or enter join code</Text>
-          </Button>
-        </Link>
         {groups.isError || invites.isError ? (
-          <Text accessibilityLiveRegion="polite" className="mb-4 text-sm text-muted-foreground">
+          <Text accessibilityLiveRegion="polite" className="text-secondary mb-4 px-1 text-sm">
             We couldn’t reach the server, so this list may be out of date.
           </Text>
         ) : null}
@@ -101,148 +121,132 @@ const GroupInvitesList = ({
 }) => {
   if (!groupInvites.length) return null;
   return (
-    <View className="gap-3 mb-4">
-      <Text className="text-foreground font-bold text-lg">Group Invites</Text>
+    <View className="mb-4 gap-2">
       {groupInvites.map((invite) => (
-        <Card key={invite.id}>
-          <CardHeader className="flex-row items-center gap-3">
-            <Text className="flex-1">
-              You’ve been sent an invite to <Text className="font-bold">{invite.group.name}</Text>
-            </Text>
-            <Link href={{ pathname: "/join", params: { inviteId: invite.id } }} asChild>
-              <Button size="sm">
-                <Text>View invite</Text>
-              </Button>
-            </Link>
-          </CardHeader>
-        </Card>
+        <View
+          key={invite.id}
+          className="flex-row items-center gap-3 rounded-2xl border border-primary/20 bg-primary-soft py-3 pl-4 pr-3"
+        >
+          <Icon as={MailIcon} className="text-primary-text size-5" />
+          <Text className="text-foreground flex-1">
+            You’re invited to <Text className="font-semibold">{invite.group.name}</Text>
+          </Text>
+          <Link href={{ pathname: "/join", params: { inviteId: invite.id } }} asChild>
+            <Button size="sm" accessibilityLabel={`View invite to ${invite.group.name}`}>
+              <Text>View</Text>
+            </Button>
+          </Link>
+        </View>
       ))}
     </View>
   );
 };
 
-interface GroupListProps {
+export const GroupList = ({
+  groupList,
+  setCreateGroupDialogOpen,
+}: {
   groupList: RouterOutputs["groupMembership"]["list"];
   setCreateGroupDialogOpen: (open: boolean) => void;
-}
-
-export const GroupList = ({ groupList, setCreateGroupDialogOpen }: GroupListProps) => {
+}) => {
   useGroupColorRevision();
   const { unseenGroupIds } = useUnseenGroupHistory();
 
-  return (
-    <View>
-      {!groupList?.length ? (
-        <>
-          <View className="items-center pt-10 gap-6">
-            <View className="w-20 h-20 rounded-full border border-primary/30 items-center justify-center bg-primary/15">
-              <Icon as={ShieldIcon} size={40} className="text-primary" />
-            </View>
-            <View className="items-center gap-2">
-              <Text className="text-foreground font-bold text-2xl">No groups yet</Text>
-              <Text className="text-sm text-muted text-center max-w-80">
-                Groups keep your family connected. Create one to share your location with people you
-                choose.
-              </Text>
-            </View>
-            <Button onPress={() => setCreateGroupDialogOpen(true)}>
-              <Text>Create a Group</Text>
-            </Button>
+  if (!groupList.length) {
+    return (
+      <View className="gap-6 pt-8">
+        <View className="items-center gap-3 px-4">
+          <View className="size-20 items-center justify-center rounded-full bg-primary-soft">
+            <Icon as={UsersIcon} className="text-primary-text size-9" />
           </View>
-
-          <View className="mt-6 overflow-hidden rounded-2xl border border-primary/20 bg-card px-5 py-4">
-            <View className="flex-row items-center gap-3 pr-6">
-              <View className="size-10 items-center justify-center rounded-full border border-primary/20 bg-primary/10">
-                <Icon as={ShieldIcon} size={18} className="text-primary" />
-              </View>
-              <View className="flex-1 gap-1">
-                <Text className="text-xs font-semibold uppercase tracking-[1px] text-primary-text">
-                  Privacy-first by default
-                </Text>
-                <Text className="text-base font-semibold text-foreground">
-                  Locations are end-to-end encrypted
-                </Text>
-                <Text className="text-sm leading-6 text-muted-foreground">
-                  Your location is encrypted on this phone before it’s sent, and only your groups
-                  can decrypt it.
-                </Text>
-              </View>
-            </View>
-          </View>
-        </>
-      ) : (
-        <View className="gap-2">
-          <Text className="text-foreground font-bold text-lg">Your Groups</Text>
-          {groupList.map((group) => {
-            const maxMembersToShow = 3;
-            const membersToShow = group.members.slice(0, maxMembersToShow);
-
-            return (
-              <Link
-                href={`/groups/${group.id}`}
-                key={group.id}
-                accessibilityLabel={`${group.name}, ${group.members.length} ${group.members.length === 1 ? "member" : "members"}${unseenGroupIds.has(group.id) ? ", new activity" : ""}`}
-              >
-                <Card className="w-full">
-                  <CardHeader className="flex-row items-center justify-between">
-                    <View className="flex-1 flex-row items-center gap-3">
-                      <View
-                        className="rounded-full p-0.5"
-                        style={{ borderWidth: 3, borderColor: getGroupColor(group.id) }}
-                      >
-                        <Avatar alt={`${group.name}'s image`} className="size-12">
-                          <DecryptedAvatarImage url={group.image} />
-                          <AvatarFallback>
-                            <Text className="font-bold">{initials(group.name)}</Text>
-                          </AvatarFallback>
-                        </Avatar>
-                      </View>
-                      <View className="flex-1 gap-1">
-                        <View className="flex-row items-center gap-2">
-                          <CardTitle numberOfLines={1} className="shrink">
-                            {group.name}
-                          </CardTitle>
-                          {unseenGroupIds.has(group.id) ? (
-                            <View className="size-2 rounded-full bg-primary" />
-                          ) : null}
-                        </View>
-                        <CardDescription>
-                          {group.members.length} {group.members.length === 1 ? "member" : "members"}
-                        </CardDescription>
-                      </View>
-                    </View>
-
-                    <View className="ml-3 flex-row items-center gap-4">
-                      <View className="flex-row items-center">
-                        {membersToShow.map((member) => (
-                          <Avatar
-                            key={member.id}
-                            alt={member.name}
-                            className="border border-card size-8 -mr-2"
-                          >
-                            <DecryptedAvatarImage url={member.image} />
-                            <AvatarFallback>
-                              <Text className="font-bold">{initials(member.name)}</Text>
-                            </AvatarFallback>
-                          </Avatar>
-                        ))}
-                        {group.members.length > maxMembersToShow && (
-                          <View className="size-8 rounded-full bg-gray-100 border border-card flex items-center justify-center">
-                            <Text className="font-medium text-secondary">
-                              +{group.members.length - maxMembersToShow}
-                            </Text>
-                          </View>
-                        )}
-                      </View>
-                      <Icon as={ChevronRightIcon} size={20} className="text-muted-foreground" />
-                    </View>
-                  </CardHeader>
-                </Card>
-              </Link>
-            );
-          })}
+          <Text className="text-foreground pt-2 text-2xl font-bold">No groups yet</Text>
+          <Text className="text-secondary text-center">
+            Create a group to share your location with people you choose, or join one you’ve been
+            invited to.
+          </Text>
         </View>
-      )}
+        <View className="gap-3">
+          <Button onPress={() => setCreateGroupDialogOpen(true)}>
+            <Text>Create a group</Text>
+          </Button>
+          <Link href="/join" asChild>
+            <Button variant="secondary">
+              <Text>Scan QR or enter join code</Text>
+            </Button>
+          </Link>
+        </View>
+        <View className="flex-row items-center gap-3 rounded-2xl border border-border bg-card p-4">
+          <Icon as={LockIcon} className="text-secondary size-5" />
+          <Text className="text-secondary flex-1 text-sm">
+            Your location is encrypted on this phone before it’s sent, and only your groups can
+            decrypt it.
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View className="overflow-hidden rounded-2xl border border-border bg-card">
+      {groupList.map((group, index) => (
+        <Link
+          href={`/groups/${group.id}`}
+          key={group.id}
+          asChild
+          accessibilityLabel={`${group.name}, ${group.members.length} ${group.members.length === 1 ? "member" : "members"}${unseenGroupIds.has(group.id) ? ", new activity" : ""}`}
+        >
+          <Pressable
+            className={cn(
+              "flex-row items-center gap-3 py-3.5 pl-4 pr-3 active:bg-secondary/60",
+              index > 0 && "border-t border-border/60",
+            )}
+          >
+            <View
+              className="rounded-full p-0.5"
+              style={{ borderWidth: 3, borderColor: getGroupColor(group.id) }}
+            >
+              <Avatar alt={`${group.name}'s image`} className="size-12">
+                <DecryptedAvatarImage url={group.image} />
+                <AvatarFallback>
+                  <Text className="font-bold">{initials(group.name)}</Text>
+                </AvatarFallback>
+              </Avatar>
+            </View>
+            <View className="flex-1 gap-1.5">
+              <View className="flex-row items-center gap-2">
+                <Text numberOfLines={1} className="text-foreground shrink text-lg font-semibold">
+                  {group.name}
+                </Text>
+                {unseenGroupIds.has(group.id) ? (
+                  <View className="size-2 rounded-full bg-primary" />
+                ) : null}
+              </View>
+              <View className="flex-row items-center gap-2">
+                <View className="flex-row pl-1.5">
+                  {group.members.slice(0, 4).map((member) => (
+                    <Avatar
+                      key={member.id}
+                      alt={member.name}
+                      className="-ml-1.5 size-6 border-2 border-card"
+                    >
+                      <DecryptedAvatarImage url={member.image} />
+                      <AvatarFallback>
+                        <Text className="text-[11px] font-bold">
+                          {initials(member.name).slice(0, 1)}
+                        </Text>
+                      </AvatarFallback>
+                    </Avatar>
+                  ))}
+                </View>
+                <Text className="text-tertiary text-sm">
+                  {group.members.length} {group.members.length === 1 ? "member" : "members"}
+                </Text>
+              </View>
+            </View>
+            <Icon as={ChevronRightIcon} className="text-tertiary size-5" />
+          </Pressable>
+        </Link>
+      ))}
     </View>
   );
 };

@@ -117,10 +117,10 @@ const HistoryTab = ({ groupId, active }: { groupId: string; active: boolean }) =
             accessibilityState={{ selected }}
             onPress={() => setCategory(filter.category)}
             hitSlop={{ top: 4, bottom: 4 }}
-            className={`min-h-9 justify-center rounded-full border px-4 py-1.5 ${selected ? "border-primary bg-primary" : "border-border bg-card"}`}
+            className={`min-h-9 justify-center rounded-full border px-4 py-1.5 ${selected ? "border-foreground bg-foreground" : "border-border bg-card"}`}
           >
             <Text
-              className={`text-sm font-semibold ${selected ? "text-primary-foreground" : "text-foreground"}`}
+              className={`text-sm font-semibold ${selected ? "text-background" : "text-foreground"}`}
             >
               {filter.label}
             </Text>
@@ -145,10 +145,10 @@ const HistoryTab = ({ groupId, active }: { groupId: string; active: boolean }) =
         {filterBar}
         <View className="gap-3 rounded-2xl border border-border bg-card p-5">
           <Text className="text-foreground text-lg font-semibold">Couldn’t load history</Text>
-          <Text className="text-muted-foreground">Check your connection and try again.</Text>
+          <Text className="text-secondary">Check your connection and try again.</Text>
           <Button
             size="sm"
-            variant="outline"
+            variant="secondary"
             className="self-start"
             loading={history.isFetching}
             onPress={() => void history.refetch()}
@@ -169,13 +169,13 @@ const HistoryTab = ({ groupId, active }: { groupId: string; active: boolean }) =
     <View className="gap-2 pt-1">
       {filterBar}
       {history.isError ? (
-        <View className="flex-row items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-2">
+        <View className="flex-row items-center justify-between gap-3 rounded-2xl border border-border bg-card px-4 py-2">
           <Text className="flex-1 text-sm text-foreground">
             Couldn’t reach the server, so this may be out of date.
           </Text>
           <Button
             size="sm"
-            variant="outline"
+            variant="secondary"
             loading={history.isFetching}
             onPress={() => void history.refetch()}
           >
@@ -184,16 +184,13 @@ const HistoryTab = ({ groupId, active }: { groupId: string; active: boolean }) =
         </View>
       ) : null}
       {sections.length === 0 ? (
-        <Text className="py-6 text-center text-muted-foreground">
+        <Text className="py-6 text-center text-tertiary">
           {filters.find((filter) => filter.category === category)?.empty}
         </Text>
       ) : null}
       {sections.map((section) => (
         <View key={section.key}>
-          <Text
-            accessibilityRole="header"
-            className="mb-1 mt-3 text-sm font-bold uppercase tracking-wider text-muted-foreground"
-          >
+          <Text accessibilityRole="header" variant="label" className="mb-1 mt-3">
             {section.title}
           </Text>
           {section.items.map((item) => {
@@ -205,14 +202,14 @@ const HistoryTab = ({ groupId, active }: { groupId: string; active: boolean }) =
                   key={item.id}
                   accessible
                   accessibilityLabel={`${text}, ${time}`}
-                  className="flex-row items-center gap-4 border-b border-border py-3"
+                  className="flex-row items-center gap-4 border-b border-border/60 px-1 py-3"
                 >
                   <View className="size-12 items-center justify-center rounded-xl bg-secondary">
                     <Icon as={eventIcons[item.type]} size={22} className="text-primary-text" />
                   </View>
                   <View className="flex-1 gap-0.5">
                     <Text className="text-foreground">{text}</Text>
-                    <Text className="text-sm text-muted-foreground">{time}</Text>
+                    <Text className="text-sm text-tertiary">{time}</Text>
                   </View>
                 </View>
               );
@@ -225,28 +222,24 @@ const HistoryTab = ({ groupId, active }: { groupId: string; active: boolean }) =
                 key={item.id}
                 accessible
                 accessibilityLabel={`${owner} ${item.deviceName} ${arrived ? "arrived at" : "left"} ${item.placeName}, ${time}`}
-                className="flex-row items-center gap-4 border-b border-border py-3"
+                className="flex-row items-center gap-4 border-b border-border/60 px-1 py-3"
               >
-                <View className="size-12 items-center justify-center rounded-xl bg-primary/10">
+                <View className="size-12 items-center justify-center rounded-xl bg-secondary">
                   <Text className="text-2xl">{item.placeEmoji}</Text>
                 </View>
                 <View className="flex-1 gap-0.5">
                   <Text className="text-foreground">
-                    <Text className="text-foreground font-bold">
+                    <Text className="text-foreground font-semibold">
                       {owner} {item.deviceName}
                     </Text>{" "}
                     {arrived ? "arrived at" : "left"} {item.placeName}
                   </Text>
-                  <Text className="text-sm text-muted-foreground">{time}</Text>
+                  <Text className="text-sm text-tertiary">{time}</Text>
                 </View>
                 <Icon
                   as={arrived ? LogInIcon : LogOutIcon}
                   size={22}
-                  className={
-                    arrived
-                      ? "text-emerald-700 dark:text-emerald-400"
-                      : "text-orange-700 dark:text-orange-400"
-                  }
+                  className={arrived ? "text-success" : "text-warning-text"}
                 />
               </View>
             );
@@ -256,7 +249,7 @@ const HistoryTab = ({ groupId, active }: { groupId: string; active: boolean }) =
       {history.hasNextPage ? (
         <Button
           size="sm"
-          variant="outline"
+          variant="secondary"
           className="mt-2 self-center"
           loading={history.isFetchingNextPage}
           onPress={() => void history.fetchNextPage()}
@@ -264,9 +257,7 @@ const HistoryTab = ({ groupId, active }: { groupId: string; active: boolean }) =
           <Text>Show older</Text>
         </Button>
       ) : null}
-      <Text className="mt-3 text-center text-sm text-muted-foreground">
-        History is kept for 14 days.
-      </Text>
+      <Text className="mt-3 text-center text-sm text-tertiary">History is kept for 14 days.</Text>
     </View>
   );
 };

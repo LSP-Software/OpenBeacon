@@ -130,7 +130,7 @@ const SignUp = () => {
   const googleSignUp = isGoogleEnabled ? (
     <>
       <Button
-        variant="outline"
+        variant="secondary"
         onPress={handleGoogleSignUp}
         loading={googleLoading}
         disabled={isSubmitting || googleLoading}
@@ -139,7 +139,7 @@ const SignUp = () => {
       </Button>
       <View className="flex-row items-center gap-4">
         <View className="flex-1 h-px bg-border" />
-        <Text className="text-sm uppercase tracking-[0.18em] text-muted">or</Text>
+        <Text className="text-sm uppercase tracking-[0.18em] text-secondary">or</Text>
         <View className="flex-1 h-px bg-border" />
       </View>
     </>
@@ -172,7 +172,7 @@ const SignUp = () => {
               <Text className="font-bold text-5xl">
                 {step.name === "code" ? "Check your\nemail." : "Create\naccount."}
               </Text>
-              <Text className="text-lg text-muted">
+              <Text className="text-lg text-secondary">
                 {step.name === "code"
                   ? "Enter the code we emailed you"
                   : step.name === "details"
@@ -222,7 +222,7 @@ const SignUp = () => {
               ) : (
                 <>
                   {step.name === "details" ? (
-                    <Text className="text-muted">
+                    <Text className="text-secondary">
                       Creating an account for <Text className="font-semibold">{step.email}</Text>
                     </Text>
                   ) : (
@@ -270,7 +270,7 @@ const SignUp = () => {
             <View className="items-center gap-4 pt-2">
               <Link href={{ pathname: "/signIn", params: { joinCode } }} asChild>
                 <Pressable accessibilityRole="link">
-                  <Text className="text-muted">
+                  <Text className="text-secondary">
                     Already have an account?{" "}
                     <Text className="font-semibold text-primary-text">Sign in</Text>
                   </Text>

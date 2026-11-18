@@ -5,10 +5,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { ConfirmIdentity } from "../../components/ConfirmIdentity.tsx";
 import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
-import { BackButton } from "../../components/headers/BackButton.tsx";
+import { ScreenHeader } from "../../components/headers/ScreenHeader.tsx";
 import { NewRecoveryPhrase } from "../../components/NewRecoveryPhrase.tsx";
 import { RecoveryCoverage } from "../../components/RecoveryCoverage.tsx";
 import { Button } from "../../components/ui/Button.tsx";
@@ -73,13 +72,7 @@ const RecoveryPhraseSetupScreen = () => {
 
   return (
     <View className="flex-1 bg-background">
-      <SafeAreaView edges={["top"]} className="border-b border-border bg-background px-6 py-4">
-        <View className="flex-row items-center justify-between">
-          {step === "saving" || step === "protecting" ? <View className="w-10" /> : <BackButton />}
-          <Text className="text-foreground text-2xl font-bold">Recovery phrase</Text>
-          <View className="w-10" />
-        </View>
-      </SafeAreaView>
+      <ScreenHeader title="Recovery phrase" hideBack={step === "saving" || step === "protecting"} />
 
       <KeyboardAvoidingView
         className="flex-1"
@@ -112,7 +105,7 @@ const RecoveryPhraseSetupScreen = () => {
           {step === "protecting" && (
             <View className="gap-4">
               <Text className="text-foreground text-3xl font-bold">Protecting your history</Text>
-              <Text accessibilityLiveRegion="polite" className="text-muted-foreground text-base">
+              <Text accessibilityLiveRegion="polite" className="text-tertiary text-base">
                 {progress.total === 0
                   ? "Checking your groups…"
                   : `Protected ${progress.done} of ${progress.total} groups.`}
@@ -123,11 +116,11 @@ const RecoveryPhraseSetupScreen = () => {
           {step === "done" && (
             <View className="gap-4">
               <Text className="text-foreground text-3xl font-bold">Your phrase is set up</Text>
-              <Text className="text-muted-foreground text-base leading-6">
+              <Text className="text-tertiary text-base leading-6">
                 Use it to get your location history back if you lose or replace your phone.
               </Text>
               {progress.failed > 0 && (
-                <Text className="text-muted-foreground text-base leading-6">
+                <Text className="text-tertiary text-base leading-6">
                   Some history couldn’t be protected yet. OpenBeacon will keep trying in the
                   background.
                 </Text>

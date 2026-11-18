@@ -336,10 +336,10 @@ const AccountScreen = () => {
             <View className="flex-row items-start justify-between gap-3">
               <View className="flex-1 gap-1">
                 <Text className="text-foreground font-semibold text-2xl">{session?.user.name}</Text>
-                <Text className="text-muted-foreground text-base">{session?.user.email}</Text>
+                <Text className="text-tertiary text-base">{session?.user.email}</Text>
               </View>
               <Button
-                variant="outline"
+                variant="secondary"
                 size="sm"
                 accessibilityLabel="Edit name"
                 onPress={() => {
@@ -357,7 +357,7 @@ const AccountScreen = () => {
                 <Text className="text-foreground font-bold text-xl">
                   {groups.isError ? "—" : (groups.data?.length ?? "—")}
                 </Text>
-                <Text className="text-muted-foreground text-base font-medium">Groups</Text>
+                <Text className="text-tertiary text-base font-medium">Groups</Text>
               </View>
 
               <Separator className="my-4" orientation="vertical" />
@@ -367,7 +367,7 @@ const AccountScreen = () => {
                   <Text className="text-foreground font-bold text-xl">
                     {devices.isError ? "—" : (devices.data?.length ?? "—")}
                   </Text>
-                  <Text className="text-muted-foreground text-base font-medium">Devices</Text>
+                  <Text className="text-tertiary text-base font-medium">Devices</Text>
                 </Pressable>
               </Link>
             </View>
@@ -414,7 +414,7 @@ const AccountScreen = () => {
             </Link>
             <Button
               size="sm"
-              variant="outline"
+              variant="secondary"
               onPress={() => {
                 storage.set(recoveryPromptKey, true);
                 setRecoveryPromptDismissed(true);
@@ -443,7 +443,7 @@ const AccountScreen = () => {
             </Link>
             <Button
               size="sm"
-              variant="outline"
+              variant="secondary"
               onPress={() => {
                 if (session?.user.id) {
                   dismissRestoreCard({
@@ -463,7 +463,7 @@ const AccountScreen = () => {
 
         <View className="mb-28 gap-3">
           {signOutPhase && (
-            <Text accessibilityLiveRegion="polite" className="text-muted">
+            <Text accessibilityLiveRegion="polite" className="text-secondary">
               {signOutPhase === "uploading"
                 ? "Uploading saved locations before signing out. This may take up to 10 seconds; any remaining locations will be saved for your next sign-in."
                 : "Contacting the server to sign out."}

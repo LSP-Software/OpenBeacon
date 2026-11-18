@@ -2,8 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, router } from "expo-router";
 import { useEffect } from "react";
 import { ScrollView, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { BackButton } from "../../components/headers/BackButton.tsx";
+import { ScreenHeader } from "../../components/headers/ScreenHeader.tsx";
 import { Button } from "../../components/ui/Button.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { trpc } from "../../lib/api.ts";
@@ -25,13 +24,7 @@ const WaitingForPhraseScreen = () => {
 
   return (
     <View className="flex-1 bg-background">
-      <SafeAreaView edges={["top"]} className="border-b border-border bg-background px-6 py-4">
-        <View className="flex-row items-center justify-between">
-          <BackButton />
-          <Text className="text-foreground text-2xl font-bold">Set up</Text>
-          <View className="w-10" />
-        </View>
-      </SafeAreaView>
+      <ScreenHeader title="Set up" />
       <ScrollView
         className="flex-1"
         contentContainerClassName="gap-6 px-6 py-6 pb-16"
@@ -52,10 +45,7 @@ const WaitingForPhraseScreen = () => {
             </View>
           ))}
         </View>
-        <Text
-          accessibilityLiveRegion="polite"
-          className="text-muted-foreground text-base leading-6"
-        >
+        <Text accessibilityLiveRegion="polite" className="text-tertiary text-base leading-6">
           {status.isError
             ? "We can’t reach the server right now. We’ll keep trying."
             : `Waiting for your phrase. This ${noun} moves on as soon as it’s ready.`}

@@ -114,10 +114,8 @@ const WelcomeScreen = () => {
         ))}
       </View>
       <View className="flex-row items-center justify-center gap-2">
-        <Icon as={LockIcon} className="text-muted-foreground size-4" />
-        <Text className="text-muted-foreground text-sm">
-          Your location is end-to-end encrypted.
-        </Text>
+        <Icon as={LockIcon} className="text-tertiary size-4" />
+        <Text className="text-tertiary text-sm">Your location is end-to-end encrypted.</Text>
       </View>
     </OnboardingScreen>
   );

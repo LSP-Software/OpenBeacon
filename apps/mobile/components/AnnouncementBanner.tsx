@@ -84,9 +84,7 @@ export const AnnouncementBanner = ({ className }: { className?: string }) => {
             )}
           </Text>
         ) : null}
-        {server ? (
-          <Text className="text-sm text-muted-foreground">From your server, {server}</Text>
-        ) : null}
+        {server ? <Text className="text-sm text-tertiary">From your server, {server}</Text> : null}
       </View>
       <Pressable
         accessibilityRole="button"
@@ -95,7 +93,7 @@ export const AnnouncementBanner = ({ className }: { className?: string }) => {
         hitSlop={4}
         onPress={() => dismissAnnouncement(announcement)}
       >
-        <Icon as={XIcon} size={18} className="text-muted-foreground" />
+        <Icon as={XIcon} size={18} className="text-tertiary" />
       </Pressable>
     </View>
   );

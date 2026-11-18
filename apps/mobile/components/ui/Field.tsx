@@ -73,7 +73,7 @@ function FieldLabel({ className, ...props }: React.ComponentProps<typeof Label>)
     <Label
       className={cn(
         {
-          "text-destructive": field.invalid,
+          "text-destructive-text": field.invalid,
         },
         className,
       )}
@@ -99,7 +99,7 @@ function FieldTitle({ className, ...props }: React.ComponentProps<typeof Text>) 
 }
 
 function FieldDescription({ className, ...props }: React.ComponentProps<typeof Text>) {
-  return <Text className={cn("text-muted-foreground text-sm", className)} {...props} />;
+  return <Text className={cn("text-tertiary text-sm", className)} {...props} />;
 }
 
 function FieldSeparator({
@@ -113,7 +113,7 @@ function FieldSeparator({
     <View className={cn("relative h-5 justify-center", className)} {...props}>
       <View className="border-border absolute inset-0 top-1/2 border-t" />
       {!!children && (
-        <Text className="bg-background text-muted-foreground mx-auto px-2 text-sm">{children}</Text>
+        <Text className="bg-background text-tertiary mx-auto px-2 text-sm">{children}</Text>
       )}
     </View>
   );
@@ -151,7 +151,7 @@ function FieldError({
     return (
       <View className="gap-1">
         {uniqueErrors.map((error) => (
-          <Text key={error?.message} className="text-destructive text-sm font-normal">
+          <Text key={error?.message} className="text-destructive-text text-sm font-normal">
             {`\u2022 ${error?.message}`}
           </Text>
         ))}
@@ -166,7 +166,7 @@ function FieldError({
   return (
     <View className={cn("gap-1", className)} {...props}>
       {typeof content === "string" ? (
-        <Text className="text-destructive text-sm font-normal">{content}</Text>
+        <Text className="text-destructive-text text-sm font-normal">{content}</Text>
       ) : (
         content
       )}

@@ -156,7 +156,7 @@ const SignIn = () => {
                     ? "Check your\nemail."
                     : "Welcome\nback."}
               </Text>
-              <Text className="text-lg text-muted">
+              <Text className="text-lg text-secondary">
                 {unverified
                   ? "Confirm your email address to finish signing in"
                   : signInCode
@@ -180,7 +180,7 @@ const SignIn = () => {
                   accessibilityRole="button"
                   accessibilityState={{ disabled: emailLoading }}
                 >
-                  <Text className={emailLoading ? "text-muted" : "text-secondary"}>
+                  <Text className={emailLoading ? "text-secondary" : "text-secondary"}>
                     Back to sign in
                   </Text>
                 </Pressable>
@@ -220,7 +220,7 @@ const SignIn = () => {
                 {isGoogleEnabled ? (
                   <>
                     <Button
-                      variant="outline"
+                      variant="secondary"
                       onPress={handleGoogleSignIn}
                       loading={googleLoading}
                       disabled={isSubmitting || googleLoading}
@@ -229,7 +229,7 @@ const SignIn = () => {
                     </Button>
                     <View className="flex-row items-center gap-4">
                       <View className="flex-1 h-px bg-border" />
-                      <Text className="text-sm uppercase tracking-[0.18em] text-muted">or</Text>
+                      <Text className="text-sm uppercase tracking-[0.18em] text-secondary">or</Text>
                       <View className="flex-1 h-px bg-border" />
                     </View>
                   </>
@@ -278,7 +278,7 @@ const SignIn = () => {
             <View className="items-center gap-4 pt-2">
               <Link href={{ pathname: "/signUp", params: { joinCode } }} asChild>
                 <Pressable accessibilityRole="link">
-                  <Text className="text-muted">
+                  <Text className="text-secondary">
                     Don't have an account?{" "}
                     <Text className="font-semibold text-primary-text">Create one</Text>
                   </Text>
