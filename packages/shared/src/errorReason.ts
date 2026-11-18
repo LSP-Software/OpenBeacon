@@ -26,6 +26,8 @@ export const errorReasons = [
   "IMAGE_CHANGED",
   "SIGN_IN_CODE_REQUIRED",
   "SIGN_IN_CODES_UNAVAILABLE",
+  "GROUP_OWNER",
+  "OWNERSHIP_OFFER_GONE",
 ] as const;
 
 export type ErrorReason = (typeof errorReasons)[number];

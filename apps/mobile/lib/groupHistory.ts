@@ -57,7 +57,7 @@ export const describeGroupEvent = ({
   const subject = person(event.subject, false);
   const place = `${event.emoji ?? ""} ${event.name ?? ""}`.trim();
   const role =
-    event.role === "OWNER" ? "an owner" : event.role === "ADMIN" ? "an admin" : "a member";
+    event.role === "ADMIN" ? "an Admin" : event.role === "EDITOR" ? "an Editor" : "a Member";
   switch (event.type) {
     case "GROUP_CREATED":
       return `${actor} created the group`;
@@ -74,7 +74,7 @@ export const describeGroupEvent = ({
         return `${actor} became ${role}`;
       }
       return event.role === "MEMBER"
-        ? `${actor} changed ${subject === "you" ? "your" : `${subject}’s`} role to member`
+        ? `${actor} changed ${subject === "you" ? "your" : `${subject}’s`} role to Member`
         : `${actor} made ${subject} ${role}`;
     case "GROUP_RENAMED":
       if (!event.name) return `${actor} renamed the group`;
@@ -91,6 +91,8 @@ export const describeGroupEvent = ({
         : `${actor} edited ${place}`;
     case "PLACE_DELETED":
       return `${actor} deleted ${place}`;
+    case "OWNER_CHANGED":
+      return `${actor} took over as owner from ${subject}`;
   }
 };
 

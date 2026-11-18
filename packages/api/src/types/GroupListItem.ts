@@ -8,6 +8,8 @@ export interface GroupListItem {
   name: string;
   image: string | null;
   imageKey: StoredImageKey | null;
+  ownerId: string;
+  ownershipOfferedToId: string | null;
   members: {
     id: string;
     userId: string;

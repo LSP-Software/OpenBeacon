@@ -53,22 +53,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await prisma.$disconnect();
     });
 
-    test("rejects a sole owner, revokes all sessions, and cancels on successful login", async () => {
+    test("schedules an owner's deletion, revokes all sessions, and cancels on successful login", async () => {
       const initialSession = await prisma.session.findFirstOrThrow({ where: { userId } });
       const otherUser = `${userId}-member`;
       await prisma.user.create({
         data: { id: otherUser, email: `${otherUser}@example.test`, name: "Member" },
-      });
-      const group = await prisma.group.create({
-        data: {
-          name: "Group",
-          groupMembers: {
-            create: [
-              { userId, role: "OWNER", joinedEpochNumber: 1 },
-              { userId: otherUser, role: "MEMBER", joinedEpochNumber: 1 },
-            ],
-          },
-        },
       });
       await expect(
         caller(initialSession.id).account.requestDeletion({ password: "incorrect" }),
@@ -77,21 +66,19 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect((await prisma.user.findUniqueOrThrow({ where: { id: userId } })).pendingDeletion).toBe(
         false,
       );
-      await expect(caller(initialSession.id).account.requestDeletion({ password })).rejects.toThrow(
-        "Transfer ownership",
-      );
-      expect((await prisma.user.findUniqueOrThrow({ where: { id: userId } })).pendingDeletion).toBe(
-        false,
-      );
-      await prisma.group.delete({ where: { id: group.id } });
-      await prisma.user.delete({ where: { id: otherUser } });
       await expect(
         caller("revoked-session").account.requestDeletion({ password }),
       ).rejects.toThrow();
-      const soloGroup = await prisma.group.create({
+      const ownedGroup = await prisma.group.create({
         data: {
-          name: "Solo",
-          groupMembers: { create: { userId, role: "OWNER", joinedEpochNumber: 1 } },
+          name: "Owned",
+          ownerId: userId,
+          groupMembers: {
+            create: [
+              { userId, role: "ADMIN", joinedEpochNumber: 1 },
+              { userId: otherUser, role: "MEMBER", joinedEpochNumber: 1 },
+            ],
+          },
         },
       });
       const inviteeId = `${userId}-invitee`;
@@ -113,13 +100,13 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         },
       });
       const invite = await prisma.groupMemberInvite.create({
-        data: { inviterId: userId, recipientId: inviteeId, groupId: soloGroup.id, role: "MEMBER" },
+        data: { inviterId: userId, recipientId: inviteeId, groupId: ownedGroup.id, role: "MEMBER" },
       });
       const sharedCode = "A".repeat(32);
       await prisma.groupSharedInvite.create({
         data: {
           creatorId: userId,
-          groupId: soloGroup.id,
+          groupId: ownedGroup.id,
           codeHash: createHash("sha256").update(sharedCode).digest("hex"),
           expiresAt: new Date(Date.now() + 60_000),
         },
@@ -128,8 +115,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(await prisma.session.count({ where: { userId } })).toBe(2);
       const before = Date.now();
       const scheduled = await caller(initialSession.id).account.requestDeletion({ password });
-      expect(await prisma.groupMemberInvite.count({ where: { groupId: soloGroup.id } })).toBe(0);
-      expect(await prisma.groupSharedInvite.count({ where: { groupId: soloGroup.id } })).toBe(0);
+      expect(await prisma.groupMemberInvite.count({ where: { groupId: ownedGroup.id } })).toBe(0);
+      expect(await prisma.groupSharedInvite.count({ where: { groupId: ownedGroup.id } })).toBe(0);
       const invitee = appRouter.createCaller(
         withDeviceActive({
           cache,
@@ -166,9 +153,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         invitee.groupInvites.acceptShared({ code: sharedCode, nextEpoch }),
       ).rejects.toThrow("Invite is invalid or expired");
       await expect(
-        caller(initialSession.id).groupInvites.createShared({ groupId: soloGroup.id }),
+        caller(initialSession.id).groupInvites.createShared({ groupId: ownedGroup.id }),
       ).rejects.toThrow();
-      expect(await prisma.group.findUnique({ where: { id: soloGroup.id } })).not.toBeNull();
+      expect(await prisma.group.findUnique({ where: { id: ownedGroup.id } })).not.toBeNull();
       expect(scheduled.deletionDate.getTime()).toBeGreaterThanOrEqual(
         before + 7 * 24 * 60 * 60 * 1000,
       );
@@ -204,7 +191,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(await caller(laterSession.id).account.deletionCancellationNotice()).toEqual({
         cancelled: false,
       });
-      await prisma.user.delete({ where: { id: inviteeId } });
+      await prisma.user.deleteMany({ where: { id: { in: [inviteeId, otherUser] } } });
     }, 20_000);
     test("rechecks the deadline after waiting for the account lock", async () => {
       await prisma.session.deleteMany({ where: { userId } });
@@ -239,7 +226,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       );
       expect(await prisma.session.count({ where: { userId } })).toBe(0);
     });
-    test("concurrent owner requests cannot leave a group without an available owner", async () => {
+    test("concurrent requests from a group's owner and another Admin both schedule deletion", async () => {
       const firstEmail = `first-${crypto.randomUUID()}@example.test`;
       const secondEmail = `second-${crypto.randomUUID()}@example.test`;
       const first = await auth.api.signUpEmail({
@@ -257,10 +244,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const group = await prisma.group.create({
         data: {
           name: "Owners",
+          ownerId: first.user.id,
           groupMembers: {
             create: [
-              { userId: first.user.id, role: "OWNER", joinedEpochNumber: 1 },
-              { userId: second.user.id, role: "OWNER", joinedEpochNumber: 1 },
+              { userId: first.user.id, role: "ADMIN", joinedEpochNumber: 1 },
+              { userId: second.user.id, role: "ADMIN", joinedEpochNumber: 1 },
             ],
           },
         },
@@ -284,13 +272,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           request(first.user.id, firstEmail, firstSession.id),
           request(second.user.id, secondEmail, secondSession.id),
         ]);
-        expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
-        expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+        expect(results.map((result) => result.status)).toEqual(["fulfilled", "fulfilled"]);
         expect(
           await prisma.user.count({
             where: { id: { in: [first.user.id, second.user.id] }, pendingDeletion: true },
           }),
-        ).toBe(1);
+        ).toBe(2);
       } finally {
         await prisma.group.deleteMany({ where: { id: group.id } });
         await prisma.user.deleteMany({ where: { id: { in: [first.user.id, second.user.id] } } });
@@ -473,10 +460,11 @@ test.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: {
           id: heavyGroup,
           name: "Heavy",
+          ownerId: heavyUserId,
           groupMembers: {
             create: [
-              { userId: heavyUserId, role: "OWNER", joinedEpochNumber: 1 },
-              { userId: partner, role: "OWNER", joinedEpochNumber: 1 },
+              { userId: heavyUserId, role: "ADMIN", joinedEpochNumber: 1 },
+              { userId: partner, role: "ADMIN", joinedEpochNumber: 1 },
             ],
           },
         },

@@ -102,6 +102,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: {
           id: groupId,
           name: "Family",
+          ownerId: owner,
           groupEpochs: {
             create: { id: `${groupId}-epoch`, epochNumber: 1, senderPublicKey: "public-key" },
           },
@@ -129,7 +130,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await prisma.groupMember.deleteMany({ where: { groupId } });
       await prisma.groupMember.createMany({
         data: [
-          { userId: owner, role: "OWNER" as const },
+          { userId: owner, role: "ADMIN" as const },
           { userId: member, role: "MEMBER" as const },
         ].map((row) => ({ ...row, groupId, joinedEpochNumber: 1, createdAt: ago(10 * day) })),
       });
@@ -264,7 +265,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             type: "ROLE_CHANGED" as const,
             actorUserId: owner,
             subjectUserId: member,
-            role: "ADMIN" as const,
+            role: "EDITOR" as const,
             createdAt: ago(2 * minute),
           },
           {
@@ -366,12 +367,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await caller(owner).groupMembership.updateRole({
         groupId,
         memberId: memberRow.id,
-        role: "ADMIN",
+        role: "EDITOR",
       });
       await caller(owner).groupMembership.updateRole({
         groupId,
         memberId: memberRow.id,
-        role: "ADMIN",
+        role: "EDITOR",
       });
       await caller(member).groupSettings.rename({ groupId, name: "Kings" });
       await caller(member).groupSettings.rename({ groupId, name: "Kings" });
@@ -379,7 +380,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         caller(member).groupMembership.updateRole({
           groupId,
           memberId: memberRow.id,
-          role: "OWNER",
+          role: "ADMIN",
         }),
       ).rejects.toMatchObject({ code: "FORBIDDEN" });
 
@@ -397,7 +398,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           type: "ROLE_CHANGED",
           actor: { userId: owner },
           subject: { userId: member },
-          role: "ADMIN",
+          role: "EDITOR",
         },
       ]);
       expect(items).toHaveLength(2);

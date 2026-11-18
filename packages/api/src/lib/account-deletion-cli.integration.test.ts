@@ -85,34 +85,13 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await prisma.$disconnect();
     });
     afterEach(removeSeededData);
-    test("a refused deletion keeps location history, memberships and sessions", async () => {
-      const group = await prisma.group.create({
-        data: {
-          name: "Shared group",
-          groupMembers: {
-            create: [
-              { userId, role: "OWNER", joinedEpochNumber: 1 },
-              { userId: memberId, role: "MEMBER", joinedEpochNumber: 1 },
-            ],
-          },
-        },
-      });
-      await seedHistory(group.id);
-      const before = await accountState();
-
-      const refused = await run(email);
-
-      expect(refused.code).toBe(1);
-      expect(refused.error).toContain("Transfer ownership");
-      expect(await accountState()).toEqual(before);
-      expect(before).toMatchObject({ payloads: 3, memberships: 1, sessions: 1 });
-    });
     test("a group image the server can't identify refuses before deleting history", async () => {
       const group = await prisma.group.create({
         data: {
           name: "Solo group",
+          ownerId: userId,
           image: "https://elsewhere.example/file/old-bucket/group.webp",
-          groupMembers: { create: [{ userId, role: "OWNER", joinedEpochNumber: 1 }] },
+          groupMembers: { create: [{ userId, role: "ADMIN", joinedEpochNumber: 1 }] },
         },
       });
       await seedHistory(group.id);
@@ -124,25 +103,27 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(await accountState()).toEqual(before);
       expect(before.payloads).toBe(3);
     });
-    test("deletes an account and returns a failure for an unknown email", async () => {
+    test("deletes an account with the groups it owns and returns a failure for an unknown email", async () => {
       const group = await prisma.group.create({
         data: {
           name: "Owner group",
+          ownerId: userId,
           groupMembers: {
             create: [
-              { userId, role: "OWNER", joinedEpochNumber: 1 },
+              { userId, role: "ADMIN", joinedEpochNumber: 1 },
               { userId: memberId, role: "MEMBER", joinedEpochNumber: 1 },
             ],
           },
         },
       });
-      expect((await run(email)).code).toBe(1);
-      expect(await prisma.user.findUnique({ where: { id: userId } })).not.toBeNull();
-      await prisma.group.delete({ where: { id: group.id } });
+      await seedHistory(group.id);
       const deleted = await run(email);
       expect(deleted.code).toBe(0);
       expect(deleted.output).toContain("Account deleted");
       expect(await prisma.user.findUnique({ where: { id: userId } })).toBeNull();
+      expect(await prisma.group.findUnique({ where: { id: group.id } })).toBeNull();
+      expect(await prisma.user.findUnique({ where: { id: memberId } })).not.toBeNull();
+      expect(await prisma.trackingStream.count({ where: { groupId: group.id } })).toBe(0);
       expect(await prisma.accountDeletionCleanup.findUnique({ where: { userId } })).not.toBeNull();
       expect((await run(email)).code).toBe(1);
     });

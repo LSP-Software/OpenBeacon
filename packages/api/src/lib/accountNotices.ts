@@ -85,6 +85,7 @@ export const readAccountNotices = ({
             deletionDate: true,
             turnedOffEmail: true,
             turnedOffPhone: true,
+            group: { select: { id: true, name: true } },
             createdAt: true,
           },
         })
@@ -108,6 +109,7 @@ export const readAccountNotices = ({
           ...notice.turnedOffPhone.map((type) => ({ type, channel: "phone" as const })),
           ...notice.turnedOffEmail.map((type) => ({ type, channel: "email" as const })),
         ],
+        group: notice.group,
       })),
   });
 

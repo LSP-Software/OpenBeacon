@@ -629,7 +629,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: {
           id: groupId,
           name: "Group",
-          groupMembers: { create: { userId: resetUser, role: "OWNER", joinedEpochNumber: 1 } },
+          ownerId: resetUser,
+          groupMembers: { create: { userId: resetUser, role: "ADMIN", joinedEpochNumber: 1 } },
           groupEpochs: {
             create: { id: epoch.epoch.epochId, epochNumber: 1, senderPublicKey: device.publicKey },
           },

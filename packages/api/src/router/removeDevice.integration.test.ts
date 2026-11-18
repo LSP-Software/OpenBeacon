@@ -70,7 +70,8 @@ const createAccount = async () => {
   const group = await prisma.group.create({
     data: {
       name: "Family",
-      groupMembers: { create: { userId: user.id, role: "OWNER", joinedEpochNumber: 1 } },
+      ownerId: user.id,
+      groupMembers: { create: { userId: user.id, role: "ADMIN", joinedEpochNumber: 1 } },
     },
   });
   return {

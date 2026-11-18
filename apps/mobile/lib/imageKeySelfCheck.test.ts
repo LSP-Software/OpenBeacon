@@ -23,13 +23,15 @@ type Group = {
   name: string;
   image: string | null;
   imageKey: EncryptedImageKey | null;
+  ownerId: string;
+  ownershipOfferedToId: string | null;
   members: {
     id: string;
     userId: string;
     name: string;
     image: string | null;
     imageKey: EncryptedImageKey | null;
-    role: "OWNER" | "ADMIN" | "MEMBER";
+    role: "ADMIN" | "EDITOR" | "MEMBER";
   }[];
 };
 
@@ -174,15 +176,17 @@ const user = { id: "user-a", image: url(ME_FILE), imageKeySealed: null };
 const makeGroup = ({
   groupKey,
   ownGroupKey,
-  role = "ADMIN",
+  role = "EDITOR",
 }: {
   groupKey?: EncryptedImageKey | null;
   ownGroupKey?: EncryptedImageKey | null;
-  role?: "OWNER" | "ADMIN" | "MEMBER";
+  role?: "ADMIN" | "EDITOR" | "MEMBER";
 }): Group => ({
   id: groupId,
   name: "Family",
   image: url(GROUP_FILE),
+  ownerId: "user-a",
+  ownershipOfferedToId: null,
   imageKey:
     groupKey === undefined
       ? wrap({
@@ -209,7 +213,7 @@ const makeGroup = ({
           : ownGroupKey,
       role,
     },
-    { id: "m-b", userId: "user-b", name: "Bea", image: null, imageKey: null, role: "OWNER" },
+    { id: "m-b", userId: "user-b", name: "Bea", image: null, imageKey: null, role: "ADMIN" },
   ],
 });
 
@@ -350,12 +354,12 @@ test("an admin's phone repairs a group key that doesn't decrypt without download
     kind: "group-image-key",
     ownerId: "school",
   });
-  expect(await check([makeGroup({ groupKey: wrongOwner, role: "OWNER" })])).toBe(true);
+  expect(await check([makeGroup({ groupKey: wrongOwner, role: "ADMIN" })])).toBe(true);
   expect(downloads).toHaveLength(0);
   expect(uploads).toHaveLength(1);
 });
 
-test("only owners and admins check the group key, and only with the picture cached", async () => {
+test("only Admins and Editors check the group key, and only with the picture cached", async () => {
   const junk = () =>
     wrap({
       fileName: GROUP_FILE,

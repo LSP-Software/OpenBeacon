@@ -24,13 +24,14 @@ export const groupLifecycleRouter = {
           await tx.$queryRaw(
             Prisma.sql`SELECT id FROM "Group" WHERE id = ${input.groupId} FOR UPDATE`,
           );
-          const actor = await tx.groupMember.findUnique({
-            where: { userId_groupId: { userId: ctx.session.user.id, groupId: input.groupId } },
+          const group = await tx.group.findUnique({
+            where: { id: input.groupId },
+            select: { ownerId: true },
           });
-          if (actor?.role !== GroupRole.OWNER) {
+          if (group?.ownerId !== ctx.session.user.id) {
             throw new TRPCError({
               code: "FORBIDDEN",
-              message: "Only owners can delete the group.",
+              message: "Only the owner can delete the group.",
             });
           }
           if (
@@ -76,10 +77,11 @@ export const groupLifecycleRouter = {
           data: {
             id: input.groupId,
             name: input.name,
+            ownerId: ctx.session.user.id,
             groupMembers: {
               create: {
                 userId: ctx.session.user.id,
-                role: GroupRole.OWNER,
+                role: GroupRole.ADMIN,
                 joinedEpochNumber: input.initialEpoch.epochNumber,
                 createdAt: await readDatabaseTime(tx),
               },
@@ -136,6 +138,8 @@ export const groupLifecycleRouter = {
           name: group.name,
           image: group.image,
           imageKey: null,
+          ownerId: group.ownerId,
+          ownershipOfferedToId: null,
           members: group.groupMembers.map((member) => ({
             id: member.id,
             userId: member.user.id,

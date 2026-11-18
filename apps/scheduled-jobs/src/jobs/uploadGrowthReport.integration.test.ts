@@ -32,6 +32,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("upload growth re
         data: {
           id: groupId,
           name: groupId,
+          ownerId: heavyId,
           groupEpochs: {
             create: {
               id: `${groupId}-epoch`,

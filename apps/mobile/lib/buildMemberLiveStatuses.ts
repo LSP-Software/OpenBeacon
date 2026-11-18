@@ -1,7 +1,7 @@
 import type { MapMemberDevice } from "./mapPeopleTypes.ts";
 import type { LiveMapPosition } from "./mapTrackingTypes.ts";
 
-export const buildMemberLiveStatuses = ({
+export const buildMemberLiveStatuses = <Role extends string>({
   memberDevices = [],
   members,
   positions,
@@ -9,7 +9,7 @@ export const buildMemberLiveStatuses = ({
   memberDevices?: readonly MapMemberDevice[];
   members: readonly {
     id: string;
-    role: "OWNER" | "ADMIN" | "MEMBER";
+    role: Role;
     nickname?: string | null;
     user: {
       id: string;

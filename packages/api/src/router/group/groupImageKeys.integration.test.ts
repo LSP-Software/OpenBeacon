@@ -193,12 +193,13 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: {
           id: groupId,
           name: "Family",
+          ownerId: owner,
           groupMembers: {
             create: [
-              { userId: owner, role: "OWNER", joinedEpochNumber: 1 },
-              { userId: admin, role: "ADMIN", joinedEpochNumber: 1 },
+              { userId: owner, role: "ADMIN", joinedEpochNumber: 1 },
+              { userId: admin, role: "EDITOR", joinedEpochNumber: 1 },
               { userId: member, role: "MEMBER", joinedEpochNumber: 2 },
-              { userId: uploader, role: "ADMIN", joinedEpochNumber: 1 },
+              { userId: uploader, role: "EDITOR", joinedEpochNumber: 1 },
             ],
           },
           groupEpochs: {
@@ -213,9 +214,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: {
           id: secondGroupId,
           name: "Friends",
+          ownerId: owner,
           groupMembers: {
             create: [
-              { userId: owner, role: "OWNER", joinedEpochNumber: 1 },
+              { userId: owner, role: "ADMIN", joinedEpochNumber: 1 },
               { userId: member, role: "MEMBER", joinedEpochNumber: 1 },
             ],
           },
@@ -228,7 +230,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: {
           id: otherGroupId,
           name: "Other",
-          groupMembers: { create: [{ userId: outsider, role: "OWNER", joinedEpochNumber: 1 }] },
+          ownerId: outsider,
+          groupMembers: { create: [{ userId: outsider, role: "ADMIN", joinedEpochNumber: 1 }] },
           groupEpochs: {
             create: [{ id: otherEpochId, epochNumber: 1, senderPublicKey: "public-key" }],
           },
@@ -886,7 +889,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: { id: deletedUploader, name: "Uploader", email: `${deletedUploader}@example.test` },
       });
       await prisma.groupMember.create({
-        data: { userId: deletedUploader, groupId, role: "ADMIN", joinedEpochNumber: 1 },
+        data: { userId: deletedUploader, groupId, role: "EDITOR", joinedEpochNumber: 1 },
       });
       const fileName = crypto.randomUUID();
       const key = wrap({

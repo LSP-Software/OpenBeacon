@@ -8,7 +8,7 @@ import { createReactNativeTestModule } from "./reactNativeTestModule.ts";
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-let role = "OWNER";
+let role = "ADMIN";
 let places: GroupPlace[] = [];
 let sharing = { enabled: true, arrivalsOff: [] as { userId: string; deviceId: string }[] };
 let sharingFailed = false;
@@ -148,7 +148,7 @@ const render = async () => {
 };
 
 beforeEach(() => {
-  role = "OWNER";
+  role = "ADMIN";
   sharing = { enabled: true, arrivalsOff: [] };
   sharingFailed = false;
   notificationRequests = 0;
@@ -165,9 +165,9 @@ test("shows each place with its size and who's here, and places still syncing", 
   expect(text).toContain("switch:on");
 });
 
-test("only owners and admins can add places", async () => {
+test("only Admins and Editors can add places", async () => {
   expect(await render()).toContain("Add place");
-  role = "ADMIN";
+  role = "EDITOR";
   expect(await render()).toContain("Add place");
   role = "MEMBER";
   const memberView = await render();
@@ -175,7 +175,7 @@ test("only owners and admins can add places", async () => {
   expect(memberView).toContain("Home");
 });
 
-test("the empty state only offers adding a place to admins", async () => {
+test("the empty state only offers adding a place to Admins and Editors", async () => {
   places = [];
   expect(await render()).toContain("Add your first place");
   role = "MEMBER";

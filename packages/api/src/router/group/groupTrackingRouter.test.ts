@@ -23,7 +23,7 @@ import { testClientPointId } from "../../lib/trackingPoints.testUtil.ts";
 const validNonce = Buffer.alloc(24, 1).toString("base64");
 
 const createMemberFindUniqueMock = (isMember: boolean) =>
-  mock(async () => (isMember ? { id: "group-member-1", role: "OWNER", userId: "user-1" } : null));
+  mock(async () => (isMember ? { id: "group-member-1", role: "ADMIN", userId: "user-1" } : null));
 
 const pointIdsOf = (clientPointIds: string[]) =>
   clientPointIds.map((clientPointId) => parseClientPointId(clientPointId).pointId.toString());

@@ -84,7 +84,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Image upload cle
       },
     });
     await prisma.group.create({
-      data: { id: groupId, name: "Group", image: url(groupKey("group-current.webp")) },
+      data: {
+        id: groupId,
+        name: "Group",
+        ownerId: userId,
+        image: url(groupKey("group-current.webp")),
+      },
     });
   });
 
@@ -278,6 +283,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Image upload cle
       data: {
         id: otherGroupId,
         name: "Group",
+        ownerId: userId,
         image: `${env.IMAGES_S3_CDN_URL}/other-bucket/user/${userId}/uploads/group/${otherGroupId}/avatar/a.webp`,
       },
     });

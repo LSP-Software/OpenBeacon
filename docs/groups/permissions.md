@@ -1,23 +1,30 @@
 # Group permissions
 
-| Action                                  | Owner                        | Admin | Member |
-| --------------------------------------- | ---------------------------- | ----- | ------ |
-| View group members and shared locations | Yes                          | Yes   | Yes    |
-| View history since their latest join    | Yes                          | Yes   | Yes    |
-| Invite a member by email, link, or code | Yes                          | Yes   | No     |
-| Invite an admin by email                | Yes                          | No    | No     |
-| Rename the group or change its image    | Yes                          | Yes   | No     |
-| Remove a member                         | Yes                          | Yes   | No     |
-| Remove an admin                         | Yes                          | No    | No     |
-| Remove another owner                    | Yes, if an owner remains     | No    | No     |
-| Change roles                            | Yes, if an owner remains     | No    | No     |
-| Add, edit or delete places              | Yes                          | Yes   | No     |
-| Re-encrypt places for later joiners     | Yes                          | Yes   | Yes    |
-| Turn off this phone's arrivals          | Yes                          | Yes   | Yes    |
-| Mute place alerts for themselves        | Yes                          | Yes   | Yes    |
-| Delete the group                        | Yes                          | No    | No     |
-| Leave the group                         | Yes, with an owner remaining | Yes   | Yes    |
+Every group has one owner: the account whose seats the group uses. The owner is always an Admin, so the Owner column lists what the owner can do on top of being an Admin.
 
-The creator is an owner. Owners may promote members to owner; email invites can assign admin or member, while link and code invites always join as members. The last owner must transfer ownership before leaving a group with other members. Leaving as the last person deletes the group. Removing or leaving a group rotates its encryption key and deletes the departing person's group location history. Places someone created stay in the group after they leave or are removed, and are deleted with their account.
+| Action                                  | Owner                          | Admin                       | Editor | Member |
+| --------------------------------------- | ------------------------------ | --------------------------- | ------ | ------ |
+| View group members and shared locations | Yes                            | Yes                         | Yes    | Yes    |
+| View history since their latest join    | Yes                            | Yes                         | Yes    | Yes    |
+| Invite a member by email, link, or code | Yes                            | Yes                         | Yes    | No     |
+| Invite an editor by email               | Yes                            | Yes                         | No     | No     |
+| Rename the group or change its image    | Yes                            | Yes                         | Yes    | No     |
+| Remove a member                         | Yes                            | Yes                         | Yes    | No     |
+| Remove an editor or another admin       | Yes                            | Yes, except the owner       | No     | No     |
+| Change roles                            | Yes                            | Yes, except the owner's     | No     | No     |
+| Add, edit or delete places              | Yes                            | Yes                         | Yes    | No     |
+| Re-encrypt places for later joiners     | Yes                            | Yes                         | Yes    | Yes    |
+| Turn off this phone's arrivals          | Yes                            | Yes                         | Yes    | Yes    |
+| Mute place alerts for themselves        | Yes                            | Yes                         | Yes    | Yes    |
+| Ask an admin to become the owner        | Yes                            | No                          | No     | No     |
+| Accept a request to become the owner    | No                             | Yes, when it's sent to them | No     | No     |
+| Delete the group                        | Yes                            | No                          | No     | No     |
+| Leave the group                         | No, deleting the group instead | Yes                         | Yes    | Yes    |
+
+The creator is the owner. Nobody can remove the owner or change the owner's role. Email invites can make someone an editor or a member, while link and code invites always join as members.
+
+To hand a group on, the owner asks an admin to become the owner. The admin sees the request on their own phone, with how many seats the group uses, and accepts or declines it there. Once they accept, they're the owner and the old owner stays an admin. The owner can cancel the request until then, and it's cancelled if the admin stops being an admin or leaves.
+
+When the owner leaves, the group is deleted for everyone, and deleting the owner's account deletes every group they own. Leaving as the last person also deletes the group. Removing or leaving a group rotates its encryption key and deletes the departing person's group location history. Places someone created stay in the group after they leave or are removed, and are deleted with their account.
 
 See [Group history](history.md) for recorded activity, visibility and retention, and [Who can see me](who-can-see-me.md) for the account-level list of current and past viewers.

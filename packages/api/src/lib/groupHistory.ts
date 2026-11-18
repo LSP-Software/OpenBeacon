@@ -19,7 +19,7 @@ const categoryEventTypes = {
     GroupEventType.MEMBER_REMOVED,
     GroupEventType.ACCOUNT_DELETED,
   ],
-  roles: [GroupEventType.ROLE_CHANGED],
+  roles: [GroupEventType.ROLE_CHANGED, GroupEventType.OWNER_CHANGED],
   group: [
     GroupEventType.GROUP_CREATED,
     GroupEventType.GROUP_RENAMED,

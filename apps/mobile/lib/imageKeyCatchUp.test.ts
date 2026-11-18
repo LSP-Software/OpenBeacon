@@ -22,7 +22,7 @@ type Member = {
   id: string;
   userId: string;
   name: string;
-  role: "OWNER" | "ADMIN" | "MEMBER";
+  role: "ADMIN" | "EDITOR" | "MEMBER";
   image: string | null;
   imageKey: EncryptedImageKey | null;
 };
@@ -31,6 +31,8 @@ type Group = {
   name: string;
   image: string | null;
   imageKey: EncryptedImageKey | null;
+  ownerId: string;
+  ownershipOfferedToId: string | null;
   members: Member[];
 };
 type ReEncryptInput = {
@@ -218,13 +220,15 @@ beforeEach(() => {
     id: "family",
     name: "Family",
     image: url(GROUP_FILE),
+    ownerId: "user-d",
+    ownershipOfferedToId: null,
     imageKey: groupKey("epoch-1"),
     members: [
       {
         id: "m-a",
         userId: "user-a",
         name: "Ana",
-        role: "ADMIN",
+        role: "EDITOR",
         image: url(ME_FILE),
         imageKey: memberKey("user-a", ME_FILE, "epoch-2"),
       },
@@ -244,7 +248,7 @@ beforeEach(() => {
         image: url(CAL_FILE),
         imageKey: memberKey("user-c", CAL_FILE, "epoch-before-joining"),
       },
-      { id: "m-d", userId: "user-d", name: "Dev", role: "OWNER", image: null, imageKey: null },
+      { id: "m-d", userId: "user-d", name: "Dev", role: "ADMIN", image: null, imageKey: null },
     ],
   };
   failures = [];

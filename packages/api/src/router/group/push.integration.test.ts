@@ -124,9 +124,10 @@ const setup = async () => {
     data: {
       id: groupId,
       name: "Family",
+      ownerId: alice,
       groupMembers: {
         create: [
-          { userId: alice, role: "OWNER", joinedEpochNumber: 1, createdAt: longAgo },
+          { userId: alice, role: "ADMIN", joinedEpochNumber: 1, createdAt: longAgo },
           { userId: bob, role: "MEMBER", joinedEpochNumber: 1, createdAt: longAgo },
           { userId: carol, role: "MEMBER", joinedEpochNumber: 1, createdAt: ago(hour) },
           { userId: dave, role: "MEMBER", joinedEpochNumber: 1, createdAt: longAgo },

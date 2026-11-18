@@ -56,6 +56,7 @@ mock.module("react-native-safe-area-context", () => ({
   SafeAreaView: ({ children }: { children: React.ReactNode }) => children,
 }));
 mock.module("lucide-react-native", () => ({
+  CrownIcon: () => null,
   ImageIcon: () => null,
   LogInIcon: () => null,
   LogOutIcon: () => null,
@@ -179,7 +180,7 @@ test("shows key access problems without offering recovery", async () => {
   keyAccess = [{ data: { current: "missing", history: "complete" }, isError: true }];
   queryResult = {
     ...queryResult,
-    data: [family([{ role: "OWNER", userId: "user-1" }])],
+    data: [family([{ role: "ADMIN", userId: "user-1" }])],
   };
   const root = createRoot();
   await act(async () => root.render(<GroupScreen />));

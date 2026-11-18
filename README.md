@@ -47,7 +47,7 @@ OpenBeacon is available on **Android 8.0 and newer**. An iPhone app is on the [r
 - Pause sharing for a set time or until you turn it back on
 - Timeline: play back where people in a group have been, one day at a time. Each person chooses how much of their own history their groups can see, from only their location now up to 14 days
 - See who can see your location now, and who could in the last 14 days
-- Several groups, with owner, admin and member roles
+- Several groups, each with one owner and Admin, Editor and Member roles
 - Invite by email, link or QR code
 - Use OpenBeacon on more than one phone or tablet, and link a new one by scanning a code
 - Optional 12-word recovery phrase to restore your history on a new phone

@@ -1,6 +1,7 @@
 import { useIsFocused } from "@react-navigation/native";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import {
+  CrownIcon,
   ImageIcon,
   LogInIcon,
   LogOutIcon,
@@ -36,6 +37,7 @@ const eventIcons = {
   MEMBER_REMOVED: UserMinusIcon,
   ACCOUNT_DELETED: UserXIcon,
   ROLE_CHANGED: ShieldIcon,
+  OWNER_CHANGED: CrownIcon,
   GROUP_RENAMED: PencilIcon,
   GROUP_IMAGE_CHANGED: ImageIcon,
   PLACE_ADDED: MapPinPlusIcon,

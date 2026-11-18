@@ -43,7 +43,7 @@ class TestOpenBeaconCache extends OpenBeaconCache {
 const createMemberFindUniqueMock = (isMember: boolean) =>
   mock(async (_args: { where: { userId_groupId: { userId: string; groupId: string } } }) =>
     isMember
-      ? { id: "group-member-1", joinedEpochNumber: 3, role: "OWNER", userId: "user-1" }
+      ? { id: "group-member-1", joinedEpochNumber: 3, role: "ADMIN", userId: "user-1" }
       : null,
   );
 

@@ -90,6 +90,14 @@ export const describeAccountNotice = (notice: AccountNotices["notices"][number])
         body: "Signing in now only needs your password. If this wasn’t you, change your password.",
         link: accountLink("password"),
       };
+    case "OWNERSHIP_OFFERED":
+      return {
+        title: notice.group
+          ? `You’ve been asked to become the owner of ${notice.group.name}`
+          : "You’ve been asked to become a group’s owner",
+        body: "Open Groups to see what it means and accept or decline.",
+        link: { href: "/(tabs)/groups/list" as const, url: "openbeacon:///groups/list" },
+      };
     case "ALERTS_TURNED_OFF": {
       const turnedOff = notice.turnedOff
         .map(({ type, channel }) => `${notificationTypes[type].label} (${channel})`)

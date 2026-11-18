@@ -22,7 +22,7 @@ const sections = [
 const descriptions: Partial<Record<keyof typeof notificationTypes, string>> = {
   PLACE_ALERTS:
     "When someone arrives at or leaves a place. You can still mute people at each place.",
-  ROLE_CHANGED: "When someone becomes an owner, admin or member.",
+  ROLE_CHANGED: "When someone’s role changes or the group gets a new owner.",
   NEW_SIGN_IN: "When a new phone or tablet signs in to your account.",
 };
 

@@ -27,8 +27,20 @@ const query = (name: string, state: Partial<QueryState>): QueryState => ({
 });
 let queries: Record<string, QueryState>;
 mock.module("../components/AnnouncementBanner.tsx", () => ({ AnnouncementBanner: () => null }));
+const mutated: Array<{ name: string; groupId: string }> = [];
+const mutation = (name: string) => ({
+  mutationFn: async ({ groupId }: { groupId: string }) => {
+    mutated.push({ name, groupId });
+  },
+});
 mock.module("@tanstack/react-query", () => ({
   useQuery: ({ queryKey }: { queryKey: [string] }) => queries[queryKey[0]],
+  useMutation: ({ mutationFn }: ReturnType<typeof mutation>) => ({
+    isPending: false,
+    variables: undefined,
+    mutateAsync: mutationFn,
+  }),
+  useQueryClient: () => ({ invalidateQueries: async () => {} }),
 }));
 mock.module("@react-navigation/native", () => ({ useIsFocused: () => true }));
 mock.module("expo-router", () => ({
@@ -42,10 +54,12 @@ mock.module("react-native-safe-area-context", () => ({
 }));
 mock.module("lucide-react-native", () => ({
   ChevronRightIcon: () => null,
+  CrownIcon: () => null,
   LockIcon: () => null,
   MailIcon: () => null,
   PlusIcon: () => null,
   QrCodeIcon: () => null,
+  ShieldIcon: () => null,
   UsersIcon: () => null,
 }));
 mock.module("../lib/api.ts", () => ({
@@ -59,8 +73,14 @@ mock.module("../lib/api.ts", () => ({
     groupInvites: {
       list: { queryOptions: () => ({ queryKey: ["invites"] }), queryKey: () => ["invites"] },
     },
+    groupOwnership: {
+      offers: { queryOptions: () => ({ queryKey: ["offers"] }), queryKey: () => ["offers"] },
+      accept: { mutationOptions: () => mutation("accept") },
+      decline: { mutationOptions: () => mutation("decline") },
+    },
   },
 }));
+mock.module("../lib/alert.ts", () => ({ Alert: { alert: () => {} } }));
 mock.module("../hooks/useUnseenGroupHistory.ts", () => ({
   useUnseenGroupHistory: () => ({ latest: [], unseenGroupIds: new Set(), userId: "user" }),
 }));
@@ -90,6 +110,7 @@ mock.module("../components/ui/Avatar.tsx", () => ({
 }));
 mock.module("../components/ui/Card.tsx", () => ({
   Card: Host,
+  CardContent: Host,
   CardDescription: Host,
   CardHeader: Host,
   CardTitle: Host,
@@ -109,9 +130,11 @@ const render = async () => {
 
 beforeEach(() => {
   refetched.length = 0;
+  mutated.length = 0;
   queries = {
     groups: query("groups", { data: [] }),
     invites: query("invites", { data: [] }),
+    offers: query("offers", { data: [] }),
   };
 });
 
@@ -167,4 +190,30 @@ test("an invite card names the group and opens the invite", async () => {
     pathname: "/join",
     params: { inviteId: "invite-1" },
   });
+});
+
+test("a request to become the owner says how many seats it uses and is answered on this phone", async () => {
+  queries["offers"] = query("offers", {
+    data: [
+      {
+        groupId: "group-1",
+        groupName: "Smith Family",
+        owner: { userId: "user-2", name: "Alex" },
+        offeredAt: new Date(),
+        seats: 5,
+      },
+    ],
+  });
+  const root = await render();
+  const output = JSON.stringify(root.container.toJSON());
+  expect(output).toContain("Become the owner of Smith Family?");
+  expect(output).toContain("it will use 5 seats of yours");
+  expect(output).toContain("Alex stays an Admin");
+  const accept = root.container
+    .queryAll((node) => node.type === "pressable")
+    .find((node) => JSON.stringify(node.toJSON()).includes("Accept"));
+  const onPress = accept?.props["onPress"];
+  if (typeof onPress !== "function") throw new Error("Missing accept button");
+  await act(async () => onPress());
+  expect(mutated).toEqual([{ name: "accept", groupId: "group-1" }]);
 });

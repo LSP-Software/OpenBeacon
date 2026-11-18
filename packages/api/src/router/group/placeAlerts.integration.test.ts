@@ -135,10 +135,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: {
           id: groupId,
           name: "Family",
+          ownerId: owner,
           groupMembers: {
             create: [owner, member].map((userId, index) => ({
               userId,
-              role: index === 0 ? ("OWNER" as const) : ("MEMBER" as const),
+              role: index === 0 ? ("ADMIN" as const) : ("MEMBER" as const),
               joinedEpochNumber: 1,
               createdAt: longAgo,
             })),
@@ -152,8 +153,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: {
           id: otherGroupId,
           name: "Other",
+          ownerId: owner,
           groupMembers: {
-            create: [{ userId: owner, role: "OWNER", joinedEpochNumber: 1, createdAt: longAgo }],
+            create: [{ userId: owner, role: "ADMIN", joinedEpochNumber: 1, createdAt: longAgo }],
           },
         },
       });

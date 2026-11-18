@@ -96,13 +96,13 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("group membership
     }
     await caller(ownerId).groupLifecycle.create(await createInput(ownerId, targetGroupId));
     await prisma.group.createMany({
-      data: fillerGroupIds.map((id, index) => ({ id, name: `Filler ${index}` })),
+      data: fillerGroupIds.map((id, index) => ({ id, name: `Filler ${index}`, ownerId: joinerId })),
     });
     await prisma.groupMember.createMany({
       data: fillerGroupIds.map((groupId) => ({
         groupId,
         userId: joinerId,
-        role: "OWNER" as const,
+        role: "ADMIN" as const,
         joinedEpochNumber: 1,
       })),
     });

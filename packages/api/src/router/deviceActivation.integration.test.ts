@@ -81,7 +81,8 @@ const createAccount = async (name: string) => {
     data: {
       id: groupId,
       name: "Family",
-      groupMembers: { create: { userId, role: "OWNER", joinedEpochNumber: 1 } },
+      ownerId: userId,
+      groupMembers: { create: { userId, role: "ADMIN", joinedEpochNumber: 1 } },
     },
   });
   const historyKey = createHistoryKeyPair();

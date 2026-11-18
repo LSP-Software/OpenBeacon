@@ -19,6 +19,7 @@ export const groupNoticeSettings = {
   MEMBER_REMOVED: "MEMBER_LEFT",
   ACCOUNT_DELETED: "MEMBER_LEFT",
   ROLE_CHANGED: "ROLE_CHANGED",
+  OWNER_CHANGED: "ROLE_CHANGED",
 } as const satisfies Partial<Record<GroupEventType, NotificationType>>;
 
 const signsOutOtherDevices: AccountNoticeType[] = [

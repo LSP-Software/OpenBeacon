@@ -39,6 +39,8 @@ model User {
   googleDeletionChallenges GoogleDeletionChallenge[]
 
   groupMembers               GroupMember[]
+  ownedGroups                Group[] @relation("GroupOwner")
+  ownershipOffers            Group[] @relation("GroupOwnershipOffer")
   devices                    UserDevice[]
   sentGroupMemberInvites     GroupMemberInvite[] @relation("GroupMemberInviteInviter")
   receivedGroupMemberInvites GroupMemberInvite[] @relation("GroupMemberInviteRecipient")
@@ -104,6 +106,7 @@ enum AccountNoticeType {
   ALERTS_TURNED_OFF
   SIGN_IN_CODES_TURNED_ON
   SIGN_IN_CODES_TURNED_OFF
+  OWNERSHIP_OFFERED
 }
 
 model AccountNotice {
@@ -118,10 +121,13 @@ model AccountNotice {
   deletionDate    DateTime?
   turnedOffEmail  NotificationType[] @default([])
   turnedOffPhone  NotificationType[] @default([])
+  groupId         String?
+  group           Group?             @relation(fields: [groupId], references: [id], onDelete: Cascade)
   createdAt       DateTime           @default(now())
 
   @@index([userId, createdAt, id])
   @@index([createdAt])
+  @@index([groupId])
 }
 
 model Session {
@@ -205,6 +211,12 @@ model Group {
   imageKeyCiphertext     String?
   epochRotationRequired Boolean @default(false)
   placesRevision Int @default(0)
+  ownerId                String
+  owner                  User      @relation("GroupOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  ownershipOfferedToId   String?
+  ownershipOfferedTo     User?     @relation("GroupOwnershipOffer", fields: [ownershipOfferedToId], references: [id], onDelete: SetNull)
+  ownershipOfferedAt     DateTime?
+  accountNotices         AccountNotice[]
   groupMembers           GroupMember[]
   groupInvites           GroupMemberInvite[]
   sharedInvites          GroupSharedInvite[]
@@ -218,6 +230,8 @@ model Group {
   updatedAt DateTime @updatedAt
 
   @@index([image])
+  @@index([ownerId])
+  @@index([ownershipOfferedToId])
 }
 
 model Place {
@@ -364,6 +378,7 @@ enum GroupEventType {
   PLACE_ADDED
   PLACE_UPDATED
   PLACE_DELETED
+  OWNER_CHANGED
 }
 
 model GroupEvent {
@@ -671,8 +686,8 @@ model GroupEpochHistoryWrap {
 }
 
 enum GroupRole {
-  OWNER
   ADMIN
+  EDITOR
   MEMBER
 }
 

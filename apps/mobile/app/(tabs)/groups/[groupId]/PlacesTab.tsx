@@ -31,6 +31,7 @@ import { catchUpGroupPlaces } from "../../../../lib/placeCatchUp.ts";
 import { groupPlacesQueryKey, groupPlacesQueryOptions } from "../../../../lib/placeSync.ts";
 import { readRegisteredDevice } from "../../../../lib/registeredDevice.ts";
 import { storage } from "../../../../lib/storage.ts";
+import { canEditGroup } from "../../../../lib/groupRoles.ts";
 
 const PlacesTab = ({
   groupId,
@@ -47,7 +48,7 @@ const PlacesTab = ({
   const userId = session?.user.id;
   const { group } = useCachedGroup(groupId);
   const self = group?.members.find((member) => member.userId === userId);
-  const canManage = self?.role === "OWNER" || self?.role === "ADMIN";
+  const canManage = canEditGroup(self?.role);
   const places = useQuery({
     ...groupPlacesQueryOptions(groupId, userId),
     subscribed: isFocused,
@@ -215,7 +216,7 @@ const PlacesTab = ({
           <Text className="text-sm text-secondary">
             {canManage
               ? `Add places like home or school. When someone’s phone arrives or leaves, the rest of ${groupName} gets an alert.`
-              : `Owners and admins can add places like home or school. When someone’s phone arrives or leaves, the rest of ${groupName} gets an alert.`}
+              : `Admins and Editors can add places like home or school. When someone’s phone arrives or leaves, the rest of ${groupName} gets an alert.`}
           </Text>
           <Text className="text-sm text-secondary">
             Each phone shows the group’s places and can turn off its own arrivals and departures.

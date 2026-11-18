@@ -17,6 +17,7 @@ import { groupPlacesRouter } from "./router/group/groupPlacesRouter.ts";
 import { groupSettingsRouter } from "./router/group/groupSettingsRouter.ts";
 import { groupTrackingRouter } from "./router/group/groupTrackingRouter.ts";
 import { placeAlertsRouter } from "./router/group/placeAlertsRouter.ts";
+import { groupOwnershipRouter } from "./router/group/groupOwnershipRouter.ts";
 import { placeSharingRouter } from "./router/group/placeSharingRouter.ts";
 import { placeTransitionsRouter } from "./router/group/placeTransitionsRouter.ts";
 import { mapsRouter } from "./router/mapsRouter.ts";
@@ -36,6 +37,7 @@ export const appRouter = createTRPCRouter({
   groupHistory: groupHistoryRouter,
   groupImageKeys: groupImageKeysRouter,
   groupMembership: groupMembershipRouter,
+  groupOwnership: groupOwnershipRouter,
   groupPlaces: groupPlacesRouter,
   groupTracking: groupTrackingRouter,
   auth: authRouter,

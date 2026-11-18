@@ -1,12 +1,6 @@
 import type { PushSender } from "@openbeacon/auth/push.ts";
 import { findAlertRecipient, type SecurityAlerts } from "@openbeacon/auth/securityAlerts.ts";
-import {
-  GroupEventType,
-  GroupRole,
-  Prisma,
-  type PrismaClient,
-  readDatabaseTime,
-} from "@openbeacon/database";
+import { GroupEventType, Prisma, type PrismaClient, readDatabaseTime } from "@openbeacon/database";
 import { TRPCError } from "@trpc/server";
 import { deleteTrackingPointsInBatches, deleteTrackingStreams } from "./trackingCleanup.ts";
 import { imageKeyColumns } from "./imageKeys.ts";
@@ -21,39 +15,14 @@ export const lockDeletableGroups = async (
   }: { userId: string; imageUrlPrefix: string; otherGroupIds?: string[] },
 ) => {
   const groupIds = await lockUserGroups(tx, userId, otherGroupIds);
-  if (!groupIds.length) return { groupIds, soloGroups: [] };
-  const soleOwner = await tx.groupMember.findFirst({
-    where: {
-      userId,
-      role: GroupRole.OWNER,
-      group: {
-        AND: [
-          { groupMembers: { some: { userId: { not: userId } } } },
-          {
-            groupMembers: {
-              none: { userId: { not: userId }, role: GroupRole.OWNER },
-            },
-          },
-        ],
-      },
-    },
-    select: { id: true },
-  });
-  if (soleOwner)
-    throw new TRPCError({
-      code: "CONFLICT",
-      message: "Transfer ownership or delete your groups before deleting your account.",
-    });
-  const soloGroups = await tx.group.findMany({
-    where: {
-      id: { in: groupIds },
-      groupMembers: { none: { userId: { not: userId } } },
-    },
+  if (!groupIds.length) return { groupIds, ownedGroups: [] };
+  const ownedGroups = await tx.group.findMany({
+    where: { id: { in: groupIds }, ownerId: userId },
     select: { id: true, image: true },
   });
-  if (soloGroups.some(({ image }) => image && !image.startsWith(`${imageUrlPrefix}/`)))
+  if (ownedGroups.some(({ image }) => image && !image.startsWith(`${imageUrlPrefix}/`)))
     throw new Error("Cannot identify group image for cleanup.");
-  return { groupIds, soloGroups };
+  return { groupIds, ownedGroups };
 };
 
 export const beginAccountDeletion = async (
@@ -62,40 +31,18 @@ export const beginAccountDeletion = async (
 ) => {
   const groupIds = await lockUserGroups(tx, userId);
   if (groupIds.length) {
-    const soleOwner = await tx.groupMember.findFirst({
-      where: {
-        userId,
-        role: GroupRole.OWNER,
-        group: {
-          AND: [
-            { groupMembers: { some: { userId: { not: userId } } } },
-            {
-              groupMembers: {
-                none: {
-                  userId: { not: userId },
-                  role: GroupRole.OWNER,
-                  user: { pendingDeletion: false },
-                },
-              },
-            },
-          ],
-        },
-      },
+    const ownedGroups = await tx.group.findMany({
+      where: { id: { in: groupIds }, ownerId: userId },
       select: { id: true },
     });
-    if (soleOwner)
-      throw new TRPCError({
-        code: "CONFLICT",
-        message: "Transfer ownership or delete your groups before deleting your account.",
-      });
-    const soloGroups = await tx.group.findMany({
-      where: { id: { in: groupIds }, groupMembers: { none: { userId: { not: userId } } } },
-      select: { id: true },
-    });
-    const soloGroupIds = soloGroups.map(({ id }) => id);
-    await tx.groupMemberInvite.deleteMany({ where: { groupId: { in: soloGroupIds } } });
-    await tx.groupSharedInvite.deleteMany({ where: { groupId: { in: soloGroupIds } } });
+    const ownedGroupIds = ownedGroups.map(({ id }) => id);
+    await tx.groupMemberInvite.deleteMany({ where: { groupId: { in: ownedGroupIds } } });
+    await tx.groupSharedInvite.deleteMany({ where: { groupId: { in: ownedGroupIds } } });
   }
+  await tx.group.updateMany({
+    where: { ownershipOfferedToId: userId },
+    data: { ownershipOfferedToId: null, ownershipOfferedAt: null },
+  });
   await tx.groupMemberInvite.deleteMany({
     where: { OR: [{ inviterId: userId }, { recipientId: userId }] },
   });
@@ -143,7 +90,7 @@ export const deleteAccountRecords = async ({
   if (!ready) return false;
   await deleteTrackingPointsInBatches({
     db,
-    streams: Prisma.sql`"stream"."senderUserId" = ${userId}`,
+    streams: Prisma.sql`("stream"."senderUserId" = ${userId} OR "stream"."groupId" IN (SELECT "id" FROM "Group" WHERE "ownerId" = ${userId}))`,
   });
 
   const deleted = await db.$transaction(
@@ -158,14 +105,14 @@ export const deleteAccountRecords = async ({
         select: { groupId: true },
       });
       const placeGroupIds = placeGroups.map(({ groupId }) => groupId);
-      const { groupIds, soloGroups } = await lockDeletableGroups(tx, {
+      const { groupIds, ownedGroups } = await lockDeletableGroups(tx, {
         userId,
         imageUrlPrefix,
         otherGroupIds: placeGroupIds,
       });
       const imageKeys: string[] = [];
       if (groupIds.length) {
-        for (const group of soloGroups) {
+        for (const group of ownedGroups) {
           if (group.image) imageKeys.push(group.image.slice(imageUrlPrefix.length + 1));
           const uploads = await tx.pendingUpload.findMany({
             where: { groupId: group.id },
@@ -181,7 +128,7 @@ export const deleteAccountRecords = async ({
         await tx.group.updateMany({
           where: {
             id: {
-              in: groupIds.filter((id) => !soloGroups.some((group) => group.id === id)),
+              in: groupIds.filter((id) => !ownedGroups.some((group) => group.id === id)),
             },
           },
           data: { epochRotationRequired: true },

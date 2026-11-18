@@ -25,7 +25,7 @@ import {
 } from "../../lib/image-upload.ts";
 import { deleteFile, deleteImagePrefix } from "../../lib/storage.ts";
 import { protectedProcedure } from "../../procedures/auth/runtime.ts";
-import { groupMemberProcedure, groupAdminProcedure } from "../../procedures/auth/group.ts";
+import { groupMemberProcedure, groupEditorProcedure } from "../../procedures/auth/group.ts";
 
 export const groupSettingsRouter = {
   setHistoryShare: groupMemberProcedure
@@ -91,10 +91,10 @@ export const groupSettingsRouter = {
         const actor = await tx.groupMember.findUnique({
           where: { userId_groupId: { userId: ctx.session.user.id, groupId: input.groupId } },
         });
-        if (actor?.role !== GroupRole.OWNER && actor?.role !== GroupRole.ADMIN) {
+        if (actor?.role !== GroupRole.ADMIN && actor?.role !== GroupRole.EDITOR) {
           throw new TRPCError({
             code: "FORBIDDEN",
-            message: "Only owners and admins can rename the group.",
+            message: "Only Admins and Editors can rename the group.",
           });
         }
         if (group && group.name !== input.name) {
@@ -112,7 +112,7 @@ export const groupSettingsRouter = {
       });
     }),
 
-  requestGroupImageUpload: groupAdminProcedure
+  requestGroupImageUpload: groupEditorProcedure
     .meta({
       rateLimit: {
         limit: 32,
@@ -135,7 +135,7 @@ export const groupSettingsRouter = {
 
       return { fileName };
     }),
-  presignGroupImageUpload: groupAdminProcedure
+  presignGroupImageUpload: groupEditorProcedure
     .meta({
       rateLimit: {
         limit: 32,
@@ -217,10 +217,10 @@ export const groupSettingsRouter = {
               const member = await tx.groupMember.findUnique({
                 where: { userId_groupId: { userId, groupId: input.groupId } },
               });
-              if (member?.role !== GroupRole.OWNER && member?.role !== GroupRole.ADMIN) {
+              if (member?.role !== GroupRole.ADMIN && member?.role !== GroupRole.EDITOR) {
                 throw new TRPCError({
                   code: "FORBIDDEN",
-                  message: "You are not an admin of this group.",
+                  message: "You are not an Admin or Editor of this group.",
                 });
               }
               if (

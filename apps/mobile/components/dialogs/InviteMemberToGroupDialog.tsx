@@ -22,14 +22,14 @@ interface InviteMemberToGroupDialogProps {
   open: boolean;
   setOpen: (open: boolean) => void;
   groupId: string;
-  canInviteAdmins: boolean;
+  canInviteEditors: boolean;
 }
 
 export const InviteMemberToGroupDialog = ({
   open,
   setOpen,
   groupId,
-  canInviteAdmins,
+  canInviteEditors,
 }: InviteMemberToGroupDialogProps) => {
   const [value, setValue] = useState("email");
 
@@ -58,7 +58,7 @@ export const InviteMemberToGroupDialog = ({
             <InviteMembersInputs
               groupId={groupId}
               setOpen={setOpen}
-              canInviteAdmins={canInviteAdmins}
+              canInviteEditors={canInviteEditors}
             />
           </TabsContent>
           {open && <SharedInvite groupId={groupId} open={open} setOpen={setOpen} value={value} />}
@@ -69,7 +69,7 @@ export const InviteMemberToGroupDialog = ({
 };
 
 interface InviteMembersInputsProps {
-  canInviteAdmins: boolean;
+  canInviteEditors: boolean;
   groupId: string;
   setOpen: (open: boolean) => void;
 }
@@ -77,7 +77,7 @@ interface InviteMembersInputsProps {
 export const InviteMembersInputs = ({
   groupId,
   setOpen,
-  canInviteAdmins,
+  canInviteEditors,
 }: InviteMembersInputsProps) => {
   const form = useForm<z.infer<typeof inviteMemberToGroupSchema>>({
     resolver: zodResolver(inviteMemberToGroupSchema),
@@ -112,7 +112,7 @@ export const InviteMembersInputs = ({
     const result = await tryCatch(
       inviteMemberMutation.mutateAsync({
         ...data,
-        invites: canInviteAdmins
+        invites: canInviteEditors
           ? data.invites
           : data.invites.map((invite) => ({ ...invite, role: "MEMBER" as const })),
       }),
@@ -144,14 +144,14 @@ export const InviteMembersInputs = ({
                   autoComplete="email"
                   textContentType="emailAddress"
                 />
-                {canInviteAdmins && (
+                {canInviteEditors && (
                   <View>
                     <FormSelectInput
                       control={form.control}
                       name={`invites.${index}.role`}
                       fieldClassName="w-28"
                       values={[
-                        { label: "Admin", value: "ADMIN" },
+                        { label: "Editor", value: "EDITOR" },
                         { label: "Member", value: "MEMBER" },
                       ]}
                     />
@@ -181,10 +181,11 @@ export const InviteMembersInputs = ({
             <Text className="text-foreground text-sm font-semibold">Member:</Text> Can view
             locations of all group members
           </Text>
-          {canInviteAdmins && (
+          {canInviteEditors && (
             <Text className="text-secondary text-sm">
-              <Text className="text-foreground text-sm font-semibold">Admin:</Text> Can view
-              locations, invite and remove members, and manage group settings
+              <Text className="text-foreground text-sm font-semibold">Editor:</Text> Can view
+              locations, invite people, remove Members, and change the group’s name, picture and
+              places
             </Text>
           )}
         </View>

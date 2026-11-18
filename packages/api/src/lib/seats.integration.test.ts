@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { prisma } from "@openbeacon/database";
-import { accountSeats, seatsUsed } from "./seats.ts";
+import { accountSeats, groupSeats, seatsUsed } from "./seats.ts";
 
 const prefix = `seats-${crypto.randomUUID()}`;
 const id = (name: string) => `${prefix}-${name}`;
@@ -50,18 +50,22 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("seats with Postg
       ],
     });
     await prisma.group.createMany({
-      data: [family, friends, notOwned].map((groupId) => ({ id: groupId, name: groupId })),
+      data: [
+        { id: family, name: family, ownerId: owner },
+        { id: friends, name: friends, ownerId: owner },
+        { id: notOwned, name: notOwned, ownerId: otherOwner },
+      ],
     });
     await prisma.groupMember.createMany({
       data: [
-        { groupId: family, userId: owner, role: "OWNER" as const },
+        { groupId: family, userId: owner, role: "ADMIN" as const },
         { groupId: family, userId: twoPhones, role: "ADMIN" as const },
         { groupId: family, userId: inBoth, role: "MEMBER" as const },
         { groupId: family, userId: pendingOnly, role: "MEMBER" as const },
-        { groupId: friends, userId: owner, role: "OWNER" as const },
+        { groupId: friends, userId: owner, role: "ADMIN" as const },
         { groupId: friends, userId: inBoth, role: "MEMBER" as const },
-        { groupId: notOwned, userId: otherOwner, role: "OWNER" as const },
-        { groupId: notOwned, userId: owner, role: "ADMIN" as const },
+        { groupId: notOwned, userId: otherOwner, role: "ADMIN" as const },
+        { groupId: notOwned, userId: owner, role: "EDITOR" as const },
         { groupId: notOwned, userId: twoPhones, role: "MEMBER" as const },
       ].map((member) => ({ ...member, joinedEpochNumber: 1 })),
     });
@@ -87,9 +91,24 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("seats with Postg
     expect(await seatsUsed(prisma, owner)).toBe(familySeats + friendsSeats);
   });
 
-  test("the owner of another group pays for the seats there, not its members", async () => {
+  test("the owner of another group pays for the seats there, not its members or other Admins", async () => {
     expect(await seatsUsed(prisma, otherOwner)).toBe(1 + 2 + 2);
     expect(await seatsUsed(prisma, twoPhones)).toBe(0);
+  });
+
+  test("a group's seats are its members' active phones, and move to whoever owns it", async () => {
+    expect(await groupSeats(prisma, family)).toBe(2 + 2 + 1);
+    expect(await groupSeats(prisma, friends)).toBe(2 + 1);
+    expect(await groupSeats(prisma, notOwned)).toBe(1 + 2 + 2);
+    const ownerBefore = await seatsUsed(prisma, owner);
+    await prisma.group.update({ where: { id: notOwned }, data: { ownerId: owner } });
+    try {
+      expect(await groupSeats(prisma, notOwned)).toBe(1 + 2 + 2);
+      expect(await seatsUsed(prisma, owner)).toBe(ownerBefore + 1 + 2 + 2);
+      expect(await seatsUsed(prisma, otherOwner)).toBe(0);
+    } finally {
+      await prisma.group.update({ where: { id: notOwned }, data: { ownerId: otherOwner } });
+    }
   });
 
   test("a pending device takes a seat once it activates, and a removed one gives it back", async () => {

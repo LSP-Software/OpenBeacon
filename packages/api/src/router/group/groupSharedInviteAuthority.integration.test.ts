@@ -117,8 +117,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await prisma.groupMember.deleteMany({ where: { groupId, userId: joiner } });
       await prisma.groupMember.upsert({
         where: { userId_groupId: { userId: admin, groupId } },
-        create: { userId: admin, groupId, role: "ADMIN", joinedEpochNumber: 1 },
-        update: { role: "ADMIN" },
+        create: { userId: admin, groupId, role: "EDITOR", joinedEpochNumber: 1 },
+        update: { role: "EDITOR" },
       });
     });
     afterAll(async () => {
@@ -175,7 +175,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
     test("demoting an admin to member deletes their unused codes", async () => {
       await caller(admin).groupInvites.createShared({ groupId });
       const { id } = await adminMembership();
-      await caller(owner).groupMembership.updateRole({ groupId, memberId: id, role: "ADMIN" });
+      await caller(owner).groupMembership.updateRole({ groupId, memberId: id, role: "EDITOR" });
       expect(await unusedCodesFromAdmin()).toBe(1);
 
       await caller(owner).groupMembership.updateRole({ groupId, memberId: id, role: "MEMBER" });

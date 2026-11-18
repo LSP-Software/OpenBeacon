@@ -17,6 +17,7 @@ import { groupEpochRouter } from "./groupEpochRouter.ts";
 import { groupHistoryRouter } from "./groupHistoryRouter.ts";
 import { groupLifecycleRouter } from "./groupLifecycleRouter.ts";
 import { groupMembershipRouter } from "./groupMembershipRouter.ts";
+import { groupOwnershipRouter } from "./groupOwnershipRouter.ts";
 import { groupTrackingRouter } from "./groupTrackingRouter.ts";
 import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
 import { encryptedTrackingPoint, testClientPointId } from "../../lib/trackingPoints.testUtil.ts";
@@ -27,6 +28,7 @@ const router = createTRPCRouter({
   groupHistory: groupHistoryRouter,
   groupLifecycle: groupLifecycleRouter,
   groupMembership: groupMembershipRouter,
+  groupOwnership: groupOwnershipRouter,
   groupTracking: groupTrackingRouter,
 });
 const cache = createIntegrationTestCache(() => 0);
@@ -286,7 +288,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           memberId: ownerMember.id,
           nextEpoch: bundle(ownerNext),
         }),
-      ).rejects.toThrow("Cannot remove the only owner");
+      ).rejects.toMatchObject({
+        code: "FORBIDDEN",
+        message: "The owner can't leave the group. Transfer ownership or delete the group.",
+      });
       expect((await owner.groupMembership.members({ groupId })).length).toBe(2);
 
       const rejoinedMember = (await owner.groupMembership.members({ groupId })).find(
@@ -336,7 +341,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         nextEpoch: bundle(finalJoined),
       });
       const finalMembers = await owner.groupMembership.members({ groupId });
-      const successor = finalMembers.find((item) => item.user.id === memberId)!;
+      const nextOwner = finalMembers.find((item) => item.user.id === memberId)!;
       const finalContext = await owner.groupMembership.removalContext({
         groupId,
         memberId: ownerMember.id,
@@ -346,33 +351,20 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         previousEpoch: finalContext.latestEpoch!,
         recipients: finalContext.recipients,
       });
-      const transfer = {
-        groupId,
-        memberId: ownerMember.id,
-        successorMemberId: successor.id,
-        nextEpoch: bundle(finalEpoch),
-      };
-      await expect(
-        member.groupMembership.remove({
-          ...transfer,
-          memberId: successor.id,
-          successorMemberId: ownerMember.id,
-        }),
-      ).rejects.toThrow("Only a departing owner");
-      await expect(
-        owner.groupMembership.remove({ ...transfer, successorMemberId: "missing" }),
-      ).rejects.toThrow("Successor not found");
-      expect(
-        (await owner.groupMembership.members({ groupId })).find((item) => item.id === successor.id)
-          ?.role,
-      ).toBe("MEMBER");
-      await owner.groupMembership.remove(transfer);
+      const leave = { groupId, memberId: ownerMember.id, nextEpoch: bundle(finalEpoch) };
+      await owner.groupMembership.updateRole({ groupId, memberId: nextOwner.id, role: "ADMIN" });
+      await owner.groupOwnership.offer({ groupId, memberId: nextOwner.id });
+      await expect(owner.groupMembership.remove(leave)).rejects.toMatchObject({
+        code: "FORBIDDEN",
+      });
+      await member.groupOwnership.accept({ groupId });
+      await owner.groupMembership.remove(leave);
       const events = await prisma.groupEvent.findMany({
         where: { groupId },
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         select: { type: true, actorUserId: true, subjectUserId: true, role: true },
       });
-      expect(events.slice(0, -2)).toEqual([
+      expect(events.slice(0, -3)).toEqual([
         { type: "GROUP_CREATED", actorUserId: ownerId, subjectUserId: null, role: null },
         { type: "MEMBER_JOINED", actorUserId: null, subjectUserId: memberId, role: "MEMBER" },
         { type: "MEMBER_LEFT", actorUserId: null, subjectUserId: memberId, role: null },
@@ -380,17 +372,19 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         { type: "MEMBER_REMOVED", actorUserId: ownerId, subjectUserId: memberId, role: null },
         { type: "MEMBER_JOINED", actorUserId: null, subjectUserId: memberId, role: "MEMBER" },
       ]);
-      expect(events.slice(-2)).toEqual(
-        expect.arrayContaining([
-          { type: "ROLE_CHANGED", actorUserId: ownerId, subjectUserId: memberId, role: "OWNER" },
-          { type: "MEMBER_LEFT", actorUserId: null, subjectUserId: ownerId, role: null },
-        ]),
+      expect(events.slice(-3)).toEqual([
+        { type: "ROLE_CHANGED", actorUserId: ownerId, subjectUserId: memberId, role: "ADMIN" },
+        { type: "OWNER_CHANGED", actorUserId: memberId, subjectUserId: ownerId, role: null },
+        { type: "MEMBER_LEFT", actorUserId: null, subjectUserId: ownerId, role: null },
+      ]);
+      expect((await prisma.group.findUniqueOrThrow({ where: { id: groupId } })).ownerId).toBe(
+        memberId,
       );
       expect(
         (await member.groupMembership.members({ groupId })).find(
           (item) => item.user.id === memberId,
         )?.role,
-      ).toBe("OWNER");
+      ).toBe("ADMIN");
       await member.groupInvites.send({ groupId, invites: [{ email: ownerEmail, role: "MEMBER" }] });
       expect(await owner.groupInvites.list()).toHaveLength(1);
     }, 45000);
@@ -509,7 +503,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(await owner.groupEpoch.rotationContext({ groupId: readsGroupId })).not.toBeNull();
     }, 45000);
 
-    test("the last member to leave deletes the group", async () => {
+    test("the owner can't leave even as the last member and deletes the group instead", async () => {
       const ownerDevices = await prisma.userDevice.findMany({ where: { id: ownerDevice } });
       const initial = createInitialGroupEpoch({
         creator: { deviceId: ownerDevice, privateKey: ownerKey.privateKey },
@@ -528,32 +522,17 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         name: "Emptied",
         initialEpoch: bundle(initial),
       });
-      await owner.groupInvites.send({
-        groupId: emptiedGroupId,
-        invites: [{ email: memberEmail, role: "MEMBER" }],
-      });
-      const invite = (await member.groupInvites.list()).find(
-        (item) => item.group.id === emptiedGroupId,
-      )!;
-      const joinContext = await member.groupInvites.acceptanceContext({ inviteId: invite.id });
-      const joined = createNextGroupEpoch({
-        creator: { deviceId: memberDevice, privateKey: memberKey.privateKey },
-        previousEpoch: joinContext.latestEpoch!,
-        recipients: joinContext.recipients,
-      });
-      await member.groupInvites.accept({ inviteId: invite.id, nextEpoch: bundle(joined) });
-      await prisma.groupMember.delete({
-        where: { userId_groupId: { userId: ownerId, groupId: emptiedGroupId } },
-      });
+      const self = (await owner.groupMembership.members({ groupId: emptiedGroupId }))[0]!;
+      await expect(
+        owner.groupMembership.remove({
+          groupId: emptiedGroupId,
+          memberId: self.id,
+          nextEpoch: bundle(initial),
+        }),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+      expect(await prisma.group.count({ where: { id: emptiedGroupId } })).toBe(1);
 
-      const self = (await member.groupMembership.members({ groupId: emptiedGroupId })).find(
-        (item) => item.user.id === memberId,
-      )!;
-      await member.groupMembership.remove({
-        groupId: emptiedGroupId,
-        memberId: self.id,
-        nextEpoch: bundle(joined),
-      });
+      await owner.groupLifecycle.delete({ groupId: emptiedGroupId, onlyIfLastMember: true });
 
       expect(await prisma.group.count({ where: { id: emptiedGroupId } })).toBe(0);
       expect(await prisma.groupEpoch.count({ where: { groupId: emptiedGroupId } })).toBe(0);

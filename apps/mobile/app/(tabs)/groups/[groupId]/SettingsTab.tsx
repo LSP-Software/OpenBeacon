@@ -14,6 +14,7 @@ import { useHistoryShare } from "../../../../hooks/useHistoryShare.ts";
 import { useHiddenMapGroupIds } from "../../../../hooks/useHiddenMapGroupIds.ts";
 import { trpc } from "../../../../lib/api.ts";
 import { authClient } from "../../../../lib/auth-client.ts";
+import { canEditGroup } from "../../../../lib/groupRoles.ts";
 import { groupHistoryShare } from "../../../../lib/historyShare.ts";
 import { forgetHiddenMapGroup, setMapGroupHidden } from "../../../../lib/hiddenMapGroups.ts";
 import { canHideMapGroups } from "../../../../lib/mapGroupVisibility.ts";
@@ -34,7 +35,7 @@ const SettingsTab = ({ groupId }: { groupId: string }) => {
 
   return (
     <View className="gap-3">
-      {(role === "OWNER" || role === "ADMIN") && (
+      {canEditGroup(role) && (
         <View className="gap-3">
           <Text variant="label">Group name</Text>
           <TextInput
@@ -98,7 +99,7 @@ const SettingsTab = ({ groupId }: { groupId: string }) => {
           />
         </View>
       )}
-      {role === "OWNER" && (
+      {session && group?.ownerId === session.user.id && (
         <Button
           variant="danger"
           disabled={deleteGroup.isPending}

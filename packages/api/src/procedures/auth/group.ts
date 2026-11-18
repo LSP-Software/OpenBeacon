@@ -34,9 +34,12 @@ export const groupMemberProcedure = protectedProcedure
     });
   });
 
-export const groupAdminProcedure = groupMemberProcedure.use(async ({ ctx, next }) => {
-  if (ctx.groupMember.role !== GroupRole.OWNER && ctx.groupMember.role !== GroupRole.ADMIN) {
-    throw new TRPCError({ code: "FORBIDDEN", message: "You are not an admin of this group" });
+export const groupEditorProcedure = groupMemberProcedure.use(async ({ ctx, next }) => {
+  if (ctx.groupMember.role !== GroupRole.ADMIN && ctx.groupMember.role !== GroupRole.EDITOR) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "You are not an Admin or Editor of this group",
+    });
   }
 
   return next({
@@ -45,7 +48,11 @@ export const groupAdminProcedure = groupMemberProcedure.use(async ({ ctx, next }
 });
 
 export const groupOwnerProcedure = groupMemberProcedure.use(async ({ ctx, next }) => {
-  if (ctx.groupMember.role !== GroupRole.OWNER) {
+  const group = await ctx.db.group.findUnique({
+    where: { id: ctx.groupMember.groupId },
+    select: { ownerId: true },
+  });
+  if (group?.ownerId !== ctx.session.user.id) {
     throw new TRPCError({ code: "FORBIDDEN", message: "You are not the owner of this group" });
   }
 

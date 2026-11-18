@@ -1,4 +1,4 @@
-import { GroupRole, Prisma } from "@openbeacon/database";
+import { Prisma } from "@openbeacon/database";
 import { TRPCError } from "@trpc/server";
 
 export const removeGroupMemberWithOwnerGuard = async ({
@@ -16,30 +16,26 @@ export const removeGroupMemberWithOwnerGuard = async ({
     Array<{ deleted: boolean; memberExists: boolean }>
   >(Prisma.sql`
     WITH target_member AS (
-      SELECT member.id, member.role
+      SELECT member.id, member."userId"
       FROM "GroupMember" AS member
       WHERE member."groupId" = ${groupId}
         AND member.id = ${memberId}
       FOR UPDATE
     ),
-    owner_rows AS (
-      SELECT owner.id
-      FROM "GroupMember" AS owner
-      JOIN "User" AS owner_user ON owner_user.id = owner."userId"
-      WHERE owner."groupId" = ${groupId}
-        AND owner.role = ${GroupRole.OWNER}
-        AND owner_user."pendingDeletion" = false
-      FOR UPDATE OF owner
-    ),
     deleted_member AS (
       DELETE FROM "GroupMember" AS member
-      USING target_member
+      USING target_member, "Group" AS target_group
       WHERE member.id = target_member.id
-        AND (
-          target_member.role <> ${GroupRole.OWNER}
-          OR (SELECT COUNT(*) FROM owner_rows WHERE id <> target_member.id) > 0
-        )
+        AND target_group.id = ${groupId}
+        AND target_group."ownerId" <> target_member."userId"
       RETURNING member.id, member."userId"
+    ),
+    cleared_offer AS (
+      UPDATE "Group" AS target_group
+      SET "ownershipOfferedToId" = NULL, "ownershipOfferedAt" = NULL
+      FROM deleted_member
+      WHERE target_group.id = ${groupId}
+        AND target_group."ownershipOfferedToId" = deleted_member."userId"
     ),
     deleted_invites AS (
       DELETE FROM "GroupMemberInvite" AS invite
@@ -66,7 +62,7 @@ export const removeGroupMemberWithOwnerGuard = async ({
   if (!result.deleted) {
     throw new TRPCError({
       code: "BAD_REQUEST",
-      message: "Cannot remove the only owner from the group.",
+      message: "The group's owner can't be removed from the group.",
     });
   }
 };

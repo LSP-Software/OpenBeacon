@@ -20,7 +20,7 @@ describe("buildMemberLiveStatuses", () => {
       members: [
         {
           id: "membership-alice",
-          role: "OWNER",
+          role: "ADMIN",
           user: { id: "alice", image: "https://example.com/a.png", name: "Alice Smith" },
         },
         {
@@ -46,7 +46,7 @@ describe("buildMemberLiveStatuses", () => {
         devices: [],
         nickname: null,
         id: "membership-alice",
-        role: "OWNER",
+        role: "ADMIN",
         timestamp: null,
         user: { id: "alice", image: "https://example.com/a.png", name: "Alice Smith" },
       },
@@ -77,7 +77,7 @@ describe("buildMemberLiveStatuses", () => {
       members: [
         {
           id: "membership-alice",
-          role: "OWNER",
+          role: "ADMIN",
           user: { id: "alice", image: null, name: "Alice" },
         },
       ],
@@ -91,7 +91,7 @@ describe("buildMemberLiveStatuses", () => {
         devices: [],
         nickname: null,
         id: "membership-alice",
-        role: "OWNER",
+        role: "ADMIN",
         timestamp: null,
         user: { id: "alice", image: null, name: "Alice" },
       },
@@ -108,7 +108,7 @@ describe("buildMemberLiveStatuses", () => {
         },
         {
           id: "membership-alice",
-          role: "OWNER",
+          role: "ADMIN",
           user: { id: "alice", image: null, name: "Alice" },
         },
       ],
@@ -148,7 +148,7 @@ describe("buildMemberLiveStatuses", () => {
       members: [
         {
           id: "membership-alice",
-          role: "OWNER",
+          role: "ADMIN",
           user: { id: "alice", image: null, name: "Alice" },
         },
       ],

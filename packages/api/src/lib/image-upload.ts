@@ -46,8 +46,11 @@ export const setPendingImageUploadForUser = async ({
       const member = await tx.groupMember.findUnique({
         where: { userId_groupId: { userId, groupId } },
       });
-      if (member?.role !== GroupRole.OWNER && member?.role !== GroupRole.ADMIN) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "You are not an admin of this group" });
+      if (member?.role !== GroupRole.ADMIN && member?.role !== GroupRole.EDITOR) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "You are not an Admin or Editor of this group",
+        });
       }
     }
     const lockKey = Math.abs(createHash("sha256").update(userId, "utf8").digest().readInt32BE(0));

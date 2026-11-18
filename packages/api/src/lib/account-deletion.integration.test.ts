@@ -72,11 +72,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: {
           id: groupId,
           name: "Group",
+          ownerId: remainingUser,
           image: `https://cdn.example/bucket/user/${deletedUser}/uploads/group/${groupId}/avatar/a`,
           groupMembers: {
             create: [
-              { userId: deletedUser, role: "OWNER", joinedEpochNumber: 1 },
-              { userId: remainingUser, role: "MEMBER", joinedEpochNumber: 1 },
+              { userId: deletedUser, role: "ADMIN", joinedEpochNumber: 1 },
+              { userId: remainingUser, role: "ADMIN", joinedEpochNumber: 1 },
             ],
           },
         },
@@ -241,16 +242,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         imageUrlPrefix: "https://cdn.example/bucket",
         securityAlerts,
       };
-      await expect(deleteAccountRecords(input)).rejects.toThrow("Transfer ownership");
-      expect(await prisma.user.findUnique({ where: { id: deletedUser } })).not.toBeNull();
-      expect(
-        await countTrackingPoints(prisma, Prisma.sql`"stream"."senderUserId" = ${deletedUser}`),
-      ).toBe(1);
-      expect(await sentAlerts()).toEqual([]);
-      await prisma.groupMember.update({
-        where: { userId_groupId: { userId: remainingUser, groupId } },
-        data: { role: "OWNER" },
-      });
       await expect(deleteAccountRecords(input)).resolves.toBe(true);
       expect(await sentAlerts()).toEqual([
         {
@@ -382,8 +373,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: {
           id: soloGroup,
           name: "Solo group",
+          ownerId: id,
           image: `https://cdn.example/bucket/${imageKey}`,
-          groupMembers: { create: { userId: id, role: "OWNER", joinedEpochNumber: 1 } },
+          groupMembers: { create: { userId: id, role: "ADMIN", joinedEpochNumber: 1 } },
         },
       });
       try {
@@ -408,7 +400,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       }
     });
 
-    test("concurrent deletion cannot remove both group owners", async () => {
+    test("concurrent deletion of a group's owner and another Admin deletes both accounts and the group", async () => {
       const first = `${prefix}-owner-one`;
       const second = `${prefix}-owner-two`;
       const member = `${prefix}-owner-member`;
@@ -424,10 +416,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: {
           id: sharedGroup,
           name: "Owners",
+          ownerId: first,
           groupMembers: {
             create: [
-              { userId: first, role: "OWNER", joinedEpochNumber: 1 },
-              { userId: second, role: "OWNER", joinedEpochNumber: 1 },
+              { userId: first, role: "ADMIN", joinedEpochNumber: 1 },
+              { userId: second, role: "ADMIN", joinedEpochNumber: 1 },
               { userId: member, role: "MEMBER", joinedEpochNumber: 1 },
             ],
           },
@@ -445,11 +438,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             }),
           ),
         );
-        expect(outcomes.filter((outcome) => outcome.status === "fulfilled")).toHaveLength(1);
-        expect(outcomes.filter((outcome) => outcome.status === "rejected")).toHaveLength(1);
-        expect(
-          await prisma.groupMember.count({ where: { groupId: sharedGroup, role: "OWNER" } }),
-        ).toBe(1);
+        expect(outcomes).toEqual([
+          { status: "fulfilled", value: true },
+          { status: "fulfilled", value: true },
+        ]);
+        expect(await prisma.group.findUnique({ where: { id: sharedGroup } })).toBeNull();
+        expect(await prisma.user.count({ where: { id: { in: [first, second, member] } } })).toBe(1);
       } finally {
         await prisma.group.deleteMany({ where: { id: sharedGroup } });
         await prisma.user.deleteMany({ where: { id: { in: [first, second, member] } } });
@@ -484,10 +478,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: {
           id: uploadGroup,
           name: "Uploads",
+          ownerId: partner,
           groupMembers: {
             create: [
-              { userId: id, role: "OWNER", joinedEpochNumber: 1 },
-              { userId: partner, role: "OWNER", joinedEpochNumber: 1 },
+              { userId: id, role: "ADMIN", joinedEpochNumber: 1 },
+              { userId: partner, role: "ADMIN", joinedEpochNumber: 1 },
             ],
           },
         },
@@ -537,11 +532,18 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const id = `${prefix}-image-race-user`;
       const imageGroup = `${prefix}-image-race-group`;
       const replacement = "https://cdn.example/bucket/user/another-user/avatar/new";
-      await prisma.user.create({ data: { id, name: "Deleting", email: `${id}@example.test` } });
+      const owner = `${id}-owner`;
+      await prisma.user.createMany({
+        data: [
+          { id, name: "Deleting", email: `${id}@example.test` },
+          { id: owner, name: "Owner", email: `${owner}@example.test` },
+        ],
+      });
       await prisma.group.create({
         data: {
           id: imageGroup,
           name: "Former group",
+          ownerId: owner,
           image: `https://cdn.example/bucket/user/${id}/uploads/group/avatar/old`,
         },
       });
@@ -576,7 +578,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         ).toBe(0);
       } finally {
         await prisma.group.deleteMany({ where: { id: imageGroup } });
-        await prisma.user.deleteMany({ where: { id } });
+        await prisma.user.deleteMany({ where: { id: { in: [id, owner] } } });
         await prisma.accountDeletionCleanup.deleteMany({ where: { userId: id } });
       }
     });

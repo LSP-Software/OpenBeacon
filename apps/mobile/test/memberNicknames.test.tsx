@@ -36,6 +36,7 @@ mock.module("expo-router", () => ({ useRouter: () => ({ replace: () => {} }) }))
 mock.module("@react-navigation/native", () => ({ useIsFocused: () => true }));
 mock.module("lucide-react-native", () => ({
   CirclePauseIcon: () => null,
+  CrownIcon: () => null,
   EllipsisVerticalIcon: () => null,
   LogOutIcon: () => null,
   MapPinIcon: () => null,
@@ -141,6 +142,10 @@ mock.module("../lib/api.ts", () => ({
     },
     placeSharing: { get: { queryOptions: () => ({ queryKey: ["placeSharing"] }) } },
     groupLifecycle: { delete: { mutationOptions: () => ({}) } },
+    groupOwnership: {
+      offer: { mutationOptions: () => ({}) },
+      cancel: { mutationOptions: () => ({}) },
+    },
   },
 }));
 mock.module("../lib/auth-client.ts", () => ({
@@ -263,7 +268,7 @@ test("a removal can't be submitted twice while the new epoch is being built", as
   records = {};
   buttons = [];
   mutate.mockClear();
-  group.members.push({ id: "self", role: "OWNER", userId: "owner", name: "Owner", image: null });
+  group.members.push({ id: "self", role: "ADMIN", userId: "owner", name: "Owner", image: null });
   const { promise: built, resolve: finishBuild } = Promise.withResolvers<object>();
   buildRemoval = () => built;
   await act(async () => root.render(<MembersTab groupId="group" live={live()} />));
@@ -280,7 +285,7 @@ test("a removal can't be submitted twice while the new epoch is being built", as
   });
   await act(async () => button("Alice, Member").onPress());
   expect(button("Remove from group").disabled).toBe(true);
-  await act(async () => button("Owner, Owner").onPress());
+  await act(async () => button("Owner, Admin").onPress());
   expect(button("Leave group").disabled).toBe(true);
   await act(async () => {
     await confirm.onPress?.();

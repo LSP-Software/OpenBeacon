@@ -53,6 +53,7 @@ import { resolveSelfDeviceLocationFallback } from "../../../lib/resolveSelfDevic
 import { storage } from "../../../lib/storage.ts";
 import { TAB_BAR_CONTENT_HEIGHT } from "../../../lib/tabBarLayout.ts";
 import { dismissTrackingQueueEviction, getTrackingQueueEviction } from "../../../lib/tracking.ts";
+import { canEditGroup } from "../../../lib/groupRoles.ts";
 
 const keyBannerDismissedKey = (userId: string, groupId: string) =>
   `map.keyBannerDismissed.${userId}.${groupId}`;
@@ -205,8 +206,7 @@ const MapScreen = () => {
       buildPlacePins({
         groups: (groups ?? []).map((group, index) => ({
           canManage: group.members.some(
-            (member) =>
-              member.userId === userId && (member.role === "OWNER" || member.role === "ADMIN"),
+            (member) => member.userId === userId && canEditGroup(member.role),
           ),
           id: group.id,
           memberUserIds: group.members.map((member) => member.userId),

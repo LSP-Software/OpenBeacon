@@ -63,6 +63,7 @@ const account = (
   device: null,
   deletionDate: null,
   turnedOff: [],
+  group: null,
   ...extra,
 });
 
@@ -71,7 +72,7 @@ const groupEvent = (
     type: "MEMBER_JOINED" | "MEMBER_LEFT" | "ROLE_CHANGED";
     actor: { userId: string; name: string } | null;
     subject: { userId: string; name: string } | null;
-    role: "OWNER" | "ADMIN" | "MEMBER" | null;
+    role: "ADMIN" | "EDITOR" | "MEMBER" | null;
     groupId: string;
   }>,
 ) => ({
@@ -143,6 +144,7 @@ describe("account notices", () => {
         "ALERTS_TURNED_OFF",
         "SIGN_IN_CODES_TURNED_ON",
         "SIGN_IN_CODES_TURNED_OFF",
+        "OWNERSHIP_OFFERED",
       ] as const
     ).map((type) => describeAccountNotice(account(type)).link.url);
     expect(urls).toEqual([
@@ -157,7 +159,17 @@ describe("account notices", () => {
       "openbeacon:///account/notifications",
       "openbeacon:///account/password",
       "openbeacon:///account/password",
+      "openbeacon:///groups/list",
     ]);
+  });
+
+  test("name the group a request to become its owner is about", () => {
+    expect(
+      describeAccountNotice(account("OWNERSHIP_OFFERED", { group: { id: "g1", name: "Family" } })),
+    ).toMatchObject({
+      title: "You’ve been asked to become the owner of Family",
+      body: "Open Groups to see what it means and accept or decline.",
+    });
   });
 
   test("list the security alerts that were turned off and where", () => {
@@ -202,7 +214,7 @@ describe("showing notices", () => {
           groupEvent({}),
           groupEvent({
             type: "ROLE_CHANGED",
-            role: "ADMIN",
+            role: "EDITOR",
             actor: { userId: "user-sam", name: "Samantha" },
             subject: { userId: "user-1", name: "Me" },
           }),
@@ -223,7 +235,7 @@ describe("showing notices", () => {
       },
       {
         kind: "groupActivity",
-        title: "Mum made you an admin",
+        title: "Mum made you an Editor",
         body: null,
         groupName: "Family",
         url: "openbeacon:///groups/family?tab=history",

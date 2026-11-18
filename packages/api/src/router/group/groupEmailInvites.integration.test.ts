@@ -104,7 +104,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const second = caller(users[2]!);
       const outsider = caller(users[3]!);
       const invites = [
-        { email: email(users[1]!), role: "ADMIN" as const },
+        { email: email(users[1]!), role: "EDITOR" as const },
         { email: ` ${email(users[2]!).toUpperCase()} `, role: "MEMBER" as const },
         { email: email(users[1]!), role: "MEMBER" as const },
         { email: email(users[0]!), role: "MEMBER" as const },
@@ -179,7 +179,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             where: { userId_groupId: { userId: users[winnerIndex]!, groupId } },
           })
         ).role,
-      ).toBe(winnerIndex === 1 ? "ADMIN" : "MEMBER");
+      ).toBe(winnerIndex === 1 ? "EDITOR" : "MEMBER");
       await expect(
         caller(users[winnerIndex]!).groupInvites.accept({
           inviteId: winnerInvite.id,
@@ -269,10 +269,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: {
           id: otherGroupId,
           name: "Expiry",
+          ownerId: users[0]!,
           groupMembers: {
             create: [
-              { userId: users[0]!, role: "OWNER", joinedEpochNumber: 1 },
-              { userId: users[1]!, role: "ADMIN", joinedEpochNumber: 1 },
+              { userId: users[0]!, role: "ADMIN", joinedEpochNumber: 1 },
+              { userId: users[1]!, role: "EDITOR", joinedEpochNumber: 1 },
             ],
           },
         },
@@ -324,10 +325,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: {
           id: refreshGroupId,
           name: "Refresh",
+          ownerId: users[0]!,
           groupMembers: {
             create: [
-              { userId: users[0]!, role: "OWNER", joinedEpochNumber: 1 },
-              { userId: users[1]!, role: "ADMIN", joinedEpochNumber: 1 },
+              { userId: users[0]!, role: "ADMIN", joinedEpochNumber: 1 },
+              { userId: users[1]!, role: "EDITOR", joinedEpochNumber: 1 },
             ],
           },
         },
@@ -360,11 +362,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
 
       await caller(users[0]!).groupInvites.send({
         groupId: refreshGroupId,
-        invites: [{ email: email(users[2]!), role: "ADMIN" }],
+        invites: [{ email: email(users[2]!), role: "EDITOR" }],
       });
       const [promoted, ...duplicates] = await inviteFor();
       expect(duplicates).toHaveLength(0);
-      expect(promoted).toMatchObject({ id: original!.id, inviterId: users[0]!, role: "ADMIN" });
+      expect(promoted).toMatchObject({ id: original!.id, inviterId: users[0]!, role: "EDITOR" });
     });
 
     test("demoting an inviter drops the invites their new role could not send", async () => {
@@ -377,11 +379,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: {
           id: demotionGroupId,
           name: "Demotion",
+          ownerId: users[0]!,
           groupMembers: {
             create: [
-              { userId: users[0]!, role: "OWNER", joinedEpochNumber: 1 },
-              { userId: users[1]!, role: "OWNER", joinedEpochNumber: 1 },
-              { userId: users[2]!, role: "ADMIN", joinedEpochNumber: 1 },
+              { userId: users[0]!, role: "ADMIN", joinedEpochNumber: 1 },
+              { userId: users[1]!, role: "ADMIN", joinedEpochNumber: 1 },
+              { userId: users[2]!, role: "EDITOR", joinedEpochNumber: 1 },
             ],
           },
         },
@@ -401,7 +404,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await caller(users[1]!).groupInvites.send({
         groupId: demotionGroupId,
         invites: [
-          { email: email(recipients[0]!), role: "ADMIN" },
+          { email: email(recipients[0]!), role: "EDITOR" },
           { email: email(recipients[1]!), role: "MEMBER" },
         ],
       });
@@ -411,14 +414,14 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       });
       await caller(users[0]!).groupInvites.send({
         groupId: demotionGroupId,
-        invites: [{ email: email(recipients[3]!), role: "ADMIN" }],
+        invites: [{ email: email(recipients[3]!), role: "EDITOR" }],
       });
       expect(await remaining()).toEqual(recipients);
 
       await caller(users[0]!).groupMembership.updateRole({
         groupId: demotionGroupId,
         memberId: memberId(users[1]!),
-        role: "ADMIN",
+        role: "EDITOR",
       });
       expect(await remaining()).toEqual([recipients[1]!, recipients[2]!, recipients[3]!]);
 

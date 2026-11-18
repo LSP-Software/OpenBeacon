@@ -1,12 +1,15 @@
 import { useIsFocused } from "@react-navigation/native";
-import { useQuery } from "@tanstack/react-query";
+import { tryCatch } from "@openbeacon/shared";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "expo-router";
 import {
   ChevronRightIcon,
+  CrownIcon,
   LockIcon,
   MailIcon,
   PlusIcon,
   QrCodeIcon,
+  ShieldIcon,
   UsersIcon,
 } from "lucide-react-native";
 import { useState } from "react";
@@ -15,6 +18,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { AnnouncementBanner } from "../../../components/AnnouncementBanner.tsx";
 import { CreateGroupDialog } from "../../../components/dialogs/CreateGroupDialog.tsx";
 import { LoadingIndicator } from "../../../components/LoadingIndicator.tsx";
+import { PromptCard } from "../../../components/PromptCard.tsx";
 import { RefreshablePage } from "../../../components/RefreshablePage.tsx";
 import { DecryptedAvatarImage } from "../../../components/image/DecryptedAvatarImage.tsx";
 import { Avatar, AvatarFallback } from "../../../components/ui/Avatar.tsx";
@@ -24,6 +28,7 @@ import { Text } from "../../../components/ui/Text.tsx";
 import { useGroupColorRevision } from "../../../hooks/useGroupColorRevision.ts";
 import { useRefetchWhileFocused } from "../../../hooks/useRefetchWhileFocused.ts";
 import { useUnseenGroupHistory } from "../../../hooks/useUnseenGroupHistory.ts";
+import { Alert } from "../../../lib/alert.ts";
 import { type RouterOutputs, trpc } from "../../../lib/api.ts";
 import { cn } from "../../../lib/cn.ts";
 import { getGroupColor } from "../../../lib/groupColor.ts";
@@ -41,8 +46,16 @@ export default function GroupsScreen() {
     ...trpc.groupInvites.list.queryOptions(),
     subscribed: isFocused,
   });
+  const ownershipOffers = useQuery({
+    ...trpc.groupOwnership.offers.queryOptions(),
+    subscribed: isFocused,
+  });
   useRefetchWhileFocused(
-    [trpc.groupMembership.list.queryKey(), trpc.groupInvites.list.queryKey()],
+    [
+      trpc.groupMembership.list.queryKey(),
+      trpc.groupInvites.list.queryKey(),
+      trpc.groupOwnership.offers.queryKey(),
+    ],
     30_000,
   );
 
@@ -107,12 +120,66 @@ export default function GroupsScreen() {
             We couldn’t reach the server, so this list may be out of date.
           </Text>
         ) : null}
+        <OwnershipOffers offers={ownershipOffers.data ?? []} />
         <GroupInvitesList groupInvites={invites.data ?? []} />
         <GroupList groupList={groups.data} setCreateGroupDialogOpen={setCreateGroupDialogOpen} />
       </View>
     </RefreshablePage>
   );
 }
+
+const OwnershipOffers = ({ offers }: { offers: RouterOutputs["groupOwnership"]["offers"] }) => {
+  const queryClient = useQueryClient();
+  const accept = useMutation(trpc.groupOwnership.accept.mutationOptions());
+  const decline = useMutation(trpc.groupOwnership.decline.mutationOptions());
+  const respond = async (groupId: string, answer: "accept" | "decline") => {
+    const result = await tryCatch(
+      (answer === "accept" ? accept : decline).mutateAsync({ groupId }),
+    );
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: trpc.groupOwnership.offers.queryKey() }),
+      queryClient.invalidateQueries({ queryKey: trpc.groupMembership.list.queryKey() }),
+    ]);
+    if (result.error) {
+      Alert.alert(
+        answer === "accept" ? "Unable to become the owner" : "Unable to decline",
+        result.error.message,
+      );
+    }
+  };
+  if (!offers.length) return null;
+  return (
+    <View className="gap-3 mb-4">
+      {offers.map((offer) => (
+        <PromptCard
+          key={offer.groupId}
+          icon={CrownIcon}
+          tone="primary"
+          title={`Become the owner of ${offer.groupName}?`}
+          description={`${offer.owner.name} asked you to take over ${offer.groupName}. The owner’s account pays for every seat in the group, so it will use ${offer.seats} ${offer.seats === 1 ? "seat" : "seats"} of yours (one for each phone or tablet in it). Only the owner can delete the group or hand it on. ${offer.owner.name} stays an Admin.`}
+        >
+          <Button
+            className="flex-1"
+            disabled={accept.isPending || decline.isPending}
+            loading={accept.isPending && accept.variables?.groupId === offer.groupId}
+            onPress={() => void respond(offer.groupId, "accept")}
+          >
+            <Text>Accept</Text>
+          </Button>
+          <Button
+            className="flex-1"
+            variant="secondary"
+            disabled={accept.isPending || decline.isPending}
+            loading={decline.isPending && decline.variables?.groupId === offer.groupId}
+            onPress={() => void respond(offer.groupId, "decline")}
+          >
+            <Text>Decline</Text>
+          </Button>
+        </PromptCard>
+      ))}
+    </View>
+  );
+};
 
 const GroupInvitesList = ({
   groupInvites,

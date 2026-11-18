@@ -4,13 +4,13 @@ import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
 import { errorCode, tryCatch } from "@openbeacon/shared";
 import { recordGroupEvent } from "../../lib/groupHistory.ts";
-import { deleteGroup } from "../../lib/deleteGroup.ts";
 import { imageKeySelect, toStoredImageKey } from "../../lib/imageKeys.ts";
 import { deleteTrackingStreams } from "../../lib/trackingCleanup.ts";
 import { getGroupRemovalContext, persistGroupEpoch } from "../../lib/groupEpochs.ts";
 import { groupMemberProcedure } from "../../procedures/auth/group.ts";
 import { protectedProcedure } from "../../procedures/auth/runtime.ts";
 import type { GroupListItem } from "../../types/GroupListItem.ts";
+import { ReasonError } from "../../lib/reasonError.ts";
 import { removeGroupMemberWithOwnerGuard } from "./assertGroupMemberCanBeRemoved.ts";
 
 export const groupMembershipRouter = {
@@ -27,6 +27,8 @@ export const groupMembershipRouter = {
         id: true,
         name: true,
         image: true,
+        ownerId: true,
+        ownershipOfferedToId: true,
         ...imageKeySelect,
         groupMembers: {
           select: {
@@ -52,6 +54,8 @@ export const groupMembershipRouter = {
           name: group.name,
           image: group.image,
           imageKey: toStoredImageKey(group),
+          ownerId: group.ownerId,
+          ownershipOfferedToId: group.ownershipOfferedToId,
           members: group.groupMembers.map((member) => ({
             id: member.id,
             userId: member.user.id,
@@ -73,8 +77,8 @@ export const groupMembershipRouter = {
     .query(async ({ ctx, input }) => {
       if (
         ctx.groupMember.id !== input.memberId &&
-        ctx.groupMember.role !== GroupRole.OWNER &&
-        ctx.groupMember.role !== GroupRole.ADMIN
+        ctx.groupMember.role !== GroupRole.ADMIN &&
+        ctx.groupMember.role !== GroupRole.EDITOR
       ) {
         throw new TRPCError({
           code: "FORBIDDEN",
@@ -242,8 +246,8 @@ export const groupMembershipRouter = {
           if (
             !actor ||
             (actor.id !== input.memberId &&
-              actor.role !== GroupRole.OWNER &&
-              actor.role !== GroupRole.ADMIN)
+              actor.role !== GroupRole.ADMIN &&
+              actor.role !== GroupRole.EDITOR)
           ) {
             throw new TRPCError({
               code: "FORBIDDEN",
@@ -252,7 +256,7 @@ export const groupMembershipRouter = {
           }
           const member = await tx.groupMember.findFirst({
             where: { groupId: input.groupId, id: input.memberId },
-            select: { userId: true, role: true },
+            select: { userId: true, role: true, group: { select: { ownerId: true } } },
           });
           if (!member) {
             throw new TRPCError({
@@ -260,59 +264,25 @@ export const groupMembershipRouter = {
               message: "Group member not found",
             });
           }
+          if (member.group.ownerId === member.userId) {
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message:
+                actor.id === input.memberId
+                  ? "The owner can't leave the group. Transfer ownership or delete the group."
+                  : "The group's owner can't be removed from the group.",
+              cause: new ReasonError("GROUP_OWNER"),
+            });
+          }
           if (
             actor.id !== input.memberId &&
-            actor.role !== GroupRole.OWNER &&
+            actor.role !== GroupRole.ADMIN &&
             member.role !== GroupRole.MEMBER
           ) {
             throw new TRPCError({
               code: "FORBIDDEN",
-              message: "Only owners can remove owners or admins.",
+              message: "Only Admins can remove Admins or Editors.",
             });
-          }
-
-          if (input.successorMemberId) {
-            if (
-              actor.id !== input.memberId ||
-              actor.role !== GroupRole.OWNER ||
-              input.successorMemberId === input.memberId
-            ) {
-              throw new TRPCError({
-                code: "FORBIDDEN",
-                message: "Only a departing owner can select a successor.",
-              });
-            }
-            const successor = await tx.groupMember.findFirst({
-              where: { id: input.successorMemberId, groupId: input.groupId },
-              include: { user: { select: { pendingDeletion: true } } },
-            });
-            if (!successor)
-              throw new TRPCError({
-                code: "NOT_FOUND",
-                message: "Successor not found.",
-              });
-            if (successor.user.pendingDeletion && successor.role !== GroupRole.OWNER) {
-              throw new TRPCError({
-                code: "CONFLICT",
-                message: "Cannot change the role of an account pending deletion.",
-              });
-            }
-            if (successor.role !== GroupRole.OWNER) {
-              await tx.groupMember.update({
-                where: { id: successor.id },
-                data: { role: GroupRole.OWNER },
-              });
-              const roleEvent = await recordGroupEvent(tx, {
-                data: {
-                  groupId: input.groupId,
-                  type: GroupEventType.ROLE_CHANGED,
-                  actorUserId: ctx.session.user.id,
-                  subjectUserId: successor.userId,
-                  role: GroupRole.OWNER,
-                },
-              });
-              eventIds.push(roleEvent.id);
-            }
           }
 
           const isLeaving = actor.id === input.memberId;
@@ -362,14 +332,10 @@ export const groupMembershipRouter = {
           });
 
           if (isLeaving) {
-            if ((await tx.groupMember.count({ where: { groupId: input.groupId } })) === 0) {
-              await deleteGroup({ db: tx, groupId: input.groupId });
-            } else {
-              await tx.group.update({
-                where: { id: input.groupId },
-                data: { epochRotationRequired: true },
-              });
-            }
+            await tx.group.update({
+              where: { id: input.groupId },
+              data: { epochRotationRequired: true },
+            });
           }
 
           const [lastStream] = await tx.$queryRaw<Array<{ id: string | null }>>(Prisma.sql`
@@ -418,20 +384,30 @@ export const groupMembershipRouter = {
             },
           },
         });
-        if (actor?.role !== GroupRole.OWNER) {
+        if (actor?.role !== GroupRole.ADMIN) {
           throw new TRPCError({
             code: "FORBIDDEN",
-            message: "Only owners can change roles.",
+            message: "Only Admins can change roles.",
           });
         }
         const member = await tx.groupMember.findFirst({
           where: { id: input.memberId, groupId: input.groupId },
-          include: { user: { select: { pendingDeletion: true } } },
+          include: {
+            user: { select: { pendingDeletion: true } },
+            group: { select: { ownerId: true, ownershipOfferedToId: true } },
+          },
         });
         if (!member) {
           throw new TRPCError({
             code: "NOT_FOUND",
             message: "Group member not found",
+          });
+        }
+        if (member.group.ownerId === member.userId && input.role !== GroupRole.ADMIN) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "The group's owner is always an Admin.",
+            cause: new ReasonError("GROUP_OWNER"),
           });
         }
         if (member.user.pendingDeletion && member.role !== input.role) {
@@ -440,28 +416,18 @@ export const groupMembershipRouter = {
             message: "Cannot change the role of an account pending deletion.",
           });
         }
-        if (member.role === GroupRole.OWNER && input.role !== GroupRole.OWNER) {
-          const owners = await tx.groupMember.count({
-            where: {
-              groupId: input.groupId,
-              role: GroupRole.OWNER,
-              id: { not: member.id },
-              user: { pendingDeletion: false },
-            },
+        if (input.role !== GroupRole.ADMIN && member.group.ownershipOfferedToId === member.userId) {
+          await tx.group.update({
+            where: { id: input.groupId },
+            data: { ownershipOfferedToId: null, ownershipOfferedAt: null },
           });
-          if (owners === 0) {
-            throw new TRPCError({
-              code: "BAD_REQUEST",
-              message: "The group must have at least one owner.",
-            });
-          }
         }
-        if (input.role !== GroupRole.OWNER) {
+        if (input.role !== GroupRole.ADMIN) {
           await tx.groupMemberInvite.deleteMany({
             where: {
               groupId: input.groupId,
               inviterId: member.userId,
-              ...(input.role === GroupRole.ADMIN ? { role: GroupRole.ADMIN } : {}),
+              ...(input.role === GroupRole.EDITOR ? { role: GroupRole.EDITOR } : {}),
             },
           });
         }

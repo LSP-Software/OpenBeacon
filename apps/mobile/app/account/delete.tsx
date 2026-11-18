@@ -13,6 +13,7 @@ import { Input } from "../../components/ui/Input.tsx";
 import { ChoiceList } from "../../components/ui/ChoiceList.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { trpc } from "../../lib/api.ts";
+import { authClient } from "../../lib/auth-client.ts";
 import { endSession } from "../../lib/endSession.ts";
 
 const DeleteAccountScreen = () => {
@@ -21,6 +22,11 @@ const DeleteAccountScreen = () => {
     trpc.account.beginGoogleDeletionVerification.mutationOptions(),
   );
   const verificationMethods = useQuery(trpc.account.deletionVerificationMethods.queryOptions());
+  const { data: session } = authClient.useSession();
+  const groups = useQuery(trpc.groupMembership.list.queryOptions());
+  const sharedOwnedGroups = (groups.data ?? []).filter(
+    (group) => group.ownerId === session?.user.id && group.members.length > 1,
+  );
   const [isGoogleVerifying, setIsGoogleVerifying] = useState(false);
   const [immediate, setImmediate] = useState(false);
   const deletionForm = useForm<{ password: string }>({ defaultValues: { password: "" } });
@@ -109,9 +115,14 @@ const DeleteAccountScreen = () => {
           deleted and cannot be recovered after deletion.
         </Text>
         <Text>
-          Groups where you are the only member will be deleted. Transfer ownership or delete groups
-          where you are the only owner before continuing.
+          Groups you own are deleted with your account, for everyone in them. To keep a group going,
+          make another Admin its owner first from the group’s Members tab.
         </Text>
+        {sharedOwnedGroups.length > 0 ? (
+          <Text className="font-semibold">
+            You own {sharedOwnedGroups.map((group) => group.name).join(", ")}.
+          </Text>
+        ) : null}
         <Text variant="label" className="pt-2">
           When to delete your account
         </Text>

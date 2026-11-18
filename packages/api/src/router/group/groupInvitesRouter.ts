@@ -16,7 +16,7 @@ import {
 import { emailInviteCreatedAfter } from "../../lib/emailInvites.ts";
 import { assertAccountBelowGroupLimit } from "../../lib/groupLimit.ts";
 import { limits } from "../../lib/limits.ts";
-import { groupAdminProcedure } from "../../procedures/auth/group.ts";
+import { groupEditorProcedure } from "../../procedures/auth/group.ts";
 import { protectedProcedure } from "../../procedures/auth/runtime.ts";
 import { imageKeySelect, toStoredImageKey } from "../../lib/imageKeys.ts";
 import type { GroupListItem } from "../../types/GroupListItem.ts";
@@ -32,7 +32,7 @@ const creatorCanAdmit = async (
   });
   return (
     !creator?.user.pendingDeletion &&
-    (creator?.role === GroupRole.OWNER || creator?.role === GroupRole.ADMIN)
+    (creator?.role === GroupRole.ADMIN || creator?.role === GroupRole.EDITOR)
   );
 };
 
@@ -110,7 +110,7 @@ export const groupInvitesRouter = {
   dismissJoinAlert: protectedProcedure
     .input(z.object({ id: z.string().min(1).max(128) }))
     .mutation(() => {}),
-  createShared: groupAdminProcedure
+  createShared: groupEditorProcedure
     .meta({ rateLimit: { limit: 32, windowMs: 60_000 } })
     .input(z.object({ groupId: z.string().min(1).max(128) }))
     .mutation(async ({ ctx, input }) => {
@@ -126,9 +126,12 @@ export const groupInvitesRouter = {
         });
         if (
           actor?.user.pendingDeletion ||
-          (actor?.role !== GroupRole.OWNER && actor?.role !== GroupRole.ADMIN)
+          (actor?.role !== GroupRole.ADMIN && actor?.role !== GroupRole.EDITOR)
         )
-          throw new TRPCError({ code: "FORBIDDEN", message: "You are not an admin of this group" });
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "You are not an Admin or Editor of this group",
+          });
         return tx.groupSharedInvite.create({
           data: {
             codeHash: createHash("sha256").update(code).digest("hex"),
@@ -145,7 +148,7 @@ export const groupInvitesRouter = {
         expiresInMs: Math.max(0, expiresAt.getTime() - Date.now()),
       };
     }),
-  sharedStatuses: groupAdminProcedure
+  sharedStatuses: groupEditorProcedure
     .input(
       z.object({
         groupId: z.string().min(1).max(128),
@@ -374,6 +377,8 @@ export const groupInvitesRouter = {
                 id: true,
                 name: true,
                 image: true,
+                ownerId: true,
+                ownershipOfferedToId: true,
                 ...imageKeySelect,
                 groupMembers: {
                   select: {
@@ -437,6 +442,8 @@ export const groupInvitesRouter = {
           name: member.group.name,
           image: member.group.image,
           imageKey: toStoredImageKey(member.group),
+          ownerId: member.group.ownerId,
+          ownershipOfferedToId: member.group.ownershipOfferedToId,
           members: member.group.groupMembers.map((groupMember) => ({
             id: groupMember.id,
             userId: groupMember.user.id,
@@ -479,7 +486,7 @@ export const groupInvitesRouter = {
         message: "Invite declined.",
       };
     }),
-  send: groupAdminProcedure
+  send: groupEditorProcedure
     .meta({
       rateLimit: {
         limit: 240,
@@ -512,15 +519,18 @@ export const groupInvitesRouter = {
         });
         if (
           actor?.user.pendingDeletion ||
-          (actor?.role !== GroupRole.OWNER && actor?.role !== GroupRole.ADMIN)
+          (actor?.role !== GroupRole.ADMIN && actor?.role !== GroupRole.EDITOR)
         ) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "You are not an admin of this group" });
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "You are not an Admin or Editor of this group",
+          });
         }
         if (
-          actor.role === GroupRole.ADMIN &&
-          input.invites.some((invite) => invite.role === GroupRole.ADMIN)
+          actor.role === GroupRole.EDITOR &&
+          input.invites.some((invite) => invite.role === GroupRole.EDITOR)
         ) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Only owners can invite admins." });
+          throw new TRPCError({ code: "FORBIDDEN", message: "Only Admins can invite Editors." });
         }
         await tx.groupMemberInvite.deleteMany({
           where: { groupId: input.groupId, createdAt: { lte: emailInviteCreatedAfter() } },

@@ -25,6 +25,7 @@ import HistoryTab from "./HistoryTab.tsx";
 import MembersTab from "./MembersTab.tsx";
 import PlacesTab from "./PlacesTab.tsx";
 import SettingsTab from "./SettingsTab.tsx";
+import { canEditGroup } from "../../../../lib/groupRoles.ts";
 
 type GroupTabValue = "members" | "places" | "history" | "settings";
 
@@ -259,7 +260,7 @@ const GroupHeader = ({
   userId: string | undefined;
 }) => {
   const canEditGroupImage = group.members.some(
-    (member) => member.userId === userId && (member.role === "OWNER" || member.role === "ADMIN"),
+    (member) => member.userId === userId && canEditGroup(member.role),
   );
 
   return (

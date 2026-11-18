@@ -21,6 +21,7 @@ import { groupEpochRouter } from "./groupEpochRouter.ts";
 import { groupInvitesRouter } from "./groupInvitesRouter.ts";
 import { groupLifecycleRouter } from "./groupLifecycleRouter.ts";
 import { groupMembershipRouter } from "./groupMembershipRouter.ts";
+import { groupOwnershipRouter } from "./groupOwnershipRouter.ts";
 import { groupSettingsRouter } from "./groupSettingsRouter.ts";
 import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
 
@@ -29,6 +30,7 @@ const router = createTRPCRouter({
   groupLifecycle: groupLifecycleRouter,
   groupInvites: groupInvitesRouter,
   groupMembership: groupMembershipRouter,
+  groupOwnership: groupOwnershipRouter,
   groupSettings: groupSettingsRouter,
 });
 let now = 0;
@@ -105,10 +107,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: {
           id: groupId,
           name: "Original",
+          ownerId: users[0]!,
           groupMembers: {
             create: users.map((userId, index) => ({
               userId,
-              role: index < 2 ? "OWNER" : "MEMBER",
+              role: index < 2 ? "ADMIN" : "MEMBER",
               joinedEpochNumber: 1,
             })),
           },
@@ -126,9 +129,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: {
           id: lastMemberGroupId,
           name: "Last member",
+          ownerId: users[0]!,
           groupMembers: {
             create: [
-              { userId: users[0]!, role: "OWNER", joinedEpochNumber: 1 },
+              { userId: users[0]!, role: "ADMIN", joinedEpochNumber: 1 },
               { userId: users[2]!, role: "MEMBER", joinedEpochNumber: 1 },
             ],
           },
@@ -150,41 +154,50 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       });
       expect(await prisma.group.findUnique({ where: { id: lastMemberGroupId } })).toBeNull();
     });
-    test("enforces permissions and serializes competing owner demotions", async () => {
+    test("enforces permissions and keeps the owner an Admin", async () => {
       const members = await prisma.groupMember.findMany({ where: { groupId } });
       const first = members.find((member) => member.userId === users[0])!;
       const second = members.find((member) => member.userId === users[1])!;
       const ordinary = caller(users[2]!);
       await expect(ordinary.groupSettings.rename({ groupId, name: "No" })).rejects.toThrow(
-        "Only owners and admins can rename the group.",
+        "Only Admins and Editors can rename the group.",
       );
       await expect(ordinary.groupLifecycle.delete({ groupId })).rejects.toThrow(
         "You are not the owner of this group",
       );
       await expect(
         ordinary.groupMembership.updateRole({ groupId, memberId: first.id, role: "MEMBER" }),
-      ).rejects.toThrow("Only owners can change roles.");
+      ).rejects.toThrow("Only Admins can change roles.");
       await caller(users[0]!).groupSettings.rename({ groupId, name: " Renamed " });
       expect((await prisma.group.findUniqueOrThrow({ where: { id: groupId } })).name).toBe(
         "Renamed",
       );
-      const outcomes = await Promise.allSettled([
-        caller(users[0]!).groupMembership.updateRole({
+      await expect(
+        caller(users[1]!).groupMembership.updateRole({
           groupId,
           memberId: first.id,
           role: "MEMBER",
         }),
+      ).rejects.toMatchObject({
+        code: "FORBIDDEN",
+        message: "The group's owner is always an Admin.",
+      });
+      await expect(
         caller(users[1]!).groupMembership.updateRole({
           groupId,
           memberId: second.id,
           role: "MEMBER",
         }),
-      ]);
-      expect(outcomes.filter((outcome) => outcome.status === "fulfilled")).toHaveLength(1);
-      expect(await prisma.groupMember.count({ where: { groupId, role: "OWNER" } })).toBe(1);
+      ).resolves.toMatchObject({ role: "MEMBER" });
+      expect(
+        await prisma.groupMember.findMany({
+          where: { groupId, role: "ADMIN" },
+          select: { userId: true },
+        }),
+      ).toEqual([{ userId: users[0]! }]);
     });
 
-    test("freezes pending roles and preserves an owner who can manage the group", async () => {
+    test("freezes pending roles and keeps the owner in the group as an Admin", async () => {
       const protectedGroup = `${prefix}-pending-owner`;
       const joinGroup = `${prefix}-pending-join`;
       const pendingUser = users[1]!;
@@ -193,10 +206,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: {
           id: protectedGroup,
           name: "Protected",
+          ownerId: activeUser,
           groupMembers: {
             create: [
-              { userId: activeUser, role: "OWNER", joinedEpochNumber: 1 },
-              { userId: pendingUser, role: "OWNER", joinedEpochNumber: 1 },
+              { userId: activeUser, role: "ADMIN", joinedEpochNumber: 1 },
+              { userId: pendingUser, role: "ADMIN", joinedEpochNumber: 1 },
             ],
           },
         },
@@ -205,7 +219,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: {
           id: joinGroup,
           name: "Join",
-          groupMembers: { create: { userId: activeUser, role: "OWNER", joinedEpochNumber: 1 } },
+          ownerId: activeUser,
+          groupMembers: { create: { userId: activeUser, role: "ADMIN", joinedEpochNumber: 1 } },
         },
       });
       await prisma.user.update({
@@ -229,7 +244,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             memberId: active.id,
             role: "MEMBER",
           }),
-        ).rejects.toThrow("at least one owner");
+        ).rejects.toThrow("The group's owner is always an Admin.");
         await expect(
           prisma.$transaction((tx) =>
             removeGroupMemberWithOwnerGuard({
@@ -238,7 +253,13 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
               memberId: active.id,
             }),
           ),
-        ).rejects.toThrow("only owner");
+        ).rejects.toThrow("The group's owner can't be removed from the group.");
+        await expect(
+          caller(activeUser).groupOwnership.offer({
+            groupId: protectedGroup,
+            memberId: pending.id,
+          }),
+        ).rejects.toMatchObject({ code: "CONFLICT", message: "This account is being deleted." });
         await prisma.groupMember.update({ where: { id: pending.id }, data: { role: "MEMBER" } });
         const nextEpoch = {
           createdByDeviceId: "device",
@@ -257,14 +278,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             },
           ],
         };
-        await expect(
-          caller(activeUser).groupMembership.remove({
-            groupId: protectedGroup,
-            memberId: active.id,
-            successorMemberId: pending.id,
-            nextEpoch,
-          }),
-        ).rejects.toThrow("pending deletion");
         const shared = await caller(activeUser).groupInvites.createShared({ groupId: joinGroup });
         await expect(
           caller(pendingUser).groupInvites.acceptShared({ code: shared.code, nextEpoch }),
@@ -291,9 +304,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           caller(activeUser).groupMembership.updateRole({
             groupId: protectedGroup,
             memberId: pending.id,
-            role: "ADMIN",
+            role: "EDITOR",
           }),
-        ).resolves.toMatchObject({ role: "ADMIN" });
+        ).resolves.toMatchObject({ role: "EDITOR" });
       } finally {
         await prisma.user.update({
           where: { id: pendingUser },
@@ -310,10 +323,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: {
           id: imageGroupId,
           name: "Image group",
+          ownerId: users[0]!,
           image: buildImagePublicUrl(env.IMAGES_S3_BUCKET_NAME, path, "avatar.webp"),
           groupMembers: {
             create: [
-              { userId: users[0]!, role: "OWNER", joinedEpochNumber: 1 },
+              { userId: users[0]!, role: "ADMIN", joinedEpochNumber: 1 },
               { userId: users[2]!, role: "MEMBER", joinedEpochNumber: 1 },
             ],
           },
@@ -355,7 +369,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: {
           id: pendingGroupId,
           name: "Pending image",
-          groupMembers: { create: { userId: users[0]!, role: "OWNER", joinedEpochNumber: 1 } },
+          ownerId: users[0]!,
+          groupMembers: { create: { userId: users[0]!, role: "ADMIN", joinedEpochNumber: 1 } },
         },
       });
       await prisma.pendingUpload.create({
@@ -388,7 +403,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: {
           id: uploadGroupId,
           name: "Upload race",
-          groupMembers: { create: { userId: users[0]!, role: "OWNER", joinedEpochNumber: 1 } },
+          ownerId: users[0]!,
+          groupMembers: { create: { userId: users[0]!, role: "ADMIN", joinedEpochNumber: 1 } },
         },
       });
       await prisma.pendingUpload.create({
@@ -445,7 +461,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           data: {
             id,
             name: "Upload test",
-            groupMembers: { create: { userId, role: "OWNER", joinedEpochNumber: 1 } },
+            ownerId: userId,
+            groupMembers: { create: { userId, role: "ADMIN", joinedEpochNumber: 1 } },
             groupEpochs: {
               create: { id: `${id}-epoch`, epochNumber: 1, senderPublicKey: "public-key" },
             },
@@ -499,7 +516,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: {
           id: uploadGroupId,
           name: "Upload success",
-          groupMembers: { create: { userId: users[0]!, role: "OWNER", joinedEpochNumber: 1 } },
+          ownerId: users[0]!,
+          groupMembers: { create: { userId: users[0]!, role: "ADMIN", joinedEpochNumber: 1 } },
           groupEpochs: {
             create: { id: `${uploadGroupId}-epoch`, epochNumber: 1, senderPublicKey: "public-key" },
           },
@@ -556,17 +574,18 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       }
     });
 
-    test("admins cannot remove owners or admins or invite admins, and members cannot invite", async () => {
+    test("editors cannot remove the owner or Editors or invite Editors, and members cannot invite", async () => {
       const permissionGroupId = `${prefix}-permission-group`;
       const group = await prisma.group.create({
         data: {
           id: permissionGroupId,
           name: "Permissions",
+          ownerId: users[0]!,
           groupMembers: {
             create: [
-              { userId: users[0]!, role: "OWNER", joinedEpochNumber: 1 },
-              { userId: users[1]!, role: "ADMIN", joinedEpochNumber: 1 },
-              { userId: users[2]!, role: "ADMIN", joinedEpochNumber: 1 },
+              { userId: users[0]!, role: "ADMIN", joinedEpochNumber: 1 },
+              { userId: users[1]!, role: "EDITOR", joinedEpochNumber: 1 },
+              { userId: users[2]!, role: "EDITOR", joinedEpochNumber: 1 },
             ],
           },
         },
@@ -574,8 +593,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       });
       const owner = group.groupMembers.find((member) => member.userId === users[0]);
       expect(owner).toBeDefined();
-      const admin = group.groupMembers.find((member) => member.userId === users[1]);
-      expect(admin).toBeDefined();
+      const editor = group.groupMembers.find((member) => member.userId === users[1]);
+      expect(editor).toBeDefined();
       const removal = {
         groupId: permissionGroupId,
         memberId: owner!.id,
@@ -598,17 +617,17 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         },
       };
       await expect(caller(users[2]!).groupMembership.remove(removal)).rejects.toThrow(
-        "Only owners can remove owners or admins.",
+        "The group's owner can't be removed from the group.",
       );
       await expect(
-        caller(users[2]!).groupMembership.remove({ ...removal, memberId: admin!.id }),
-      ).rejects.toThrow("Only owners can remove owners or admins.");
+        caller(users[2]!).groupMembership.remove({ ...removal, memberId: editor!.id }),
+      ).rejects.toThrow("Only Admins can remove Admins or Editors.");
       await expect(
         caller(users[2]!).groupInvites.send({
           groupId: permissionGroupId,
-          invites: [{ email: "person@example.test", role: "ADMIN" }],
+          invites: [{ email: "person@example.test", role: "EDITOR" }],
         }),
-      ).rejects.toThrow("Only owners can invite admins.");
+      ).rejects.toThrow("Only Admins can invite Editors.");
       await expect(
         caller(users[2]!).groupInvites.send({
           groupId: permissionGroupId,
@@ -645,9 +664,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: {
           id: lockedGroupId,
           name: "Locked",
+          ownerId: owner,
           groupMembers: {
             create: [
-              { userId: owner, role: "OWNER", joinedEpochNumber: 1 },
+              { userId: owner, role: "ADMIN", joinedEpochNumber: 1 },
               { userId: member, role: "MEMBER", joinedEpochNumber: 1 },
             ],
           },
@@ -696,7 +716,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
                 nextEpoch: unopenableEpoch(`${owner}-device`),
               }),
             () =>
-              api.groupMembership.updateRole({ groupId: lockedGroupId, memberId, role: "ADMIN" }),
+              api.groupMembership.updateRole({ groupId: lockedGroupId, memberId, role: "EDITOR" }),
             () => api.groupSettings.rename({ groupId: lockedGroupId, name: "Taken" }),
             () =>
               api.groupSettings.confirmGroupImageUpload({
@@ -715,7 +735,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           include: { groupMembers: true },
         });
         expect(after.name).toBe("Locked");
-        expect(after.groupMembers.map(({ role }) => role).sort()).toEqual(["MEMBER", "OWNER"]);
+        expect(after.groupMembers.map(({ role }) => role).sort()).toEqual(["ADMIN", "MEMBER"]);
         expect(
           await prisma.personalGroupNickname.count({ where: { ownerId: ownerMemberId } }),
         ).toBe(0);
@@ -748,9 +768,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           epochRotationRequired: true,
           id: claimedGroupId,
           name: "Claimed",
+          ownerId: owner,
           groupMembers: {
             create: [
-              { userId: owner, role: "OWNER", joinedEpochNumber: 1 },
+              { userId: owner, role: "ADMIN", joinedEpochNumber: 1 },
               { userId: member, role: "MEMBER", joinedEpochNumber: 1 },
             ],
           },

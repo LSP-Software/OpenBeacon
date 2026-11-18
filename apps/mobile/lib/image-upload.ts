@@ -106,7 +106,7 @@ export const imageUploadErrorMessage = (error: unknown) => {
     return "That upload expired. Choose the picture again.";
   }
   if (error.data.code === "FORBIDDEN") {
-    return "Only group owners and admins can change the group picture.";
+    return "Only group Admins and Editors can change the group picture.";
   }
   if (error.data.code === "TOO_MANY_REQUESTS") {
     return "Too many uploads. Wait a minute and try again.";

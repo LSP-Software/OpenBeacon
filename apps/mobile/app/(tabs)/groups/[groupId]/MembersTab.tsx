@@ -6,6 +6,7 @@ import { skipToken, useMutation, useQuery, useQueryClient } from "@tanstack/reac
 import { useRouter } from "expo-router";
 import {
   CirclePauseIcon,
+  CrownIcon,
   EllipsisVerticalIcon,
   LogOutIcon,
   MapPinIcon,
@@ -14,7 +15,7 @@ import {
   UserPlusIcon,
 } from "lucide-react-native";
 import { useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, TextInput, View } from "react-native";
 import { InviteMemberToGroupDialog } from "../../../../components/dialogs/InviteMemberToGroupDialog.tsx";
 import { LoadingIndicator } from "../../../../components/LoadingIndicator.tsx";
 import { DecryptedAvatarImage } from "../../../../components/image/DecryptedAvatarImage.tsx";
@@ -43,6 +44,7 @@ import { getBatteryVisual } from "../../../../lib/batteryVisual.ts";
 import { buildMemberLiveStatuses } from "../../../../lib/buildMemberLiveStatuses.ts";
 import { deviceIconFor } from "../../../../lib/deviceIcons.ts";
 import { buildRemoveGroupMemberInput, submitEpochChange } from "../../../../lib/groupEncryption.ts";
+import { canEditGroup, groupRoles, roleLabel } from "../../../../lib/groupRoles.ts";
 import { forgetHiddenMapGroup } from "../../../../lib/hiddenMapGroups.ts";
 import { timeSince } from "../../../../lib/timeSince.ts";
 import { requestTrackingSync } from "../../../../lib/trackingEvents.ts";
@@ -64,12 +66,10 @@ const MembersTab = ({
   const updateNickname = useMutation(trpc.groupMembership.updateNickname.mutationOptions());
   const [changingRole, setChangingRole] = useState<{
     memberId: string;
-    role: "OWNER" | "ADMIN" | "MEMBER";
+    role: (typeof groupRoles)[number];
   } | null>(null);
   const [addMemberDialogOpen, setAddMemberDialogOpen] = useState(false);
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
-  const [successorDialogOpen, setSuccessorDialogOpen] = useState(false);
-  const [successorMemberId, setSuccessorMemberId] = useState<string | null>(null);
   const { data: session } = authClient.useSession();
   const isFocused = useIsFocused();
   const queryClient = useQueryClient();
@@ -78,6 +78,8 @@ const MembersTab = ({
   const removal = useSingleFlight<string>();
   const deleteGroup = useMutation(trpc.groupLifecycle.delete.mutationOptions());
   const updateRole = useMutation(trpc.groupMembership.updateRole.mutationOptions());
+  const offerOwnership = useMutation(trpc.groupOwnership.offer.mutationOptions());
+  const cancelOwnershipOffer = useMutation(trpc.groupOwnership.cancel.mutationOptions());
   const { group, isPending: isFetchingMembers } = useCachedGroup(groupId);
   const members = useMemo(
     () =>
@@ -123,24 +125,85 @@ const MembersTab = ({
   });
   const self = members?.find((member) => member.user.id === session?.user.id);
   const selectedMember = memberStatuses.find((member) => member.id === selectedMemberId);
-  const canManage = self?.role === "OWNER" || self?.role === "ADMIN";
-  const confirmRemoval = (
-    member: { id: string; user: { id: string; name: string } },
-    successor?: string,
-  ) => {
+  const canManage = canEditGroup(self?.role);
+  const selfIsOwner = !!self && self.user.id === group?.ownerId;
+  const refreshGroups = () =>
+    queryClient.invalidateQueries({ queryKey: trpc.groupMembership.list.queryKey() });
+  const leaveAsOwner = () => {
+    const isLastMember = members?.length === 1;
+    Alert.alert(
+      isLastMember ? "Leave group?" : "Leave and delete the group?",
+      isLastMember
+        ? "You are the last person in this group. Leaving will permanently delete the group and its tracking data."
+        : `You own ${group?.name ?? "this group"}, so leaving deletes it and its location history for everyone. To keep it going, make another Admin the owner first.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: isLastMember ? "Leave" : "Delete group",
+          style: "destructive",
+          onPress: async () => {
+            const result = await tryCatch(
+              removal.run(self?.id ?? "", async () => {
+                await deleteGroup.mutateAsync({
+                  groupId,
+                  ...(isLastMember ? { onlyIfLastMember: true } : {}),
+                });
+                if (session) forgetHiddenMapGroup({ groupId, userId: session.user.id });
+                router.replace("/(tabs)/groups/list");
+                await refreshGroups();
+                requestTrackingSync();
+              }),
+            );
+            if (result.error) {
+              Alert.alert(
+                "Unable to update group",
+                result.error instanceof Error ? result.error.message : "Something went wrong.",
+              );
+            }
+          },
+        },
+      ],
+    );
+  };
+  const askToTakeOver = (member: { id: string; user: { name: string } }) =>
+    Alert.alert(
+      `Ask ${member.user.name} to become the owner?`,
+      `${member.user.name} will see the request on their phone and can accept or decline it. Once they accept, their account pays for this group’s seats and only they can delete the group or hand it on. You’ll stay an Admin.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Send request",
+          onPress: async () => {
+            const result = await tryCatch(
+              offerOwnership.mutateAsync({ groupId, memberId: member.id }),
+            );
+            if (result.error) {
+              Alert.alert("Unable to send the request", result.error.message);
+              return;
+            }
+            await refreshGroups();
+          },
+        },
+      ],
+    );
+  const cancelTakeOver = async () => {
+    const result = await tryCatch(cancelOwnershipOffer.mutateAsync({ groupId }));
+    if (result.error) {
+      Alert.alert("Unable to cancel the request", result.error.message);
+      return;
+    }
+    await refreshGroups();
+  };
+  const confirmRemoval = (member: { id: string; user: { id: string; name: string } }) => {
     const isSelf = member.user.id === session?.user.id;
-    const isLastMember = isSelf && members?.length === 1;
-    if (isSelf && self?.role === "OWNER" && !successor && !isLastMember) {
-      setSuccessorMemberId(null);
-      setSuccessorDialogOpen(true);
+    if (isSelf && selfIsOwner) {
+      leaveAsOwner();
       return;
     }
     Alert.alert(
       isSelf ? "Leave group?" : `Remove ${member.user.name}?`,
       isSelf
-        ? isLastMember
-          ? "You are the last person in this group. Leaving will permanently delete the group and its tracking data."
-          : `${successor ? `${members?.find((item) => item.id === successor)?.user.name ?? "The selected member"} will become an owner. ` : ""}You will leave this group, and your location history in this group will be deleted.`
+        ? "You will leave this group, and your location history in this group will be deleted."
         : `${member.user.name} will be removed from this group and their location history in this group will be deleted.`,
       [
         { text: "Cancel", style: "cancel" },
@@ -150,28 +213,15 @@ const MembersTab = ({
           onPress: async () => {
             const result = await tryCatch(
               removal.run(member.id, async () => {
-                if (isLastMember) {
-                  await deleteGroup.mutateAsync({
-                    groupId,
-                    onlyIfLastMember: true,
-                  });
-                } else {
-                  await submitEpochChange({
-                    build: () => buildRemoveGroupMemberInput({ groupId, memberId: member.id }),
-                    submit: (input) =>
-                      removeMember.mutateAsync({
-                        ...input,
-                        ...(successor ? { successorMemberId: successor } : {}),
-                      }),
-                  });
-                }
+                await submitEpochChange({
+                  build: () => buildRemoveGroupMemberInput({ groupId, memberId: member.id }),
+                  submit: (input) => removeMember.mutateAsync(input),
+                });
                 if (isSelf) {
                   forgetHiddenMapGroup({ groupId, userId: member.user.id });
                   router.replace("/(tabs)/groups/list");
                 }
-                await queryClient.invalidateQueries({
-                  queryKey: trpc.groupMembership.list.queryKey(),
-                });
+                await refreshGroups();
                 requestTrackingSync();
               }),
             );
@@ -197,7 +247,7 @@ const MembersTab = ({
         open={addMemberDialogOpen}
         setOpen={setAddMemberDialogOpen}
         groupId={groupId}
-        canInviteAdmins={self?.role === "OWNER"}
+        canInviteEditors={self?.role === "ADMIN"}
       />
       <Dialog
         open={nicknameMember !== null}
@@ -272,43 +322,6 @@ const MembersTab = ({
           </Button>
         </DialogContent>
       </Dialog>
-      <Dialog open={successorDialogOpen} onOpenChange={setSuccessorDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Choose a new owner</DialogTitle>
-          </DialogHeader>
-          <Text>Select the person who will manage this group after you leave.</Text>
-          <ScrollView style={{ maxHeight: 280 }}>
-            {members
-              ?.filter((member) => member.id !== self?.id)
-              .map((member) => (
-                <Pressable
-                  key={member.id}
-                  accessibilityRole="radio"
-                  accessibilityState={{
-                    checked: successorMemberId === member.id,
-                  }}
-                  onPress={() => setSuccessorMemberId(member.id)}
-                  className="flex-row items-center gap-3 rounded-lg p-3"
-                >
-                  <View
-                    className={`size-5 rounded-full border-2 ${successorMemberId === member.id ? "border-primary bg-primary" : "border-border"}`}
-                  />
-                  <Text>{member.user.name}</Text>
-                </Pressable>
-              ))}
-          </ScrollView>
-          <Button
-            disabled={!successorMemberId}
-            onPress={() => {
-              setSuccessorDialogOpen(false);
-              if (self && successorMemberId) confirmRemoval(self, successorMemberId);
-            }}
-          >
-            <Text>Continue</Text>
-          </Button>
-        </DialogContent>
-      </Dialog>
       <View className="flex-row items-center justify-between pb-3">
         <Text variant="label">
           {members?.length ?? 0} {members?.length === 1 ? "member" : "members"}
@@ -325,7 +338,7 @@ const MembersTab = ({
           <Pressable
             key={member.id}
             accessibilityRole="button"
-            accessibilityLabel={`${member.nickname ?? member.user.name}, ${ROLE_LABELS[member.role]}`}
+            accessibilityLabel={`${member.nickname ?? member.user.name}, ${member.user.id === group?.ownerId ? "Owner, " : ""}${roleLabel(member.role)}`}
             accessibilityHint="Opens actions for this member"
             onPress={() => setSelectedMemberId(member.id)}
             className={cn(
@@ -351,11 +364,17 @@ const MembersTab = ({
                     <Text className="text-secondary text-xs font-semibold">You</Text>
                   </View>
                 ) : null}
+                {member.user.id === group?.ownerId ? (
+                  <View className="flex-row items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5">
+                    <Icon as={CrownIcon} size={12} className="text-primary" />
+                    <Text className="text-primary-text text-xs font-semibold">Owner</Text>
+                  </View>
+                ) : null}
                 <View className="flex-1" />
                 {changingRole?.memberId === member.id ? (
                   <ActivityIndicator size="small" />
                 ) : (
-                  <Text className="text-tertiary text-sm">{ROLE_LABELS[member.role]}</Text>
+                  <Text className="text-tertiary text-sm">{roleLabel(member.role)}</Text>
                 )}
                 <Icon as={EllipsisVerticalIcon} className="text-secondary size-5" />
               </View>
@@ -397,18 +416,20 @@ const MembersTab = ({
                 >
                   {selectedMember.nickname ?? selectedMember.user.name}
                 </Text>
-                <Text className="text-secondary text-sm">{ROLE_LABELS[selectedMember.role]}</Text>
+                <Text className="text-secondary text-sm">
+                  {selectedMember.user.id === group?.ownerId ? "Owner · " : ""}
+                  {roleLabel(selectedMember.role)}
+                </Text>
               </View>
             </View>
-            {self?.role === "OWNER" && selectedMember.id !== self.id ? (
+            {self?.role === "ADMIN" &&
+            selectedMember.id !== self.id &&
+            selectedMember.user.id !== group?.ownerId ? (
               <View className="gap-2">
                 <Text variant="label">Role</Text>
                 <SegmentedControl
                   accessibilityLabel={`Role for ${selectedMember.user.name}`}
-                  options={(["OWNER", "ADMIN", "MEMBER"] as const).map((role) => ({
-                    value: role,
-                    label: ROLE_LABELS[role],
-                  }))}
+                  options={groupRoles.map((role) => ({ value: role, label: roleLabel(role) }))}
                   selected={selectedMember.role}
                   disabled={changingRole !== null}
                   onChange={(role) => {
@@ -416,7 +437,7 @@ const MembersTab = ({
                     setSelectedMemberId(null);
                     Alert.alert(
                       "Change role?",
-                      `Make ${selectedMember.user.name} ${role.toLowerCase()}?`,
+                      `Make ${selectedMember.user.name} ${roleLabel(role)}?`,
                       [
                         { text: "Cancel", style: "cancel" },
                         {
@@ -435,9 +456,7 @@ const MembersTab = ({
                               Alert.alert("Unable to change role", result.error.message);
                               return;
                             }
-                            await queryClient.invalidateQueries({
-                              queryKey: trpc.groupMembership.list.queryKey(),
-                            });
+                            await refreshGroups();
                             setChangingRole(null);
                           },
                         },
@@ -446,6 +465,34 @@ const MembersTab = ({
                   }}
                 />
               </View>
+            ) : null}
+            {selfIsOwner && selectedMember.id !== self?.id && selectedMember.role === "ADMIN" ? (
+              group?.ownershipOfferedToId === selectedMember.user.id ? (
+                <View className="flex-row items-center gap-2">
+                  <Text className="text-secondary flex-1 text-sm">Asked to take over as owner</Text>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    loading={cancelOwnershipOffer.isPending}
+                    onPress={() => void cancelTakeOver()}
+                  >
+                    <Text>Cancel request</Text>
+                  </Button>
+                </View>
+              ) : (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  loading={offerOwnership.isPending}
+                  onPress={() => {
+                    setSelectedMemberId(null);
+                    askToTakeOver(selectedMember);
+                  }}
+                >
+                  <Icon as={CrownIcon} size={16} className="text-foreground" />
+                  <Text>Make owner</Text>
+                </Button>
+              )
             ) : null}
             <View className="overflow-hidden rounded-2xl border border-border">
               <Pressable
@@ -479,7 +526,9 @@ const MembersTab = ({
                 </View>
               </Pressable>
               {(selectedMember.id === self?.id ||
-                (canManage && (self?.role === "OWNER" || selectedMember.role === "MEMBER"))) && (
+                (canManage &&
+                  selectedMember.user.id !== group?.ownerId &&
+                  (self?.role === "ADMIN" || selectedMember.role === "MEMBER"))) && (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={
@@ -510,15 +559,13 @@ const MembersTab = ({
   );
 };
 
-const ROLE_LABELS = { OWNER: "Owner", ADMIN: "Admin", MEMBER: "Member" } as const;
-
 const MemberStatus = ({
   arrivalsOff,
   member,
   sharingPaused,
 }: {
   arrivalsOff: string | null;
-  member: ReturnType<typeof buildMemberLiveStatuses>[number];
+  member: ReturnType<typeof buildMemberLiveStatuses<(typeof groupRoles)[number]>>[number];
   sharingPaused: boolean;
 }) => {
   const batteryVisual = member.battery

@@ -35,7 +35,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Expired records 
       data: {
         id: groupId,
         name: "Group",
-        groupMembers: { create: { userId: memberId, role: "OWNER", joinedEpochNumber: 1 } },
+        ownerId: memberId,
+        groupMembers: { create: { userId: memberId, role: "ADMIN", joinedEpochNumber: 1 } },
       },
     });
     await prisma.verification.createMany({

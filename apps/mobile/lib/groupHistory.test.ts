@@ -45,29 +45,41 @@ describe("group event wording", () => {
     expect(describe_({ type: "MEMBER_REMOVED", actor: sam, subject: alex })).toBe(
       "Dad removed Alex",
     );
-    expect(describe_({ type: "ROLE_CHANGED", actor: sam, subject: me, role: "ADMIN" })).toBe(
-      "Dad made you an admin",
+    expect(describe_({ type: "ROLE_CHANGED", actor: sam, subject: me, role: "EDITOR" })).toBe(
+      "Dad made you an Editor",
     );
   });
 
   test("describes role changes, including demotions and people changing their own role", () => {
-    expect(describe_({ type: "ROLE_CHANGED", actor: sam, subject: alex, role: "OWNER" })).toBe(
-      "Dad made Alex an owner",
+    expect(describe_({ type: "ROLE_CHANGED", actor: sam, subject: alex, role: "ADMIN" })).toBe(
+      "Dad made Alex an Admin",
     );
     expect(describe_({ type: "ROLE_CHANGED", actor: me, subject: alex, role: "MEMBER" })).toBe(
-      "You changed Alex’s role to member",
+      "You changed Alex’s role to Member",
     );
     expect(describe_({ type: "ROLE_CHANGED", actor: sam, subject: me, role: "MEMBER" })).toBe(
-      "Dad changed your role to member",
+      "Dad changed your role to Member",
     );
     expect(describe_({ type: "ROLE_CHANGED", actor: sam, subject: null, role: "MEMBER" })).toBe(
-      "Dad changed a deleted account’s role to member",
+      "Dad changed a deleted account’s role to Member",
     );
-    expect(describe_({ type: "ROLE_CHANGED", actor: me, subject: me, role: "ADMIN" })).toBe(
-      "You became an admin",
+    expect(describe_({ type: "ROLE_CHANGED", actor: me, subject: me, role: "EDITOR" })).toBe(
+      "You became an Editor",
     );
-    expect(describe_({ type: "ROLE_CHANGED", actor: sam, subject: sam, role: "OWNER" })).toBe(
-      "Dad became an owner",
+    expect(describe_({ type: "ROLE_CHANGED", actor: sam, subject: sam, role: "ADMIN" })).toBe(
+      "Dad became an Admin",
+    );
+  });
+
+  test("describes a change of owner from both sides", () => {
+    expect(describe_({ type: "OWNER_CHANGED", actor: alex, subject: sam })).toBe(
+      "Alex took over as owner from Dad",
+    );
+    expect(describe_({ type: "OWNER_CHANGED", actor: me, subject: sam })).toBe(
+      "You took over as owner from Dad",
+    );
+    expect(describe_({ type: "OWNER_CHANGED", actor: alex, subject: me })).toBe(
+      "Alex took over as owner from you",
     );
   });
 
@@ -75,16 +87,16 @@ describe("group event wording", () => {
     expect(describe_({ type: "MEMBER_REMOVED", actor: null, subject: alex })).toBe(
       "A deleted account removed Alex",
     );
-    expect(describe_({ type: "ROLE_CHANGED", actor: sam, subject: null, role: "OWNER" })).toBe(
-      "Dad made a deleted account an owner",
+    expect(describe_({ type: "ROLE_CHANGED", actor: sam, subject: null, role: "ADMIN" })).toBe(
+      "Dad made a deleted account an Admin",
     );
     expect(describe_({ type: "ACCOUNT_DELETED" })).toBe("A member deleted their account");
   });
 
   test("describes joins, leaves, renames and places", () => {
     expect(describe_({ type: "MEMBER_JOINED", subject: alex, role: "MEMBER" })).toBe("Alex joined");
-    expect(describe_({ type: "MEMBER_JOINED", subject: alex, role: "ADMIN" })).toBe(
-      "Alex joined as an admin",
+    expect(describe_({ type: "MEMBER_JOINED", subject: alex, role: "EDITOR" })).toBe(
+      "Alex joined as an Editor",
     );
     expect(describe_({ type: "MEMBER_LEFT", subject: me })).toBe("You left the group");
     expect(

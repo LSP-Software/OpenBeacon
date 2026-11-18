@@ -175,10 +175,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: {
           id: groupId,
           name: "Family",
+          ownerId: owner,
           groupMembers: {
             create: [
-              { userId: owner, role: "OWNER", joinedEpochNumber: 1 },
-              { userId: admin, role: "ADMIN", joinedEpochNumber: 1 },
+              { userId: owner, role: "ADMIN", joinedEpochNumber: 1 },
+              { userId: admin, role: "EDITOR", joinedEpochNumber: 1 },
               { userId: member, role: "MEMBER", joinedEpochNumber: 1 },
             ],
           },
@@ -194,7 +195,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: {
           id: otherGroupId,
           name: "Other",
-          groupMembers: { create: [{ userId: outsider, role: "OWNER", joinedEpochNumber: 1 }] },
+          ownerId: outsider,
+          groupMembers: { create: [{ userId: outsider, role: "ADMIN", joinedEpochNumber: 1 }] },
           groupEpochs: {
             create: [{ id: otherEpochId, epochNumber: 1, senderPublicKey: "public-key" }],
           },
@@ -235,7 +237,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await expect(caller(outsider).groupPlaces.list({ groupId })).rejects.toThrow(
         "You are not a member of this group",
       );
-      await expect(createPlace(member)).rejects.toThrow("You are not an admin of this group");
+      await expect(createPlace(member)).rejects.toThrow(
+        "You are not an Admin or Editor of this group",
+      );
       await expect(createPlace(outsider)).rejects.toThrow("You are not a member of this group");
       await expect(
         caller(member).groupPlaces.update({
@@ -246,10 +250,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           geometry: sealGeometry({ senderDeviceId: deviceOf(member) }),
           expectedCiphertext: place.ciphertext,
         }),
-      ).rejects.toThrow("You are not an admin of this group");
+      ).rejects.toThrow("You are not an Admin or Editor of this group");
       await expect(
         caller(member).groupPlaces.delete({ groupId, placeId: place.id }),
-      ).rejects.toThrow("You are not an admin of this group");
+      ).rejects.toThrow("You are not an Admin or Editor of this group");
 
       const updated = await caller(owner).groupPlaces.update({
         groupId,
@@ -622,7 +626,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
               publicKeyAlgorithm: "X25519",
             },
           },
-          groupMembers: { create: { groupId, role: "ADMIN", joinedEpochNumber: 2 } },
+          groupMembers: { create: { groupId, role: "EDITOR", joinedEpochNumber: 2 } },
         },
       });
       const { place: kept } = await createPlace(owner, "Owner's place");

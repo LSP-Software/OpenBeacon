@@ -179,7 +179,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
     test("a guest at the group limit is told before joining, and pending deletion wins", async () => {
       const fillerIds = Array.from({ length: 16 }, (_, i) => `${prefix}-filler-${i}`);
       await prisma.group.createMany({
-        data: fillerIds.map((id) => ({ id, name: "Filler" })),
+        data: fillerIds.map((id) => ({ id, name: "Filler", ownerId: guest })),
       });
       await prisma.groupMember.createMany({
         data: fillerIds.map((id) => ({

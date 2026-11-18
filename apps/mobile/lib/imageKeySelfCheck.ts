@@ -10,6 +10,7 @@ import { cachedImageUri, imageFileNameFromUrl, readCachedImage } from "./imageCa
 import { confirmGroupImage, getOwnImageKey, storeOwnImageKeyInGroup } from "./imageKeys.ts";
 import type { StoredImageKey } from "./imageKeyTypes.ts";
 import { storage } from "./storage.ts";
+import { canEditGroup } from "./groupRoles.ts";
 
 const RETRY_AFTER_MS = 15 * 60_000;
 const GROUP_IMAGE_REPAIR_EVERY_MS = 24 * 60 * 60_000;
@@ -127,7 +128,7 @@ const checkGroupKey = async ({
   if (
     latest?.image !== url ||
     latest.imageKey?.ciphertext !== imageKey.ciphertext ||
-    (role !== "OWNER" && role !== "ADMIN")
+    !canEditGroup(role)
   ) {
     return unsettled;
   }
@@ -210,12 +211,7 @@ const checkAll = async ({ groups, user }: CheckInput) => {
     if (currentUserId !== user.id) break;
     const groupFileName = imageFileNameFromUrl(group.image);
     const groupImageKey = group.imageKey;
-    if (
-      group.image &&
-      groupFileName &&
-      groupImageKey &&
-      (me.role === "OWNER" || me.role === "ADMIN")
-    ) {
+    if (group.image && groupFileName && groupImageKey && canEditGroup(me.role)) {
       const url = group.image;
       repaired =
         (await runCheck({

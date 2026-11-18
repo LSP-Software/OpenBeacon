@@ -27,7 +27,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         })),
       });
       await prisma.group.createMany({
-        data: [family, former, stranger].map((id) => ({ id, name: "renamed later" })),
+        data: [
+          { id: family, ownerId: me },
+          { id: former, ownerId: jo },
+          { id: stranger, ownerId: kim },
+        ].map((group) => ({ ...group, name: "renamed later" })),
       });
       await prisma.groupMember.createMany({
         data: [

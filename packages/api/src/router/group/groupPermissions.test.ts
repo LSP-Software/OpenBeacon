@@ -23,8 +23,8 @@ const router = createTRPCRouter({
   groupMembership: groupMembershipRouter,
 });
 const createCaller = (
-  actorRole: "OWNER" | "ADMIN" | "MEMBER",
-  targetRole: "OWNER" | "ADMIN" | "MEMBER" = "MEMBER",
+  actorRole: "ADMIN" | "EDITOR" | "MEMBER",
+  targetRole: "ADMIN" | "EDITOR" | "MEMBER" = "MEMBER",
   Cache: typeof TestCache = TestCache,
 ) => {
   const actor = {
@@ -38,7 +38,11 @@ const createCaller = (
     $queryRaw: mock(async () => [actor]),
     groupMember: {
       findUnique: mock(async () => actor),
-      findFirst: mock(async () => ({ userId: "target-user", role: targetRole })),
+      findFirst: mock(async () => ({
+        userId: "target-user",
+        role: targetRole,
+        group: { ownerId: "owner-user" },
+      })),
       findMany: mock(async () => []),
     },
     user: {
@@ -90,25 +94,25 @@ const removal = {
   },
 };
 
-test("admins cannot remove an admin or owner", async () => {
-  for (const role of ["ADMIN", "OWNER"] as const) {
+test("editors cannot remove an Admin or Editor", async () => {
+  for (const role of ["EDITOR", "ADMIN"] as const) {
     await expect(
-      createCaller("ADMIN", role).caller.groupMembership.remove(removal),
-    ).rejects.toThrow("Only owners can remove owners or admins.");
+      createCaller("EDITOR", role).caller.groupMembership.remove(removal),
+    ).rejects.toThrow("Only Admins can remove Admins or Editors.");
   }
 });
 
-test("admin invitations reject mixed roles atomically and allow members", async () => {
-  const { caller, createMany } = createCaller("ADMIN");
+test("editor invitations reject mixed roles atomically and allow members", async () => {
+  const { caller, createMany } = createCaller("EDITOR");
   await expect(
     caller.groupInvites.send({
       groupId: "group",
       invites: [
         { email: "target@example.test", role: "MEMBER" },
-        { email: "other@example.test", role: "ADMIN" },
+        { email: "other@example.test", role: "EDITOR" },
       ],
     }),
-  ).rejects.toThrow("Only owners can invite admins.");
+  ).rejects.toThrow("Only Admins can invite Editors.");
   expect(createMany).not.toHaveBeenCalled();
   await caller.groupInvites.send({
     groupId: "group",
@@ -121,15 +125,15 @@ test("admin invitations reject mixed roles atomically and allow members", async 
   });
 });
 
-test("owners can invite admins and members cannot invite", async () => {
-  const owner = createCaller("OWNER");
+test("admins can invite editors and members cannot invite", async () => {
+  const owner = createCaller("ADMIN");
   await owner.caller.groupInvites.send({
     groupId: "group",
-    invites: [{ email: "target@example.test", role: "ADMIN" }],
+    invites: [{ email: "target@example.test", role: "EDITOR" }],
   });
   expect(owner.createMany).toHaveBeenCalledWith({
     data: [
-      { inviterId: "actor-user", recipientId: "target-user", groupId: "group", role: "ADMIN" },
+      { inviterId: "actor-user", recipientId: "target-user", groupId: "group", role: "EDITOR" },
     ],
   });
   const member = createCaller("MEMBER");
@@ -143,7 +147,7 @@ test("owners can invite admins and members cannot invite", async () => {
 });
 
 test("charges for submitted invitees without revealing account matches", async () => {
-  const { caller, createMany } = createCaller("OWNER");
+  const { caller, createMany } = createCaller("ADMIN");
   const batch = (count: number, email: string) => ({
     groupId: "group",
     invites: Array.from({ length: count }, () => ({ email, role: "MEMBER" as const })),
@@ -164,7 +168,7 @@ test("charges for submitted invitees without revealing account matches", async (
 
 test("invitations still send with a log line while Redis is unavailable", async () => {
   const error = spyOn(console, "error").mockImplementation(() => {});
-  const { caller, createMany } = createCaller("OWNER", "MEMBER", UnavailableCache);
+  const { caller, createMany } = createCaller("ADMIN", "MEMBER", UnavailableCache);
   await caller.groupInvites.send({
     groupId: "group",
     invites: [{ email: "target@example.test", role: "MEMBER" }],

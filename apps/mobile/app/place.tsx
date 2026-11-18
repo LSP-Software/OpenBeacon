@@ -42,6 +42,7 @@ import {
   savePlace,
 } from "../lib/placeSync.ts";
 import { syncGroupPlaces } from "../lib/placeBackgroundSync.ts";
+import { canEditGroup } from "../lib/groupRoles.ts";
 
 const PIN_ABOVE_CENTER = 150;
 
@@ -74,8 +75,8 @@ const PlaceScreen = () => {
 
   const problem = !group
     ? "This group isn’t available on this phone."
-    : role !== "OWNER" && role !== "ADMIN"
-      ? "Only owners and admins can add or change places."
+    : !canEditGroup(role)
+      ? "Only Admins and Editors can add or change places."
       : placeId && places.isError
         ? "Couldn’t load this place. Check your connection and try again."
         : placeId && !place

@@ -18,7 +18,7 @@ const hourOf = (date: Date) => Math.floor(date.getTime() / 3_600_000);
 
 const createGroup = async (name: string, epochDaysAgo: number[]) => {
   const groupId = `${prefix}-${name}`;
-  await prisma.group.create({ data: { id: groupId, name } });
+  await prisma.group.create({ data: { id: groupId, name, ownerId: userId } });
   for (const [index, daysAgo] of epochDaysAgo.entries()) {
     const id = `${groupId}-epoch-${index + 1}`;
     await prisma.groupEpoch.create({
@@ -422,15 +422,15 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history
     await prisma.user.update({ where: { id: userId }, data: { historyShare: "DAY_1" } });
     await prisma.groupMember.createMany({
       data: [
-        { groupId: followsAccount, userId, role: "OWNER", joinedEpochNumber: 1 },
+        { groupId: followsAccount, userId, role: "ADMIN", joinedEpochNumber: 1 },
         {
           groupId: overridden,
           userId,
-          role: "OWNER",
+          role: "ADMIN",
           joinedEpochNumber: 1,
           historyShare: "HOURS_6",
         },
-        { groupId: maximum, userId, role: "OWNER", joinedEpochNumber: 1, historyShare: "MAXIMUM" },
+        { groupId: maximum, userId, role: "ADMIN", joinedEpochNumber: 1, historyShare: "MAXIMUM" },
       ],
     });
     for (const groupId of [followsAccount, overridden, maximum]) {

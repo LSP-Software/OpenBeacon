@@ -20,7 +20,7 @@ import {
 } from "../../lib/groupWriteChecks.ts";
 import { limits } from "../../lib/limits.ts";
 import { ReasonError } from "../../lib/reasonError.ts";
-import { groupAdminProcedure, groupMemberProcedure } from "../../procedures/auth/group.ts";
+import { groupEditorProcedure, groupMemberProcedure } from "../../procedures/auth/group.ts";
 
 const placeSelect = {
   id: true,
@@ -68,7 +68,7 @@ export const groupPlacesRouter = {
         places: places.map((place) => ({ ...place, kind: PLACE_GEOMETRY_KIND })),
       };
     }),
-  create: groupAdminProcedure
+  create: groupEditorProcedure
     .meta({ rateLimit: { limit: 60, windowMs: 60_000 } })
     .input(createPlaceSchema)
     .mutation(async ({ ctx, input }) =>
@@ -112,7 +112,7 @@ export const groupPlacesRouter = {
         },
       }),
     ),
-  update: groupAdminProcedure
+  update: groupEditorProcedure
     .meta({ rateLimit: { limit: 60, windowMs: 60_000 } })
     .input(updatePlaceSchema)
     .mutation(async ({ ctx, input }) =>
@@ -234,7 +234,7 @@ export const groupPlacesRouter = {
         changesPlaces: (result) => result.places.length > 0,
       });
     }),
-  delete: groupAdminProcedure
+  delete: groupEditorProcedure
     .meta({ rateLimit: { limit: 60, windowMs: 60_000 } })
     .input(deletePlaceSchema)
     .mutation(async ({ ctx, input }) =>
@@ -305,8 +305,11 @@ const writePlace = async <T extends object>({
       groupLock: "FOR NO KEY UPDATE",
       userId,
     });
-    if (needsAdmin && member.role !== GroupRole.OWNER && member.role !== GroupRole.ADMIN) {
-      throw new TRPCError({ code: "FORBIDDEN", message: "You are not an admin of this group" });
+    if (needsAdmin && member.role !== GroupRole.ADMIN && member.role !== GroupRole.EDITOR) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "You are not an Admin or Editor of this group",
+      });
     }
     await assertActiveDevices(tx, { deviceIds: [deviceId], userId });
     if (geometries.length > 0) {

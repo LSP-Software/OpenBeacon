@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { GroupRole, type Prisma } from "@openbeacon/database";
+import type { Prisma } from "@openbeacon/database";
 
 const importGroupMemberRemovalModule = async () =>
   import(
@@ -7,7 +7,7 @@ const importGroupMemberRemovalModule = async () =>
   ) as Promise<typeof import("./assertGroupMemberCanBeRemoved.ts")>;
 
 describe("group membership removal guard", () => {
-  test("rejects removing the only owner", async () => {
+  test("rejects removing the owner", async () => {
     const { removeGroupMemberWithOwnerGuard } = await importGroupMemberRemovalModule();
     const queryRaw = mock(async () => [{ deleted: false, memberExists: true }]);
 
@@ -19,11 +19,11 @@ describe("group membership removal guard", () => {
         groupId: "group-1",
         memberId: "member-1",
       }),
-    ).rejects.toThrow("Cannot remove the only owner from the group.");
+    ).rejects.toThrow("The group's owner can't be removed from the group.");
     expect(queryRaw).toHaveBeenCalledTimes(1);
   });
 
-  test("allows removing an owner when another owner remains", async () => {
+  test("allows removing anyone else", async () => {
     const { removeGroupMemberWithOwnerGuard } = await importGroupMemberRemovalModule();
     const queryRaw = mock(async () => [{ deleted: true, memberExists: true }]);
 
@@ -55,9 +55,9 @@ describe("group membership removal guard", () => {
         memberId: "member-1",
       }),
     ).resolves.toBeUndefined();
-    expect(sqlQuery?.strings.join("")).toContain("target_member.role <> ");
-    expect(sqlQuery?.strings.join("")).toContain("COUNT(*) FROM owner_rows");
-    expect(sqlQuery?.values).toContain(GroupRole.OWNER);
+    expect(sqlQuery?.strings.join("")).toContain(
+      'target_group."ownerId" <> target_member."userId"',
+    );
   });
 
   test("uses current Prisma table and column names", async () => {

@@ -44,9 +44,10 @@ const createGroup = async (name: string, lateJoinedEpochNumber = 2) => {
     data: {
       id: groupId,
       name,
+      ownerId: viewerId,
       groupMembers: {
         create: [
-          { userId: viewerId, role: "OWNER", joinedEpochNumber: 1 },
+          { userId: viewerId, role: "ADMIN", joinedEpochNumber: 1 },
           { userId: memberId, role: "MEMBER", joinedEpochNumber: 1 },
           { userId: lateId, role: "MEMBER", joinedEpochNumber: lateJoinedEpochNumber },
         ],
