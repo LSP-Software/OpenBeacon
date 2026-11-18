@@ -38,6 +38,11 @@ mock.module("../lib/appLock.ts", () => ({ useAppLock: () => ({ locked: false, aw
 mock.module("../components/ui/Alert.tsx", () => ({
   AlertHost: () => React.createElement("alert-host"),
 }));
+mock.module("../components/ui/Button.tsx", () => ({
+  Button: ({ children, onPress }: { children?: React.ReactNode; onPress: () => void }) =>
+    React.createElement("mock-button", { onPress }, children),
+}));
+mock.module("../components/ui/Text.tsx", () => ({ Text: Passthrough }));
 mock.module("../components/OfflineBanner.tsx", () => ({ OfflineBanner: () => null }));
 mock.module("../components/InAppNoticeBanner.tsx", () => ({ InAppNoticeBanner: () => null }));
 mock.module("../lib/api.ts", () => ({ queryClient: {} }));
@@ -56,7 +61,7 @@ mock.module("../providers/SessionDataCleanup.tsx", () => ({ SessionDataCleanup: 
 mock.module("../providers/ThemeProvider.tsx", () => ({ ThemeProvider: Passthrough }));
 mock.module("../providers/TrackingProvider.tsx", () => ({ TrackingProvider: Passthrough }));
 
-const { default: RootLayout } = await import("../app/_layout.tsx");
+const { default: RootLayout, ErrorBoundary } = await import("../app/_layout.tsx");
 
 const setupRoutes = [
   "index",
@@ -127,6 +132,27 @@ test("a signed-in phone that isn't set up can only reach setup", async () => {
 test("a signed-in phone that isn't registered yet can only reach setup", async () => {
   thisDeviceState = "unregistered";
   expect((await render()).guard).toBe(false);
+});
+
+test("a screen that fails to render shows a way to try again instead of closing the app", async () => {
+  let retries = 0;
+  root = createRoot();
+  await act(async () =>
+    root?.render(
+      <ErrorBoundary
+        error={new TypeError("unknown value")}
+        retry={async () => {
+          retries += 1;
+        }}
+      />,
+    ),
+  );
+  const text = JSON.stringify(root.container.children);
+  expect(text).toContain("Something went wrong");
+  const [tryAgain] = root.container.queryAll((item) => item.type === "mock-button");
+  if (!tryAgain) throw new Error("Missing Try again");
+  await act(async () => (tryAgain.props as { onPress: () => void }).onPress());
+  expect(retries).toBe(1);
 });
 
 test("a set-up phone reaches the whole app", async () => {

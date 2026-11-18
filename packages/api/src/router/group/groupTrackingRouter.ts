@@ -115,7 +115,7 @@ export const groupTrackingRouter = {
               ? await uploadGroupTrackingBatch({
                   db: tx,
                   groupId: input.groupId,
-                  memberSince: member.createdAt,
+                  joinedEpochNumber: member.joinedEpochNumber,
                   points: input.points,
                   userId,
                   refundAllowance,

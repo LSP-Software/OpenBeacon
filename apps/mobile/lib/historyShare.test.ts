@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   groupHistoryShare,
   historyShareAmount,
+  historyShareLabel,
   historyShareNote,
   senderHistoryStart,
   shortensHistory,
@@ -62,6 +63,18 @@ describe("shortensHistory", () => {
       shortensHistory({ groupIds, next: { groupId: "club", override: "LAST_LOCATION" }, setting }),
     ).toBe(true);
   });
+
+  test("moving off a setting this build doesn't know always asks before deleting", () => {
+    const unknown = {
+      account: "DAYS_3" as typeof setting.account,
+      groups: [{ groupId: "family", historyShare: null }],
+    };
+    for (const share of ["HOURS_6", "LAST_LOCATION", "MAXIMUM"] as const) {
+      expect(
+        shortensHistory({ groupIds: ["family"], next: { account: share }, setting: unknown }),
+      ).toBe(true);
+    }
+  });
 });
 
 describe("wording", () => {
@@ -75,6 +88,13 @@ describe("wording", () => {
   test("the invite line describes the amount shared", () => {
     expect(historyShareAmount("WEEK_1")).toBe("1 week of history");
     expect(historyShareAmount("MAXIMUM")).toBe("up to 14 days of history");
+  });
+
+  test("a setting this build doesn't know still has wording", () => {
+    const unknown = "DAYS_3" as typeof setting.account;
+    expect(historyShareLabel(unknown)).toBe("Custom");
+    expect(historyShareAmount(unknown)).toBe("some of your history");
+    expect(historyShareNote("Sam", unknown)).toBeNull();
   });
 });
 

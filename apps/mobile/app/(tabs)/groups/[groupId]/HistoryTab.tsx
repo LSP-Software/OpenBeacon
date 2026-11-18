@@ -161,7 +161,9 @@ const HistoryTab = ({ groupId, active }: { groupId: string; active: boolean }) =
   }
 
   const sections = groupByDay({
-    items: history.data.pages.flatMap((page) => page.items),
+    items: history.data.pages
+      .flatMap((page) => page.items)
+      .filter((item) => item.kind !== "group" || Object.hasOwn(eventIcons, item.type)),
     now: new Date(),
   });
 
@@ -197,6 +199,7 @@ const HistoryTab = ({ groupId, active }: { groupId: string; active: boolean }) =
             const time = item.at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
             if (item.kind === "group") {
               const text = describeGroupEvent({ event: item, memberName, userId });
+              if (!text) return null;
               return (
                 <View
                   key={item.id}

@@ -28,6 +28,7 @@ let groupListCalls = 0;
 
 mock.module("./storage.ts", () => ({
   storage: {
+    getAllKeys: () => [...storageValues.keys()],
     getString: (key: string) => {
       const value = storageValues.get(key);
       return typeof value === "string" ? value : undefined;
@@ -292,6 +293,23 @@ describe("syncGroupPlaces", () => {
     expect(nativePlaces).toEqual([{ groupId: "family", places: [] }]);
   });
 
+  test("remembers places for change detection without keeping their coordinates", async () => {
+    places = [home, school];
+    await syncGroupPlaces({ groupId: "family", quietPlaceIds: [], userId: "user-1" });
+    const stored = [...storageValues.values()].map(String).join(" ");
+    expect(stored).not.toContain("51.5");
+    expect(stored).not.toContain("-0.12");
+  });
+
+  test("a place remembered in plain text by an older build is compared by hash and overwritten", async () => {
+    const key = `places.known.${JSON.stringify(["https://api.example.test", "user-1", "family"])}`;
+    storageValues.set(key, JSON.stringify({ home: "51.5,-0.12,250" }));
+    places = [home, school];
+    await syncGroupPlaces({ groupId: "family", quietPlaceIds: [], userId: "user-1" });
+    expect(notices.map(({ title }) => title)).toEqual(["Family added 🏫 School"]);
+    expect(String(storageValues.get(key))).not.toContain("51.5");
+  });
+
   test("doesn't remember places when native detection belongs to another account", async () => {
     nativeAccepts = false;
     expect(await syncGroupPlaces({ groupId: "family", quietPlaceIds: [], userId: "user-1" })).toBe(
@@ -306,6 +324,14 @@ describe("syncGroupPlaces", () => {
 describe("applyPlaceUpdates", () => {
   const summary = (revision: number, needsCatchUp = false) => ({
     places: [{ groupId: "family", revision, needsCatchUp }],
+  });
+
+  test("removes plain place coordinates an older build kept, even for groups this phone has left", async () => {
+    const key = `places.known.${JSON.stringify(["https://api.example.test", "user-1", "old-club"])}`;
+    storageValues.set(key, JSON.stringify({ pitch: "51.4,-0.2,100" }));
+    await applyPlaceUpdates({ updates: {}, userId: "user-1" });
+    expect(String(storageValues.get(key))).not.toContain("51.4");
+    expect(Object.keys(JSON.parse(String(storageValues.get(key))))).toEqual(["pitch"]);
   });
 
   test("refreshes places only when the revision changes", async () => {

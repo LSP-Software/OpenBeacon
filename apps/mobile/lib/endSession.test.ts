@@ -164,6 +164,29 @@ const { endSession, settleLostSessions } = await import("./endSession.ts");
 const { storeHistoryKey } = await import("./historyKeys.ts");
 const baseUrl = (await import("./currentServer.ts")).getBaseUrl();
 const pendingSharingKey = `locationSharing.pending.${JSON.stringify([baseUrl, "user-a", "device"])}`;
+const accountStorageKeys = [
+  `places.known.${JSON.stringify([baseUrl, "user-a", "family"])}`,
+  `places.revision.${JSON.stringify([baseUrl, "user-a", "family"])}`,
+  `places.alertsCursor.${JSON.stringify([baseUrl, "user-a"])}`,
+  `notices.cursor.${JSON.stringify([baseUrl, "user-a"])}`,
+  `locationSharing.synced.${JSON.stringify([baseUrl, "user-a", "device-a"])}`,
+  `locationSharing.localPause.${JSON.stringify([baseUrl, "user-a", "device-a"])}`,
+  `historyShareNotice.${JSON.stringify([baseUrl, "user-a"])}`,
+  "map.hiddenGroups.user-a",
+  "map.peopleTrayOpen.user-a",
+  "timeline.groupId.user-a",
+  "groupHistory.seenAt.user-a.family",
+  "recovery.restoreCardDismissed.user-a",
+  "recovery.promptDismissed.user-a",
+  "recovery.historyWarningDismissedFrom.user-a.family",
+  "encryption.history.unpublished.user-a",
+  "onboarding.user-a",
+];
+const otherAccountStorageKeys = [
+  `places.known.${JSON.stringify([baseUrl, "user-ab", "family"])}`,
+  "map.hiddenGroups.user-ab",
+  "map.showSymbols",
+];
 
 const removedError = () =>
   new TRPCClientError("This device was removed.", {
@@ -459,6 +482,9 @@ describe("ending a session", () => {
     storageValues.set(pendingSharingKey, "change");
     storageValues.set("pendingJoinCode.user-a", "join-code");
     storageValues.set("api_compatibility", "saved-verdict");
+    for (const key of [...accountStorageKeys, ...otherAccountStorageKeys]) {
+      storageValues.set(key, "stored");
+    }
     return device;
   };
 
@@ -476,12 +502,15 @@ describe("ending a session", () => {
     activeFlag: storageValues.has(`encryption.device.active.${deviceId}`),
     revokeToken: secureStoreValues.has("sessionTokenToRevokeOnNextLogin"),
     compatibility: storageValues.has("api_compatibility"),
+    accountStorage: accountStorageKeys.filter((key) => storageValues.has(key)),
+    otherAccountStorage: otherAccountStorageKeys.every((key) => storageValues.has(key)),
     lostSession: JSON.parse(String(storageValues.get("session.lost") ?? "[]")).map(
       ({ userId }: { userId: string }) => userId,
     ),
   });
 
   const keptKeys = {
+    accountStorage: accountStorageKeys,
     deviceKey: true,
     historyKeys: true,
     savedDeviceLink: true,
@@ -489,6 +518,7 @@ describe("ending a session", () => {
     lostSession: ["user-a"],
   };
   const wipedKeys = {
+    accountStorage: [],
     deviceKey: false,
     historyKeys: false,
     savedDeviceLink: false,
@@ -563,6 +593,7 @@ describe("ending a session", () => {
       pushTokenForgotten: true,
       registration: false,
       pendingJoinCodes: false,
+      otherAccountStorage: true,
       ...expected,
     });
   });

@@ -166,6 +166,24 @@ test("without email, every type has one switch and nothing mentions email", asyn
   expect(text).toContain("When a new phone or tablet signs in to your account.");
 });
 
+test("a setting a newer server added is left out instead of breaking the screen", async () => {
+  const known = settingsFor(false);
+  query.data = {
+    ...known,
+    settings: [
+      ...known.settings,
+      {
+        type: "SEAT_LIMIT_REACHED" as keyof typeof notificationTypes,
+        email: null,
+        phone: true,
+      },
+    ],
+  };
+  const { switches } = await render();
+
+  expect(switches).toHaveLength(Object.keys(notificationTypes).length);
+});
+
 test("the Notifications are off card shows only when this phone's notifications are off", async () => {
   query.data = settingsFor(true);
   expect((await render()).cards).toHaveLength(0);

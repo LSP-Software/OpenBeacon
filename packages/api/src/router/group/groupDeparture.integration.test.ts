@@ -266,11 +266,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         deviceId: memberDevice,
       });
       expect(rejoinedWraps.epochs.map((epoch) => epoch.epochId)).toEqual([rejoined.epoch.epochId]);
-      await expect(
-        member.groupTracking.uploadBatch({ groupId, points: [point] }),
-      ).rejects.toMatchObject({
-        code: "BAD_REQUEST",
-        message: "Epoch does not belong to this group.",
+      expect(await member.groupTracking.uploadBatch({ groupId, points: [point] })).toMatchObject({
+        accepted: [],
+        expired: [point.clientPointId],
       });
       const ownerContext = await owner.groupMembership.removalContext({
         groupId,

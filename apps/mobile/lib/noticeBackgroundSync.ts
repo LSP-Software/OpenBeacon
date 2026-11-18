@@ -92,6 +92,7 @@ export const describeAccountNotice = (notice: AccountNotices["notices"][number])
       };
     case "ALERTS_TURNED_OFF": {
       const turnedOff = notice.turnedOff
+        .filter(({ type }) => Object.hasOwn(notificationTypes, type))
         .map(({ type, channel }) => `${notificationTypes[type].label} (${channel})`)
         .join(", ");
       return {
@@ -106,6 +107,8 @@ export const describeAccountNotice = (notice: AccountNotices["notices"][number])
         link: accountLink("notifications"),
       };
     }
+    default:
+      return null;
   }
 };
 
@@ -117,14 +120,13 @@ export const showAccountNotices = async ({
   userId: string;
 }) => {
   for (const notice of notices.notices) {
-    const { title, body, link } = describeAccountNotice(notice);
+    const described = describeAccountNotice(notice);
+    if (!described) continue;
     await showEventNotice({
-      title,
-      body,
+      ...described,
       groupName: null,
       key: notice.id,
       kind: "accountAlert",
-      link,
     });
   }
   storage.set(accountCursorKey(userId), notices.cursor);
@@ -144,15 +146,17 @@ export const showNotices = async ({
     const group = (await groups()).find(({ id }) => id === notice.groupId);
     if (!group) continue;
     const groupNicknames = await nicknamesFor(notice.groupId);
+    const title = describeGroupEvent({
+      event: notice,
+      memberName: (memberUserId) => {
+        const member = group.members.find((item) => item.userId === memberUserId);
+        return member ? (groupNicknames[member.id]?.name ?? member.name) : null;
+      },
+      userId,
+    });
+    if (!title) continue;
     await showEventNotice({
-      title: describeGroupEvent({
-        event: notice,
-        memberName: (memberUserId) => {
-          const member = group.members.find((item) => item.userId === memberUserId);
-          return member ? (groupNicknames[member.id]?.name ?? member.name) : null;
-        },
-        userId,
-      }),
+      title,
       body: null,
       groupName: group.name,
       key: notice.id,

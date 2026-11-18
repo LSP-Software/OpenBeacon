@@ -125,7 +125,9 @@ const NotificationsScreen = () => {
         {settings.data &&
           sections.map((section) => {
             const rows = settings.data.settings.filter(
-              ({ type }) => notificationTypes[type].section === section.key,
+              ({ type }) =>
+                Object.hasOwn(notificationTypes, type) &&
+                notificationTypes[type].section === section.key,
             );
             const emailColumn = showEmail && rows.some(({ email }) => email !== null);
             return (

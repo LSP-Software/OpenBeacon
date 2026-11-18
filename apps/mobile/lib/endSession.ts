@@ -125,6 +125,9 @@ const wipeKeyMaterial = async ({
   if (deviceId) await tryCatch(deleteSavedDeviceLink({ deviceId, userId }));
   await tryCatch(deleteOwnImageKey(userId));
   await tryCatch(deleteDeviceKey(userId));
+  for (const key of storage.getAllKeys()) {
+    if (key.split(/[."[\],]/).includes(userId)) storage.remove(key);
+  }
   forgetLostSession(userId);
 };
 

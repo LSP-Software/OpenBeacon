@@ -27,6 +27,7 @@ Anything else needs no change. That includes:
 - a new procedure the app doesn't call yet;
 - a new optional input that an older server can ignore without breaking what the app does;
 - a new output field;
+- a new value in an output enum the app already tolerates: notification types, group event types, history-share values and account notice types. The app skips a value it doesn't know (and moves its notice cursor past it), or, for a history-share value, shows it as "Custom" and asks before any change that could delete history. Any new lookup the app keys by a value from the server needs the same fallback;
 - looser validation;
 - refactors and performance work;
 - database migrations that keep the API the same.

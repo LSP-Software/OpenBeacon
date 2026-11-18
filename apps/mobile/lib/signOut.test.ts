@@ -54,6 +54,7 @@ mock.module("expo-secure-store", () => ({
 
 mock.module("./storage.ts", () => ({
   storage: {
+    getAllKeys: () => [...storageValues.keys()],
     getBoolean: (key: string) => storageValues.get(key) === true,
     getString: (key: string) => {
       const value = storageValues.get(key);

@@ -370,6 +370,18 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         where: { groupId_senderDeviceId: { groupId: familyId, senderDeviceId: sharerDeviceId } },
       });
       expect(Buffer.from(latest.payload.subarray(24)).toString("base64")).toBe(live.ciphertext);
+
+      const historyOnly = point("last-only-history-without-live", { capturedHour: nowHour() });
+      const historyOnlyResult = await upload([historyOnly]);
+      expect(historyOnlyResult.discarded).toEqual([historyOnly.clientPointId]);
+      expect(historyOnlyResult.accepted).toEqual([]);
+      expect(await storedHours(familyId)).toEqual([5]);
+      const moved = await prisma.trackingLatestPoint.findUniqueOrThrow({
+        where: { groupId_senderDeviceId: { groupId: familyId, senderDeviceId: sharerDeviceId } },
+      });
+      expect(Buffer.from(moved.payload.subarray(24)).toString("base64")).toBe(
+        historyOnly.ciphertext,
+      );
     });
 
     test("the account query returns the setting and each group's override for account sync", async () => {
