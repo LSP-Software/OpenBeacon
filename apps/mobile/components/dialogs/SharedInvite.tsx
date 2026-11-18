@@ -3,6 +3,7 @@ import { tryCatch } from "@openbeacon/shared";
 import { focusManager, useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { Platform, Share, View } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import { useCachedGroup } from "../../hooks/useCachedGroup.ts";
 import { trpc } from "../../lib/api.ts";
 import { BrandedQrCode } from "../BrandedQrCode.tsx";
@@ -22,6 +23,7 @@ export const SharedInvite = ({
 }) => {
   const invite = useMutation(trpc.groupInvites.createShared.mutationOptions());
   const [expired, setExpired] = useState(false);
+  const [copied, setCopied] = useState(false);
   const inviteId = invite.data?.id;
   const expiresInMs = invite.data?.expiresInMs;
   const reset = invite.reset;
@@ -56,6 +58,7 @@ export const SharedInvite = ({
   useEffect(() => {
     if (inviteId === undefined || expiresInMs === undefined) return;
     setExpired(false);
+    setCopied(false);
     const timeout = setTimeout(() => setExpired(true), expiresInMs);
     return () => clearTimeout(timeout);
   }, [inviteId, expiresInMs]);
@@ -87,19 +90,34 @@ export const SharedInvite = ({
           ) : (
             <>
               <Text selectable>{invite.data.code}</Text>
-              <Button
-                onPress={async () => {
-                  if (Platform.OS === "ios") setOpen(false);
-                  const result = await tryCatch(
-                    Share.share({
-                      message: `Join my Open Beacon group: openbeacon://join?code=${invite.data.code}`,
-                    }),
-                  );
-                  if (result.error) Alert.alert("Unable to share invitation");
-                }}
-              >
-                <Text>Share link</Text>
-              </Button>
+              <View className="flex-row gap-2">
+                <Button
+                  variant="outline"
+                  onPress={async () => {
+                    const result = await tryCatch(Clipboard.setStringAsync(invite.data.code));
+                    if (result.error) {
+                      Alert.alert("Unable to copy code");
+                      return;
+                    }
+                    setCopied(true);
+                  }}
+                >
+                  <Text>{copied ? "Copied" : "Copy code"}</Text>
+                </Button>
+                <Button
+                  onPress={async () => {
+                    if (Platform.OS === "ios") setOpen(false);
+                    const result = await tryCatch(
+                      Share.share({
+                        message: `Join my Open Beacon group: openbeacon://join?code=${invite.data.code}`,
+                      }),
+                    );
+                    if (result.error) Alert.alert("Unable to share invitation");
+                  }}
+                >
+                  <Text>Share link</Text>
+                </Button>
+              </View>
             </>
           )}
         </>

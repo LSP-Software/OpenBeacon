@@ -11,12 +11,19 @@ let memberIds: string[] | undefined;
 let statusRequests: string[][];
 let created: number;
 const setOpen = mock((_open: boolean) => {});
+const copied: string[] = [];
 const focusListeners = new Set<(focused: boolean) => void>();
 
 mock.module("react-native", () => ({
   ...createReactNativeTestModule(),
   Alert: { alert: () => {} },
   Share: { share: async () => ({}) },
+}));
+mock.module("expo-clipboard", () => ({
+  setStringAsync: async (text: string) => {
+    copied.push(text);
+    return true;
+  },
 }));
 mock.module("../BrandedQrCode.tsx", () => ({
   BrandedQrCode: ({ value }: { value: string }) => React.createElement("qr", { value }),
@@ -118,6 +125,28 @@ describe("shared invitation dialog", () => {
     statusRequests = [];
     created = 0;
     setOpen.mockClear();
+    copied.length = 0;
+  });
+  test("copies just the code and resets the copied label for a new invite", async () => {
+    const root = createRoot();
+    await render(root, "link");
+    await createInvite(root);
+    const copyButton = () => {
+      const button = root.container
+        .queryAll((item) => item.type === "button")
+        .find((item) => /Copy code|Copied/.test(JSON.stringify(item.children)));
+      if (!button) throw new Error("Copy code button not found");
+      return button;
+    };
+    await act(async () => {
+      (copyButton().props as { onClick?: () => void }).onClick?.();
+      await Promise.resolve();
+    });
+    expect(copied).toEqual(["1".repeat(32)]);
+    expect(JSON.stringify(copyButton().children)).toContain("Copied");
+    await createInvite(root);
+    expect(JSON.stringify(copyButton().children)).toContain("Copy code");
+    await act(async () => root.unmount());
   });
   test("checks the latest invite only when someone joins, and closes once it is used", async () => {
     const root = createRoot();
