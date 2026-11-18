@@ -109,8 +109,17 @@ export const groupTrackingHistoryRangeSchema = z
     cursor: z
       .object({
         capturedHour: z.number().int().min(-2_147_483_648).max(2_147_483_647),
-        streamId: z.string().regex(/^\d{1,19}$/),
-        pointId: z.string().regex(/^-?\d{1,19}$/),
+        streamId: z
+          .string()
+          .regex(/^\d{1,19}$/)
+          .refine((id) => BigInt(id) <= 9_223_372_036_854_775_807n),
+        pointId: z
+          .string()
+          .regex(/^-?\d{1,19}$/)
+          .refine(
+            (id) =>
+              BigInt(id) >= -9_223_372_036_854_775_808n && BigInt(id) <= 9_223_372_036_854_775_807n,
+          ),
       })
       .optional(),
     limit: z.number().int().min(1).max(2_000).optional(),

@@ -7,7 +7,8 @@ export const emailSchema = z
   .pipe(z.email({ error: "Invalid email address" }).max(320));
 export const passwordSchema = z
   .string()
-  .min(8, { message: "Password must be at least 8 characters long" });
+  .min(8, { message: "Password must be at least 8 characters long" })
+  .max(128, { message: "Password must be at most 128 characters long" });
 export const accountNameSchema = z
   .string()
   .trim()

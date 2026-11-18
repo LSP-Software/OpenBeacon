@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { optionalEnvString } from "./env.ts";
+import { optionalEnvString, serverNameSchema } from "./env.ts";
 
 describe("optionalEnvString", () => {
   test("returns undefined when the input is undefined", () => {
@@ -20,5 +20,19 @@ describe("optionalEnvString", () => {
 
   test("leaves non-string values to zod validation", () => {
     expect(() => optionalEnvString.parse(123)).toThrow();
+  });
+});
+
+describe("serverNameSchema", () => {
+  test("uses the default for a missing or blank name", () => {
+    expect(serverNameSchema.parse(undefined)).toBe("OpenBeacon");
+    expect(serverNameSchema.parse("")).toBe("OpenBeacon");
+    expect(serverNameSchema.parse("   ")).toBe("OpenBeacon");
+    expect(serverNameSchema.parse(" Family server ")).toBe("Family server");
+  });
+
+  test("refuses a name too long to show in the app and email footers", () => {
+    expect(serverNameSchema.safeParse("a".repeat(100)).success).toBe(true);
+    expect(serverNameSchema.safeParse("a".repeat(101)).success).toBe(false);
   });
 });

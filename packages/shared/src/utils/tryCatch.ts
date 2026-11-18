@@ -15,6 +15,11 @@ export const tryCatch = async <T, E = Error>(promise: Promise<T>): Promise<Resul
     const data = await promise;
     return { data, error: null };
   } catch (error) {
-    return { data: null, error: error as E };
+    return {
+      data: null,
+      error: (typeof error === "object" && error !== null
+        ? error
+        : new Error(String(error), { cause: error })) as E,
+    };
   }
 };

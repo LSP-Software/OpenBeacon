@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { accountNameSchema, emailSchema } from "./fields.ts";
+import { accountNameSchema, emailSchema, passwordSchema } from "./fields.ts";
 
 describe("accountNameSchema", () => {
   test("trims names and accepts international names and punctuation", () => {
@@ -29,5 +29,14 @@ describe("emailSchema", () => {
     ]) {
       expect(emailSchema.safeParse(email).success).toBe(false);
     }
+  });
+});
+
+describe("passwordSchema", () => {
+  test("matches the server's 8 to 128 character limit", () => {
+    expect(passwordSchema.safeParse("a".repeat(7)).success).toBe(false);
+    expect(passwordSchema.safeParse("a".repeat(8)).success).toBe(true);
+    expect(passwordSchema.safeParse("a".repeat(128)).success).toBe(true);
+    expect(passwordSchema.safeParse("a".repeat(129)).success).toBe(false);
   });
 });

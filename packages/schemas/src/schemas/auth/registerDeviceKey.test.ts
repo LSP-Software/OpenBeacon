@@ -92,6 +92,19 @@ describe("registerDeviceKeySchema", () => {
     );
   });
 
+  test("only takes device IDs made of the characters the app generates", () => {
+    const input = { algorithm: DEVICE_KEY_ALGORITHM, publicKey: createDeviceKeyPair().publicKey };
+    expect(
+      registerDeviceKeySchema.safeParse({
+        ...input,
+        deviceId: "device_550e8400-e29b-41d4-a716-446655440000",
+      }).success,
+    ).toBe(true);
+    for (const deviceId of ['device"a', "device\\a", "device\na", "device😀", "device a"]) {
+      expect(registerDeviceKeySchema.safeParse({ ...input, deviceId }).success).toBe(false);
+    }
+  });
+
   test("keeps a plain device model and drops one that could carry a link or run on", () => {
     const modelOf = (model: string) =>
       registerDeviceKeySchema.parse({
@@ -282,4 +295,33 @@ describe("groupEpochBundleSchema", () => {
     expect(bundleWith(5001, 1)).toBe(false);
     expect(bundleWith(1, 1001)).toBe(false);
   });
+});
+
+test("only takes epoch IDs made of the characters the app generates", () => {
+  const bundleFor = (epochId: string) => ({
+    createdByDeviceId: "device-a",
+    epochId,
+    epochNumber: 1,
+    historyKeys: [],
+    recipientKeys: [
+      {
+        algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
+        createdAt: new Date("2026-03-30T12:00:00.000Z"),
+        ephemeralPublicKey: createDeviceKeyPair().publicKey,
+        epochId,
+        recipientDeviceId: "device-a",
+        senderPublicKey: createDeviceKeyPair().publicKey,
+        wrappedKey: encodeBase64(new Uint8Array(48)),
+      },
+    ],
+  });
+  const generated = createInitialGroupEpoch({
+    creator: { deviceId: "device-a", privateKey: createDeviceKeyPair().privateKey },
+    groupId: "group-a",
+    recipients: [],
+  }).epoch.epochId;
+  expect(groupEpochBundleSchema.safeParse(bundleFor(generated)).success).toBe(true);
+  for (const epochId of ['epoch"a', "epoch\\a", "epoch\u0001a", "epoché"]) {
+    expect(groupEpochBundleSchema.safeParse(bundleFor(epochId)).success).toBe(false);
+  }
 });
