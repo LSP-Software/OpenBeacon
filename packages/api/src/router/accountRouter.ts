@@ -26,6 +26,7 @@ import {
   presignImageUpload,
   setPendingImageUploadForUser,
 } from "../lib/image-upload.ts";
+import { readAccountUsage } from "../lib/accountUsage.ts";
 import { readAccountViewers } from "../lib/accountViewers.ts";
 import { deleteHistoryOutsideShare } from "../lib/historyShare.ts";
 import { assertActiveDevices, assertSentFromThisDevice } from "../lib/groupWriteChecks.ts";
@@ -484,6 +485,17 @@ export const accountRouter = {
           : null,
     };
   }),
+  usage: protectedProcedure.meta({ rateLimit: { limit: 60, windowMs: 60_000 } }).query(({ ctx }) =>
+    readAccountUsage({
+      allowSelfSetSeats: ctx.allowSelfSetSeats && !ctx.selfHosted,
+      db: ctx.db,
+      deviceId: ctx.deviceId,
+      now: new Date(),
+      seatHolds: ctx.seatHolds,
+      selfHosted: ctx.selfHosted,
+      userId: ctx.session.user.id,
+    }),
+  ),
   setSeats: protectedProcedure
     .meta({ rateLimit: { limit: 30, windowMs: 60_000 } })
     .input(z.object({ seats: z.number().int().min(0).max(maxAccountSeats) }))

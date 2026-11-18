@@ -730,6 +730,125 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       ).rejects.toMatchObject(noFreeSeats);
     });
 
+    test("usage shows seats per owned group in seat order with holds, and no seats for other owners' groups", async () => {
+      const owner = await createUser({ seats: 2 });
+      const member = await createUser({ phones: 2 });
+      const other = await createUser({ seats: 4 });
+      const family = await createGroup(owner);
+      await setSeats(owner, 3);
+      await joinWithCode(member, await invite(owner, family));
+      const theirs = await createGroup(other);
+      await joinWithCode(owner, await invite(other, theirs));
+      await setSeats(owner, 2);
+      const usage = await caller(owner, { allowSelfSetSeats: true }).account.usage();
+      expect(usage.gauges).toEqual([
+        {
+          id: "seats",
+          label: "Seats",
+          used: 3,
+          max: 2,
+          onHold: 1,
+          unit: { one: "seat", other: "seats" },
+        },
+        {
+          id: "groups",
+          label: "Groups",
+          used: 2,
+          max: 16,
+          onHold: 0,
+          unit: { one: "group", other: "groups" },
+        },
+      ]);
+      expect(usage.limits).toEqual([
+        {
+          id: "history",
+          label: "Location history kept",
+          value: 30,
+          unit: { one: "day", other: "days" },
+        },
+      ]);
+      expect(usage.seats).toEqual({
+        seats: 2,
+        paidSeats: 2,
+        used: 3,
+        onHold: 1,
+        max: 1_024,
+        selfSetAllowed: true,
+        paidPeriodEndsAt: null,
+        graceEndsAt: null,
+      });
+      const [familyUsage, theirsUsage] = usage.groups;
+      expect(familyUsage).toMatchObject({ id: family, isOwner: true, yourPhonesOnHold: [] });
+      expect(familyUsage?.seats).toMatchObject({ used: 3, max: 64, onHold: 1 });
+      expect(
+        familyUsage?.seats?.phones.map(({ deviceId, isThisPhone, onHold }) => ({
+          deviceId,
+          isThisPhone,
+          onHold,
+        })),
+      ).toEqual([
+        { deviceId: owner.deviceIds[0], isThisPhone: true, onHold: false },
+        { deviceId: member.deviceIds[0], isThisPhone: false, onHold: false },
+        { deviceId: member.deviceIds[1], isThisPhone: false, onHold: true },
+      ]);
+      expect(theirsUsage).toMatchObject({
+        id: theirs,
+        isOwner: false,
+        owner: { userId: other.id },
+        seats: null,
+        yourPhonesOnHold: [],
+      });
+      expect((await caller(owner).account.usage()).seats?.selfSetAllowed).toBe(false);
+
+      await setSeats(other, 1);
+      expect((await caller(owner).account.usage()).groups[1]?.yourPhonesOnHold).toEqual([
+        { deviceId: owner.deviceIds[0], deviceName: "Phone", isThisPhone: true },
+      ]);
+
+      await setSeats(owner, 3);
+      const endedAt = new Date(Date.now() - 3_600_000);
+      await prisma.user.update({ where: { id: owner.id }, data: { paidPeriodEndsAt: endedAt } });
+      const grace = await caller(owner).account.usage();
+      const graceEndsAt = new Date(endedAt.getTime() + 7 * 86_400_000);
+      expect(grace.seats).toMatchObject({ seats: 3, onHold: 0, graceEndsAt });
+      expect(grace.groups[0]?.seats?.phones.map(({ holdsFrom }) => holdsFrom)).toEqual([
+        graceEndsAt,
+        graceEndsAt,
+        graceEndsAt,
+      ]);
+    });
+
+    test("usage on a self-hosted server shows groups only", async () => {
+      const owner = await createUser({ seats: 0 });
+      const member = await createUser();
+      const groupId = await createGroup(owner, { selfHosted: true });
+      await joinWithCode(member, await invite(owner, groupId, { selfHosted: true }), {
+        selfHosted: true,
+      });
+
+      const usage = await caller(owner, {
+        allowSelfSetSeats: true,
+        selfHosted: true,
+      }).account.usage();
+      expect(usage.gauges.map(({ id }) => id)).toEqual(["groups"]);
+      expect(usage.gauges[0]).toMatchObject({ used: 1, max: 16 });
+      expect(usage.seats).toBeNull();
+      expect(usage.groups).toEqual([
+        {
+          id: groupId,
+          name: "Family",
+          owner: { userId: owner.id, name: `Name ${owner.id}` },
+          isOwner: true,
+          seats: null,
+          yourPhonesOnHold: [],
+        },
+      ]);
+      expect((await caller(member, { selfHosted: true }).account.usage()).groups[0]).toMatchObject({
+        isOwner: false,
+        seats: null,
+      });
+    });
+
     test("the debug setting ends and renews the paid period only where self-set seats are allowed", async () => {
       const owner = await createUser({ seats: 2 });
       await expect(caller(owner).account.setPaidPeriodEnded({ ended: true })).rejects.toMatchObject(

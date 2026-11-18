@@ -1,5 +1,5 @@
 import { tryCatch } from "@openbeacon/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArmchairIcon, MinusIcon, PlusIcon } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, View } from "react-native";
@@ -9,22 +9,39 @@ import { Button } from "./ui/Button.tsx";
 import { Icon } from "./ui/Icon.tsx";
 import { Text } from "./ui/Text.tsx";
 
-export const SeatsSetting = ({ subscribed }: { subscribed: boolean }) => {
+export const SeatsSetting = ({
+  seats,
+  onChanged,
+}: {
+  seats: {
+    seats: number;
+    paidSeats: number;
+    used: number;
+    max: number;
+    paidPeriodEndsAt: Date | null;
+    graceEndsAt: Date | null;
+  };
+  onChanged: () => Promise<unknown>;
+}) => {
   const queryClient = useQueryClient();
-  const seats = useQuery({ ...trpc.account.seats.queryOptions(), subscribed });
   const setSeats = useMutation(trpc.account.setSeats.mutationOptions());
   const setPaidPeriodEnded = useMutation(trpc.account.setPaidPeriodEnded.mutationOptions());
   const [draft, setDraft] = useState<number | null>(null);
-  if (!seats.data?.selfSetAllowed) return null;
-  const { grace, max, paidPeriodEndsAt, paidSeats, used } = seats.data;
+  const { graceEndsAt, max, paidPeriodEndsAt, paidSeats, used } = seats;
   const value = draft ?? paidSeats;
+  const refresh = () =>
+    Promise.all([
+      onChanged(),
+      queryClient.invalidateQueries({ queryKey: trpc.account.seats.queryKey() }),
+      queryClient.invalidateQueries({ queryKey: trpc.groupMembership.list.queryKey() }),
+    ]);
   const save = async () => {
     const result = await tryCatch(setSeats.mutateAsync({ seats: value }));
     if (result.error) {
       Alert.alert("Unable to change seats", result.error.message);
       return;
     }
-    await queryClient.invalidateQueries({ queryKey: trpc.account.seats.queryKey() });
+    await refresh();
     setDraft(null);
   };
   const endPaidPeriod = async (ended: boolean) => {
@@ -33,10 +50,7 @@ export const SeatsSetting = ({ subscribed }: { subscribed: boolean }) => {
       Alert.alert("Unable to change the paid period", result.error.message);
       return;
     }
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: trpc.account.seats.queryKey() }),
-      queryClient.invalidateQueries({ queryKey: trpc.groupMembership.list.queryKey() }),
-    ]);
+    await refresh();
   };
   const formatDate = (date: Date) =>
     date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
@@ -51,8 +65,8 @@ export const SeatsSetting = ({ subscribed }: { subscribed: boolean }) => {
           <View className="flex-1">
             <Text className="font-medium">Seats (beta testing)</Text>
             <Text className="text-sm text-muted-foreground">
-              Using {used} of {seats.data.seats}
-              {seats.data.seats !== paidSeats ? ` (${paidSeats} paid)` : ""}
+              Using {used} of {seats.seats}
+              {seats.seats !== paidSeats ? ` (${paidSeats} paid)` : ""}
             </Text>
           </View>
           <Pressable
@@ -90,8 +104,8 @@ export const SeatsSetting = ({ subscribed }: { subscribed: boolean }) => {
           <Text className="text-sm text-muted-foreground">
             {paidPeriodEndsAt === null
               ? "Ending the paid period starts a 7-day grace period, at most once every 6 months. After it, this account has no seats, so every phone in the groups you own goes on hold."
-              : grace
-                ? `Your paid period ended ${formatDate(paidPeriodEndsAt)}. You keep your seats until ${formatDate(grace.endsAt)}.`
+              : graceEndsAt
+                ? `Your paid period ended ${formatDate(paidPeriodEndsAt)}. You keep your seats until ${formatDate(graceEndsAt)}.`
                 : `Your paid period ended ${formatDate(paidPeriodEndsAt)} with no grace period left, so you have no seats.`}
           </Text>
           <Button

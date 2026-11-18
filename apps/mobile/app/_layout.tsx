@@ -87,6 +87,7 @@ const RootLayout = () => {
                     <Stack.Screen name="account/sign-out-others" />
                     <Stack.Screen name="account/sign-in-codes" />
                     <Stack.Screen name="account/theme" />
+                    <Stack.Screen name="account/usage" />
                     <Stack.Screen name="account/location-history" />
                     <Stack.Screen name="account/who-can-see-me" />
                   </Stack.Protected>

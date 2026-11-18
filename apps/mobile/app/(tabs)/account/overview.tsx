@@ -10,6 +10,7 @@ import {
   BellOffIcon,
   BookOpenIcon,
   EyeIcon,
+  GaugeIcon,
   HistoryIcon,
   InfoIcon,
   KeyRoundIcon,
@@ -33,7 +34,6 @@ import { SettingsContainer } from "../../../components/containers/settingsContai
 import { LocationSharingCard } from "../../../components/LocationSharingCard.tsx";
 import { ProfileImage } from "../../../components/image/ProfileImage.tsx";
 import { PromptCard } from "../../../components/PromptCard.tsx";
-import { SeatsSetting } from "../../../components/SeatsSetting.tsx";
 import { Button } from "../../../components/ui/Button.tsx";
 import {
   Dialog,
@@ -383,6 +383,7 @@ const AccountScreen = () => {
                     href: "/account/devices",
                     value: devices.data ? String(devices.data.length) : undefined,
                   },
+                  { label: "Usage", icon: GaugeIcon, href: "/account/usage" },
                   { label: "Password and security", icon: LockIcon, href: "/account/password" },
                   {
                     label: "App lock",
@@ -447,7 +448,6 @@ const AccountScreen = () => {
               },
             ]}
           />
-          <SeatsSetting subscribed={isFocused} />
         </View>
         {signOutPhase && (
           <Text accessibilityLiveRegion="polite" className="text-secondary px-1 text-sm">
