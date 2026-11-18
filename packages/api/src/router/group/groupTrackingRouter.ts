@@ -89,6 +89,7 @@ export const groupTrackingRouter = {
         cost,
       });
       const charged = new Map<string, number>();
+      const available = new Map<string, number>();
       const refundAllowance = async (senderDeviceId: string, count: number) => {
         const cost = Math.min(count, charged.get(senderDeviceId) ?? 0);
         if (cost <= 0) return;
@@ -103,6 +104,18 @@ export const groupTrackingRouter = {
           );
         }
       };
+      const historyCosts = new Map<string, number>();
+      for (const point of input.points) {
+        if (point.role === "LIVE") continue;
+        historyCosts.set(point.senderDeviceId, (historyCosts.get(point.senderDeviceId) ?? 0) + 1);
+      }
+      for (const [senderDeviceId, cost] of historyCosts) {
+        const allowance = await ctx.cache.rateLimits.take(historyAllowance(senderDeviceId, cost), {
+          whenUnavailable: "allow",
+        });
+        if (!allowance.unavailable) charged.set(senderDeviceId, allowance.granted);
+        available.set(senderDeviceId, allowance.granted);
+      }
       const transaction = await tryCatch(
         ctx.db.$transaction(async (tx) => {
           const member = await lockGroupMemberForWrite(tx, {
@@ -118,25 +131,19 @@ export const groupTrackingRouter = {
                   joinedEpochNumber: member.joinedEpochNumber,
                   points: input.points,
                   userId,
-                  refundAllowance,
+                  refundAllowance: async (senderDeviceId, count) => {
+                    available.set(senderDeviceId, (available.get(senderDeviceId) ?? 0) + count);
+                  },
                   takeAllowance: async (senderDeviceId, cost) => {
-                    const allowance = await ctx.cache.rateLimits.take(
-                      historyAllowance(senderDeviceId, cost),
-                      { whenUnavailable: "allow" },
-                    );
-                    if (!allowance.unavailable) {
-                      charged.set(
-                        senderDeviceId,
-                        (charged.get(senderDeviceId) ?? 0) + allowance.granted,
-                      );
-                    }
-                    if (allowance.granted < cost) {
+                    const granted = Math.min(cost, available.get(senderDeviceId) ?? 0);
+                    available.set(senderDeviceId, (available.get(senderDeviceId) ?? 0) - granted);
+                    if (granted < cost) {
                       console.warn("[rate-limit] history allowance reached", {
                         userId,
-                        discarded: cost - allowance.granted,
+                        discarded: cost - granted,
                       });
                     }
-                    return allowance.granted;
+                    return granted;
                   },
                 })
               : { accepted: [], discarded: [], duplicates: [], expired: [] };
@@ -167,6 +174,9 @@ export const groupTrackingRouter = {
         );
         throw transaction.error;
       }
+      await Promise.all(
+        [...available].map(([senderDeviceId, unused]) => refundAllowance(senderDeviceId, unused)),
+      );
       const result = transaction.data;
       if ("placeTransitions" in result) {
         ctx.push?.placeTransitions({

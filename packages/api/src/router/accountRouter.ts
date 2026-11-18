@@ -183,45 +183,39 @@ export const accountRouter = {
     .input(setHistoryShareSchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
-      return ctx.db.$transaction(async (tx) => {
-        await tx.$queryRaw(
-          Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR NO KEY UPDATE`,
-        );
-        const following = (
-          await tx.groupMember.findMany({
+      const followingGroupIds = async () =>
+        (
+          await ctx.db.groupMember.findMany({
             where: { userId, historyShare: null },
             select: { groupId: true },
           })
         ).map(({ groupId }) => groupId);
-        const previous = await tx.user.findUniqueOrThrow({
-          where: { id: userId },
-          select: { historyShare: true },
-        });
-        const deletedBefore = await deleteHistoryOutsideShare({
-          db: tx,
-          groupIds: following,
-          historyShare: previous.historyShare,
-          userId,
-        });
-        const account = await tx.user.update({
-          where: { id: userId },
-          data: { historyShare: input.historyShare, historyShareChangedAt: new Date() },
-          select: { historyShare: true, historyShareChangedAt: true },
-        });
-        const deletedPoints =
-          deletedBefore +
-          (await deleteHistoryOutsideShare({
-            db: tx,
-            groupIds: following,
-            historyShare: input.historyShare,
-            userId,
-          }));
-        return {
-          historyShare: account.historyShare,
-          changedAt: account.historyShareChangedAt,
-          deletedPoints,
-        };
+      const previous = await ctx.db.user.findUniqueOrThrow({
+        where: { id: userId },
+        select: { historyShare: true },
       });
+      const deletedBefore = await deleteHistoryOutsideShare({
+        db: ctx.db,
+        groupIds: await followingGroupIds(),
+        historyShare: previous.historyShare,
+        userId,
+      });
+      const account = await ctx.db.user.update({
+        where: { id: userId },
+        data: { historyShare: input.historyShare, historyShareChangedAt: new Date() },
+        select: { historyShare: true, historyShareChangedAt: true },
+      });
+      const deletedAfter = await deleteHistoryOutsideShare({
+        db: ctx.db,
+        groupIds: await followingGroupIds(),
+        historyShare: account.historyShare,
+        userId,
+      });
+      return {
+        historyShare: account.historyShare,
+        changedAt: account.historyShareChangedAt,
+        deletedPoints: deletedBefore + deletedAfter,
+      };
     }),
   deletionVerificationMethods: setupProcedure.query(async ({ ctx }) => {
     const accounts = await ctx.db.account.findMany({

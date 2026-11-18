@@ -169,15 +169,17 @@ const downloadPart = async ({
   etag,
   limiter,
   part,
+  stallTimeoutMs,
   url,
 }: {
   etag: string;
   limiter: RateLimiter;
   part: { start: number; length: number };
+  stallTimeoutMs: number;
   url: string;
 }) => {
   const controller = new AbortController();
-  let stallTimer = setTimeout(() => controller.abort(), STALL_TIMEOUT_MS);
+  let stallTimer = setTimeout(() => controller.abort(), stallTimeoutMs);
   const buffer = Buffer.allocUnsafe(part.length);
   let offset = 0;
 
@@ -202,7 +204,7 @@ const downloadPart = async ({
       buffer.set(chunk, offset);
       offset += chunk.byteLength;
       await limiter.take(chunk.byteLength);
-      stallTimer = setTimeout(() => controller.abort(), STALL_TIMEOUT_MS);
+      stallTimer = setTimeout(() => controller.abort(), stallTimeoutMs);
     }
   } finally {
     clearTimeout(stallTimer);
@@ -246,6 +248,7 @@ export const uploadArchive = async ({
   partSize = PART_SIZE,
   sleep = (ms: number) => Bun.sleep(ms),
   source,
+  stallTimeoutMs = STALL_TIMEOUT_MS,
   stateDir,
   uploadLimiter,
 }: {
@@ -258,6 +261,7 @@ export const uploadArchive = async ({
   partClient: S3Client;
   partSize?: number;
   sleep?: (ms: number) => Promise<void>;
+  stallTimeoutMs?: number;
   source: { etag: string; size: number; url: string };
   stateDir: string;
   uploadLimiter: RateLimiter;
@@ -359,26 +363,34 @@ export const uploadArchive = async ({
             etag: source.etag,
             limiter: downloadLimiter,
             part,
+            stallTimeoutMs,
             url: source.url,
           });
-          const response = await partClient.send(
-            new UploadPartCommand({
-              Body: createThrottledBody({
-                buffer,
-                limiter: uploadLimiter,
-                onSent: (bytes) => {
-                  sentBytes += bytes;
-                  onProgress(bytes);
-                },
+          const controller = new AbortController();
+          let stallTimer = setTimeout(() => controller.abort(), stallTimeoutMs);
+          const response = await partClient
+            .send(
+              new UploadPartCommand({
+                Body: createThrottledBody({
+                  buffer,
+                  limiter: uploadLimiter,
+                  onSent: (bytes) => {
+                    clearTimeout(stallTimer);
+                    stallTimer = setTimeout(() => controller.abort(), stallTimeoutMs);
+                    sentBytes += bytes;
+                    onProgress(bytes);
+                  },
+                }),
+                Bucket: bucket,
+                ContentLength: part.length,
+                ContentMD5: createHash("md5").update(buffer).digest("base64"),
+                Key: key,
+                PartNumber: part.partNumber,
+                UploadId: activeState.uploadId,
               }),
-              Bucket: bucket,
-              ContentLength: part.length,
-              ContentMD5: createHash("md5").update(buffer).digest("base64"),
-              Key: key,
-              PartNumber: part.partNumber,
-              UploadId: activeState.uploadId,
-            }),
-          );
+              { abortSignal: controller.signal },
+            )
+            .finally(() => clearTimeout(stallTimer));
 
           if (!response.ETag) {
             throw new Error(`Map storage did not return an ETag for part ${part.partNumber}`);

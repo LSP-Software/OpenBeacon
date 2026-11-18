@@ -176,18 +176,24 @@ const otherBuild = () => {
 describe("map tiles commands", () => {
   let stateDir = "";
   let newestBuild = "20261107";
+  let olderBuilds: string[] = [];
 
   beforeEach(async () => {
     setSystemTime(now);
     newestBuild = "20261107";
+    olderBuilds = [];
     stateDir = await mkdtemp(join(tmpdir(), "map-tiles-commands-"));
     spyOn(console, "log").mockImplementation(() => {});
     globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("builds.json")) {
-        return Response.json([
-          { key: `${newestBuild}.pmtiles`, size: source.byteLength, version: "4.15.2" },
-        ]);
+        return Response.json(
+          [newestBuild, ...olderBuilds].map((build) => ({
+            key: `${build}.pmtiles`,
+            size: source.byteLength,
+            version: "4.15.2",
+          })),
+        );
       }
       if (init?.method === "HEAD") {
         return new Response(null, {
@@ -419,6 +425,19 @@ describe("map tiles commands", () => {
     expect(storage.manifest()?.slots.a?.build).toBe("20261107");
     expect(await Bun.file(statePath).exists()).toBe(false);
     expect((await readMapStatus(context(storage))).resumableUploads).toEqual([]);
+  });
+
+  test("an interrupted first download resumes its build after Protomaps lists a newer one", async () => {
+    const storage = createFakeStorage({ failCompletes: 1 });
+
+    await expect(publish(context(storage), update)).rejects.toThrow("Upload stopped");
+    newestBuild = "20261108";
+    olderBuilds = ["20261107"];
+    const result = await publish(context(storage), scheduledUpdate);
+
+    expect(result.published).toBe(true);
+    expect(storage.writes.filter((write) => write === "create:planet-a.pmtiles")).toHaveLength(1);
+    expect(storage.manifest()).toMatchObject({ current: "a", slots: { a: { build: "20261107" } } });
   });
 
   test("a scheduled update resumes a manual update that stopped before the interval", async () => {

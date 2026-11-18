@@ -23,6 +23,7 @@ const cache = {
   rateLimits: {
     consume: async () => ({ allowed: true }),
     take: async (input: { cost?: number }) => ({ granted: input.cost ?? 1, remaining: 2_880 }),
+    refund: async () => {},
   },
 };
 const router = createTRPCRouter({ account: accountRouter, groupTracking: groupTrackingRouter });

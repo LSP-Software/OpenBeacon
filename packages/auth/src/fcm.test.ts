@@ -141,6 +141,20 @@ describe("access token", () => {
     await expect(client.getAccessToken()).rejects.toMatchObject({ code: "FCM_AUTH_400" });
   });
 
+  test("says Google couldn't be reached when the token request gets no answer", async () => {
+    const client = createFcmClient({
+      projectId: "openbeacon-test",
+      clientEmail: "push@example.test",
+      privateKey: pem,
+      fetch: async () => {
+        throw new TypeError("fetch failed");
+      },
+    });
+    await expect(client.getAccessToken()).rejects.toMatchObject({
+      code: "FCM_AUTH_UNREACHABLE",
+    });
+  });
+
   test("fails on a private key that isn't a PKCS #8 key, without calling Google", async () => {
     let called = false;
     const client = createFcmClient({

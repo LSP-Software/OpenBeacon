@@ -11,6 +11,15 @@ const smtpErrorDetails = (error: Error) => {
   return details.length > 0 ? ` (${details.join(" ")})` : "";
 };
 
+export const emailUnreachableCode = "EMAIL_UNREACHABLE";
+
+const unreachable = (message: string) =>
+  Object.assign(new Error(message), { code: emailUnreachableCode });
+
+const resendUnreachable = (error: { statusCode?: number | null }) =>
+  error.statusCode === null ||
+  (error.statusCode !== undefined && (error.statusCode === 429 || error.statusCode >= 500));
+
 export const createEmailTransport = (
   config: Exclude<EmailConfig, { transport: "none" }>,
 ): EmailTransport => {
@@ -38,12 +47,15 @@ export const createEmailTransport = (
         if (result.error) throw new Error(`Resend could not send email: ${result.error.name}`);
       },
       verify: async () => {
-        const result = await resend.domains.list(
-          { limit: 100 },
-          { signal: AbortSignal.timeout(15_000) },
+        const listed = await tryCatch(
+          resend.domains.list({ limit: 100 }, { signal: AbortSignal.timeout(15_000) }),
         );
+        if (listed.error) throw unreachable("Resend could not be reached");
+        const result = listed.data;
         // Resend has no endpoint for checking a send-only key. A restricted_api_key error means the key is valid but can only send.
         if (result.error?.name === "restricted_api_key") return;
+        if (result.error && resendUnreachable(result.error))
+          throw unreachable(`Resend could not be reached: ${result.error.name}`);
         if (result.error) throw new Error(`Resend rejected the API key: ${result.error.name}`);
         const domain = config.fromAddress.split("@")[1]?.toLowerCase();
         const verified = result.data.data.find(
@@ -52,9 +64,13 @@ export const createEmailTransport = (
         if (!verified) {
           throw new Error("The EMAIL_FROM domain is not verified in Resend");
         }
-        const details = await resend.domains.get(verified.id, {
-          signal: AbortSignal.timeout(15_000),
-        });
+        const fetched = await tryCatch(
+          resend.domains.get(verified.id, { signal: AbortSignal.timeout(15_000) }),
+        );
+        if (fetched.error) throw unreachable("Resend could not be reached");
+        const details = fetched.data;
+        if (details.error && resendUnreachable(details.error))
+          throw unreachable(`Resend could not be reached: ${details.error.name}`);
         if (details.error) {
           throw new Error(`Resend could not read the EMAIL_FROM domain: ${details.error.name}`);
         }
@@ -97,6 +113,14 @@ export const createEmailTransport = (
     verify: async () => {
       const result = await tryCatch(transporter.verify());
       if (!result.error) return;
+      const code = "code" in result.error ? result.error.code : null;
+      const responseCode = "responseCode" in result.error ? result.error.responseCode : null;
+      if (
+        (typeof responseCode === "number" && responseCode >= 400 && responseCode < 500) ||
+        (typeof responseCode !== "number" &&
+          ["ECONNECTION", "ETIMEDOUT", "ESOCKET", "EDNS"].includes(String(code)))
+      )
+        throw unreachable(`SMTP server could not be reached${smtpErrorDetails(result.error)}`);
       throw new Error(`SMTP connection or login failed${smtpErrorDetails(result.error)}`);
     },
   };

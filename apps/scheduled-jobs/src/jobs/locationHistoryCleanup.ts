@@ -168,6 +168,12 @@ export const createEpochCleanup =
               AND NOT EXISTS (
                 SELECT 1 FROM "Place" pl WHERE pl."epochId" = e.id
               )
+              AND NOT EXISTS (
+                SELECT 1 FROM "Group" g WHERE g."imageKeyEpochId" = e.id
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM "GroupMember" gm WHERE gm."imageKeyEpochId" = e.id
+              )
             FOR UPDATE OF e SKIP LOCKED
           )
         `,

@@ -314,7 +314,6 @@ describe("groupTrackingRouter", () => {
       memberFindUniqueMock: createMemberFindUniqueMock(true),
     });
     await cache.rateLimits.take({ ...allowance(), cost: 2_880 });
-    const take = spyOn(cache.rateLimits, "take");
     const live = trackingPoint("live", "LIVE");
 
     await expect(
@@ -324,7 +323,6 @@ describe("groupTrackingRouter", () => {
       discarded: [],
       duplicates: [duplicate.clientPointId],
     });
-    expect(take).not.toHaveBeenCalled();
 
     const newStay = trackingPoint("new-stay", "STAY");
     await expect(

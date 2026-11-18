@@ -15,6 +15,8 @@ const transport = config.transport === "none" ? null : createEmailTransport(conf
 
 export const emailEnabled = transport !== null;
 
+export { emailUnreachableCode } from "./transport.ts";
+
 export const checkEmail = async () => {
   if (!transport) return;
   const result = await tryCatch(transport.verify());

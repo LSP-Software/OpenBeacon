@@ -96,6 +96,26 @@ describe("SMTP transport", () => {
     await expect(transport.verify()).rejects.toThrow("SMTP connection or login failed (EAUTH 535)");
   });
 
+  test("marks a server that can't be reached as unreachable and a refused login as a failure", async () => {
+    for (const failure of [
+      { code: "ECONNECTION" },
+      { code: "ETIMEDOUT" },
+      { code: "EDNS" },
+      { code: "EPROTOCOL", responseCode: 421 },
+    ]) {
+      smtpVerify.mockImplementationOnce(async () => {
+        throw Object.assign(new Error("unavailable"), failure);
+      });
+      await expect(transport.verify()).rejects.toMatchObject({ code: "EMAIL_UNREACHABLE" });
+    }
+    smtpVerify.mockImplementationOnce(async () => {
+      throw Object.assign(new Error("535 login failed"), { code: "EAUTH", responseCode: 535 });
+    });
+    const refused = await transport.verify().catch((caught: unknown) => caught);
+    expect(refused).toMatchObject({ message: "SMTP connection or login failed (EAUTH 535)" });
+    expect(refused).not.toMatchObject({ code: "EMAIL_UNREACHABLE" });
+  });
+
   test("reports why a send failed without addresses or content", async () => {
     sendMail.mockImplementationOnce(async () => {
       throw Object.assign(new Error("550 owner@example.com: mailbox unavailable"), {
@@ -144,10 +164,24 @@ describe("Resend transport", () => {
   });
 
   test("rejects an invalid key", async () => {
-    domainsResult = { data: null, error: { name: "invalid_api_key" } };
-    await expect(transport.verify()).rejects.toThrow(
-      "Resend rejected the API key: invalid_api_key",
-    );
+    domainsResult = { data: null, error: { name: "invalid_api_key", statusCode: 403 } };
+    const error = await transport.verify().catch((caught: unknown) => caught);
+    expect(error).toMatchObject({ message: "Resend rejected the API key: invalid_api_key" });
+    expect(error).not.toMatchObject({ code: "EMAIL_UNREACHABLE" });
+  });
+
+  test("marks a Resend outage as unreachable rather than a bad key", async () => {
+    for (const error of [
+      { name: "application_error", statusCode: null },
+      { name: "internal_server_error", statusCode: 500 },
+      { name: "rate_limit_exceeded", statusCode: 429 },
+    ]) {
+      domainsResult = { data: null, error };
+      await expect(transport.verify()).rejects.toMatchObject({
+        message: `Resend could not be reached: ${error.name}`,
+        code: "EMAIL_UNREACHABLE",
+      });
+    }
   });
 
   test("requires the sender domain to be verified", async () => {

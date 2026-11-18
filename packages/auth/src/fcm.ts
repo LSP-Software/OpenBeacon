@@ -59,15 +59,23 @@ export const createFcmClient = ({
       .setIssuedAt(issuedAt)
       .setExpirationTime(issuedAt + 3600)
       .sign(await importPKCS8(privateKey, "RS256"));
-    const response = await fetch(tokenUrl, {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-        assertion,
-      }).toString(),
-      signal: AbortSignal.timeout(10_000),
-    });
+    const answered = await tryCatch(
+      fetch(tokenUrl, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+          assertion,
+        }).toString(),
+        signal: AbortSignal.timeout(10_000),
+      }),
+    );
+    if (answered.error) {
+      throw Object.assign(new Error("Could not reach Google's token endpoint"), {
+        code: "FCM_AUTH_UNREACHABLE",
+      });
+    }
+    const response = answered.data;
     const body: unknown = await response.json().catch(() => null);
     const token =
       body && typeof body === "object" && "access_token" in body ? body.access_token : null;

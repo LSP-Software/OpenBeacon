@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
-import { prisma } from "@openbeacon/database";
+import { Prisma, prisma } from "@openbeacon/database";
 import { createDeviceKeyPair, generateGroupEpochKey } from "@openbeacon/encryption";
 import type { HistoryShare } from "@openbeacon/shared";
 import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
@@ -48,6 +48,38 @@ const caller = (userId: string, deviceId: string) =>
       session: { user: { id: userId }, session: { id: `${userId}-session` } },
     }) as Parameters<typeof router.createCaller>[0],
   );
+
+const withSlowPointDeletes = (delayMs: number) => {
+  const slowDeletes = <T extends object>(db: T): T =>
+    new Proxy(db, {
+      get: (target, key, receiver) => {
+        const value = Reflect.get(target, key, receiver);
+        if (key === "$queryRaw" && typeof value === "function")
+          return async (query: unknown, ...values: unknown[]) => {
+            if (query instanceof Prisma.Sql && query.sql.includes('DELETE FROM "TrackingPoint"'))
+              await Bun.sleep(delayMs);
+            return Reflect.apply(value, target, [query, ...values]);
+          };
+        if (key === "$transaction" && typeof value === "function")
+          return (run: unknown, ...options: unknown[]) =>
+            Reflect.apply(value, target, [
+              typeof run === "function" ? (tx: object) => run(slowDeletes(tx)) : run,
+              ...options,
+            ]);
+        return value;
+      },
+    });
+  return (userId: string, deviceId: string) =>
+    router.createCaller(
+      withDeviceActive({
+        cache,
+        db: slowDeletes(prisma),
+        clientIp: "127.0.0.1",
+        deviceId,
+        session: { user: { id: userId }, session: { id: `${userId}-session` } },
+      }) as Parameters<typeof router.createCaller>[0],
+    );
+};
 
 const nowHour = () => Math.floor(Date.now() / 3_600_000);
 const epochId = (groupId: string) => `${groupId}-epoch`;
@@ -238,6 +270,33 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(await storedHours(clubId)).toEqual([100, 24, 23, 0]);
       expect(await storedHours(familyId, quietId)).toEqual([100]);
     });
+
+    test("a change that takes longer than a transaction allows to delete points is still saved", async () => {
+      await setAccount(sharerId, "WEEK_1");
+      for (const hoursAgo of [0, 30, 200]) await store(familyId, nowHour() - hoursAgo);
+      await store(clubId, nowHour() - 30);
+      const sharer = withSlowPointDeletes(3_000)(sharerId, sharerDeviceId);
+
+      const account = await sharer.account.setHistoryShare({ historyShare: "DAY_1" });
+      expect(account).toMatchObject({ historyShare: "DAY_1", deletedPoints: 3 });
+      expect(await storedHours(familyId)).toEqual([0]);
+
+      await setOverride(sharerId, familyId, "WEEK_1");
+      await store(familyId, nowHour() - 30);
+      await store(familyId, nowHour() - 200);
+      const group = await sharer.groupSettings.setHistoryShare({
+        groupId: familyId,
+        historyShare: "HOURS_6",
+      });
+      expect(group).toMatchObject({ override: "HOURS_6", deletedPoints: 2 });
+      expect(await storedHours(familyId)).toEqual([0]);
+      expect(
+        await prisma.groupMember.findUniqueOrThrow({
+          where: { userId_groupId: { userId: sharerId, groupId: familyId } },
+          select: { historyShare: true },
+        }),
+      ).toEqual({ historyShare: "HOURS_6" });
+    }, 30_000);
 
     test("lengthening keeps deleted points deleted and only applies going forward", async () => {
       for (const hoursAgo of [0, 10]) await store(familyId, nowHour() - hoursAgo);

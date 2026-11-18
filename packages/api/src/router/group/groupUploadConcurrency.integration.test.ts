@@ -179,6 +179,50 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       }
     });
 
+    test("an upload takes its history allowance from Redis before it locks the group", async () => {
+      const { groupId, point } = await createGroup();
+      let answer = () => {};
+      const answered = new Promise<void>((resolve) => {
+        answer = resolve;
+      });
+      let markAsked = () => {};
+      const asked = new Promise<void>((resolve) => {
+        markAsked = resolve;
+      });
+      const slowCache = Object.assign(Object.create(cache), {
+        rateLimits: {
+          ...cache.rateLimits,
+          take: async (...args: Parameters<typeof cache.rateLimits.take>) => {
+            markAsked();
+            await answered;
+            return cache.rateLimits.take(...args);
+          },
+        },
+      });
+      const clientPointId = testClientPointId(`${prefix}-slow-redis`);
+      const upload = router
+        .createCaller(
+          withDeviceActive({
+            cache: slowCache,
+            db: prisma,
+            clientIp: "127.0.0.1",
+            deviceId: memberDevice,
+            session: { user: { id: memberId }, session: { id: `${memberId}-session` } },
+          }) as Parameters<typeof router.createCaller>[0],
+        )
+        .groupTracking.uploadBatch({ groupId, points: [point(memberDevice, clientPointId)] });
+      await asked;
+      const groupFree = await prisma
+        .$queryRaw(Prisma.sql`SELECT id FROM "Group" WHERE id = ${groupId} FOR UPDATE NOWAIT`)
+        .then(
+          () => true,
+          () => false,
+        );
+      answer();
+      expect((await upload).accepted).toEqual([clientPointId]);
+      expect(groupFree).toBe(true);
+    });
+
     test("uploads sharing points cannot deadlock however each batch is ordered", async () => {
       const { groupId, epochId, point } = await createGroup();
       const stored = (clientPointId: string) => (tx: Prisma.TransactionClient) =>

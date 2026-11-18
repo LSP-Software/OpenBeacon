@@ -323,6 +323,40 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history
     expect(await epochNumbers(groupId)).toEqual([2]);
   });
 
+  test("keeps an epoch that a group or profile picture key is still wrapped under", async () => {
+    const groupPicture = await createGroup("group-picture", [200, 100]);
+    await prisma.group.update({
+      where: { id: groupPicture },
+      data: { imageKeyEpochId: `${groupPicture}-epoch-1` },
+    });
+    const profilePicture = await createGroup("profile-picture", [200, 100]);
+    await prisma.groupMember.create({
+      data: {
+        groupId: profilePicture,
+        userId,
+        role: "OWNER",
+        joinedEpochNumber: 1,
+        imageKeyEpochId: `${profilePicture}-epoch-1`,
+      },
+    });
+
+    await createEpochCleanup()();
+    expect(await epochNumbers(groupPicture)).toEqual([1, 2]);
+    expect(await epochNumbers(profilePicture)).toEqual([1, 2]);
+
+    await prisma.group.update({
+      where: { id: groupPicture },
+      data: { imageKeyEpochId: `${groupPicture}-epoch-2` },
+    });
+    await prisma.groupMember.update({
+      where: { userId_groupId: { userId, groupId: profilePicture } },
+      data: { imageKeyEpochId: `${profilePicture}-epoch-2` },
+    });
+    await createEpochCleanup()();
+    expect(await epochNumbers(groupPicture)).toEqual([2]);
+    expect(await epochNumbers(profilePicture)).toEqual([2]);
+  });
+
   test("deletes place transitions and group events more than 14 days old, in batches up to the run limit", async () => {
     const groupId = await createGroup("transitions", [200]);
     const place = await prisma.place.create({

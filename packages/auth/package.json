@@ -6,6 +6,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./backgroundWork.ts": "./src/backgroundWork.ts",
     "./fcm.ts": "./src/fcm.ts",
     "./push.ts": "./src/push.ts",
     "./securityAlerts.ts": "./src/securityAlerts.ts"

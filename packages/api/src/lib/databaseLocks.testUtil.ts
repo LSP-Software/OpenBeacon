@@ -3,6 +3,7 @@ import { Prisma, type PrismaClient } from "@openbeacon/database";
 export const holdRowLock = async ({
   afterLock,
   beforeCommit,
+  column = "id",
   db,
   id,
   mode = "FOR UPDATE",
@@ -10,10 +11,11 @@ export const holdRowLock = async ({
 }: {
   afterLock?: (tx: Prisma.TransactionClient) => Promise<unknown>;
   beforeCommit?: (tx: Prisma.TransactionClient) => Promise<unknown>;
+  column?: "id" | "userId";
   db: PrismaClient;
   id: string;
   mode?: "FOR NO KEY UPDATE" | "FOR SHARE" | "FOR UPDATE";
-  table: "AccountHistoryKey" | "Group" | "User";
+  table: "AccountDeletionCleanup" | "AccountHistoryKey" | "Group" | "User";
 }) => {
   let release = () => {};
   const released = new Promise<void>((resolve) => {
@@ -27,7 +29,7 @@ export const holdRowLock = async ({
   const holder = db.$transaction(
     async (tx) => {
       await tx.$queryRaw(
-        Prisma.sql`SELECT id FROM ${Prisma.raw(`"${table}"`)} WHERE id = ${id} ${Prisma.raw(mode)}`,
+        Prisma.sql`SELECT 1 FROM ${Prisma.raw(`"${table}"`)} WHERE ${Prisma.raw(`"${column}"`)} = ${id} ${Prisma.raw(mode)}`,
       );
       const [backend] = await tx.$queryRaw<Array<{ pid: number }>>`SELECT pg_backend_pid() AS pid`;
       if (!backend) throw new Error("Unable to read the lock holder's backend pid.");

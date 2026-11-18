@@ -1,5 +1,5 @@
 #!/bin/sh
-# Bun ignores SIGTERM as PID 1 because the backend registers no handler, so this shell stays PID 1 and forwards the signal to whichever step is running.
+# This shell stays PID 1 and forwards SIGTERM to whichever step is running; the backend then finishes its requests and queued work before exiting.
 trap 'kill -TERM "$child" 2>/dev/null; wait "$child"; exit 143' TERM INT
 
 run() {

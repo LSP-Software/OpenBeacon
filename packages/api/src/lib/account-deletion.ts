@@ -11,6 +11,7 @@ import { TRPCError } from "@trpc/server";
 import { deleteTrackingPointsInBatches, deleteTrackingStreams } from "./trackingCleanup.ts";
 import { imageKeyColumns } from "./imageKeys.ts";
 import { lockUserGroups } from "./lockUserGroups.ts";
+import { retryOnTransactionConflict } from "./retryOnTransactionConflict.ts";
 
 export const lockDeletableGroups = async (
   tx: Prisma.TransactionClient,
@@ -146,100 +147,106 @@ export const deleteAccountRecords = async ({
     streams: Prisma.sql`"stream"."senderUserId" = ${userId}`,
   });
 
-  const deleted = await db.$transaction(
-    async (tx) => {
-      if (!(await lockDueUser(tx))) return null;
-      const user = await findAlertRecipient(tx, userId);
-      if (!user) return null;
+  const deleted = await retryOnTransactionConflict(() =>
+    db.$transaction(
+      async (tx) => {
+        if (!(await lockDueUser(tx))) return null;
+        const user = await findAlertRecipient(tx, userId);
+        if (!user) return null;
 
-      const placeGroups = await tx.place.findMany({
-        where: { OR: [{ createdByUserId: userId }, { updatedByUserId: userId }] },
-        distinct: ["groupId"],
-        select: { groupId: true },
-      });
-      const placeGroupIds = placeGroups.map(({ groupId }) => groupId);
-      const { groupIds, soloGroups } = await lockDeletableGroups(tx, {
-        userId,
-        imageUrlPrefix,
-        otherGroupIds: placeGroupIds,
-      });
-      const imageKeys: string[] = [];
-      if (groupIds.length) {
-        for (const group of soloGroups) {
-          if (group.image) imageKeys.push(group.image.slice(imageUrlPrefix.length + 1));
-          const uploads = await tx.pendingUpload.findMany({
-            where: { groupId: group.id },
-            select: { userId: true, fileName: true },
-          });
-          for (const upload of uploads)
-            imageKeys.push(
-              `user/${upload.userId}/uploads/group/${group.id}/avatar/${upload.fileName}`,
-            );
-          await tx.pendingUpload.deleteMany({ where: { groupId: group.id } });
-          await tx.group.delete({ where: { id: group.id } });
-        }
-        await tx.group.updateMany({
-          where: {
-            id: {
-              in: groupIds.filter((id) => !soloGroups.some((group) => group.id === id)),
-            },
-          },
-          data: { epochRotationRequired: true },
+        const placeGroups = await tx.place.findMany({
+          where: { OR: [{ createdByUserId: userId }, { updatedByUserId: userId }] },
+          distinct: ["groupId"],
+          select: { groupId: true },
         });
-      }
+        const placeGroupIds = placeGroups.map(({ groupId }) => groupId);
+        const pictureGroups = await tx.group.findMany({
+          where: { image: { startsWith: `${imageUrlPrefix}/user/${userId}/` } },
+          select: { id: true },
+        });
+        const { groupIds, soloGroups } = await lockDeletableGroups(tx, {
+          userId,
+          imageUrlPrefix,
+          otherGroupIds: [...placeGroupIds, ...pictureGroups.map(({ id }) => id)],
+        });
+        const imageKeys: string[] = [];
+        if (groupIds.length) {
+          for (const group of soloGroups) {
+            if (group.image) imageKeys.push(group.image.slice(imageUrlPrefix.length + 1));
+            const uploads = await tx.pendingUpload.findMany({
+              where: { groupId: group.id },
+              select: { userId: true, fileName: true },
+            });
+            for (const upload of uploads)
+              imageKeys.push(
+                `user/${upload.userId}/uploads/group/${group.id}/avatar/${upload.fileName}`,
+              );
+            await tx.pendingUpload.deleteMany({ where: { groupId: group.id } });
+            await tx.group.delete({ where: { id: group.id } });
+          }
+          await tx.group.updateMany({
+            where: {
+              id: {
+                in: groupIds.filter((id) => !soloGroups.some((group) => group.id === id)),
+              },
+            },
+            data: { epochRotationRequired: true },
+          });
+        }
 
-      const [clock] = await tx.$queryRaw<Array<{ now: Date }>>`SELECT clock_timestamp() AS now`;
-      if (!clock) throw new Error("Unable to read database time.");
-      await tx.accountDeletionCleanup.upsert({
-        where: { userId },
-        create: { userId, createdAt: clock.now, imageKeys },
-        update: { imageKeys: { push: imageKeys } },
-      });
-      const imageGroups = await tx.group.updateManyAndReturn({
-        where: { image: { startsWith: `${imageUrlPrefix}/user/${userId}/` } },
-        data: { image: null, ...imageKeyColumns(null) },
-        select: { id: true },
-      });
-      const eventsAt = await readDatabaseTime(tx);
-      await tx.groupEvent.createMany({
-        data: imageGroups.map(({ id }) => ({
-          createdAt: eventsAt,
-          groupId: id,
-          type: GroupEventType.GROUP_IMAGE_CHANGED,
-          actorUserId: userId,
-        })),
-      });
-      await deleteTrackingStreams({
-        db: tx,
-        streams: Prisma.sql`"stream"."senderUserId" = ${userId}`,
-      });
-      await tx.groupEpochRecipientKey.deleteMany({
-        where: { recipientDevice: { userId } },
-      });
-      await tx.feedback.deleteMany({
-        where: { email: { equals: user.email, mode: "insensitive" } },
-      });
-      await tx.group.updateMany({
-        where: { id: { in: placeGroupIds } },
-        data: { placesRevision: { increment: 1 } },
-      });
-      const memberships = await tx.groupMember.findMany({
-        where: { userId },
-        select: { groupId: true },
-      });
-      await tx.user.delete({ where: { id: userId } });
-      const deletedAt = await readDatabaseTime(tx);
-      const deletionEvents = await tx.groupEvent.createManyAndReturn({
-        data: memberships.map(({ groupId }) => ({
-          createdAt: deletedAt,
-          groupId,
-          type: GroupEventType.ACCOUNT_DELETED,
-        })),
-        select: { id: true },
-      });
-      return { user, eventIds: deletionEvents.map(({ id }) => id) };
-    },
-    { timeout: 60_000 },
+        const [clock] = await tx.$queryRaw<Array<{ now: Date }>>`SELECT clock_timestamp() AS now`;
+        if (!clock) throw new Error("Unable to read database time.");
+        await tx.accountDeletionCleanup.upsert({
+          where: { userId },
+          create: { userId, createdAt: clock.now, imageKeys },
+          update: { imageKeys: { push: imageKeys } },
+        });
+        const imageGroups = await tx.group.updateManyAndReturn({
+          where: { image: { startsWith: `${imageUrlPrefix}/user/${userId}/` } },
+          data: { image: null, ...imageKeyColumns(null) },
+          select: { id: true },
+        });
+        const eventsAt = await readDatabaseTime(tx);
+        await tx.groupEvent.createMany({
+          data: imageGroups.map(({ id }) => ({
+            createdAt: eventsAt,
+            groupId: id,
+            type: GroupEventType.GROUP_IMAGE_CHANGED,
+            actorUserId: userId,
+          })),
+        });
+        await deleteTrackingStreams({
+          db: tx,
+          streams: Prisma.sql`"stream"."senderUserId" = ${userId}`,
+        });
+        await tx.groupEpochRecipientKey.deleteMany({
+          where: { recipientDevice: { userId } },
+        });
+        await tx.feedback.deleteMany({
+          where: { email: { equals: user.email, mode: "insensitive" } },
+        });
+        await tx.group.updateMany({
+          where: { id: { in: placeGroupIds } },
+          data: { placesRevision: { increment: 1 } },
+        });
+        const memberships = await tx.groupMember.findMany({
+          where: { userId },
+          select: { groupId: true },
+        });
+        await tx.user.delete({ where: { id: userId } });
+        const deletedAt = await readDatabaseTime(tx);
+        const deletionEvents = await tx.groupEvent.createManyAndReturn({
+          data: memberships.map(({ groupId }) => ({
+            createdAt: deletedAt,
+            groupId,
+            type: GroupEventType.ACCOUNT_DELETED,
+          })),
+          select: { id: true },
+        });
+        return { user, eventIds: deletionEvents.map(({ id }) => id) };
+      },
+      { timeout: 60_000 },
+    ),
   );
   if (!deleted) return false;
   push?.groupEvents(deleted.eventIds);

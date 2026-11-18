@@ -1,9 +1,11 @@
 import { checkImageStorage } from "@openbeacon/api/checkStorage.ts";
 import { checkMapStorage } from "@openbeacon/api/mapStorage.ts";
 import { fcm } from "@openbeacon/auth";
-import { checkEmail, emailEnabled } from "@openbeacon/email";
+import { checkEmail, emailEnabled, emailUnreachableCode } from "@openbeacon/email";
+import { errorCode } from "@openbeacon/shared";
 import { pingRedis } from "@openbeacon/cache";
 import { cache } from "./cache.ts";
+import { checkOptionalServices } from "./checkOptionalServices.ts";
 import { checkServices } from "./checkServices.ts";
 import { db } from "./db.ts";
 import { env } from "./env.ts";
@@ -23,6 +25,24 @@ await checkServices({
   },
   "Image storage": checkImageStorage,
   "Map storage": checkMapStorage,
-  ...(emailEnabled ? { Email: checkEmail } : {}),
-  ...(fcm ? { "Push (FCM)": fcm.getAccessToken } : {}),
+});
+
+await checkOptionalServices({
+  ...(emailEnabled
+    ? {
+        Email: {
+          check: checkEmail,
+          isUnreachable: (error) => errorCode(error) === emailUnreachableCode,
+        },
+      }
+    : {}),
+  ...(fcm
+    ? {
+        "Push (FCM)": {
+          check: fcm.getAccessToken,
+          isUnreachable: (error) =>
+            /^FCM_AUTH_(UNREACHABLE|429|5\d\d)$/.test(errorCode(error) ?? ""),
+        },
+      }
+    : {}),
 });

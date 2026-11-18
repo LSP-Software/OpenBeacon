@@ -6,6 +6,7 @@ import {
   sendGoogleSignInEmail,
   sendSecurityAlertEmail,
 } from "@openbeacon/email";
+import { createBackgroundWork } from "./backgroundWork.ts";
 import { getAuthCapabilities } from "./capabilities.ts";
 import { createAuth } from "./createAuth.ts";
 import { db } from "./db.ts";
@@ -52,12 +53,20 @@ const { settings: fcmSettings } = resolveFcmSettings({
 
 export const fcm = fcmSettings ? createFcmClient(fcmSettings) : null;
 
-export const push = createPushSender({ db, fcm });
+export const backgroundWork = createBackgroundWork();
+
+export const push = createPushSender({
+  db,
+  fcm,
+  runInBackground: backgroundWork.run,
+  setTimer: backgroundWork.setTimer,
+});
 
 export const securityAlerts = createSecurityAlerts({
   db,
   push,
   sendSecurityAlertEmail: emailEnabled ? sendSecurityAlertEmail : null,
+  runInBackground: backgroundWork.run,
   alertsTurnedOff: {
     add: async (input) => sharedCache().alertsTurnedOff.add(input),
     take: async (input) => sharedCache().alertsTurnedOff.take(input),
@@ -68,6 +77,7 @@ export const securityAlerts = createSecurityAlerts({
 export const auth = createAuth({
   emailCodes,
   securityAlerts,
+  runInBackground: backgroundWork.run,
   rateLimits: {
     consume: (input, options) => sharedCache().rateLimits.consume(input, options),
     refund: (input) => sharedCache().rateLimits.refund(input),
