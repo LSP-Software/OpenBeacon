@@ -157,7 +157,12 @@ const MembersTab = ({
                   });
                 } else {
                   await submitEpochChange({
-                    build: () => buildRemoveGroupMemberInput({ groupId, memberId: member.id }),
+                    build: () =>
+                      buildRemoveGroupMemberInput({
+                        groupId,
+                        memberId: member.id,
+                        leaving: isSelf,
+                      }),
                     submit: (input) =>
                       removeMember.mutateAsync({
                         ...input,

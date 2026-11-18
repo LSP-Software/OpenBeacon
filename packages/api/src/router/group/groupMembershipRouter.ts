@@ -260,6 +260,12 @@ export const groupMembershipRouter = {
               message: "Group member not found",
             });
           }
+          if (actor.id !== input.memberId && !input.nextEpoch) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Removing a member needs new group keys.",
+            });
+          }
           if (
             actor.id !== input.memberId &&
             actor.role !== GroupRole.OWNER &&
@@ -316,7 +322,7 @@ export const groupMembershipRouter = {
           }
 
           const isLeaving = actor.id === input.memberId;
-          if (!isLeaving) {
+          if (!isLeaving && input.nextEpoch) {
             await persistGroupEpoch({
               db: tx,
               deviceId: ctx.deviceId,

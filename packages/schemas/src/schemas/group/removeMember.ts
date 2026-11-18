@@ -5,5 +5,5 @@ export const removeGroupMemberSchema = z.object({
   groupId: z.string().min(1),
   memberId: z.string().min(1),
   successorMemberId: z.string().min(1).optional(),
-  nextEpoch: groupEpochBundleSchema,
+  nextEpoch: groupEpochBundleSchema.optional(),
 });
