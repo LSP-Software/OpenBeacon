@@ -58,8 +58,30 @@ mock.module("../lib/trackingEvents.ts", () => ({
   requestTrackingSync: () => events.push("sync"),
 }));
 mock.module("../lib/thisDeviceNoun.ts", () => ({ thisDeviceNoun: () => "tablet" }));
-mock.module("../lib/pendingJoinCode.ts", () => ({
-  openAppAfterSetup: (home: string) => events.push(`open:${home}`),
+mock.module("../lib/onboarding.ts", () => ({
+  advanceOnboarding: (step: string) => events.push(`advance:${step}`),
+}));
+mock.module("../components/onboarding/OnboardingScreen.tsx", () => ({
+  useAdvanceOnboardingOnce: () => (step: string) => events.push(`advance:${step}`),
+  OnboardingScreen: ({
+    title,
+    children,
+    primary,
+    secondary,
+  }: {
+    title: string;
+    children?: React.ReactNode;
+    primary: { label: string; onPress: () => void };
+    secondary?: { label: string; onPress: () => void };
+  }) => (
+    <>
+      <View>{title}</View>
+      {children}
+      {React.createElement("mock-button", { onPress: primary.onPress }, primary.label)}
+      {secondary &&
+        React.createElement("mock-button", { onPress: secondary.onPress }, secondary.label)}
+    </>
+  ),
 }));
 
 const { default: NameThisPhoneScreen } = await import("../app/setup/name.tsx");
@@ -83,10 +105,10 @@ beforeEach(async () => {
 });
 
 test("names a tablet as a tablet", () => {
-  expect(JSON.stringify(root.container.toJSON())).toContain('"Name this ","tablet"');
+  expect(JSON.stringify(root.container.toJSON())).toContain("Name this tablet");
 });
 
-test("continuing saves the name, then hands over to the app, opening any saved invite", async () => {
+test("continuing saves the name, then moves on to the next onboarding step", async () => {
   await press("Continue");
 
   expect(updateDevice.mock.calls[0]?.[0]).toEqual({
@@ -94,12 +116,12 @@ test("continuing saves the name, then hands over to the app, opening any saved i
     icon: "phone",
     name: "Pixel 9",
   });
-  expect(events).toEqual(["save", "sync", "open:/"]);
+  expect(events).toEqual(["save", "sync", "advance:name"]);
 });
 
-test("skipping hands over to the app the same way", async () => {
+test("skipping moves on the same way without saving", async () => {
   await press("Skip");
 
   expect(updateDevice).not.toHaveBeenCalled();
-  expect(events).toEqual(["sync", "open:/"]);
+  expect(events).toEqual(["sync", "advance:name"]);
 });

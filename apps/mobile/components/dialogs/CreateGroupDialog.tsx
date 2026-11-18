@@ -162,7 +162,7 @@ export const CreateGroupDialog = ({
           <Input
             control={form.control}
             name="name"
-            label="Group Name"
+            label="Group name"
             placeholder="Group name"
             autoComplete="off"
           />
@@ -183,7 +183,7 @@ export const CreateGroupDialog = ({
             loading={createGroupSubmission.isPending || createGroupMutation.isPending}
             disabled={picturePicker.isPending}
           >
-            <Text>Create Group</Text>
+            <Text>Create group</Text>
           </Button>
         </View>
       </DialogContent>

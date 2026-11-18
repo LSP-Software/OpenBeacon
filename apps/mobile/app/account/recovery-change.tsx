@@ -5,10 +5,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { ConfirmIdentity } from "../../components/ConfirmIdentity.tsx";
 import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
-import { BackButton } from "../../components/headers/BackButton.tsx";
+import { ScreenHeader } from "../../components/headers/ScreenHeader.tsx";
 import { NewRecoveryPhrase } from "../../components/NewRecoveryPhrase.tsx";
 import { Button } from "../../components/ui/Button.tsx";
 import { Text } from "../../components/ui/Text.tsx";
@@ -50,13 +49,7 @@ const RecoveryPhraseChangeScreen = () => {
 
   return (
     <View className="flex-1 bg-background">
-      <SafeAreaView edges={["top"]} className="border-b border-border bg-background px-6 py-4">
-        <View className="flex-row items-center justify-between">
-          {step === "saving" ? <View className="w-10" /> : <BackButton />}
-          <Text className="text-foreground text-2xl font-bold">Change phrase</Text>
-          <View className="w-10" />
-        </View>
-      </SafeAreaView>
+      <ScreenHeader title="Change phrase" hideBack={step === "saving"} />
 
       <KeyboardAvoidingView
         className="flex-1"
@@ -64,12 +57,12 @@ const RecoveryPhraseChangeScreen = () => {
       >
         <ScrollView
           className="flex-1"
-          contentContainerClassName="gap-6 px-6 py-6 pb-32"
+          contentContainerClassName="gap-6 px-4 pb-32 pt-2"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
           {step !== "done" && (
-            <Text className="text-muted-foreground text-base leading-6">
+            <Text className="text-secondary text-base">
               You’ll get a new 12-word phrase to write down. Your old phrase stops working as soon
               as the new one is saved. Your groups and location history aren’t affected.
             </Text>
@@ -95,8 +88,8 @@ const RecoveryPhraseChangeScreen = () => {
 
           {step === "done" && (
             <View className="gap-4">
-              <Text className="text-foreground text-3xl font-bold">Your phrase is changed</Text>
-              <Text className="text-muted-foreground text-base leading-6">
+              <Text className="text-foreground text-2xl font-bold">Your phrase is changed</Text>
+              <Text className="text-secondary text-base">
                 Use your new phrase to read your history on a new phone. Your old phrase no longer
                 works.
               </Text>

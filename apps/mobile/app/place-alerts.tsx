@@ -2,8 +2,7 @@ import { useIsFocused } from "@react-navigation/native";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams } from "expo-router";
 import { ScrollView, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { BackButton } from "../components/headers/BackButton.tsx";
+import { ScreenHeader } from "../components/headers/ScreenHeader.tsx";
 import { LoadingIndicator } from "../components/LoadingIndicator.tsx";
 import {
   Accordion,
@@ -37,26 +36,14 @@ const PlaceAlertsScreen = () => {
 
   return (
     <View className="flex-1 bg-background">
-      <SafeAreaView edges={["top"]} className="border-b border-border bg-background px-6 py-4">
-        <View className="flex-row items-center gap-4">
-          <BackButton />
-          <View className="min-w-0 flex-1">
-            <Text className="text-foreground text-2xl font-bold">Alerts</Text>
-            {group ? (
-              <Text className="text-muted-foreground" numberOfLines={1}>
-                {group.name}
-              </Text>
-            ) : null}
-          </View>
-        </View>
-      </SafeAreaView>
+      <ScreenHeader title="Alerts" subtitle={group?.name} />
 
       <ScrollView
         className="flex-1"
-        contentContainerClassName="gap-4 px-6 py-6 pb-32"
+        contentContainerClassName="gap-6 px-4 pb-32 pt-2"
         showsVerticalScrollIndicator={false}
       >
-        <Text className="text-muted-foreground text-base leading-6">
+        <Text className="text-secondary text-base">
           Choose whose arrivals and departures you hear about. This only changes your alerts.
           Everyone else still gets theirs.
         </Text>
@@ -65,7 +52,7 @@ const PlaceAlertsScreen = () => {
           <View className="gap-3">
             <Text>Couldn’t load your alerts. Check your connection and try again.</Text>
             <Button
-              variant="outline"
+              variant="secondary"
               onPress={() => {
                 void places.refetch();
                 void mutes.refetch();
@@ -77,7 +64,7 @@ const PlaceAlertsScreen = () => {
         ) : places.isPending || mutes.isPending || !group ? (
           <LoadingIndicator />
         ) : places.data.length === 0 ? (
-          <Text className="text-muted-foreground">This group has no places yet.</Text>
+          <Text className="text-tertiary">This group has no places yet.</Text>
         ) : (
           <Accordion type="multiple">
             <View className="gap-4">
@@ -91,18 +78,18 @@ const PlaceAlertsScreen = () => {
                   <AccordionItem
                     key={place.id}
                     value={place.id}
-                    className="rounded-3xl border border-border bg-card px-5"
+                    className="rounded-2xl border border-border bg-card px-5"
                   >
                     <AccordionTrigger className="items-center">
                       <View className="flex-1 flex-row items-center gap-4">
-                        <View className="size-12 items-center justify-center rounded-xl bg-primary/10">
+                        <View className="size-12 items-center justify-center rounded-xl bg-secondary">
                           <Text className="text-2xl">{place.emoji}</Text>
                         </View>
                         <View className="min-w-0 flex-1">
                           <Text className="text-foreground text-lg font-semibold" numberOfLines={1}>
                             {place.name}
                           </Text>
-                          <Text className="text-muted-foreground text-base">{state.summary}</Text>
+                          <Text className="text-tertiary text-base">{state.summary}</Text>
                         </View>
                       </View>
                     </AccordionTrigger>
@@ -112,7 +99,7 @@ const PlaceAlertsScreen = () => {
                           <Text className="text-foreground text-base font-semibold">
                             Mute everyone here
                           </Text>
-                          <Text className="text-muted-foreground text-sm">
+                          <Text className="text-tertiary text-sm">
                             Includes people who join later
                           </Text>
                         </View>
@@ -137,7 +124,7 @@ const PlaceAlertsScreen = () => {
                             <Text className="text-foreground flex-1 text-lg" numberOfLines={1}>
                               {name}
                             </Text>
-                            <Text className="text-muted-foreground w-20 text-right text-sm">
+                            <Text className="text-tertiary w-20 text-right text-sm">
                               {member.alertsOn ? "Alerts on" : "Alerts off"}
                             </Text>
                             <Switch

@@ -69,12 +69,12 @@ export const AppLockScreen = () => {
                   <Text className="text-center text-3xl font-bold" accessibilityRole="header">
                     OpenBeacon is locked
                   </Text>
-                  <Text className="text-muted-foreground text-center text-base leading-6">
+                  <Text className="text-tertiary text-center text-base leading-6">
                     Use your face, fingerprint or screen lock.
                   </Text>
                   {lockedOut && (
                     <Text
-                      className="text-destructive text-center text-base leading-6"
+                      className="text-destructive-text text-center text-base leading-6"
                       accessibilityLiveRegion="polite"
                     >
                       Too many tries. Wait a moment, then try again.

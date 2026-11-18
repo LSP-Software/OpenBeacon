@@ -1,5 +1,6 @@
 import { router } from "expo-router";
 import { readThisDeviceState } from "./deviceActivation.ts";
+import { hasPendingOnboarding } from "./onboardingStorage.ts";
 import { readRegisteredDeviceNow } from "./registeredDevice.ts";
 import { storage } from "./storage.ts";
 
@@ -47,8 +48,10 @@ export const joinCodeFromInput = (input: string) => {
 export const saveJoinLinkForAfterSetup = (link: string) => {
   const code = joinCodeFromLink(link);
   const device = readRegisteredDeviceNow();
-  if (!code || !device || readThisDeviceState() === "active") return;
+  if (!code || !device) return false;
+  if (readThisDeviceState() === "active" && !hasPendingOnboarding(device.userId)) return false;
   savePendingJoinCode({ code, userId: device.userId });
+  return true;
 };
 
 export const openAppAfterSetup = (home: "/" | "/(tabs)/map") => {

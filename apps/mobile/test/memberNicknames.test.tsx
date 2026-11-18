@@ -35,8 +35,13 @@ mock.module("@tanstack/react-query", () => ({
 mock.module("expo-router", () => ({ useRouter: () => ({ replace: () => {} }) }));
 mock.module("@react-navigation/native", () => ({ useIsFocused: () => true }));
 mock.module("lucide-react-native", () => ({
+  CirclePauseIcon: () => null,
+  EllipsisVerticalIcon: () => null,
+  LogOutIcon: () => null,
   MapPinIcon: () => null,
-  PlusCircleIcon: () => null,
+  PencilIcon: () => null,
+  UserMinusIcon: () => null,
+  UserPlusIcon: () => null,
   BackpackIcon: () => null,
   Flower2Icon: () => null,
   HeartIcon: () => null,
@@ -55,7 +60,21 @@ mock.module("react-native", () => ({
   View: ({ accessibilityLabel, children }: { accessibilityLabel?: string; children?: ReactNode }) =>
     React.createElement("view", { accessibilityLabel }, children),
   ScrollView: passthrough,
-  Pressable: passthrough,
+  Pressable: ({
+    accessibilityLabel,
+    children,
+    disabled = false,
+    onPress,
+  }: {
+    accessibilityLabel?: string;
+    children?: ReactNode;
+    disabled?: boolean;
+    onPress?: () => void;
+  }) => {
+    if (accessibilityLabel && onPress)
+      buttons.push({ label: accessibilityLabel, disabled, onPress });
+    return React.createElement(React.Fragment, null, children);
+  },
   ActivityIndicator: () => null,
   Alert: { alert: () => {} },
   TextInput: ({
@@ -87,6 +106,11 @@ mock.module("../components/ui/Button.tsx", () => ({
   },
 }));
 mock.module("../components/ui/Text.tsx", () => ({ Text: passthrough }));
+mock.module("../components/ui/BottomSheet.tsx", () => ({
+  BottomSheet: ({ visible, children }: { visible: boolean; children: ReactNode }) =>
+    visible ? children : null,
+}));
+mock.module("../components/ui/SegmentedControl.tsx", () => ({ SegmentedControl: () => null }));
 mock.module("../components/ui/Dialog.tsx", () => ({
   Dialog: ({ open, children }: { open: boolean; children: ReactNode }) => (open ? children : null),
   DialogContent: passthrough,
@@ -162,6 +186,7 @@ test("waits for loaded nicknames before opening the editor", async () => {
   records = {};
   buttons = [];
   await act(async () => root.render(<MembersTab groupId="group" live={live()} />));
+  await act(async () => button("Alice, Member").onPress());
   expect(button("Edit nickname").disabled).toBe(true);
   await act(async () => button("Edit nickname").onPress());
   expect(buttons.some((item) => item.label === "Save nickname")).toBe(false);
@@ -181,9 +206,11 @@ test("keeps an unreadable nickname on blank save and replaces it when a new nick
   buttons = [];
   mutate.mockClear();
   await act(async () => root.render(<MembersTab groupId="group" live={live()} />));
+  await act(async () => button("Alice, Member").onPress());
   await act(async () => button("Edit nickname").onPress());
   await act(async () => button("Save nickname").onPress());
   expect(mutate).not.toHaveBeenCalled();
+  await act(async () => button("Alice, Member").onPress());
   await act(async () => button("Edit nickname").onPress());
   await act(async () => changeInput("Mum"));
   await act(async () => button("Save nickname").onPress());
@@ -240,7 +267,8 @@ test("a removal can't be submitted twice while the new epoch is being built", as
   const { promise: built, resolve: finishBuild } = Promise.withResolvers<object>();
   buildRemoval = () => built;
   await act(async () => root.render(<MembersTab groupId="group" live={live()} />));
-  await act(async () => button("Remove member").onPress());
+  await act(async () => button("Alice, Member").onPress());
+  await act(async () => button("Remove from group").onPress());
   const confirm = getAlerts()
     .at(-1)
     ?.buttons.find((item) => item.text === "Remove");
@@ -250,7 +278,9 @@ test("a removal can't be submitted twice while the new epoch is being built", as
   await act(async () => {
     first = confirm.onPress?.();
   });
-  expect(button("Remove member").disabled).toBe(true);
+  await act(async () => button("Alice, Member").onPress());
+  expect(button("Remove from group").disabled).toBe(true);
+  await act(async () => button("Owner, Owner").onPress());
   expect(button("Leave group").disabled).toBe(true);
   await act(async () => {
     await confirm.onPress?.();
@@ -261,7 +291,8 @@ test("a removal can't be submitted twice while the new epoch is being built", as
   });
 
   expect(mutate).toHaveBeenCalledTimes(1);
-  expect(button("Remove member").disabled).toBe(false);
+  await act(async () => button("Alice, Member").onPress());
+  expect(button("Remove from group").disabled).toBe(false);
   group.members.pop();
   buildRemoval = async () => ({});
   await act(async () => root.unmount());

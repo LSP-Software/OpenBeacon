@@ -62,7 +62,7 @@ const notifyListeners = () => {
 
 export const setGroupColor = (groupId: string, color: GroupColor) => {
   if (!isGroupColor(color)) {
-    throw new Error("Group color must be chosen from the palette");
+    throw new Error("Group colour must be chosen from the palette");
   }
   storage.set(storageKey(groupId), color);
   notifyListeners();

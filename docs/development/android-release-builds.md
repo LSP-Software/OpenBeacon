@@ -132,13 +132,13 @@ adb install -r apps/mobile/openbeacon-<version>-<versionCode>.apk
 
 `adb install -r` refuses an APK with a lower `versionCode` than the copy already on the phone.
 
-Phones that installed Open Beacon from Google Play have it signed with Google's app signing key, so the APK can't be installed over that copy. Remove it first with `adb uninstall net.openbeacon.app`, which deletes the app's data on that phone.
+Phones that installed OpenBeacon from Google Play have it signed with Google's app signing key, so the APK can't be installed over that copy. Remove it first with `adb uninstall net.openbeacon.app`, which deletes the app's data on that phone.
 
 Google sign-in in the APK only works if the SHA1 of your signing key is registered on the Android OAuth client. See [Building your own version](#building-your-own-version).
 
 ## Building your own version
 
-Anyone can build and sign the app with their own key. Google Play only lets one developer publish a package name, so a version published separately from Open Beacon needs:
+Anyone can build and sign the app with their own key. Google Play only lets one developer publish a package name, so a version published separately from OpenBeacon needs:
 
 - **Its own package name.** Change `android.package` (and `ios.bundleIdentifier`) in `apps/mobile/app.json`.
 - **Its own upload key**, created as above and set in `credentials.json`.

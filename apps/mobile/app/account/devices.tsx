@@ -6,9 +6,8 @@ import { Link } from "expo-router";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { Pressable, ScrollView, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { z } from "zod";
-import { BackButton } from "../../components/headers/BackButton.tsx";
+import { ScreenHeader } from "../../components/headers/ScreenHeader.tsx";
 import { LocationSharingCard } from "../../components/LocationSharingCard.tsx";
 import { isSharingPaused } from "@openbeacon/shared";
 import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
@@ -61,13 +60,7 @@ const DevicesScreen = () => {
 
   return (
     <View className="flex-1 bg-background">
-      <SafeAreaView edges={["top"]} className="border-b border-border bg-background px-6 py-4">
-        <View className="flex-row items-center justify-between">
-          <BackButton />
-          <Text className="text-foreground text-2xl font-bold">Devices</Text>
-          <View className="w-10" />
-        </View>
-      </SafeAreaView>
+      <ScreenHeader title="Devices" />
 
       <Dialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
         <DialogContent className="max-h-[90%]">
@@ -94,12 +87,12 @@ const DevicesScreen = () => {
                     onPress={() => form.setValue("icon", icon)}
                     className={cn(
                       "size-12 items-center justify-center rounded-2xl border",
-                      selected ? "border-primary bg-primary/10" : "border-border bg-background",
+                      selected ? "border-primary bg-primary-soft" : "border-border bg-background",
                     )}
                   >
                     <Icon
                       as={option.icon}
-                      className={selected ? "text-primary size-6" : "text-muted-foreground size-6"}
+                      className={selected ? "text-primary size-6" : "text-tertiary size-6"}
                     />
                   </Pressable>
                 );
@@ -114,7 +107,7 @@ const DevicesScreen = () => {
               />
             ) : null}
             {editing?.isCurrent ? (
-              <Text className="text-muted-foreground text-sm leading-5">
+              <Text className="text-tertiary text-sm leading-5">
                 To remove this phone, sign out on the Account tab and choose to remove it.
               </Text>
             ) : (
@@ -141,24 +134,24 @@ const DevicesScreen = () => {
         <LoadingIndicator />
       ) : devices.isError ? (
         <View className="flex-1 items-center justify-center gap-4 px-6">
-          <Text className="text-muted-foreground text-center">
+          <Text className="text-tertiary text-center">
             We couldn’t load your devices. Check your connection and try again.
           </Text>
-          <Button variant="outline" onPress={() => devices.refetch()}>
+          <Button variant="secondary" onPress={() => devices.refetch()}>
             <Text>Try again</Text>
           </Button>
         </View>
       ) : (
         <ScrollView
           className="flex-1"
-          contentContainerClassName="gap-4 px-6 py-6 pb-32"
+          contentContainerClassName="gap-6 px-4 pb-32 pt-2"
           showsVerticalScrollIndicator={false}
         >
-          <Text className="text-muted-foreground text-base leading-6">
+          <Text className="text-secondary text-base">
             Phones and tablets signed in to your account. Tap one to manage location sharing, rename
             it, change its icon or remove it.
           </Text>
-          <View className="overflow-hidden rounded-3xl border border-border bg-card">
+          <View className="overflow-hidden rounded-2xl border border-border bg-card">
             {devices.data.map((device, index) => {
               const lastActive = shortTimeSince(device.lastSeenAt);
               const position = positions.find(
@@ -172,37 +165,37 @@ const DevicesScreen = () => {
                   accessibilityRole="button"
                   accessibilityHint="Manage location sharing, edit name and icon, or remove it"
                   className={cn(
-                    "flex-row items-center gap-4 px-5 py-4",
-                    index < devices.data.length - 1 && "border-b border-border/50",
+                    "flex-row items-center gap-4 px-4 py-3.5 active:bg-secondary/60",
+                    index < devices.data.length - 1 && "border-b border-border/60",
                   )}
                   onPress={() => {
                     form.reset({ name: device.name, icon: device.icon });
                     setEditing(device);
                   }}
                 >
-                  <View className="size-11 items-center justify-center rounded-2xl border border-border bg-background/70">
+                  <View className="size-11 items-center justify-center rounded-xl bg-secondary">
                     <Icon
                       as={deviceIconFor(device.icon, device.platform).icon}
-                      className="text-primary size-5"
+                      className="text-foreground size-5"
                     />
                   </View>
                   <View className="flex-1 gap-1">
                     <View className="flex-row flex-wrap items-center gap-2">
-                      <Text className="text-foreground text-base font-medium">{device.name}</Text>
+                      <Text className="text-foreground text-base font-semibold">{device.name}</Text>
                       {device.isCurrent && (
-                        <View className="rounded-full bg-primary/10 px-2 py-0.5">
-                          <Text className="text-primary text-xs font-medium">This phone</Text>
+                        <View className="rounded-full bg-primary-soft px-2 py-0.5">
+                          <Text className="text-primary-text text-xs font-medium">This phone</Text>
                         </View>
                       )}
                       {!device.activatedAt && (
-                        <View className="rounded-full bg-muted px-2 py-0.5">
-                          <Text className="text-muted-foreground text-xs font-medium">
+                        <View className="rounded-full bg-secondary px-2 py-0.5">
+                          <Text className="text-secondary text-xs font-medium">
                             Waiting for setup
                           </Text>
                         </View>
                       )}
                     </View>
-                    <Text className="text-muted-foreground text-sm">
+                    <Text className="text-tertiary text-sm">
                       {[
                         device.model,
                         `Added ${device.createdAt.toLocaleDateString(undefined, { dateStyle: "medium" })}`,
@@ -210,12 +203,12 @@ const DevicesScreen = () => {
                         .filter(Boolean)
                         .join(" · ")}
                     </Text>
-                    <Text className="text-muted-foreground text-sm">
+                    <Text className="text-tertiary text-sm">
                       {device.isCurrent || lastActive === "now"
                         ? "Active now"
                         : `Last active ${lastActive} ago`}
                     </Text>
-                    <Text className="text-muted-foreground text-sm">
+                    <Text className="text-tertiary text-sm">
                       {!device.activatedAt
                         ? "Can’t see anyone’s location until it’s set up"
                         : isSharingPaused(device, serverNow()) ||
@@ -242,7 +235,7 @@ const DevicesScreen = () => {
             })}
           </View>
           <Link href="/account/add-device" asChild>
-            <Button variant="outline">
+            <Button variant="secondary">
               <Text>Add a device</Text>
             </Button>
           </Link>

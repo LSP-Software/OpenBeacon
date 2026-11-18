@@ -68,14 +68,14 @@ const RemoveOldDevicesScreen = () => {
       <Stack.Screen options={{ gestureEnabled: false }} />
       <ScrollView
         className="flex-1"
-        contentContainerClassName="gap-6 px-6 py-6 pb-16"
+        contentContainerClassName="gap-6 px-4 pb-16 pt-2"
         showsVerticalScrollIndicator={false}
       >
         <View className="gap-4">
           <Text className="text-foreground text-3xl font-bold">
             Remove devices you no longer have
           </Text>
-          <Text className="text-muted-foreground text-base leading-6">
+          <Text className="text-secondary text-base">
             Removed devices are signed out and won’t receive new locations. Untick any device you
             still use.
           </Text>
@@ -83,17 +83,17 @@ const RemoveOldDevicesScreen = () => {
         {devices.isPending && <LoadingIndicator />}
         {devices.isError && (
           <View className="gap-4">
-            <Text className="text-muted-foreground text-base leading-6">
+            <Text className="text-secondary text-base">
               We couldn’t load your devices. Check your connection and try again, or keep them all
               and remove any later in Account → Devices.
             </Text>
-            <Button variant="outline" onPress={() => devices.refetch()}>
+            <Button variant="secondary" onPress={() => devices.refetch()}>
               <Text>Try again</Text>
             </Button>
           </View>
         )}
         {otherDevices.length > 0 && (
-          <View className="overflow-hidden rounded-3xl border border-border bg-card">
+          <View className="overflow-hidden rounded-2xl border border-border bg-card">
             {otherDevices.map((device, index) => {
               const checked = ticked.has(device.id);
               return (
@@ -113,9 +113,7 @@ const RemoveOldDevicesScreen = () => {
                   />
                   <View className="flex-1">
                     <Text className="text-foreground text-base font-medium">{device.name}</Text>
-                    {device.model && (
-                      <Text className="text-muted-foreground text-sm">{device.model}</Text>
-                    )}
+                    {device.model && <Text className="text-tertiary text-sm">{device.model}</Text>}
                   </View>
                   <View
                     className={cn(
@@ -138,7 +136,7 @@ const RemoveOldDevicesScreen = () => {
           <Text>{removing ? "Removing…" : "Remove ticked devices"}</Text>
         </Button>
         <Link href="/setup/name" replace asChild>
-          <Button variant="outline" disabled={removing}>
+          <Button variant="secondary" disabled={removing}>
             <Text>Keep them all</Text>
           </Button>
         </Link>

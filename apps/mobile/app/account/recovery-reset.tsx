@@ -6,11 +6,10 @@ import { Link, router, Stack, useFocusEffect, useLocalSearchParams } from "expo-
 import { useCallback, useEffect, useEffectEvent, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { BackHandler, KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { ConfirmIdentity } from "../../components/ConfirmIdentity.tsx";
 import { EmailCodeEntry } from "../../components/EmailCodeEntry.tsx";
 import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
-import { BackButton } from "../../components/headers/BackButton.tsx";
+import { ScreenHeader } from "../../components/headers/ScreenHeader.tsx";
 import { NewRecoveryPhrase } from "../../components/NewRecoveryPhrase.tsx";
 import { RecoveryCoverage } from "../../components/RecoveryCoverage.tsx";
 import { Button } from "../../components/ui/Button.tsx";
@@ -186,15 +185,7 @@ const RecoveryPhraseResetScreen = () => {
   return (
     <View className="flex-1 bg-background">
       <Stack.Screen options={{ gestureEnabled: !busy }} />
-      <SafeAreaView edges={["top"]} className="border-b border-border bg-background px-6 py-4">
-        <View className="flex-row items-center justify-between">
-          {busy ? <View className="w-10" /> : <BackButton />}
-          <Text className="text-foreground text-2xl font-bold">
-            {setup ? "Start fresh" : "Reset phrase"}
-          </Text>
-          <View className="w-10" />
-        </View>
-      </SafeAreaView>
+      <ScreenHeader title={setup ? "Start fresh" : "Reset phrase"} hideBack={busy} />
 
       <KeyboardAvoidingView
         className="flex-1"
@@ -202,18 +193,18 @@ const RecoveryPhraseResetScreen = () => {
       >
         <ScrollView
           className="flex-1"
-          contentContainerClassName="gap-6 px-6 py-6 pb-32"
+          contentContainerClassName="gap-6 px-4 pb-32 pt-2"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
           {step === "warn" && setup && (
             <View className="gap-4">
-              <Text className="text-foreground text-3xl font-bold">Start fresh on this phone?</Text>
+              <Text className="text-foreground text-2xl font-bold">Start fresh on this phone?</Text>
               <View className="gap-2 rounded-lg border border-destructive bg-destructive/10 p-4">
                 <Text className="font-semibold">
                   Your location history from before today will be deleted for good.
                 </Text>
-                <Text className="text-muted-foreground leading-6">
+                <Text className="text-tertiary leading-6">
                   Your groups and members stay. You’ll get a new recovery phrase, and this phone is
                   set up straight away. Your other phones keep working but will need the new phrase
                   to read history.
@@ -224,23 +215,23 @@ const RecoveryPhraseResetScreen = () => {
 
           {step === "warn" && !setup && (
             <View className="gap-4">
-              <Text className="text-foreground text-3xl font-bold">
+              <Text className="text-foreground text-2xl font-bold">
                 Reset your recovery phrase?
               </Text>
-              <Text className="text-muted-foreground text-base leading-6">
+              <Text className="text-secondary text-base">
                 Only do this if you’ve lost your phrase and no other phone can read your history.
               </Text>
               <View className="gap-2 rounded-lg border border-destructive bg-destructive/10 p-4">
                 <Text className="font-semibold">
                   Encrypted history from before today can’t be recovered.
                 </Text>
-                <Text className="text-muted-foreground leading-6">
+                <Text className="text-tertiary leading-6">
                   Your old phrase stops working, and the keys it protected are deleted from your
                   account. This phone keeps only the history it can still read with its own keys.
                   Other phones will need the new phrase.
                 </Text>
               </View>
-              <Text className="text-muted-foreground text-base leading-6">
+              <Text className="text-secondary text-base">
                 Your groups and live location sharing aren’t affected.
               </Text>
             </View>
@@ -249,7 +240,7 @@ const RecoveryPhraseResetScreen = () => {
           {step === "warn" && (
             <View className="gap-4">
               {providers?.email && (
-                <Text className="text-muted-foreground text-base leading-6">
+                <Text className="text-secondary text-base">
                   To make sure it’s you, we’ll email you a code before you get your new phrase.
                 </Text>
               )}
@@ -278,7 +269,7 @@ const RecoveryPhraseResetScreen = () => {
               >
                 <Text>Continue</Text>
               </Button>
-              <Button variant="outline" onPress={() => router.back()}>
+              <Button variant="secondary" onPress={() => router.back()}>
                 <Text>Cancel</Text>
               </Button>
             </View>
@@ -297,7 +288,7 @@ const RecoveryPhraseResetScreen = () => {
           {step === "code" && !codeEmail && <LoadingIndicator />}
           {step === "code" && codeEmail && (
             <View className="gap-4">
-              <Text className="text-foreground text-3xl font-bold">Check your email</Text>
+              <Text className="text-foreground text-2xl font-bold">Check your email</Text>
               <EmailCodeEntry
                 email={codeEmail}
                 submitLabel="Continue"
@@ -317,8 +308,8 @@ const RecoveryPhraseResetScreen = () => {
 
           {step === "protecting" && (
             <View className="gap-4">
-              <Text className="text-foreground text-3xl font-bold">Protecting your history</Text>
-              <Text accessibilityLiveRegion="polite" className="text-muted-foreground text-base">
+              <Text className="text-foreground text-2xl font-bold">Protecting your history</Text>
+              <Text accessibilityLiveRegion="polite" className="text-tertiary text-base">
                 {progress.total === 0
                   ? "Checking your groups…"
                   : `Protected ${progress.done} of ${progress.total} groups.`}
@@ -328,8 +319,8 @@ const RecoveryPhraseResetScreen = () => {
 
           {step === "unconfirmed" && (
             <View className="gap-4">
-              <Text className="text-foreground text-3xl font-bold">Finish setting up</Text>
-              <Text className="text-muted-foreground text-base leading-6">
+              <Text className="text-foreground text-2xl font-bold">Finish setting up</Text>
+              <Text className="text-secondary text-base">
                 Your new phrase is set up, but we couldn’t finish setting up this phone. Check your
                 connection and try again.
               </Text>
@@ -345,8 +336,8 @@ const RecoveryPhraseResetScreen = () => {
 
           {step === "unsaved" && (
             <View className="gap-4">
-              <Text className="text-foreground text-3xl font-bold">Restore your new phrase</Text>
-              <Text className="text-muted-foreground text-base leading-6">
+              <Text className="text-foreground text-2xl font-bold">Restore your new phrase</Text>
+              <Text className="text-secondary text-base">
                 Your new phrase is set up, but this phone couldn’t save its key. Restore with the
                 phrase you just wrote down.
               </Text>
@@ -368,12 +359,12 @@ const RecoveryPhraseResetScreen = () => {
 
           {step === "done" && (
             <View className="gap-4">
-              <Text className="text-foreground text-3xl font-bold">Your phrase is reset</Text>
-              <Text className="text-muted-foreground text-base leading-6">
+              <Text className="text-foreground text-2xl font-bold">Your phrase is reset</Text>
+              <Text className="text-secondary text-base">
                 Use it to get your location history back if you lose or replace your phone.
               </Text>
               {progress.failed > 0 && (
-                <Text className="text-muted-foreground text-base leading-6">
+                <Text className="text-secondary text-base">
                   Some history couldn’t be protected yet. OpenBeacon will keep trying in the
                   background.
                 </Text>

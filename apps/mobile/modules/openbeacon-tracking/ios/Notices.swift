@@ -30,10 +30,10 @@ enum Notice: String {
 
   var title: String {
     switch self {
-    case .appTooOld: return "Update Open Beacon"
+    case .appTooOld: return "Update OpenBeacon"
     case .serverTooOld, .selfHostedServerTooOld, .outOfSync: return "Location sharing paused"
     case .locationPermission: return "Location sharing stopped"
-    case .deviceRemoved, .signedOut: return "Signed out of Open Beacon"
+    case .deviceRemoved, .signedOut: return "Signed out of OpenBeacon"
     case .sharingResumed: return "Location sharing turned back on"
     case .sharingChanged: return "Location sharing changed"
     }
@@ -42,10 +42,10 @@ enum Notice: String {
   var body: String {
     switch self {
     case .appTooOld: return "This phone has stopped sharing your location. Update the app to start sharing again."
-    case .serverTooOld: return "We're updating Open Beacon's servers. Sharing will start again shortly."
+    case .serverTooOld: return "We're updating OpenBeacon's servers. Sharing will start again shortly."
     case .selfHostedServerTooOld: return "Your server needs updating before this phone can share its location again."
     case .outOfSync: return "The app and your server don't match. Open the app for details."
-    case .locationPermission: return "Open Beacon can no longer use your location all the time. Tap to turn it back on."
+    case .locationPermission: return "OpenBeacon can no longer use your location all the time. Tap to turn it back on."
     case .deviceRemoved: return "This phone was removed from your account and has stopped sharing your location."
     case .signedOut: return "This phone has stopped sharing your location. Sign in again to keep sharing."
     case .sharingResumed: return "You turned sharing on from another device. Tap to start sharing from this phone."

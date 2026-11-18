@@ -36,6 +36,7 @@ export const ProfileImage = ({ imageUrl }: { imageUrl?: string | null }) => {
       alt="Profile avatar"
       imageUrl={uploadedImageUrl ?? session?.user?.image ?? imageUrl ?? null}
       onImageUploaded={handleProfileImageUploaded}
+      size="sm"
       uploadImage={uploadProfileImage}
     />
   );

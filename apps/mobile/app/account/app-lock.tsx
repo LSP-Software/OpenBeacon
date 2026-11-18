@@ -1,9 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Platform, ScrollView, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { BackButton } from "../../components/headers/BackButton.tsx";
-import { RadioCardGroup } from "../../components/ui/RadioCardGroup.tsx";
+import { ScreenHeader } from "../../components/headers/ScreenHeader.tsx";
+import { ChoiceList } from "../../components/ui/ChoiceList.tsx";
 import { Switch } from "../../components/ui/Switch.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { Alert } from "../../lib/alert.ts";
@@ -63,34 +62,25 @@ const AppLockSettingsScreen = () => {
 
   return (
     <View className="flex-1 bg-background">
-      <SafeAreaView edges={["top"]} className="border-b border-border bg-background px-6 py-4">
-        <View className="flex-row items-center justify-between">
-          <BackButton />
-          <Text className="text-foreground flex-1 text-center text-2xl font-bold" numberOfLines={1}>
-            App lock
-          </Text>
-          <View className="w-10" />
-        </View>
-      </SafeAreaView>
+      <ScreenHeader title="App lock" />
 
       <ScrollView
         className="flex-1"
-        contentContainerClassName="gap-8 px-6 py-6 pb-32"
+        contentContainerClassName="gap-6 px-4 pb-32 pt-2"
         showsVerticalScrollIndicator={false}
       >
-        <View className="gap-2">
-          <Text className="text-foreground text-3xl font-bold">Lock OpenBeacon</Text>
-          <Text className="text-muted-foreground text-base leading-6">
+        <View>
+          <Text className="text-secondary text-base">
             {Platform.OS === "ios"
               ? "Ask for Face ID, Touch ID or your passcode before anyone can open OpenBeacon on this phone. Location sharing keeps running while the app is locked, and the location indicator stays on. OpenBeacon’s preview in the app switcher is hidden while app lock is on."
               : "Ask for your face, fingerprint or screen lock before anyone can open OpenBeacon on this phone. Location sharing keeps running while the app is locked, and the sharing notification stays on. On Android 13 and later, OpenBeacon’s preview in recent apps is hidden while app lock is on."}
           </Text>
         </View>
 
-        <View className="flex-row items-center gap-4 rounded-3xl border border-border bg-card px-5 py-4">
+        <View className="flex-row items-center gap-4 rounded-2xl border border-border bg-card px-4 py-3.5">
           <View className="flex-1 gap-1">
-            <Text className="text-foreground text-base font-medium">App lock</Text>
-            <Text className="text-muted-foreground text-sm">
+            <Text className="text-foreground font-medium">App lock</Text>
+            <Text className="text-tertiary text-sm">
               {unavailable
                 ? "This phone has no screen lock. Set one in your phone’s settings to use app lock."
                 : enabled
@@ -107,20 +97,18 @@ const AppLockSettingsScreen = () => {
         </View>
 
         {enabled && (
-          <View className="gap-3">
-            <View className="gap-1">
-              <Text className="text-foreground text-xl font-semibold">Lock again</Text>
-              <Text className="text-muted-foreground text-sm">
-                Choose how long you can be away before OpenBeacon asks again. It always asks when
-                it’s opened after being closed. Choosing a longer time asks for your screen lock.
-              </Text>
-            </View>
-            <RadioCardGroup
+          <View className="gap-2">
+            <Text variant="label">Lock again</Text>
+            <ChoiceList
               accessibilityLabel="Lock again"
               options={relockOptions}
               selected={relockAfter}
               onChange={(next) => void changeRelock(next)}
             />
+            <Text className="text-tertiary text-sm">
+              Choose how long you can be away before OpenBeacon asks again. It always asks when it’s
+              opened after being closed. Choosing a longer time asks for your screen lock.
+            </Text>
           </View>
         )}
       </ScrollView>

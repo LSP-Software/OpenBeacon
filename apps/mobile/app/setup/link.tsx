@@ -11,9 +11,8 @@ import {
 } from "expo-screen-capture";
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import { BackHandler, ScrollView, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { BrandedQrCode } from "../../components/BrandedQrCode.tsx";
-import { BackButton } from "../../components/headers/BackButton.tsx";
+import { ScreenHeader } from "../../components/headers/ScreenHeader.tsx";
 import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
 import { Button } from "../../components/ui/Button.tsx";
 import { Text } from "../../components/ui/Text.tsx";
@@ -232,27 +231,21 @@ const LinkWithOtherPhoneScreen = () => {
   return (
     <View className="flex-1 bg-background">
       <Stack.Screen options={{ gestureEnabled: !(handover && !problem) }} />
-      <SafeAreaView edges={["top"]} className="border-b border-border bg-background px-6 py-4">
-        <View className="flex-row items-center justify-between">
-          {handover && !problem ? <View className="w-10" /> : <BackButton fallback="/setup" />}
-          <Text className="text-foreground text-2xl font-bold">Set up</Text>
-          <View className="w-10" />
-        </View>
-      </SafeAreaView>
+      <ScreenHeader title="Set up" hideBack={!!handover && !problem} fallback="/setup" />
       <ScrollView
         className="flex-1"
-        contentContainerClassName="gap-6 px-6 py-6 pb-16"
+        contentContainerClassName="gap-6 px-4 pb-16 pt-2"
         showsVerticalScrollIndicator={false}
       >
-        <Text className="text-foreground text-3xl font-bold">Link with your other device</Text>
-        <Text className="text-muted-foreground text-base leading-6">
+        <Text className="text-foreground text-2xl font-bold">Link with your other device</Text>
+        <Text className="text-secondary text-base">
           Open OpenBeacon on your other phone or tablet and scan this code. You’ll find the scanner
           in Account → Devices → Add a device.
         </Text>
 
         {problem ? (
           <View className="gap-4">
-            <Text className="text-destructive text-base leading-6">{problem.message}</Text>
+            <Text className="text-destructive-text text-base leading-6">{problem.message}</Text>
             {problem.action === "continue" && (
               <Link href="/setup/name" replace asChild>
                 <Button>
@@ -300,11 +293,11 @@ const LinkWithOtherPhoneScreen = () => {
         ) : handover ? (
           <View className="items-center gap-4">
             <LoadingIndicator />
-            <Text className="text-muted-foreground text-base">Setting up this {noun}…</Text>
+            <Text className="text-tertiary text-base">Setting up this {noun}…</Text>
           </View>
         ) : expired ? (
           <View className="gap-4">
-            <Text className="text-muted-foreground text-base leading-6">
+            <Text className="text-secondary text-base">
               This code has expired. Codes only work for 10 minutes.
             </Text>
             <Button onPress={showNewCode} loading={createLink.isPending}>
@@ -313,7 +306,7 @@ const LinkWithOtherPhoneScreen = () => {
           </View>
         ) : link?.active && unreachable ? (
           <View className="gap-4">
-            <Text className="text-muted-foreground text-base leading-6">
+            <Text className="text-secondary text-base">
               {status.error instanceof TRPCClientError && status.error.data
                 ? `We couldn’t finish linking. This ${noun} is already set up, so you can carry on.`
                 : `We can’t reach the server right now. This ${noun} is already set up, so you can carry on and we’ll finish linking next time you open the app.`}
@@ -335,7 +328,7 @@ const LinkWithOtherPhoneScreen = () => {
             />
             <Text
               accessibilityLiveRegion="polite"
-              className="text-muted-foreground text-center text-base leading-6"
+              className="text-tertiary text-center text-base leading-6"
             >
               {status.error instanceof TRPCClientError && status.error.data
                 ? problemMessage(status.error)

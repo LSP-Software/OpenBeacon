@@ -88,7 +88,7 @@ const PlaceScreen = () => {
     return (
       <View className="flex-1 items-center justify-center gap-4 bg-background px-8">
         <Text className="text-center text-foreground">{problem}</Text>
-        <Button variant="outline" onPress={close}>
+        <Button variant="secondary" onPress={close}>
           <Text>Go back</Text>
         </Button>
       </View>
@@ -267,10 +267,10 @@ const PlaceEditor = ({
       <View className="flex-1 items-center justify-center gap-4 bg-background px-8">
         {map.isMapNotReady ? (
           <>
-            <Text className="text-center text-muted-foreground">
+            <Text className="text-center text-tertiary">
               The server is still preparing the map. You can add places when it's ready.
             </Text>
-            <Button variant="outline" onPress={map.retryUrl}>
+            <Button variant="secondary" onPress={map.retryUrl}>
               <Text>Try again</Text>
             </Button>
             <Button variant="ghost" onPress={onClose}>
@@ -279,10 +279,10 @@ const PlaceEditor = ({
           </>
         ) : map.isError ? (
           <>
-            <Text className="text-center text-muted-foreground">
+            <Text className="text-center text-tertiary">
               We couldn’t load the map. Check your connection and try again.
             </Text>
-            <Button variant="outline" loading={map.isFetching} onPress={map.retryUrl}>
+            <Button variant="secondary" loading={map.isFetching} onPress={map.retryUrl}>
               <Text>Try again</Text>
             </Button>
           </>
@@ -390,9 +390,7 @@ const PlaceEditor = ({
             accessibilityLabel={step === 1 ? "Where is it?" : "Name it"}
             header={
               <View className="gap-1">
-                <Text className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  Step {step} of 2
-                </Text>
+                <Text className="text-secondary text-sm font-semibold">Step {step} of 2</Text>
                 <Text className="text-foreground text-2xl font-bold">
                   {step === 1 ? "Where is it?" : "Name it"}
                 </Text>
@@ -401,7 +399,7 @@ const PlaceEditor = ({
           >
             {step === 1 ? (
               <View className="gap-4 pt-2">
-                <Text className="text-muted-foreground">
+                <Text className="text-tertiary">
                   {center
                     ? "Move the map so the pin sits on the place."
                     : "Finding your location. You can also move the map to the place."}
@@ -443,7 +441,7 @@ const PlaceEditor = ({
                         }}
                         className={cn(
                           "h-12 items-center justify-center rounded-xl border",
-                          selected ? "border-2 border-primary bg-primary/10" : "border-border",
+                          selected ? "border-2 border-primary bg-primary-soft" : "border-border",
                         )}
                         style={{ width: "15%" }}
                       >
@@ -470,12 +468,12 @@ const PlaceEditor = ({
                       setEmoji("");
                     }}
                   >
-                    <Text className="font-semibold text-primary">Choose another emoji</Text>
+                    <Text className="font-semibold text-primary-text">Choose another emoji</Text>
                   </Pressable>
                 )}
                 <View className="flex-row gap-3 pt-1">
                   <Button
-                    variant="outline"
+                    variant="secondary"
                     className="flex-1"
                     disabled={busy !== null}
                     onPress={() => setStep(1)}
@@ -512,7 +510,7 @@ const PlaceEditor = ({
                       })
                     }
                   >
-                    <Text className="text-destructive">Delete place</Text>
+                    <Text className="text-destructive-text">Delete place</Text>
                   </Button>
                 ) : null}
               </View>

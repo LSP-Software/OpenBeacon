@@ -4,11 +4,10 @@ import { TRPCClientError } from "@trpc/client";
 import { router, useNavigation } from "expo-router";
 import { useEffect, useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { ConfirmIdentity } from "../../components/ConfirmIdentity.tsx";
 import { EmailCodeEntry } from "../../components/EmailCodeEntry.tsx";
 import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
-import { BackButton } from "../../components/headers/BackButton.tsx";
+import { ScreenHeader } from "../../components/headers/ScreenHeader.tsx";
 import { Button } from "../../components/ui/Button.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { useIdentityGate } from "../../hooks/useIdentityGate.ts";
@@ -89,13 +88,7 @@ const SignInCodesScreen = () => {
 
   return (
     <View className="flex-1 bg-background">
-      <SafeAreaView edges={["top"]} className="border-b border-border bg-background px-6 py-4">
-        <View className="flex-row items-center justify-between">
-          {step.name === "saving" ? <View className="w-10" /> : <BackButton />}
-          <Text className="text-foreground text-2xl font-bold">Sign-in codes</Text>
-          <View className="w-10" />
-        </View>
-      </SafeAreaView>
+      <ScreenHeader title="Sign-in codes" hideBack={step.name === "saving"} />
 
       <KeyboardAvoidingView
         className="flex-1"
@@ -103,17 +96,17 @@ const SignInCodesScreen = () => {
       >
         <ScrollView
           className="flex-1"
-          contentContainerClassName="gap-6 px-6 py-6 pb-32"
+          contentContainerClassName="gap-6 px-4 pb-32 pt-2"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
           <View className="gap-2">
-            <Text className="text-muted-foreground text-base leading-6">
+            <Text className="text-secondary text-base">
               With sign-in codes on, signing in with your password also needs a 6-digit code we
               email you. Someone who learns your password can’t sign in unless they can also read
               your email.
             </Text>
-            <Text className="text-muted-foreground text-base leading-6">
+            <Text className="text-secondary text-base">
               Phones and tablets that are already signed in stay signed in, and confirming it’s you
               on them still only needs your password.
             </Text>
@@ -125,13 +118,13 @@ const SignInCodesScreen = () => {
               <Text>
                 We couldn’t load your sign-in codes setting. Check your connection and try again.
               </Text>
-              <Button variant="outline" onPress={() => status.refetch()}>
+              <Button variant="secondary" onPress={() => status.refetch()}>
                 <Text>Try again</Text>
               </Button>
             </View>
           )}
           {status.data && !on && !status.data.canTurnOn && (
-            <Text className="text-muted-foreground text-base leading-6">
+            <Text className="text-secondary text-base">
               Sign-in codes are only for accounts that sign in with a password, on servers that can
               send email.
             </Text>
@@ -183,7 +176,7 @@ const SignInCodesScreen = () => {
               )}
 
               {(step.name === "ready" || step.name === "saving") && !on && (
-                <Text className="text-muted-foreground text-sm leading-5">
+                <Text className="text-tertiary text-sm leading-5">
                   We’ll email you a code first to check it arrives.
                 </Text>
               )}

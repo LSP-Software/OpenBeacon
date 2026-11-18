@@ -46,7 +46,7 @@ export const NewSignInBanner = ({ subscribed }: { subscribed: boolean }) => {
         </Link>
         <Button
           size="sm"
-          variant="outline"
+          variant="secondary"
           onPress={() => {
             storage.set(dismissedKey(pending.id), true);
             setRevision((revision) => revision + 1);

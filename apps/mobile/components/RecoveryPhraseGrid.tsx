@@ -32,9 +32,9 @@ export const RecoveryPhraseGrid = ({
         {words.map((word, index) => (
           <View
             key={numberOf(index)}
-            className="w-[48%] flex-row gap-2 rounded-lg border border-border bg-card px-3 py-2"
+            className="w-[48%] flex-row gap-2 rounded-2xl border border-border bg-card px-3 py-2"
           >
-            <Text className="text-muted-foreground w-6">{numberOf(index)}</Text>
+            <Text className="text-tertiary w-6">{numberOf(index)}</Text>
             <Text selectable={false} className="font-semibold">
               {word}
             </Text>
@@ -61,12 +61,12 @@ export const RecoveryPhraseGrid = ({
               accessible={false}
               onPress={() => inputs.current[index]?.focus()}
               className={cn(
-                "w-[48%] flex-row items-center gap-2 rounded-lg border border-border bg-card px-3",
+                "w-[48%] flex-row items-center gap-2 rounded-2xl border border-border bg-card px-3",
                 invalidIndexes.includes(index) && "border-destructive",
                 !editable && "opacity-50",
               )}
             >
-              <Text className="text-muted-foreground w-6">{numberOf(index)}</Text>
+              <Text className="text-tertiary w-6">{numberOf(index)}</Text>
               <TextInput
                 ref={(instance) => {
                   inputs.current[index] = instance;

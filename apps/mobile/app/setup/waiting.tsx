@@ -2,8 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, router } from "expo-router";
 import { useEffect } from "react";
 import { ScrollView, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { BackButton } from "../../components/headers/BackButton.tsx";
+import { ScreenHeader } from "../../components/headers/ScreenHeader.tsx";
 import { Button } from "../../components/ui/Button.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { trpc } from "../../lib/api.ts";
@@ -25,19 +24,13 @@ const WaitingForPhraseScreen = () => {
 
   return (
     <View className="flex-1 bg-background">
-      <SafeAreaView edges={["top"]} className="border-b border-border bg-background px-6 py-4">
-        <View className="flex-row items-center justify-between">
-          <BackButton />
-          <Text className="text-foreground text-2xl font-bold">Set up</Text>
-          <View className="w-10" />
-        </View>
-      </SafeAreaView>
+      <ScreenHeader title="Set up" />
       <ScrollView
         className="flex-1"
-        contentContainerClassName="gap-6 px-6 py-6 pb-16"
+        contentContainerClassName="gap-6 px-4 pb-16 pt-2"
         showsVerticalScrollIndicator={false}
       >
-        <Text className="text-foreground text-3xl font-bold">
+        <Text className="text-foreground text-2xl font-bold">
           Create a phrase on your other device
         </Text>
         <View className="gap-3">
@@ -47,15 +40,12 @@ const WaitingForPhraseScreen = () => {
             "Write down the 12 words and keep them somewhere safe.",
           ].map((step, index) => (
             <View key={step} className="flex-row gap-3">
-              <Text className="text-primary text-base font-bold">{index + 1}.</Text>
+              <Text className="text-primary-text text-base font-bold">{index + 1}.</Text>
               <Text className="text-foreground flex-1 text-base leading-6">{step}</Text>
             </View>
           ))}
         </View>
-        <Text
-          accessibilityLiveRegion="polite"
-          className="text-muted-foreground text-base leading-6"
-        >
+        <Text accessibilityLiveRegion="polite" className="text-secondary text-base">
           {status.isError
             ? "We can’t reach the server right now. We’ll keep trying."
             : `Waiting for your phrase. This ${noun} moves on as soon as it’s ready.`}

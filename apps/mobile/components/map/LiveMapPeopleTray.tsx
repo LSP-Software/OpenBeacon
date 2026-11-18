@@ -55,89 +55,105 @@ export const LiveMapPeopleTray = ({
       count: people.waiting.length,
     },
   ].filter((section) => section.count > 0);
+  const allUpToDate =
+    pendingSections.length === 0 && sections.length === 1 && sections[0]?.key === "upToDate";
 
   return (
     <View
-      className="absolute bottom-0 left-0 right-0 rounded-t-2xl border-t border-border bg-card pb-2 pt-3 shadow-md shadow-black/15"
+      className="absolute bottom-0 left-0 right-0 rounded-t-3xl border-t border-border bg-card pb-3 pt-4 shadow-md shadow-black/15"
       onLayout={(event) => onHeightChange(event.nativeEvent.layout.height)}
     >
+      <View className="flex-row items-center justify-between px-4 pb-3">
+        <Text accessibilityRole="header" className="text-foreground text-base font-semibold">
+          People
+        </Text>
+        {allUpToDate ? (
+          <View className="flex-row items-center gap-1.5">
+            <View className="size-2 rounded-full bg-success" />
+            <Text className="text-success text-sm font-medium">All up to date</Text>
+          </View>
+        ) : null}
+      </View>
       {people.connectionLost ? (
-        <View className="mx-3 mb-2 rounded-lg border border-amber-600 px-3 py-1.5 dark:border-amber-400">
-          <Text className="text-xs text-amber-700 dark:text-amber-400">
+        <View className="mx-4 mb-3 rounded-xl bg-warning px-3 py-2">
+          <Text className="text-sm text-warning-text">
             Can’t reach the server. Locations shown may be out of date.
           </Text>
         </View>
       ) : null}
-      <View className="flex-row flex-wrap gap-1.5 px-3 pb-2">
-        {sections.map((section) => {
-          const isProblem = section.status === "cantRead";
-          const chipLabel =
-            isProblem && section.people.length > 1 ? "need attention" : section.label.toLowerCase();
-          return (
-            <Pressable
-              key={section.key}
-              accessibilityRole="button"
-              accessibilityLabel={`Show ${section.people.length} ${chipLabel}`}
-              className={cn(
-                "flex-row items-center gap-1 rounded-full border px-2.5 py-1 active:opacity-70",
-                isProblem ? "border-destructive" : "border-border",
-                section.status === "hidden" && "border-dashed",
-              )}
-              hitSlop={{ top: 9, bottom: 9 }}
-              onPress={() => {
-                scrollRef.current?.scrollTo({
-                  x: sectionXRef.current[section.key] ?? 0,
-                  animated: true,
-                });
-              }}
-            >
-              <Text
+      {allUpToDate ? null : (
+        <View className="flex-row flex-wrap gap-1.5 px-4 pb-3">
+          {sections.map((section) => {
+            const isProblem = section.status === "cantRead";
+            const chipLabel =
+              isProblem && section.people.length > 1
+                ? "need attention"
+                : section.label.toLowerCase();
+            return (
+              <Pressable
+                key={section.key}
+                accessibilityRole="button"
+                accessibilityLabel={`Show ${section.people.length} ${chipLabel}`}
                 className={cn(
-                  "text-xs font-semibold",
-                  isProblem ? "text-destructive" : "text-foreground",
+                  "flex-row items-center gap-1 rounded-full px-2.5 py-1 active:opacity-70",
+                  isProblem ? "bg-destructive-soft" : "bg-secondary",
                 )}
+                hitSlop={{ top: 9, bottom: 9 }}
+                onPress={() => {
+                  scrollRef.current?.scrollTo({
+                    x: sectionXRef.current[section.key] ?? 0,
+                    animated: true,
+                  });
+                }}
               >
-                {section.people.length} {chipLabel}
+                <Text
+                  className={cn(
+                    "text-xs font-semibold",
+                    isProblem ? "text-destructive-text" : "text-foreground",
+                  )}
+                >
+                  {section.people.length} {chipLabel}
+                </Text>
+              </Pressable>
+            );
+          })}
+          {pendingSections.map((section) => (
+            <View
+              key={section.key}
+              className="flex-row items-center gap-1 rounded-full bg-secondary px-2.5 py-1"
+            >
+              <ActivityIndicator size="small" />
+              <Text className="text-xs font-semibold text-foreground">
+                {section.chip} {countPeople(section.count)}
               </Text>
-            </Pressable>
-          );
-        })}
-        {pendingSections.map((section) => (
-          <View
-            key={section.key}
-            className="flex-row items-center gap-1 rounded-full border border-border px-2.5 py-1"
-          >
-            <ActivityIndicator size="small" />
-            <Text className="text-xs font-semibold text-foreground">
-              {section.chip} {countPeople(section.count)}
-            </Text>
-          </View>
-        ))}
-      </View>
+            </View>
+          ))}
+        </View>
+      )}
       <ScrollView
         ref={scrollRef}
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerClassName="px-3"
+        contentContainerClassName="px-4"
       >
         {sections.map((section, index) => (
           <View
             key={section.key}
             className={cn(index > 0 && "ml-3 border-l border-border pl-3")}
             onLayout={(event) => {
-              sectionXRef.current[section.key] = Math.max(0, event.nativeEvent.layout.x - 12);
+              sectionXRef.current[section.key] = Math.max(0, event.nativeEvent.layout.x - 16);
             }}
           >
-            <Text
-              className={cn(
-                "mb-1 text-[11px] font-bold uppercase",
-                section.status === "cantRead"
-                  ? "text-destructive"
-                  : "text-muted dark:text-muted-foreground",
-              )}
-            >
-              {section.label}
-            </Text>
+            {allUpToDate ? null : (
+              <Text
+                className={cn(
+                  "mb-1.5 text-xs font-semibold",
+                  section.status === "cantRead" ? "text-destructive-text" : "text-secondary",
+                )}
+              >
+                {section.label}
+              </Text>
+            )}
             <View className="flex-row gap-2">
               {section.people.map((person) => {
                 const timestamp = "timestamp" in person ? person.timestamp : null;
@@ -172,14 +188,10 @@ export const LiveMapPeopleTray = ({
             key={section.key}
             className={cn((sections.length > 0 || index > 0) && "ml-3 border-l border-border pl-3")}
           >
-            <Text className="mb-1 text-[11px] font-bold uppercase text-muted dark:text-muted-foreground">
-              {section.label}
-            </Text>
+            <Text className="text-secondary mb-1.5 text-xs font-semibold">{section.label}</Text>
             <View className="h-16 flex-row items-center gap-2 px-1">
               <ActivityIndicator size="small" />
-              <Text className="text-xs text-muted dark:text-muted-foreground">
-                {countPeople(section.count)}
-              </Text>
+              <Text className="text-secondary text-xs">{countPeople(section.count)}</Text>
             </View>
           </View>
         ))}
@@ -213,7 +225,7 @@ const TrayPerson = memo(
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      className="w-14 items-center active:opacity-70"
+      className="w-16 items-center active:opacity-70"
       onPress={() => onSelectPerson(person.userId)}
     >
       <LiveMapMarkerPin
@@ -226,12 +238,10 @@ const TrayPerson = memo(
         status={status}
         timestamp={timestamp}
       />
-      <Text className="mt-0.5 text-[11px] font-semibold text-foreground" numberOfLines={1}>
+      <Text className="text-foreground mt-1 text-xs font-semibold" numberOfLines={1}>
         {person.isSelf ? "You" : person.name.trim().split(/\s+/)[0] || person.name}
       </Text>
-      {age !== null ? (
-        <Text className="text-[10px] leading-3 text-muted dark:text-muted-foreground">{age}</Text>
-      ) : null}
+      {age !== null ? <Text className="text-tertiary text-xs leading-4">{age}</Text> : null}
     </Pressable>
   ),
 );

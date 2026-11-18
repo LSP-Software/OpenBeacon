@@ -12,8 +12,7 @@ import {
 } from "expo-screen-capture";
 import { useCallback, useEffect, useState } from "react";
 import { BackHandler, KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { BackButton } from "../../components/headers/BackButton.tsx";
+import { ScreenHeader } from "../../components/headers/ScreenHeader.tsx";
 import { RecoveryPhraseGrid } from "../../components/RecoveryPhraseGrid.tsx";
 import { RecoveryCoverage } from "../../components/RecoveryCoverage.tsx";
 import { Button } from "../../components/ui/Button.tsx";
@@ -139,13 +138,7 @@ const RecoveryRestoreScreen = () => {
   return (
     <View className="flex-1 bg-background">
       <Stack.Screen options={{ gestureEnabled: !busy }} />
-      <SafeAreaView edges={["top"]} className="border-b border-border bg-background px-6 py-4">
-        <View className="flex-row items-center justify-between">
-          {busy ? <View className="w-10" /> : <BackButton />}
-          <Text className="text-foreground text-2xl font-bold">Restore</Text>
-          <View className="w-10" />
-        </View>
-      </SafeAreaView>
+      <ScreenHeader title="Restore" hideBack={busy} />
 
       <KeyboardAvoidingView
         className="flex-1"
@@ -153,14 +146,14 @@ const RecoveryRestoreScreen = () => {
       >
         <ScrollView
           className="flex-1"
-          contentContainerClassName="gap-6 px-6 py-6 pb-32"
+          contentContainerClassName="gap-6 px-4 pb-32 pt-2"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
           {entering && (
             <View className="gap-4">
-              <Text className="text-foreground text-3xl font-bold">Restore your history</Text>
-              <Text className="text-muted-foreground text-base leading-6">
+              <Text className="text-foreground text-2xl font-bold">Restore your history</Text>
+              <Text className="text-secondary text-base">
                 {setup
                   ? `Enter the 12 words of your recovery phrase to set up this ${thisDeviceNoun()}. It then gets your groups’ location history too.`
                   : `Your account has a recovery phrase. Enter its 12 words to read your groups’ location history on this ${thisDeviceNoun()}.`}
@@ -176,7 +169,7 @@ const RecoveryRestoreScreen = () => {
                 editable={step === "enter"}
               />
               {problem && (
-                <Text className="text-destructive text-sm leading-5">{problem.message}</Text>
+                <Text className="text-destructive-text text-sm leading-5">{problem.message}</Text>
               )}
               <Button onPress={restore} disabled={step === "restoring"}>
                 <Text>{step === "restoring" ? "Restoring…" : "Restore"}</Text>
@@ -201,13 +194,13 @@ const RecoveryRestoreScreen = () => {
 
           {(step === "activating" || step === "activationFailed") && userId && (
             <View className="gap-4">
-              <Text className="text-foreground text-3xl font-bold">Your history is restored</Text>
+              <Text className="text-foreground text-2xl font-bold">Your history is restored</Text>
               <Text
                 accessibilityLiveRegion="polite"
                 className={
                   activationProblem
-                    ? "text-destructive text-base leading-6"
-                    : "text-muted-foreground text-base leading-6"
+                    ? "text-destructive-text text-base leading-6"
+                    : "text-secondary text-base"
                 }
               >
                 {activationProblem ?? `Setting up this ${thisDeviceNoun()}…`}
@@ -220,8 +213,8 @@ const RecoveryRestoreScreen = () => {
 
           {step === "done" && (
             <View className="gap-4">
-              <Text className="text-foreground text-3xl font-bold">Your history is restored</Text>
-              <Text className="text-muted-foreground text-base leading-6">
+              <Text className="text-foreground text-2xl font-bold">Your history is restored</Text>
+              <Text className="text-secondary text-base">
                 This phone can now read the history your recovery phrase protects.
               </Text>
               <RecoveryCoverage userId={userId} />

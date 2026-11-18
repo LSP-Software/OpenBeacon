@@ -2,10 +2,8 @@ import { useIsFocused } from "@react-navigation/native";
 import { tryCatch } from "@openbeacon/shared";
 import { skipToken, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocalSearchParams, useRouter } from "expo-router";
-import { Clock3Icon, MapPinIcon, SlidersHorizontalIcon, UsersIcon } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { BackButton } from "../../../../components/headers/BackButton.tsx";
 import { GroupImage } from "../../../../components/image/GroupImage.tsx";
 import { LoadingIndicator } from "../../../../components/LoadingIndicator.tsx";
@@ -31,26 +29,10 @@ import SettingsTab from "./SettingsTab.tsx";
 type GroupTabValue = "members" | "places" | "history" | "settings";
 
 const GROUP_TABS: readonly SwipeTabsItem<GroupTabValue>[] = [
-  {
-    value: "members",
-    label: "Members",
-    icon: UsersIcon,
-  },
-  {
-    value: "places",
-    label: "Places",
-    icon: MapPinIcon,
-  },
-  {
-    value: "history",
-    label: "History",
-    icon: Clock3Icon,
-  },
-  {
-    value: "settings",
-    label: "Settings",
-    icon: SlidersHorizontalIcon,
-  },
+  { value: "members", label: "Members" },
+  { value: "places", label: "Places" },
+  { value: "history", label: "History" },
+  { value: "settings", label: "Settings" },
 ] as const;
 
 const GroupScreen = () => {
@@ -185,85 +167,86 @@ const GroupBody = ({ groupId, initialTab }: { groupId: string; initialTab: Group
 
   return (
     <RefreshablePage>
-      <SafeAreaView edges={["top", "bottom"]} className="flex-1 bg-background px-4 pt-5 pb-32">
-        <View className="overflow-hidden rounded-2xl border border-border bg-card px-5 py-5">
-          <View className="gap-5">
-            <GroupHeader group={group} userId={session?.user.id} />
-            {keyAccess?.data?.current === "missing" && (
-              <View className="gap-2 rounded-xl border border-destructive bg-card p-4">
-                <Text className="font-semibold text-destructive">
-                  This phone can’t access this group’s current encryption key
-                </Text>
-                <Text>Current group locations may be unavailable on this phone.</Text>
-              </View>
-            )}
-            {historyPartialFrom !== null && showHistoryWarning && (
-              <View className="gap-2 rounded-xl border border-amber-600 dark:border-amber-400 bg-card p-4">
-                <Text className="font-semibold text-amber-700 dark:text-amber-400">
-                  Some location history isn’t available on this phone
-                </Text>
-                <Text>
-                  History from before{" "}
-                  {historyPartialFrom.toLocaleDateString(undefined, {
-                    dateStyle: "medium",
-                  })}{" "}
-                  can’t be read on this phone.
-                </Text>
-                <View className="flex-row flex-wrap gap-3">
-                  {canRestoreRecoveryPhrase && (
-                    <Link href="/account/recovery-restore" asChild>
-                      <Button size="sm">
-                        <Text>Restore recovery phrase</Text>
-                      </Button>
-                    </Link>
-                  )}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onPress={() => {
-                      storage.set(historyWarningKey, historyPartialFrom.getTime());
-                      setHistoryWarningDismissedFrom(historyPartialFrom.getTime());
-                    }}
-                  >
-                    <Text>Dismiss</Text>
-                  </Button>
-                </View>
-              </View>
-            )}
-            <SwipeTabs
-              ariaLabel="Group sections"
-              tabs={GROUP_TABS.map((tab) =>
-                tab.value === "history"
-                  ? { ...tab, badge: history.unseenGroupIds.has(groupId) && value !== "history" }
-                  : tab,
-              )}
-              value={value}
-              onValueChange={setValue}
-              renderScene={(tabValue) => {
-                if (tabValue === "members") {
-                  return <MembersTab groupId={groupId} live={live} />;
-                }
-
-                if (tabValue === "places") {
-                  return (
-                    <PlacesTab
-                      groupId={groupId}
-                      groupName={group.name}
-                      livePositions={live.positions}
-                    />
-                  );
-                }
-
-                if (tabValue === "history") {
-                  return <HistoryTab groupId={groupId} active={value === "history"} />;
-                }
-
-                return <SettingsTab groupId={groupId} />;
-              }}
-            />
-          </View>
+      <View className="flex-1 bg-background pb-32">
+        <View className="px-2 py-1">
+          <BackButton fallback="/(tabs)/groups/list" />
         </View>
-      </SafeAreaView>
+        <View className="gap-4 px-4">
+          <GroupHeader group={group} userId={session?.user.id} />
+          {keyAccess?.data?.current === "missing" && (
+            <View className="gap-2 rounded-2xl border border-destructive-text bg-card p-4">
+              <Text className="font-semibold text-destructive-text">
+                This phone can’t access this group’s current encryption key
+              </Text>
+              <Text>Current group locations may be unavailable on this phone.</Text>
+            </View>
+          )}
+          {historyPartialFrom !== null && showHistoryWarning && (
+            <View className="gap-2 rounded-2xl border border-warning-accent bg-card p-4">
+              <Text className="font-semibold text-warning-text">
+                Some location history isn’t available on this phone
+              </Text>
+              <Text>
+                History from before{" "}
+                {historyPartialFrom.toLocaleDateString(undefined, {
+                  dateStyle: "medium",
+                })}{" "}
+                can’t be read on this phone.
+              </Text>
+              <View className="flex-row flex-wrap gap-3">
+                {canRestoreRecoveryPhrase && (
+                  <Link href="/account/recovery-restore" asChild>
+                    <Button size="sm">
+                      <Text>Restore recovery phrase</Text>
+                    </Button>
+                  </Link>
+                )}
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onPress={() => {
+                    storage.set(historyWarningKey, historyPartialFrom.getTime());
+                    setHistoryWarningDismissedFrom(historyPartialFrom.getTime());
+                  }}
+                >
+                  <Text>Dismiss</Text>
+                </Button>
+              </View>
+            </View>
+          )}
+          <SwipeTabs
+            ariaLabel="Group sections"
+            tabs={GROUP_TABS.map((tab) =>
+              tab.value === "history"
+                ? { ...tab, badge: history.unseenGroupIds.has(groupId) && value !== "history" }
+                : tab,
+            )}
+            value={value}
+            onValueChange={setValue}
+            renderScene={(tabValue) => {
+              if (tabValue === "members") {
+                return <MembersTab groupId={groupId} live={live} />;
+              }
+
+              if (tabValue === "places") {
+                return (
+                  <PlacesTab
+                    groupId={groupId}
+                    groupName={group.name}
+                    livePositions={live.positions}
+                  />
+                );
+              }
+
+              if (tabValue === "history") {
+                return <HistoryTab groupId={groupId} active={value === "history"} />;
+              }
+
+              return <SettingsTab groupId={groupId} />;
+            }}
+          />
+        </View>
+      </View>
     </RefreshablePage>
   );
 };
@@ -280,20 +263,24 @@ const GroupHeader = ({
   );
 
   return (
-    <View className="gap-4">
-      <View className="flex-row items-center justify-between gap-4">
-        <BackButton />
-      </View>
-      <View className="flex-row items-center gap-4">
-        <GroupImage
-          groupId={group.id}
-          imageUrl={group.image ?? null}
-          size="md"
-          editable={canEditGroupImage}
-        />
-        <View className="flex-1">
-          <Text className="text-foreground text-3xl font-bold">{group.name}</Text>
-        </View>
+    <View className="flex-row items-center gap-4 px-1">
+      <GroupImage
+        groupId={group.id}
+        imageUrl={group.image ?? null}
+        size="sm"
+        editable={canEditGroupImage}
+      />
+      <View className="flex-1">
+        <Text
+          accessibilityRole="header"
+          className="text-foreground text-3xl font-bold"
+          numberOfLines={2}
+        >
+          {group.name}
+        </Text>
+        <Text className="text-tertiary text-sm">
+          {group.members.length} {group.members.length === 1 ? "member" : "members"}
+        </Text>
       </View>
     </View>
   );

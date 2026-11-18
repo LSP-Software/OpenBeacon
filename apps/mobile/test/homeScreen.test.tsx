@@ -8,7 +8,7 @@ import { createRoot, type Root } from "test-renderer";
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 let focused = true;
-let session: { user: { name: string } } | null = null;
+let session: { user: { id: string; name: string } } | null = null;
 let deviceActive: boolean | Error = true;
 let savedLink: { linkId: string; psk: Uint8Array } | null | Error = null;
 const replace = mock((_route: string) => {});
@@ -57,8 +57,15 @@ mock.module("../lib/deviceActivation.ts", () => ({
   },
 }));
 
+let registration: { deviceId: string; userId: string } | Error = {
+  deviceId: "device-1",
+  userId: "registered-user",
+};
 mock.module("../lib/deviceKeys.ts", () => ({
-  ensureDeviceKeyRegistration: async () => ({ deviceId: "device-1", userId: "user-1" }),
+  ensureDeviceKeyRegistration: async () => {
+    if (registration instanceof Error) throw registration;
+    return registration;
+  },
 }));
 mock.module("../lib/savedDeviceLink.ts", () => ({
   deleteSavedDeviceLink: async () => {},
@@ -69,6 +76,17 @@ mock.module("../lib/savedDeviceLink.ts", () => ({
   },
 }));
 
+let onboarding: { kind: string } | null = null;
+const readOnboardingFor: string[] = [];
+const startedOnboarding: string[] = [];
+mock.module("../lib/onboarding.ts", () => ({
+  readOnboarding: (userId: string) => {
+    readOnboardingFor.push(userId);
+    return onboarding;
+  },
+  startOnboarding: (userId: string, kind: string) => startedOnboarding.push(`${userId}:${kind}`),
+}));
+
 const { default: HomeScreen } = await import("../app/index.tsx");
 let root: Root | null = null;
 afterEach(async () => {
@@ -77,11 +95,15 @@ afterEach(async () => {
   replace.mockClear();
   deviceActive = true;
   savedLink = null;
+  onboarding = null;
+  registration = { deviceId: "device-1", userId: "registered-user" };
+  readOnboardingFor.length = 0;
+  startedOnboarding.length = 0;
 });
 
 const renderSignedIn = async () => {
   focused = true;
-  session = { user: { name: "Signed in" } };
+  session = { user: { id: "user-1", name: "Signed in" } };
   root = createRoot();
   await act(() => root?.render(<HomeScreen />));
 };
@@ -91,10 +113,58 @@ test("an active device opens the map", async () => {
   expect(replace.mock.calls).toEqual([["/(tabs)/map"]]);
 });
 
-test("a Pending device opens setup instead of the map", async () => {
+test("a Pending device starts onboarding as a new device instead of opening the map", async () => {
   deviceActive = false;
   await renderSignedIn();
-  expect(replace.mock.calls).toEqual([["/setup"]]);
+  expect(replace.mock.calls).toEqual([["/onboarding"]]);
+  expect(startedOnboarding).toEqual(["registered-user:newDevice"]);
+});
+
+test("reads onboarding for the account this device is registered to", async () => {
+  await renderSignedIn();
+  expect(readOnboardingFor).toEqual(["registered-user"]);
+});
+
+test.each(["newAccount", "returning"])(
+  "a Pending device restarts %s onboarding as a new device so it can restore first",
+  async (kind) => {
+    deviceActive = false;
+    onboarding = { kind };
+    await renderSignedIn();
+    expect(replace.mock.calls).toEqual([["/onboarding"]]);
+    expect(startedOnboarding).toEqual(["registered-user:newDevice"]);
+  },
+);
+
+test("keeps loading and tries again when this device can't be registered", async () => {
+  jest.useFakeTimers();
+  try {
+    registration = new Error("offline");
+    await renderSignedIn();
+    expect(replace).not.toHaveBeenCalled();
+
+    registration = { deviceId: "device-1", userId: "registered-user" };
+    await act(async () => {
+      jest.advanceTimersByTime(5_000);
+    });
+    expect(replace.mock.calls).toEqual([["/(tabs)/map"]]);
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test("a Pending device part way through onboarding carries on where it left off", async () => {
+  deviceActive = false;
+  onboarding = { kind: "newDevice" };
+  await renderSignedIn();
+  expect(replace.mock.calls).toEqual([["/onboarding"]]);
+  expect(startedOnboarding).toEqual([]);
+});
+
+test("an active device that hasn't finished onboarding goes back to it", async () => {
+  onboarding = { kind: "newAccount" };
+  await renderSignedIn();
+  expect(replace.mock.calls).toEqual([["/onboarding"]]);
 });
 
 test("keeps loading and checks again when the device status can't be checked", async () => {
@@ -108,7 +178,7 @@ test("keeps loading and checks again when the device status can't be checked", a
     await act(async () => {
       jest.advanceTimersByTime(5_000);
     });
-    expect(replace.mock.calls).toEqual([["/setup"]]);
+    expect(replace.mock.calls).toEqual([["/onboarding"]]);
   } finally {
     jest.useRealTimers();
   }
@@ -131,7 +201,7 @@ test("backs off the checks while the device status still can't be checked", asyn
     await act(async () => {
       jest.advanceTimersByTime(1_000);
     });
-    expect(replace.mock.calls).toEqual([["/setup"]]);
+    expect(replace.mock.calls).toEqual([["/onboarding"]]);
   } finally {
     jest.useRealTimers();
   }
@@ -171,18 +241,18 @@ test("routes as usual when the saved setup code can't be read", async () => {
   deviceActive = false;
   savedLink = new Error("Keychain locked");
   await renderSignedIn();
-  expect(replace.mock.calls).toEqual([["/setup"]]);
+  expect(replace.mock.calls).toEqual([["/onboarding"]]);
 });
 
 test("refreshing a session while the home screen is unfocused does not navigate away from account", async () => {
   focused = true;
-  session = { user: { name: "Before" } };
+  session = { user: { id: "user-1", name: "Before" } };
   root = createRoot();
   await act(() => root?.render(<HomeScreen />));
   expect(replace).toHaveBeenCalledTimes(1);
   focused = false;
   replace.mockClear();
-  session = { user: { name: "After" } };
+  session = { user: { id: "user-1", name: "After" } };
   await act(() => root?.render(<HomeScreen />));
   expect(replace).not.toHaveBeenCalled();
 });

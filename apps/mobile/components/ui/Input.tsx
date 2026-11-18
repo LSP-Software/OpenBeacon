@@ -48,7 +48,7 @@ function Input<TFieldValues extends FieldValues, TName extends FieldPath<TFieldV
           <Field data-invalid={fieldState.invalid}>
             {(label || description) && (
               <View className={"flex flex-col"}>
-                {label && <FieldLabel className="text-lg font-medium">{label}</FieldLabel>}
+                {label && <FieldLabel className="text-sm font-semibold">{label}</FieldLabel>}
                 {description && <FieldDescription>{description}</FieldDescription>}
               </View>
             )}
@@ -76,10 +76,10 @@ function Input<TFieldValues extends FieldValues, TName extends FieldPath<TFieldV
                   field.onBlur();
                 }}
                 className={cn(
-                  `rounded-lg border border-border bg-input text-foreground ${inputFocused && "border-primary"} py-4 px-4`,
+                  `h-[52px] rounded-lg border border-border-strong bg-input px-4 text-base text-foreground ${inputFocused && "border-primary"}`,
                   isPasswordInput && "pr-12",
                   props.editable === false && "opacity-50",
-                  "placeholder:text-secondary dark:placeholder:text-muted-foreground",
+                  "placeholder:text-tertiary",
                   className,
                 )}
                 {...props}
@@ -96,8 +96,8 @@ function Input<TFieldValues extends FieldValues, TName extends FieldPath<TFieldV
                 >
                   <Icon
                     as={passwordVisible ? EyeOffIcon : EyeIcon}
-                    className="text-muted-foreground"
-                    size={18}
+                    className="text-tertiary"
+                    size={20}
                   />
                 </Pressable>
               )}

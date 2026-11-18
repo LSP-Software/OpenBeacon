@@ -88,7 +88,7 @@ const TimelineScreen = () => {
         <Text className="text-center text-foreground">
           This group isn’t available on this phone.
         </Text>
-        <Button variant="outline" onPress={close}>
+        <Button variant="secondary" onPress={close}>
           <Text>Go back</Text>
         </Button>
       </View>
@@ -631,7 +631,7 @@ const TimelineView = ({
                     !item.selectable && "opacity-40",
                   )}
                 >
-                  <Text className={cn("text-[11px]", selected ? "text-background" : "text-muted")}>
+                  <Text className={cn("text-xs", selected ? "text-background" : "text-secondary")}>
                     {isToday ? "Today" : date.toLocaleDateString(undefined, { weekday: "short" })}
                   </Text>
                   <Text
@@ -783,7 +783,7 @@ const TimelineView = ({
                     <Text className="text-xs font-semibold text-foreground" numberOfLines={1}>
                       {place.name}
                       {stopLabel ? (
-                        <Text className="text-xs font-normal text-muted"> · {stopLabel}</Text>
+                        <Text className="text-xs font-normal text-secondary"> · {stopLabel}</Text>
                       ) : null}
                     </Text>
                   </View>
@@ -809,12 +809,12 @@ const TimelineView = ({
         <View className="flex-1 items-center justify-center gap-4 px-8">
           {map.isError || map.isMapNotReady ? (
             <>
-              <Text className="text-center text-muted-foreground">
+              <Text className="text-center text-tertiary">
                 {map.isMapNotReady
                   ? "The server is still preparing the map."
                   : "We couldn’t load the map. Check your connection and try again."}
               </Text>
-              <Button variant="outline" loading={map.isFetching} onPress={map.retryUrl}>
+              <Button variant="secondary" loading={map.isFetching} onPress={map.retryUrl}>
                 <Text>Try again</Text>
               </Button>
             </>
@@ -879,7 +879,7 @@ const TimelineView = ({
         ) : !days ? (
           <ActivityIndicator className="py-6" />
         ) : !day ? (
-          <Text className="py-4 text-center text-muted-foreground">
+          <Text className="py-4 text-center text-tertiary">
             {personId
               ? "No location history for this person in this group yet."
               : `No location history in ${group.name} yet.`}
@@ -905,7 +905,7 @@ const TimelineView = ({
                   {status?.title}
                 </Text>
                 {status?.detail ? (
-                  <Text className="text-sm text-muted" numberOfLines={2}>
+                  <Text className="text-sm text-secondary" numberOfLines={2}>
                     {status.detail}
                   </Text>
                 ) : null}
@@ -932,7 +932,7 @@ const TimelineView = ({
                 onScrub={scrubTo}
               />
             ) : (
-              <Text className="py-2 text-center text-muted-foreground">
+              <Text className="py-2 text-center text-tertiary">
                 {personId
                   ? `No locations from ${selectedName ?? "this person"} on this day.`
                   : "No locations on this day."}
@@ -1033,14 +1033,14 @@ const TimelineView = ({
               </View>
             ) : null}
             {personId === null && hiddenCount > 0 ? (
-              <View className="gap-2 rounded-xl border border-amber-600 dark:border-amber-400 bg-card p-3">
+              <View className="gap-2 rounded-xl border border-warning-accent bg-card p-3">
                 <Text className="text-sm text-foreground">
                   There are too many locations on this day to show everyone, so Timeline is showing{" "}
                   {peopleWithLocations.length - hiddenCount} of {peopleWithLocations.length} people.
                 </Text>
                 <Button
                   size="sm"
-                  variant="outline"
+                  variant="secondary"
                   className="self-start"
                   onPress={() => setChooserOpen(true)}
                 >
@@ -1049,7 +1049,7 @@ const TimelineView = ({
               </View>
             ) : null}
             {undecryptable > 0 ? (
-              <Text className="text-xs text-muted">
+              <Text className="text-xs text-secondary">
                 {undecryptable === 1
                   ? "1 location couldn’t be decrypted on this phone, so it’s left out."
                   : `${undecryptable.toLocaleString()} locations couldn’t be decrypted on this phone, so they’re left out.`}
@@ -1152,14 +1152,14 @@ const LegendItem = ({
         }}
       />
     </View>
-    <Text className="text-xs text-muted">{label}</Text>
+    <Text className="text-xs text-secondary">{label}</Text>
   </View>
 );
 
 const StatCard = ({ label, value }: { label: string; value: string }) => (
   <View className="flex-1 rounded-xl bg-background px-3 py-2">
     <Text className="text-lg font-semibold text-foreground">{value}</Text>
-    <Text className="text-xs text-muted">{label}</Text>
+    <Text className="text-xs text-secondary">{label}</Text>
   </View>
 );
 
@@ -1179,7 +1179,7 @@ const DeviceSwitch = ({
   const next = deviceIds[(deviceIds.indexOf(current) + 1) % deviceIds.length] ?? current;
   return (
     <View className="flex-row items-center justify-between gap-2">
-      <Text className="shrink text-sm text-muted" numberOfLines={1}>
+      <Text className="shrink text-sm text-secondary" numberOfLines={1}>
         Showing {nameOf(current)}
       </Text>
       <Button size="sm" variant="ghost" onPress={() => onSwitch(next)}>
@@ -1219,7 +1219,7 @@ const ProblemNote = ({
 }) => (
   <View className="items-center gap-3 py-3">
     <Text className="text-center text-foreground">{message}</Text>
-    <Button size="sm" variant="outline" loading={loading} onPress={onRetry}>
+    <Button size="sm" variant="secondary" loading={loading} onPress={onRetry}>
       <Text>Try again</Text>
     </Button>
   </View>

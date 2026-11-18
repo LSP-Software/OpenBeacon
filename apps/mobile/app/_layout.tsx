@@ -63,6 +63,13 @@ const RootLayout = () => {
                     <Stack.Screen name="place-alerts" />
                     <Stack.Screen name="timeline" />
                     <Stack.Screen name="setup/name" />
+                    <Stack.Screen name="onboarding/sharing" />
+                    <Stack.Screen name="onboarding/notifications" />
+                    <Stack.Screen name="onboarding/location" />
+                    <Stack.Screen name="onboarding/background" />
+                    <Stack.Screen name="onboarding/recovery" />
+                    <Stack.Screen name="onboarding/app-lock" />
+                    <Stack.Screen name="onboarding/done" />
                     <Stack.Screen name="setup/remove-devices" />
                     <Stack.Screen name="account/about" />
                     <Stack.Screen name="account/add-device" />

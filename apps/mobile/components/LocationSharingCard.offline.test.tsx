@@ -42,7 +42,11 @@ mock.module("react-native", () => ({
     visible ? children : null,
 }));
 mock.module("../lib/appLock.ts", () => ({ useAppLock: () => ({ locked: false, away: false }) }));
-mock.module("lucide-react-native", () => ({ MapPinIcon: () => null, PauseIcon: () => null }));
+mock.module("lucide-react-native", () => ({
+  CheckIcon: () => null,
+  MapPinIcon: () => null,
+  PauseIcon: () => null,
+}));
 mock.module("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ bottom: 0 }) }));
 mock.module("@react-navigation/native", () => ({ useIsFocused: () => true }));
 mock.module("../lib/api.ts", () => ({

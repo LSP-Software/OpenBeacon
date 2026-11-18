@@ -1,6 +1,5 @@
 import { useRef, useState } from "react";
-import { PanResponder, Pressable, View } from "react-native";
-import { cn } from "../lib/cn.ts";
+import { PanResponder, View } from "react-native";
 import {
   formatPlaceDistance,
   formatPlaceSize,
@@ -11,6 +10,7 @@ import {
   sliderFromPlaceRadius,
   snapPlaceRadius,
 } from "../lib/places.ts";
+import { SegmentedControl } from "./ui/SegmentedControl.tsx";
 import { Text } from "./ui/Text.tsx";
 
 export const PlaceSizeSlider = ({
@@ -50,7 +50,7 @@ export const PlaceSizeSlider = ({
     <View className="gap-3">
       <View className="flex-row items-center justify-between">
         <Text className="text-foreground font-semibold">Size</Text>
-        <Text className="font-semibold text-primary">{formatPlaceSize(radiusMeters)}</Text>
+        <Text className="font-semibold text-primary-text">{formatPlaceSize(radiusMeters)}</Text>
       </View>
       <View
         {...panResponder.panHandlers}
@@ -91,37 +91,15 @@ export const PlaceSizeSlider = ({
         />
       </View>
       <View className="flex-row justify-between">
-        <Text className="text-xs text-muted-foreground">
-          {formatPlaceDistance(PLACE_RADIUS_MIN)}
-        </Text>
-        <Text className="text-xs text-muted-foreground">
-          {formatPlaceDistance(PLACE_RADIUS_MAX)}
-        </Text>
+        <Text className="text-xs text-tertiary">{formatPlaceDistance(PLACE_RADIUS_MIN)}</Text>
+        <Text className="text-xs text-tertiary">{formatPlaceDistance(PLACE_RADIUS_MAX)}</Text>
       </View>
-      <View className="flex-row gap-2">
-        {PLACE_SIZE_STOPS.map((stop) => {
-          const selected = stop.radiusMeters === radiusMeters;
-          return (
-            <Pressable
-              key={stop.label}
-              accessibilityRole="button"
-              accessibilityState={{ selected }}
-              onPress={() => onChange(stop.radiusMeters)}
-              className={cn(
-                "flex-1 items-center rounded-xl border px-2 py-2",
-                selected ? "border-primary bg-primary/10" : "border-border",
-              )}
-            >
-              <Text className={cn("font-semibold", selected ? "text-primary" : "text-foreground")}>
-                {stop.label}
-              </Text>
-              <Text className="text-xs text-muted-foreground">
-                {formatPlaceDistance(stop.radiusMeters)}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+      <SegmentedControl
+        accessibilityLabel="Place size"
+        options={PLACE_SIZE_STOPS.map((stop) => ({ value: stop.radiusMeters, label: stop.label }))}
+        selected={radiusMeters}
+        onChange={onChange}
+      />
     </View>
   );
 };

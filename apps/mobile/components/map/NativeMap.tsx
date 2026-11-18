@@ -1,14 +1,6 @@
 import { Camera, GeoJSONSource, Layer, Map as MapLibreMap } from "@maplibre/maplibre-react-native";
 import { Link } from "expo-router";
-import {
-  EyeOffIcon,
-  HistoryIcon,
-  LayersIcon,
-  LocateFixedIcon,
-  MapPinIcon,
-  ScanIcon,
-  UsersIcon,
-} from "lucide-react-native";
+import { ChevronDownIcon, EyeOffIcon, LocateFixedIcon, ScanIcon } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AccessibilityInfo,
@@ -192,7 +184,7 @@ export const NativeMap = ({
           : trayPeople
             ? "tray"
             : null),
-    topInset: insets.top,
+    topInset: insets.top + 48,
   });
   const { edgeMarkers, mapRef } = edge;
   const selection = useLiveMapSelection({
@@ -401,7 +393,7 @@ export const NativeMap = ({
         accessibilityLiveRegion="polite"
       >
         <ActivityIndicator />
-        <Text className="text-center text-muted-foreground">
+        <Text className="text-center text-tertiary">
           The server is still preparing the map. It will appear here when it's ready.
         </Text>
       </View>
@@ -414,7 +406,7 @@ export const NativeMap = ({
         className="flex-1 items-center justify-center bg-background px-8"
         accessibilityLiveRegion="polite"
       >
-        <Text className="text-center text-muted-foreground">
+        <Text className="text-center text-tertiary">
           You’re offline. The map will appear when you reconnect.
         </Text>
       </View>
@@ -427,10 +419,10 @@ export const NativeMap = ({
         className="flex-1 items-center justify-center gap-4 bg-background px-8"
         accessibilityLiveRegion="polite"
       >
-        <Text className="text-center text-muted-foreground">
+        <Text className="text-center text-tertiary">
           We couldn’t load the map. Check your connection and try again.
         </Text>
-        <Button variant="outline" loading={map.isFetching} onPress={map.retryUrl}>
+        <Button variant="secondary" loading={map.isFetching} onPress={map.retryUrl}>
           <Text>Try again</Text>
         </Button>
       </View>
@@ -606,31 +598,48 @@ export const NativeMap = ({
       ))}
       {map.showRecoverableError || map.isRefreshing ? (
         <View
-          className="absolute left-3 top-14 rounded-full bg-card p-3"
+          className="absolute left-3 rounded-full bg-card p-3"
+          style={{ top: insets.top + 56 }}
           accessibilityLabel="Loading map"
         >
-          <ActivityIndicator />
+          <ActivityIndicator color={colors.primary} />
         </View>
       ) : null}
       <View
-        className="absolute right-3 top-14 gap-2"
+        className="absolute right-3"
+        style={{ top: insets.top + 56 }}
         onLayout={(event) => {
           edge.onControlsLayout(event.nativeEvent.layout);
         }}
       >
-        <Pressable
-          accessibilityLabel="Show map names and symbols"
-          accessibilityRole="switch"
-          accessibilityState={{ checked: showSymbols }}
-          onPress={map.toggleSymbols}
-          className="size-11 items-center justify-center rounded-full border border-border bg-card shadow-sm shadow-black/10"
-        >
-          <Icon
-            as={MapPinIcon}
-            size={20}
-            className={showSymbols ? "text-foreground" : "text-muted"}
-          />
-        </Pressable>
+        {hasMarkers ? (
+          <View className="overflow-hidden rounded-full border border-border bg-card shadow-sm shadow-black/10">
+            <Pressable
+              accessibilityLabel="Show everyone"
+              accessibilityRole="button"
+              onPress={fitEveryoneInFrame}
+              className="size-11 items-center justify-center active:bg-secondary"
+            >
+              <Icon as={ScanIcon} size={20} className="text-foreground" />
+            </Pressable>
+            {selfMarker ? (
+              <Pressable
+                accessibilityLabel="Go to current location"
+                accessibilityRole="button"
+                onPress={goToCurrentLocation}
+                className="size-11 items-center justify-center border-t border-border active:bg-secondary"
+              >
+                <Icon as={LocateFixedIcon} size={20} className="text-foreground" />
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
+      </View>
+      <View
+        pointerEvents="box-none"
+        className="absolute left-3 right-3 flex-row flex-wrap gap-2"
+        style={{ top: insets.top + 8 }}
+      >
         {canHideGroups ? (
           <Pressable
             accessibilityLabel={
@@ -648,54 +657,61 @@ export const NativeMap = ({
               openGroupMenu();
             }}
             className={cn(
-              "size-11 items-center justify-center rounded-full border shadow-sm shadow-black/10",
+              "h-10 flex-row items-center gap-1 rounded-full border px-3 shadow-sm shadow-black/10",
               groupMenuOpen ? "border-foreground bg-foreground" : "border-border bg-card",
             )}
           >
+            {hiddenGroupCount > 0 ? (
+              <Icon
+                as={EyeOffIcon}
+                size={14}
+                className={groupMenuOpen ? "text-background" : "text-secondary"}
+              />
+            ) : null}
+            <Text
+              className={cn(
+                "text-sm font-semibold",
+                groupMenuOpen ? "text-background" : "text-foreground",
+              )}
+            >
+              Groups
+            </Text>
             <Icon
-              as={LayersIcon}
-              size={20}
+              as={ChevronDownIcon}
+              size={14}
               className={groupMenuOpen ? "text-background" : "text-foreground"}
             />
-            {hiddenGroupCount > 0 ? (
-              <View className="absolute -right-1 -top-1 size-5 items-center justify-center rounded-full border-2 border-card bg-muted">
-                <Icon as={EyeOffIcon} size={11} className="text-white" />
-              </View>
-            ) : null}
           </Pressable>
         ) : null}
+        <Pressable
+          accessibilityLabel="Show map names and symbols"
+          accessibilityRole="switch"
+          accessibilityState={{ checked: showSymbols }}
+          onPress={map.toggleSymbols}
+          className={cn(
+            "h-10 justify-center rounded-full border px-3 shadow-sm shadow-black/10",
+            showSymbols ? "border-foreground bg-foreground" : "border-border bg-card",
+          )}
+        >
+          <Text
+            className={cn(
+              "text-sm font-semibold",
+              showSymbols ? "text-background" : "text-foreground",
+            )}
+          >
+            Labels
+          </Text>
+        </Pressable>
         {timelineGroupId ? (
           <Link href={{ pathname: "/timeline", params: { groupId: timelineGroupId } }} asChild>
             <Pressable
               accessibilityLabel="Timeline"
               accessibilityRole="link"
-              className="size-11 items-center justify-center rounded-full border border-border bg-card shadow-sm shadow-black/10"
+              className="h-10 justify-center rounded-full border border-border bg-card px-3 shadow-sm shadow-black/10"
             >
-              <Icon as={HistoryIcon} size={20} className="text-foreground" />
+              <Text className="text-foreground text-sm font-semibold">Timeline</Text>
             </Pressable>
           </Link>
-        ) : null}
-        {hasMarkers ? (
-          <>
-            <Pressable
-              accessibilityLabel="Show everyone"
-              accessibilityRole="button"
-              onPress={fitEveryoneInFrame}
-              className="size-11 items-center justify-center rounded-full border border-border bg-card shadow-sm shadow-black/10"
-            >
-              <Icon as={ScanIcon} size={20} className="text-foreground" />
-            </Pressable>
-            {selfMarker ? (
-              <Pressable
-                accessibilityLabel="Go to current location"
-                accessibilityRole="button"
-                onPress={goToCurrentLocation}
-                className="size-11 items-center justify-center rounded-full border border-border bg-card shadow-sm shadow-black/10"
-              >
-                <Icon as={LocateFixedIcon} size={20} className="text-foreground" />
-              </Pressable>
-            ) : null}
-          </>
         ) : null}
         <Pressable
           accessibilityLabel={
@@ -712,23 +728,31 @@ export const NativeMap = ({
             onPeopleTrayOpenChange?.(true);
           }}
           className={cn(
-            "size-11 items-center justify-center rounded-full border shadow-sm shadow-black/10",
+            "h-10 flex-row items-center gap-1.5 rounded-full border px-3 shadow-sm shadow-black/10",
             isTrayOpen ? "border-foreground bg-foreground" : "border-border bg-card",
           )}
         >
-          <Icon
-            as={UsersIcon}
-            size={20}
-            className={isTrayOpen ? "text-background" : "text-foreground"}
-          />
+          <Text
+            className={cn(
+              "text-sm font-semibold",
+              isTrayOpen ? "text-background" : "text-foreground",
+            )}
+          >
+            People
+          </Text>
           {showAttentionCount ? (
             <View
               className={cn(
-                "absolute -right-1 -top-1 h-5 min-w-5 items-center justify-center rounded-full border-2 border-card px-1",
-                hasKeyProblem ? "bg-destructive" : "bg-muted",
+                "h-5 min-w-5 items-center justify-center rounded-full px-1",
+                hasKeyProblem ? "bg-destructive" : "bg-border-strong",
               )}
             >
-              <Text className="text-[11px] font-bold leading-[13px] text-white">
+              <Text
+                className={cn(
+                  "text-xs font-bold leading-4",
+                  hasKeyProblem ? "text-white" : "text-foreground",
+                )}
+              >
                 {needsAttentionCount}
               </Text>
             </View>
@@ -738,7 +762,8 @@ export const NativeMap = ({
       {canHideGroups && groupMenuOpen ? (
         <LiveMapGroupMenu
           groups={groupOptions}
-          maxHeight={Math.max(mapHeight - 68, 0)}
+          maxHeight={Math.max(mapHeight - insets.top - 68, 0)}
+          top={insets.top + 56}
           onSetHidden={setGroupHidden}
         />
       ) : null}

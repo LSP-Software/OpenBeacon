@@ -92,7 +92,7 @@ export const SharedInvite = ({
               <Text selectable>{invite.data.code}</Text>
               <View className="flex-row gap-2">
                 <Button
-                  variant="outline"
+                  variant="secondary"
                   onPress={async () => {
                     const result = await tryCatch(Clipboard.setStringAsync(invite.data.code));
                     if (result.error) {
@@ -109,7 +109,7 @@ export const SharedInvite = ({
                     if (Platform.OS === "ios") setOpen(false);
                     const result = await tryCatch(
                       Share.share({
-                        message: `Join my Open Beacon group: openbeacon://join?code=${invite.data.code}`,
+                        message: `Join my OpenBeacon group: openbeacon://join?code=${invite.data.code}`,
                       }),
                     );
                     if (result.error) Alert.alert("Unable to share invitation");

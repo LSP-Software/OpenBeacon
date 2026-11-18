@@ -58,7 +58,7 @@ export default function ServerUrl() {
       verdict === null
         ? "Check the address, that the server is running and that it has a valid HTTPS certificate."
         : verdict === "appTooOld"
-          ? "This server needs a newer version of Open Beacon. Update the app before using it."
+          ? "This server needs a newer version of OpenBeacon. Update the app before using it."
           : `This server is running version ${serverVersion}, which is too old for this app. Ask whoever runs it to update it. You won't be able to share your location until it's updated.`,
       [
         { text: "Cancel", style: "cancel" },
@@ -83,15 +83,17 @@ export default function ServerUrl() {
         behavior={Platform.select({ ios: "padding", android: undefined })}
       >
         <ScrollView
-          contentContainerClassName="px-8 pt-4 pb-10 gap-10"
+          contentContainerClassName="gap-8 px-6 pb-10 pt-1"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
           <ReturnToHomeHeader />
 
           <View className="gap-5">
-            <Text className="font-bold text-5xl">Custom{"\n"}server</Text>
-            <Text className="text-lg text-muted">
+            <Text accessibilityRole="header" className="text-3xl font-bold">
+              Custom server
+            </Text>
+            <Text className="text-secondary text-base">
               Point OpenBeacon at your own self-hosted backend, for example
               https://beacon.example.com. It must use https:// with a valid certificate.
             </Text>
@@ -115,8 +117,8 @@ export default function ServerUrl() {
               }}
             />
 
-            <View className="bg-primary/10 rounded-lg p-4 border border-primary/15">
-              <Text className="text-sm text-muted">
+            <View className="rounded-xl bg-secondary p-4">
+              <Text className="text-sm text-secondary">
                 Changing server signs you out on this phone. Changes take effect after restarting
                 the app.
               </Text>
@@ -130,8 +132,8 @@ export default function ServerUrl() {
               <Text>Save</Text>
             </Button>
             {hasCustomServerUrl() && (
-              <Button variant="outline" loading={clearing} onPress={handleClear}>
-                <Text>Use Default Server</Text>
+              <Button variant="secondary" loading={clearing} onPress={handleClear}>
+                <Text>Use default server</Text>
               </Button>
             )}
           </View>
@@ -140,7 +142,7 @@ export default function ServerUrl() {
 
           <View className="gap-2">
             <Text className="font-semibold text-lg">Self-hosting OpenBeacon</Text>
-            <Text className="text-muted">
+            <Text className="text-secondary">
               OpenBeacon is fully open source. You can run your own backend using Docker behind
               HTTPS.
             </Text>

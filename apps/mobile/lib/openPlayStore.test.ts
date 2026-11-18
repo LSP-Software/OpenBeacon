@@ -20,7 +20,7 @@ beforeEach(() => {
   canOpenMarket = true;
 });
 
-test("opens the Play Store app on the Open Beacon listing", async () => {
+test("opens the Play Store app on the OpenBeacon listing", async () => {
   await openPlayStore();
   expect(opened).toEqual(["market://details?id=net.openbeacon.app"]);
 });

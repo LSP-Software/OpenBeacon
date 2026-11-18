@@ -14,6 +14,7 @@ import { isThisDeviceActive } from "../lib/deviceActivation.ts";
 import { ensureDeviceKeyRegistration } from "../lib/deviceKeys.ts";
 import { endSession } from "../lib/endSession.ts";
 import { launchRetryDelayMs } from "../lib/launchRetry.ts";
+import { readOnboarding, startOnboarding } from "../lib/onboarding.ts";
 import { readSavedDeviceLink } from "../lib/savedDeviceLink.ts";
 import { useColors } from "../lib/theme.ts";
 
@@ -94,8 +95,19 @@ export default function HomeScreen() {
       let cancelled = false;
       let retry: ReturnType<typeof setTimeout> | undefined;
       let failed = 0;
+      const tryAgainLater = () => {
+        failed += 1;
+        setFailures(failed);
+        retry = setTimeout(() => void route(), launchRetryDelayMs(failed));
+      };
       const route = async () => {
-        const savedLink = await tryCatch(ensureDeviceKeyRegistration().then(readSavedDeviceLink));
+        const device = await tryCatch(ensureDeviceKeyRegistration());
+        if (cancelled) return;
+        if (device.error) {
+          tryAgainLater();
+          return;
+        }
+        const savedLink = await tryCatch(readSavedDeviceLink(device.data));
         if (cancelled) return;
         if (savedLink.data) {
           router.replace("/setup/link");
@@ -104,13 +116,14 @@ export default function HomeScreen() {
         const active = await tryCatch(isThisDeviceActive());
         if (cancelled) return;
         if (active.error) {
-          failed += 1;
-          setFailures(failed);
-          retry = setTimeout(() => void route(), launchRetryDelayMs(failed));
+          tryAgainLater();
           return;
         }
         setFailures(0);
-        router.replace(active.data ? "/(tabs)/map" : "/setup");
+        const { userId } = device.data;
+        const onboarding = readOnboarding(userId);
+        if (!active.data && onboarding?.kind !== "newDevice") startOnboarding(userId, "newDevice");
+        router.replace(active.data && !onboarding ? "/(tabs)/map" : "/onboarding");
       };
       void route();
       return () => {
@@ -131,9 +144,9 @@ export default function HomeScreen() {
     return (
       <LoadingScreen colors={colors}>
         {session && failures > 0 && (
-          <View className="absolute bottom-0 left-0 right-0 gap-3 px-8 pb-12">
+          <View className="absolute bottom-0 left-0 right-0 gap-3 px-6 pb-12">
             <AnnouncementBanner />
-            <Text className="text-center text-muted" accessibilityLiveRegion="polite">
+            <Text className="text-center text-secondary" accessibilityLiveRegion="polite">
               {hasCustomServerUrl()
                 ? `Couldn't connect to ${baseUrl}. Check your connection and that your server is running. Trying again automatically.`
                 : "Couldn't connect to OpenBeacon. Check your connection. Trying again automatically."}
@@ -141,12 +154,12 @@ export default function HomeScreen() {
             <Button onPress={() => setAttempt((value) => value + 1)}>
               <Text>Try again</Text>
             </Button>
-            <Button variant="outline" loading={signingOut} onPress={signOut}>
+            <Button variant="secondary" loading={signingOut} onPress={signOut}>
               <Text>Sign out</Text>
             </Button>
             {hasCustomServerUrl() && (
               <Link href="/serverUrl" asChild>
-                <Button variant="outline">
+                <Button variant="secondary">
                   <Text>Change server</Text>
                 </Button>
               </Link>
@@ -164,7 +177,7 @@ export default function HomeScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <SafeAreaView className="flex-1 px-8 py-6 justify-between min-h-[600]">
+        <SafeAreaView className="min-h-[600] flex-1 justify-between px-6 py-6">
           <View
             className="absolute inset-0 items-center justify-center top-[-15%]"
             pointerEvents="none"
@@ -188,18 +201,20 @@ export default function HomeScreen() {
           <View className="flex-1 items-center justify-center gap-10 pt-10">
             <BeaconIcon size={96} color={colors.primary} />
             <View className="items-center gap-4">
-              <Text className="font-bold text-5xl">OPENBEACON</Text>
-              <Text className="text-xl text-muted text-center">Your family.{"\n"}Your data.</Text>
+              <Text className="text-4xl font-bold">OpenBeacon</Text>
+              <Text className="text-xl text-secondary text-center">
+                Your family.{"\n"}Your data.
+              </Text>
             </View>
           </View>
 
           <View className="gap-6 pb-8">
             <View className="gap-3">
               <Button onPress={() => router.push("/signIn")}>
-                <Text>Sign In</Text>
+                <Text>Sign in</Text>
               </Button>
-              <Button variant="outline" onPress={() => router.push("/signUp")}>
-                <Text>Create Account</Text>
+              <Button variant="secondary" onPress={() => router.push("/signUp")}>
+                <Text>Create account</Text>
               </Button>
             </View>
 
@@ -209,7 +224,9 @@ export default function HomeScreen() {
               accessibilityRole="button"
               accessibilityLabel="Configure custom server"
             >
-              <Text className="text-sm text-muted">Using a self-hosted server?</Text>
+              <Text className="text-primary-text text-sm font-medium">
+                Using a self-hosted server?
+              </Text>
             </Pressable>
           </View>
         </SafeAreaView>

@@ -30,7 +30,7 @@ const DialogOverlay = ({
     <FullWindowOverlay>
       <DialogPrimitive.Overlay
         className={cn(
-          "absolute bottom-0 left-0 right-0 top-0 flex items-center justify-center bg-black/50 p-2",
+          "absolute bottom-0 left-0 right-0 top-0 flex items-center justify-center bg-black/50 p-4",
           className,
         )}
         {...props}
@@ -62,7 +62,7 @@ const DialogContent = ({
       <DialogOverlay>
         <DialogPrimitive.Content
           className={cn(
-            "bg-background border-border z-50 mx-auto flex w-full max-w-full flex-col gap-4 rounded-lg border p-6 shadow-lg shadow-black/5 sm:max-w-lg",
+            "bg-background border-border z-50 mx-auto flex w-full max-w-full flex-col gap-4 rounded-3xl border p-6 sm:max-w-lg",
             className,
           )}
           {...props}
@@ -70,10 +70,10 @@ const DialogContent = ({
           {children}
           {showClose && (
             <DialogPrimitive.Close
-              className="absolute right-4 top-4 rounded opacity-70 active:opacity-100"
-              hitSlop={12}
+              className="absolute right-3 top-3 size-10 items-center justify-center rounded-full bg-secondary"
+              hitSlop={4}
             >
-              <Icon as={X} className="text-accent-foreground size-4 shrink-0" />
+              <Icon as={X} className="text-foreground size-5 shrink-0" />
               <Text className="sr-only">Close</Text>
             </DialogPrimitive.Close>
           )}
@@ -104,7 +104,7 @@ const DialogTitle = ({
 }: DialogPrimitive.TitleProps & React.RefAttributes<DialogPrimitive.TitleRef>) => {
   return (
     <DialogPrimitive.Title
-      className={cn("text-foreground text-lg font-semibold leading-none", className)}
+      className={cn("text-foreground pr-10 text-xl font-bold", className)}
       {...props}
     />
   );
@@ -115,10 +115,7 @@ const DialogDescription = ({
   ...props
 }: DialogPrimitive.DescriptionProps & React.RefAttributes<DialogPrimitive.DescriptionRef>) => {
   return (
-    <DialogPrimitive.Description
-      className={cn("text-muted-foreground text-sm", className)}
-      {...props}
-    />
+    <DialogPrimitive.Description className={cn("text-secondary text-base", className)} {...props} />
   );
 };
 

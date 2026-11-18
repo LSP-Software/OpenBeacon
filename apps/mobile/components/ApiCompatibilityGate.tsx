@@ -32,11 +32,11 @@ export const ApiCompatibilityGate = () => {
   const problem = compatibility?.problem ?? null;
   const title =
     problem === "appTooOld"
-      ? "Update Open Beacon"
+      ? "Update OpenBeacon"
       : problem === "serverTooOld"
         ? selfHosted
           ? "Your server needs updating"
-          : "We're updating Open Beacon"
+          : "We're updating OpenBeacon"
         : "The app and server don't match";
 
   useEffect(() => {
@@ -89,26 +89,26 @@ export const ApiCompatibilityGate = () => {
             </Text>
             {switchedServer ? (
               <Text className="text-lg">
-                You've switched server. Close Open Beacon and open it again to connect.
+                You've switched server. Close OpenBeacon and open it again to connect.
               </Text>
             ) : (
               <>
                 {compatibility.problem === "appTooOld" && (
                   <Text className="text-lg">
-                    This version of Open Beacon is out of date, so your family can't see your
+                    This version of OpenBeacon is out of date, so your family can't see your
                     location. Update the app to start sharing again.
                   </Text>
                 )}
                 {compatibility.problem === "serverTooOld" && (
                   <Text className="text-lg">
                     {selfHosted
-                      ? "Your Open Beacon server is out of date, so your location isn't being shared. Ask whoever runs your server to update it."
-                      : "We're updating Open Beacon's servers. Your location isn't being shared right now. Try again in a little while."}
+                      ? "Your OpenBeacon server is out of date, so your location isn't being shared. Ask whoever runs your server to update it."
+                      : "We're updating OpenBeacon's servers. Your location isn't being shared right now. Try again in a little while."}
                   </Text>
                 )}
                 {compatibility.problem === "outOfSync" && (
                   <Text className="text-lg">
-                    Open Beacon asked your server for something it doesn't have. Please tell us, and
+                    OpenBeacon asked your server for something it doesn't have. Please tell us, and
                     include the versions below.
                   </Text>
                 )}
@@ -117,11 +117,11 @@ export const ApiCompatibilityGate = () => {
             {compatibility.message !== null && (
               <Text className="text-lg">{compatibility.message}</Text>
             )}
-            <View className="bg-primary/10 rounded-lg p-4 border border-primary/15 gap-1">
-              <Text className="text-sm text-muted">App version {appVersion}</Text>
-              {selfHosted && <Text className="text-sm text-muted">Server {baseUrl}</Text>}
+            <View className="rounded-xl bg-secondary p-4 gap-1">
+              <Text className="text-sm text-secondary">App version {appVersion}</Text>
+              {selfHosted && <Text className="text-sm text-secondary">Server {baseUrl}</Text>}
               {compatibility.problem !== "appTooOld" && (
-                <Text className="text-sm text-muted">Server version {serverVersion}</Text>
+                <Text className="text-sm text-secondary">Server version {serverVersion}</Text>
               )}
             </View>
             {compatibility.problem === "serverTooOld" && selfHosted && (
@@ -141,24 +141,24 @@ export const ApiCompatibilityGate = () => {
               </Button>
             )}
             {!switchedServer && (
-              <Button variant="outline" loading={checking} onPress={tryAgain}>
+              <Button variant="secondary" loading={checking} onPress={tryAgain}>
                 <Text>Try again</Text>
               </Button>
             )}
             {unreachable && !switchedServer && (
-              <Text className="text-muted" accessibilityLiveRegion="polite">
+              <Text className="text-secondary" accessibilityLiveRegion="polite">
                 Couldn't reach your server. Check your internet connection and try again.
               </Text>
             )}
             {compatibility.problem === "outOfSync" && (
               <Link href="/account/contact-us" asChild>
-                <Button variant="outline">
+                <Button variant="secondary">
                   <Text>Contact us</Text>
                 </Button>
               </Link>
             )}
             <Link href="/serverUrl" asChild>
-              <Button variant="outline">
+              <Button variant="secondary">
                 <Text>Use a different server</Text>
               </Button>
             </Link>

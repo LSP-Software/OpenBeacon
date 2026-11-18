@@ -111,14 +111,14 @@ export const LocationSharingPausedBanner = ({
   return (
     <View
       accessibilityLiveRegion="polite"
-      className="mb-2 gap-1 rounded-xl border border-border bg-card px-3 py-2"
+      className="mb-2 gap-1 rounded-2xl border border-border bg-card px-3 py-2"
     >
       <View className="flex-row items-center gap-3">
         <Icon as={PauseIcon} size={16} className="text-foreground" />
         <Text className="flex-1 text-sm font-medium">Your location sharing is paused</Text>
         <Button
           size="sm"
-          variant="outline"
+          variant="secondary"
           loading={resume.isPending}
           onPress={async () => {
             setFailure(null);
@@ -135,7 +135,7 @@ export const LocationSharingPausedBanner = ({
           <Text>Resume</Text>
         </Button>
       </View>
-      {failure ? <Text className="text-sm text-muted-foreground">{failure}</Text> : null}
+      {failure ? <Text className="text-sm text-tertiary">{failure}</Text> : null}
     </View>
   );
 };

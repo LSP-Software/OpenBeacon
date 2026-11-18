@@ -152,17 +152,17 @@ const ForgotPassword = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-background">
-      <KeyboardFormScrollView contentContainerClassName="px-8 pt-2 pb-6 gap-6">
+      <KeyboardFormScrollView contentContainerClassName="gap-6 px-6 pb-6 pt-1">
         {(formProps) => (
           <>
             <ReturnToHomeHeader />
             <View className="gap-2">
-              <Text className="font-bold text-5xl">
+              <Text accessibilityRole="header" className="text-3xl font-bold">
                 {step.name === "code" || step.name === "signInCode"
-                  ? "Check your\nemail."
-                  : "Reset\npassword."}
+                  ? "Check your email"
+                  : "Reset your password"}
               </Text>
-              <Text className="text-lg text-muted">
+              <Text className="text-secondary text-base">
                 {step.name === "email"
                   ? "We'll email you a code to reset it"
                   : step.name === "code" || step.name === "signInCode"
@@ -174,7 +174,7 @@ const ForgotPassword = () => {
             <View className="gap-4" {...formProps}>
               {step.name === "email" ? (
                 <>
-                  <Text className="text-muted">
+                  <Text className="text-secondary">
                     A new password signs you back in, but it doesn't recover your encrypted location
                     history. Only your recovery phrase can do that, so keep it somewhere safe.
                   </Text>
@@ -201,7 +201,7 @@ const ForgotPassword = () => {
                     notice={step.notice}
                     resentMessage="If this address has an account with a password, we've sent it a new code. Earlier codes no longer work."
                     description={
-                      <Text className="text-muted">
+                      <Text className="text-secondary">
                         If <Text className="font-semibold">{step.email}</Text> has an OpenBeacon
                         account with a password, we've sent it a 6-digit code. It expires in 10
                         minutes.
@@ -237,7 +237,7 @@ const ForgotPassword = () => {
                 </>
               ) : step.name === "signInCode" ? (
                 <>
-                  <Text className="text-muted">
+                  <Text className="text-secondary">
                     Your password has been reset. Your account also asks for a code when you sign
                     in.
                   </Text>
@@ -251,7 +251,7 @@ const ForgotPassword = () => {
                 </>
               ) : (
                 <>
-                  <Text className="text-muted">
+                  <Text className="text-secondary">
                     Choose a new password for <Text className="font-semibold">{step.email}</Text>{" "}
                     within 5 minutes. Resetting signs your account out on every phone. It doesn't
                     recover encrypted location history. For that you need your recovery phrase.
@@ -260,7 +260,6 @@ const ForgotPassword = () => {
                     control={form.control}
                     name="password"
                     label="New password"
-                    placeholder="New password"
                     secureTextEntry
                     autoCapitalize="none"
                     autoComplete="new-password"
@@ -271,7 +270,6 @@ const ForgotPassword = () => {
                     control={form.control}
                     name="confirmPassword"
                     label="Confirm new password"
-                    placeholder="Confirm new password"
                     secureTextEntry
                     autoCapitalize="none"
                     autoComplete="new-password"
@@ -289,7 +287,7 @@ const ForgotPassword = () => {
             <View className="items-center gap-4 pt-2">
               <Link href={{ pathname: "/signIn", params: { joinCode: params.joinCode } }} asChild>
                 <Pressable accessibilityRole="link">
-                  <Text className="text-muted">
+                  <Text className="text-secondary">
                     Remembered it? <Text className="font-semibold text-primary-text">Sign in</Text>
                   </Text>
                 </Pressable>

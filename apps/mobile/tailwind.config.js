@@ -13,6 +13,12 @@ module.exports = {
     extend: {
       colors: {
         border: "hsl(var(--border) / <alpha-value>)",
+        "border-strong": "hsl(var(--border-strong) / <alpha-value>)",
+        action: "hsl(var(--action) / <alpha-value>)",
+        success: {
+          DEFAULT: "hsl(var(--success) / <alpha-value>)",
+          soft: "hsl(var(--success-soft) / <alpha-value>)",
+        },
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
         brand: "hsl(var(--brand) / <alpha-value>)",
@@ -26,14 +32,17 @@ module.exports = {
           DEFAULT: "hsl(var(--primary) / <alpha-value>)",
           foreground: "hsl(var(--primary-foreground))",
           text: "hsl(var(--primary-text) / <alpha-value>)",
+          soft: "hsl(var(--primary-soft) / <alpha-value>)",
         },
         secondary: {
           DEFAULT: "hsl(var(--secondary) / <alpha-value>)",
           foreground: "hsl(var(--secondary-foreground))",
         },
         destructive: {
-          DEFAULT: "hsl(var(--destructive))",
+          DEFAULT: "hsl(var(--destructive) / <alpha-value>)",
           foreground: "hsl(var(--destructive-foreground))",
+          text: "hsl(var(--destructive-text) / <alpha-value>)",
+          soft: "hsl(var(--destructive-soft) / <alpha-value>)",
         },
         muted: {
           DEFAULT: "hsl(var(--muted) / <alpha-value>)",
@@ -63,10 +72,12 @@ module.exports = {
       },
       textColor: {
         secondary: "hsl(var(--text-secondary) / <alpha-value>)",
+        tertiary: "hsl(var(--text-tertiary) / <alpha-value>)",
         "secondary-foreground": "hsl(var(--secondary-foreground))",
       },
       borderColor: {
         border: "hsl(var(--border) / <alpha-value>)",
+        "border-strong": "hsl(var(--border-strong) / <alpha-value>)",
       },
       keyframes: {
         "accordion-down": {

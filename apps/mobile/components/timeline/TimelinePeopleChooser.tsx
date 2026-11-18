@@ -56,7 +56,7 @@ export const TimelinePeopleChooser = ({
               <Text>Cancel</Text>
             </Button>
           </View>
-          <Text className="text-sm text-muted-foreground">
+          <Text className="text-sm text-tertiary">
             This phone can decrypt and play about {MAX_TIMELINE_POINTS.toLocaleString()} locations
             at once. Pick who to show on this day.
           </Text>
@@ -96,7 +96,7 @@ export const TimelinePeopleChooser = ({
                     <Text className="font-semibold text-foreground" numberOfLines={1}>
                       {person.name}
                     </Text>
-                    <Text className="text-xs text-muted">
+                    <Text className="text-xs text-secondary">
                       {tooMany
                         ? "Too many locations to add. Untick someone else first."
                         : `About ${person.points.toLocaleString()} ${person.points === 1 ? "location" : "locations"}`}

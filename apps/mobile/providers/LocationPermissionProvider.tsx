@@ -20,13 +20,12 @@ import {
   type LocationPermissionState,
   openLocationSettings,
   requestBackgroundLocationPermissions,
-  requestLocationPermissionsForLaunch,
+  requestForegroundLocationPermissions,
 } from "../lib/locationPermissions.ts";
-import { dismissNotice, requestNotificationPermissions } from "../lib/notifications.ts";
+import { dismissNotice } from "../lib/notifications.ts";
 
 const LocationPermissionContext = createContext<{
   permissionState: LocationPermissionState | null;
-  isConfiguringLocation: boolean;
   refreshLocationPermissionState: () => Promise<LocationPermissionState | null>;
   openLocationPermissionSettings: () => Promise<void>;
 } | null>(null);
@@ -38,131 +37,86 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
   const { setup } = useGlobalSearchParams<{ setup?: string }>();
   const inSetup =
     pathname.startsWith("/setup") || (pathname.startsWith("/account/recovery-") && Boolean(setup));
-  const readyToAsk = Boolean(session) && thisDeviceActive && !inSetup;
+  const readyToCheck = Boolean(session) && thisDeviceActive && !inSetup;
   const [permissionState, setPermissionState] = useState<LocationPermissionState | null>(null);
-  const [isLaunchingLocationSetup, setIsLaunchingLocationSetup] = useState(true);
-  const [isBackgroundPermissionDialogOpen, setIsBackgroundPermissionDialogOpen] = useState(false);
-  const [isRequestingBackgroundPermission, setIsRequestingBackgroundPermission] = useState(false);
-  const permissionCheckRef = useRef<Promise<void> | null>(null);
-  const shouldOpenBackgroundPermissionDialog = useCallback(
-    ({
-      flow,
-      nextPermissionState,
-    }: {
-      flow: "refresh" | "launchRequest";
-      nextPermissionState: LocationPermissionState;
-    }): boolean =>
-      flow === "launchRequest" &&
-      nextPermissionState.foregroundStatus === "granted" &&
-      nextPermissionState.preciseEnabled &&
-      nextPermissionState.backgroundStatus !== "granted" &&
-      nextPermissionState.canRequestBackgroundInApp,
-    [],
-  );
-  const syncLocationPermissions = useCallback(
-    async (flow: "refresh" | "launchRequest"): Promise<LocationPermissionState | null> => {
-      if (!readyToAsk) return null;
-      while (permissionCheckRef.current) {
-        if (flow === "refresh") return null;
-        await permissionCheckRef.current;
-      }
-      let finishCheck = () => {};
-      permissionCheckRef.current = new Promise<void>((resolve) => {
-        finishCheck = resolve;
-      });
+  const [isPermissionDialogOpen, setIsPermissionDialogOpen] = useState(false);
+  const [isRequestingPermission, setIsRequestingPermission] = useState(false);
+  const permissionCheckRef = useRef<Promise<LocationPermissionState | null> | null>(null);
 
-      const launchResult =
-        flow === "launchRequest" ? await tryCatch(requestLocationPermissionsForLaunch()) : null;
-      const permissionResult =
-        launchResult && !launchResult.error
-          ? launchResult
-          : await tryCatch(getLocationPermissionState());
-
-      permissionCheckRef.current = null;
-      finishCheck();
-
-      if (permissionResult.error) {
-        return null;
-      }
-
-      setPermissionState(permissionResult.data);
-      setIsBackgroundPermissionDialogOpen(
-        shouldOpenBackgroundPermissionDialog({
-          flow,
-          nextPermissionState: permissionResult.data,
-        }),
-      );
-
-      return permissionResult.data;
-    },
-    [readyToAsk, shouldOpenBackgroundPermissionDialog],
-  );
+  const syncLocationPermissions = useCallback(async (): Promise<LocationPermissionState | null> => {
+    if (!readyToCheck) return null;
+    if (permissionCheckRef.current) return permissionCheckRef.current;
+    const check = (async () => {
+      const result = await tryCatch(getLocationPermissionState());
+      if (result.error) return null;
+      setPermissionState(result.data);
+      return result.data;
+    })();
+    permissionCheckRef.current = check;
+    const checked = await check;
+    permissionCheckRef.current = null;
+    return checked;
+  }, [readyToCheck]);
 
   useEffect(() => {
     if (isPending) {
       return;
     }
 
-    if (!readyToAsk) {
+    if (!readyToCheck) {
       setPermissionState(null);
-      setIsLaunchingLocationSetup(true);
       return;
     }
 
-    setIsLaunchingLocationSetup(true);
-    let cancelled = false;
-    void (async () => {
-      await tryCatch(requestNotificationPermissions());
-      if (cancelled) return;
-      await syncLocationPermissions("launchRequest");
-      if (cancelled) return;
-      setIsLaunchingLocationSetup(false);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [isPending, readyToAsk, syncLocationPermissions]);
+    void syncLocationPermissions();
+  }, [isPending, readyToCheck, syncLocationPermissions]);
 
-  useAppForeground(() => void syncLocationPermissions("refresh"));
+  useAppForeground(() => void syncLocationPermissions());
 
   useEffect(() => {
     if (permissionState?.isReadyForSharing) void dismissNotice("locationPermission");
   }, [permissionState?.isReadyForSharing]);
 
   const refreshLocationPermissionState = async (): Promise<LocationPermissionState | null> =>
-    syncLocationPermissions("refresh");
+    syncLocationPermissions();
 
-  const continueToBackgroundPermission = async () => {
-    if (isRequestingBackgroundPermission) {
+  const canAskInApp =
+    permissionState?.foregroundStatus === "undetermined" ||
+    (permissionState?.canRequestBackgroundInApp === true &&
+      permissionState.missing.length === 1 &&
+      permissionState.missing[0] === "background");
+
+  const continueToPermission = async () => {
+    if (isRequestingPermission) {
       return;
     }
 
-    if (
-      !permissionState?.canRequestBackgroundInApp ||
-      permissionState.missing.length !== 1 ||
-      permissionState.missing[0] !== "background"
-    ) {
-      setIsBackgroundPermissionDialogOpen(false);
+    if (!canAskInApp) {
+      setIsPermissionDialogOpen(false);
       await openLocationSettings();
       return;
     }
 
-    setIsRequestingBackgroundPermission(true);
+    setIsRequestingPermission(true);
 
-    const permissionResult = await tryCatch(requestBackgroundLocationPermissions());
+    const permissionResult = await tryCatch(
+      permissionState?.foregroundStatus === "undetermined"
+        ? requestForegroundLocationPermissions()
+        : requestBackgroundLocationPermissions(),
+    );
 
-    setIsRequestingBackgroundPermission(false);
+    setIsRequestingPermission(false);
 
     if (permissionResult.error) {
       return;
     }
 
     setPermissionState(permissionResult.data);
-    setIsBackgroundPermissionDialogOpen(false);
+    setIsPermissionDialogOpen(false);
   };
 
   const openLocationPermissionSettings = async (): Promise<void> => {
-    setIsBackgroundPermissionDialogOpen(true);
+    setIsPermissionDialogOpen(true);
   };
 
   return (
@@ -170,10 +124,6 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
       <LocationPermissionContext.Provider
         value={{
           permissionState,
-          isConfiguringLocation:
-            isLaunchingLocationSetup ||
-            isBackgroundPermissionDialogOpen ||
-            isRequestingBackgroundPermission,
           refreshLocationPermissionState,
           openLocationPermissionSettings,
         }}
@@ -181,12 +131,7 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
         {children}
       </LocationPermissionContext.Provider>
 
-      <Dialog
-        open={isBackgroundPermissionDialogOpen}
-        onOpenChange={(open) => {
-          setIsBackgroundPermissionDialogOpen(open);
-        }}
-      >
+      <Dialog open={isPermissionDialogOpen} onOpenChange={setIsPermissionDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
@@ -198,27 +143,22 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
             <DialogDescription>
               OpenBeacon needs precise and background location so your family and friends can see
               where you are even when you are not actively using the app.{" "}
-              {permissionState?.canRequestBackgroundInApp &&
-              permissionState.missing.length === 1 &&
-              permissionState.missing[0] === "background"
+              {canAskInApp
                 ? "The app will ask for that access next."
                 : "You can update location access in your device settings."}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button
-              variant="outline"
+              variant="secondary"
               onPress={() => {
-                setIsBackgroundPermissionDialogOpen(false);
+                setIsPermissionDialogOpen(false);
               }}
             >
               <Text>Not now</Text>
             </Button>
-            <Button
-              onPress={continueToBackgroundPermission}
-              loading={isRequestingBackgroundPermission}
-            >
-              <Text>Open Settings</Text>
+            <Button onPress={continueToPermission} loading={isRequestingPermission}>
+              <Text>{canAskInApp ? "Continue" : "Open Settings"}</Text>
             </Button>
           </DialogFooter>
         </DialogContent>

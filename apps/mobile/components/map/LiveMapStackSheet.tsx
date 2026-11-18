@@ -32,7 +32,7 @@ const StackSheetRow = ({ marker, onPress }: { marker: LiveMapMarker; onPress: ()
             .filter(Boolean)
             .join(" · ")}
         </Text>
-        <Text className="text-muted text-sm">
+        <Text className="text-secondary text-sm">
           {updatedAge === null ? "No location sent yet" : `Updated ${updatedAge}`}
         </Text>
       </View>

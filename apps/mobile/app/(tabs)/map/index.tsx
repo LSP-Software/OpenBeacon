@@ -437,8 +437,8 @@ const MapScreen = () => {
       />
       <ScrollView
         pointerEvents="box-none"
-        className="absolute left-4 right-16"
-        style={{ top: insets.top + 8, maxHeight: "65%" }}
+        className="absolute left-3 right-16"
+        style={{ top: insets.top + 56, maxHeight: "65%" }}
       >
         <AnnouncementBanner className="mb-2" />
         <NewSignInBanner subscribed={isFocused} />
@@ -448,8 +448,8 @@ const MapScreen = () => {
           userId={selfUserId}
         />
         {queueEviction && (
-          <View className="mb-2 gap-2 rounded-xl border border-amber-600 dark:border-amber-400 bg-card p-4">
-            <Text className="font-semibold text-amber-700 dark:text-amber-400">
+          <View className="mb-2 gap-2 rounded-2xl border border-warning-accent bg-card p-4">
+            <Text className="font-semibold text-warning-text">
               Some location history was removed
             </Text>
             <Text>
@@ -468,7 +468,7 @@ const MapScreen = () => {
             </Text>
             <Button
               size="sm"
-              variant="outline"
+              variant="secondary"
               className="self-start"
               loading={dismissQueueEviction.isPending}
               onPress={() => dismissQueueEviction.mutate(queueEviction)}
@@ -481,9 +481,9 @@ const MapScreen = () => {
           groupsMissingKeys.map((group) => (
             <View
               key={group.id}
-              className="mb-2 gap-2 rounded-xl border border-red-700 dark:border-red-400 bg-card p-4"
+              className="mb-2 gap-2 rounded-2xl border border-destructive-text bg-card p-4"
             >
-              <Text className="font-semibold text-red-700 dark:text-red-400">
+              <Text className="font-semibold text-destructive-text">
                 Can’t show locations for {group.name}
               </Text>
               <Text>
@@ -499,15 +499,15 @@ const MapScreen = () => {
                     <Text>Open group</Text>
                   </Button>
                 </Link>
-                <Button size="sm" variant="outline" onPress={() => dismissKeyBanners([group.id])}>
+                <Button size="sm" variant="secondary" onPress={() => dismissKeyBanners([group.id])}>
                   <Text>Dismiss</Text>
                 </Button>
               </View>
             </View>
           ))}
         {groupsMissingKeys.length > 2 && (
-          <View className="mb-2 gap-2 rounded-xl border border-red-700 dark:border-red-400 bg-card p-4">
-            <Text className="font-semibold text-red-700 dark:text-red-400">
+          <View className="mb-2 gap-2 rounded-2xl border border-destructive-text bg-card p-4">
+            <Text className="font-semibold text-destructive-text">
               Multiple groups require attention
             </Text>
             <View className="flex-row flex-wrap items-center gap-3">
@@ -518,7 +518,7 @@ const MapScreen = () => {
               </Link>
               <Button
                 size="sm"
-                variant="outline"
+                variant="secondary"
                 onPress={() => dismissKeyBanners(groupsMissingKeys.map((group) => group.id))}
               >
                 <Text>Dismiss</Text>

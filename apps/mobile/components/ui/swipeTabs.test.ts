@@ -1,10 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  getActiveSceneHeight,
-  getExpandingTabLayouts,
-  getSceneIndexFromOffset,
-  getSwipeTabsIndex,
-} from "./swipeTabs.ts";
+import { getActiveSceneHeight, getSceneIndexFromOffset, getSwipeTabsIndex } from "./swipeTabs.ts";
 
 describe("swipeTabs", () => {
   test("returns the active tab index when the value exists", () => {
@@ -60,27 +55,5 @@ describe("swipeTabs", () => {
         value: "settings",
       }),
     ).toBe(420);
-  });
-
-  test("expands the active tab and fills the bar with icon-only tabs", () => {
-    const layouts = getExpandingTabLayouts({ barWidth: 300, tabCount: 4 });
-
-    expect(layouts[1]).toEqual([
-      { left: 0, width: 51 },
-      { left: 51, width: 147 },
-      { left: 198, width: 51 },
-      { left: 249, width: 51 },
-    ]);
-    for (const pageLayouts of layouts) {
-      const last = pageLayouts.at(-1);
-      expect(last && last.left + last.width).toBe(300);
-    }
-  });
-
-  test("keeps icon-only tabs tappable on a narrow bar", () => {
-    const layouts = getExpandingTabLayouts({ barWidth: 220, tabCount: 4 });
-
-    expect(layouts[0]?.[1]?.width).toBe(44);
-    expect(layouts[0]?.[0]?.width).toBe(88);
   });
 });

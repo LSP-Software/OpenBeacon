@@ -80,7 +80,7 @@ function AccordionTrigger({
           >
             {children}
             <Animated.View style={chevronStyle}>
-              <Icon as={ChevronDown} size={16} className="text-muted-foreground shrink-0" />
+              <Icon as={ChevronDown} size={16} className="text-tertiary shrink-0" />
             </Animated.View>
           </Pressable>
         </AccordionPrimitive.Trigger>

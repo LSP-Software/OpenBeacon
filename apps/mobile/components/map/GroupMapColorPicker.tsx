@@ -15,23 +15,23 @@ export const GroupMapColorPicker = ({ groupId }: { groupId: string }) => {
   const sync = useQuery(groupColorSyncQueryOptions(userId));
   const save = useMutation({
     mutationFn: saveGroupColor,
-    onError: (error) => Alert.alert("Unable to save color", error.message),
+    onError: (error) => Alert.alert("Unable to save colour", error.message),
   });
   const locked = !userId || !sync.isSuccess || sync.isFetching || save.isPending;
   const selectedColor = save.isPending ? save.variables.color : getGroupColor(groupId);
 
   return (
-    <View className="gap-3 rounded-lg border border-border bg-card p-4">
+    <View className="gap-3 rounded-2xl border border-border bg-card p-4">
       <View className="gap-1">
-        <Text className="text-foreground font-medium">Map marker color</Text>
-        <Text className="text-muted-foreground text-sm">
-          Used for this group's ring on the live map. Only you see this color.
+        <Text className="text-foreground font-medium">Map marker colour</Text>
+        <Text className="text-tertiary text-sm">
+          Used for this group's ring on the live map. Only you see this colour.
         </Text>
       </View>
       {sync.isError ? (
         <View className="gap-2">
-          <Text className="text-destructive text-sm">Couldn't load your saved color.</Text>
-          <Button variant="outline" onPress={() => sync.refetch()}>
+          <Text className="text-destructive-text text-sm">Couldn’t load your saved colour.</Text>
+          <Button variant="secondary" onPress={() => sync.refetch()}>
             <Text>Try again</Text>
           </Button>
         </View>

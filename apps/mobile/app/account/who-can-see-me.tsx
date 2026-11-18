@@ -2,8 +2,7 @@ import { useIsFocused } from "@react-navigation/native";
 import { skipToken, useQueries, useQuery } from "@tanstack/react-query";
 import { Link } from "expo-router";
 import { ScrollView, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { BackButton } from "../../components/headers/BackButton.tsx";
+import { ScreenHeader } from "../../components/headers/ScreenHeader.tsx";
 import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
 import { LocationSharingCard } from "../../components/LocationSharingCard.tsx";
 import { DecryptedAvatarImage } from "../../components/image/DecryptedAvatarImage.tsx";
@@ -52,9 +51,9 @@ const Person = ({
     </Avatar>
     <View className="flex-1 gap-1">
       <Text className="text-foreground text-base font-medium">{name}</Text>
-      {accountName && <Text className="text-muted-foreground text-sm">{accountName}</Text>}
+      {accountName && <Text className="text-tertiary text-sm">{accountName}</Text>}
       {details.map((detail) => (
-        <Text key={detail.key} className="text-muted-foreground text-sm">
+        <Text key={detail.key} className="text-tertiary text-sm">
           {detail.text}
         </Text>
       ))}
@@ -90,29 +89,23 @@ const WhoCanSeeMeScreen = () => {
 
   return (
     <View className="flex-1 bg-background">
-      <SafeAreaView edges={["top"]} className="border-b border-border bg-background px-6 py-4">
-        <View className="flex-row items-center justify-between">
-          <BackButton />
-          <Text className="text-foreground text-2xl font-bold">Who can see me</Text>
-          <View className="w-10" />
-        </View>
-      </SafeAreaView>
+      <ScreenHeader title="Who can see me" />
 
       {viewers.isPending ? (
         <LoadingIndicator />
       ) : viewers.isError ? (
         <View className="flex-1 items-center justify-center gap-4 px-6">
-          <Text className="text-muted-foreground text-center">
+          <Text className="text-tertiary text-center">
             We couldn’t load who can see you. Check your connection and try again.
           </Text>
-          <Button variant="outline" onPress={() => viewers.refetch()}>
+          <Button variant="secondary" onPress={() => viewers.refetch()}>
             <Text>Try again</Text>
           </Button>
         </View>
       ) : (
         <ScrollView
           className="flex-1"
-          contentContainerClassName="gap-4 px-6 py-6 pb-32"
+          contentContainerClassName="gap-6 px-4 pb-32 pt-2"
           showsVerticalScrollIndicator={false}
         >
           <LocationSharingCard />
@@ -120,7 +113,7 @@ const WhoCanSeeMeScreen = () => {
           <Text accessibilityRole="header" className="text-foreground text-lg font-semibold">
             Can see you now
           </Text>
-          <Text className="text-muted-foreground text-base leading-6">
+          <Text className="text-secondary text-base">
             Everyone in a group with you can see where you are while you’re sharing. They can also
             replay where you’ve been, as far back as you chose for that group (shown below, at most
             14 days), but only from when they joined that group, and see roughly when you paused and
@@ -128,16 +121,16 @@ const WhoCanSeeMeScreen = () => {
             are.
           </Text>
           <Link href="/account/location-history" asChild>
-            <Button variant="outline" className="self-start">
+            <Button variant="secondary" className="self-start">
               <Text>Choose how much history to share</Text>
             </Button>
           </Link>
           {viewers.data.current.length === 0 ? (
-            <Text className="text-muted-foreground text-base">
+            <Text className="text-tertiary text-base">
               No one. You’re not in a group with anyone else.
             </Text>
           ) : (
-            <View className="overflow-hidden rounded-3xl border border-border bg-card">
+            <View className="overflow-hidden rounded-2xl border border-border bg-card">
               {viewers.data.current.map((viewer, index) => (
                 <Person
                   key={viewer.userId}
@@ -169,15 +162,15 @@ const WhoCanSeeMeScreen = () => {
           <Text accessibilityRole="header" className="text-foreground text-lg font-semibold">
             Could see you recently
           </Text>
-          <Text className="text-muted-foreground text-base leading-6">
+          <Text className="text-secondary text-base">
             People who stopped being in a group with you since{" "}
             {formatViewerDate(viewers.data.since)}. They can’t see where you go now, but they may
             have kept what they saw before.
           </Text>
           {viewers.data.past.length === 0 ? (
-            <Text className="text-muted-foreground text-base">No one.</Text>
+            <Text className="text-tertiary text-base">No one.</Text>
           ) : (
-            <View className="overflow-hidden rounded-3xl border border-border bg-card">
+            <View className="overflow-hidden rounded-2xl border border-border bg-card">
               {viewers.data.past.map((viewer, index) => {
                 const stillSharing = viewers.data.current.find(
                   (person) => person.userId === viewer.userId,

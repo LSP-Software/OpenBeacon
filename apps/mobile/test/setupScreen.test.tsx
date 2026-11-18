@@ -70,6 +70,8 @@ mock.module("../components/ui/Button.tsx", () => ({
   }) => React.createElement("mock-button", { disabled, onPress }, children),
 }));
 mock.module("../components/ui/Text.tsx", () => ({ Text: View }));
+mock.module("../components/ui/Icon.tsx", () => ({ Icon: () => null }));
+mock.module("lucide-react-native", () => ({ CheckIcon: () => null }));
 mock.module("../lib/api.ts", () => ({
   trpc: {
     accountRecovery: { status: { queryOptions: () => ({ queryKey: "recovery" }) } },
@@ -104,7 +106,13 @@ mock.module("../lib/thisDeviceNoun.ts", () => ({ thisDeviceNoun: () => deviceNou
 const clearPendingJoinCodes = mock(() => {});
 mock.module("../lib/pendingJoinCode.ts", () => ({
   clearPendingJoinCodes,
-  openAppAfterSetup: (home: string) => replace(home),
+}));
+
+mock.module("../lib/onboarding.ts", () => ({
+  advanceOnboarding: (step: string) => replace(`advance:${step}`),
+}));
+mock.module("../components/onboarding/OnboardingScreen.tsx", () => ({
+  OnboardingProgress: () => null,
 }));
 
 const { default: SetUpPhoneScreen } = await import("../app/setup/index.tsx");
@@ -172,10 +180,10 @@ afterEach(async () => {
   root = null;
 });
 
-test("a phone that's already set up leaves setup instead of offering it again", async () => {
+test("a phone that's already set up moves on from restoring instead of offering it again", async () => {
   deviceActive = true;
   await render();
-  expect(replace.mock.calls).toEqual([["/"]]);
+  expect(replace.mock.calls).toEqual([["advance:restore"]]);
 });
 
 test("a phone that isn't set up stays on setup", async () => {
@@ -332,7 +340,7 @@ test("checks again for another active phone each time setup is shown", async () 
 test("a tablet is called a tablet", async () => {
   deviceNoun = "tablet";
   await render();
-  expect(shownText()).toContain('"Set up this ","tablet"');
+  expect(shownText()).toContain('"Bring your history to this ","tablet"');
   expect(shownText()).not.toContain('"phone"');
   expect(shownText()).toContain("Cancel and remove this tablet");
 });

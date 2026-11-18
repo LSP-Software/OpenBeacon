@@ -1,9 +1,9 @@
 Pod::Spec.new do |s|
   s.name           = 'OpenBeaconTracking'
   s.version        = '0.0.0'
-  s.summary        = 'Encrypted location capture for Open Beacon'
+  s.summary        = 'Encrypted location capture for OpenBeacon'
   s.license        = 'SEE LICENSE IN LICENSE.md'
-  s.author         = 'Open Beacon'
+  s.author         = 'OpenBeacon'
   s.homepage       = 'https://openbeacon.net'
   s.platforms      = { :ios => '15.1' }
   s.source         = { git: 'https://github.com/LSP-Software/OpenBeacon.git' }

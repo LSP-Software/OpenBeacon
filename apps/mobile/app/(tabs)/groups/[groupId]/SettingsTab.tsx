@@ -33,17 +33,17 @@ const SettingsTab = ({ groupId }: { groupId: string }) => {
   const role = group?.members.find((member) => member.userId === session?.user.id)?.role;
 
   return (
-    <View className="gap-3 pt-1">
+    <View className="gap-3">
       {(role === "OWNER" || role === "ADMIN") && (
         <View className="gap-3">
-          <Text className="text-lg font-medium">Group name</Text>
+          <Text variant="label">Group name</Text>
           <TextInput
             accessibilityLabel="Group name"
             value={name}
             onChangeText={setName}
             placeholder={group?.name}
             maxLength={100}
-            className="rounded-lg border border-border bg-input text-foreground placeholder:text-secondary dark:placeholder:text-muted-foreground p-4"
+            className="h-[52px] rounded-lg border border-border-strong bg-input px-4 text-base text-foreground placeholder:text-tertiary"
           />
           <Button
             disabled={!name.trim() || rename.isPending}
@@ -65,8 +65,8 @@ const SettingsTab = ({ groupId }: { groupId: string }) => {
       )}
       {historyShare.setting ? (
         <View className="gap-2">
-          <Text className="text-lg font-medium text-muted-foreground">Your location history</Text>
-          <Text className="text-muted-foreground text-sm">
+          <Text variant="label">Your location history</Text>
+          <Text className="text-secondary text-sm">
             How much of your history members of {group?.name ?? "this group"} can play back in
             Timeline. Only you can change this.
           </Text>
@@ -78,13 +78,13 @@ const SettingsTab = ({ groupId }: { groupId: string }) => {
           />
         </View>
       ) : null}
-      <Text className="mb-1 text-lg font-medium text-muted-foreground">Appearance</Text>
+      <Text variant="label">Appearance</Text>
       <GroupMapColorPicker groupId={groupId} />
       {session && canHideMapGroups(groupCount) && (
-        <View className="flex-row items-center gap-4 rounded-lg border border-border bg-card p-4">
+        <View className="flex-row items-center gap-4 rounded-2xl border border-border bg-card p-4">
           <View className="flex-1 gap-1">
             <Text className="text-foreground font-medium">Show on map</Text>
-            <Text className="text-muted-foreground text-sm">
+            <Text className="text-tertiary text-sm">
               Only changes this phone. Members can still see you, and you keep sharing your location
               with them.
             </Text>
@@ -100,8 +100,7 @@ const SettingsTab = ({ groupId }: { groupId: string }) => {
       )}
       {role === "OWNER" && (
         <Button
-          variant="destructive"
-          className="bg-red-700 dark:bg-red-700"
+          variant="danger"
           disabled={deleteGroup.isPending}
           onPress={() =>
             Alert.alert(
@@ -130,7 +129,7 @@ const SettingsTab = ({ groupId }: { groupId: string }) => {
             )
           }
         >
-          <Text className="text-white">Delete group</Text>
+          <Text>Delete group</Text>
         </Button>
       )}
     </View>

@@ -132,7 +132,7 @@ export const ConfirmIdentity = ({ onConfirmed }: { onConfirmed: () => void }) =>
   return (
     <View className="gap-4">
       <Text className="text-foreground text-3xl font-bold">Confirm it’s you</Text>
-      <Text className="text-muted-foreground text-base leading-6">
+      <Text className="text-secondary text-base">
         {methods.data?.password !== false
           ? "Sign in again to continue. This stops anyone who picks up your unlocked phone from making important changes to your account."
           : screenLock.data === true
@@ -148,7 +148,7 @@ export const ConfirmIdentity = ({ onConfirmed }: { onConfirmed: () => void }) =>
             onSubmit={(code) => confirmWithCode(signInCode.password, code)}
             onResend={() => confirmWithCode(signInCode.password)}
           />
-          <Button variant="outline" onPress={() => setSignInCode(null)} disabled={pending}>
+          <Button variant="secondary" onPress={() => setSignInCode(null)} disabled={pending}>
             <Text>{google ? "Use a different method" : "Back"}</Text>
           </Button>
         </>
@@ -178,7 +178,7 @@ export const ConfirmIdentity = ({ onConfirmed }: { onConfirmed: () => void }) =>
       )}
       {google && !signInCode && (
         <Button
-          variant={methods.data?.password ? "outline" : "default"}
+          variant={methods.data?.password ? "secondary" : "default"}
           onPress={confirmWithGoogle}
           disabled={pending}
         >
@@ -189,7 +189,7 @@ export const ConfirmIdentity = ({ onConfirmed }: { onConfirmed: () => void }) =>
       {methods.isError && (
         <View className="gap-4">
           <Text>Unable to load sign-in methods. Please try again.</Text>
-          <Button variant="outline" onPress={() => methods.refetch()}>
+          <Button variant="secondary" onPress={() => methods.refetch()}>
             <Text>Try again</Text>
           </Button>
         </View>

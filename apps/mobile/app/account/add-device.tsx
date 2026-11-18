@@ -4,8 +4,7 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import { router } from "expo-router";
 import { useRef, useState } from "react";
 import { Linking, ScrollView, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { BackButton } from "../../components/headers/BackButton.tsx";
+import { ScreenHeader } from "../../components/headers/ScreenHeader.tsx";
 import { Button } from "../../components/ui/Button.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { Alert } from "../../lib/alert.ts";
@@ -94,30 +93,24 @@ const AddDeviceScreen = () => {
 
   return (
     <View className="flex-1 bg-background">
-      <SafeAreaView edges={["top"]} className="border-b border-border bg-background px-6 py-4">
-        <View className="flex-row items-center justify-between">
-          {step === "approving" ? <View className="w-10" /> : <BackButton />}
-          <Text className="text-foreground text-2xl font-bold">Add a device</Text>
-          <View className="w-10" />
-        </View>
-      </SafeAreaView>
+      <ScreenHeader title="Add a device" hideBack={step === "approving"} />
       <ScrollView
         className="flex-1"
-        contentContainerClassName="gap-6 px-6 py-6 pb-16"
+        contentContainerClassName="gap-6 px-4 pb-16 pt-2"
         showsVerticalScrollIndicator={false}
       >
         {(step === "scan" || step === "checking") && (
           <View className="gap-4">
-            <Text className="text-muted-foreground text-base leading-6">
+            <Text className="text-secondary text-base">
               On the new phone or tablet, sign in and choose “Yes, link with your other device”.
               Then scan the code it shows.
             </Text>
-            {problem && <Text className="text-destructive text-base leading-6">{problem}</Text>}
+            {problem && <Text className="text-destructive-text text-base">{problem}</Text>}
             {permission?.granted ? (
               <View
                 accessible
                 accessibilityLabel="Camera. Point it at the code on the new device."
-                className="overflow-hidden rounded-3xl"
+                className="overflow-hidden rounded-2xl"
               >
                 <CameraView
                   style={{ height: 320 }}
@@ -127,7 +120,7 @@ const AddDeviceScreen = () => {
               </View>
             ) : permission && !permission.canAskAgain ? (
               <View className="gap-4">
-                <Text className="text-muted-foreground text-base leading-6">
+                <Text className="text-secondary text-base">
                   OpenBeacon isn’t allowed to use the camera. Turn on camera access in Settings to
                   scan the code.
                 </Text>
@@ -150,7 +143,7 @@ const AddDeviceScreen = () => {
               </Button>
             )}
             {problem && (
-              <Button variant="outline" onPress={scanAgain}>
+              <Button variant="secondary" onPress={scanAgain}>
                 <Text>Scan again</Text>
               </Button>
             )}
@@ -159,10 +152,10 @@ const AddDeviceScreen = () => {
 
         {(step === "confirm" || step === "approving") && link && (
           <View className="gap-4">
-            <Text className="text-foreground text-3xl font-bold">
+            <Text className="text-foreground text-2xl font-bold">
               Add {link.device.name} to your account?
             </Text>
-            <Text className="text-muted-foreground text-base leading-6">
+            <Text className="text-secondary text-base">
               It will see your groups’ locations and your history.
               {link.device.model && link.device.model !== link.device.name
                 ? ` It’s a ${link.device.model}.`
@@ -171,7 +164,7 @@ const AddDeviceScreen = () => {
             <Button onPress={approve} loading={step === "approving"}>
               <Text>Add</Text>
             </Button>
-            <Button variant="destructive" onPress={decline} disabled={step === "approving"}>
+            <Button variant="secondary" onPress={decline} disabled={step === "approving"}>
               <Text>Not me</Text>
             </Button>
           </View>
@@ -179,8 +172,8 @@ const AddDeviceScreen = () => {
 
         {step === "done" && link && (
           <View className="gap-4">
-            <Text className="text-foreground text-3xl font-bold">{link.device.name} is set up</Text>
-            <Text className="text-muted-foreground text-base leading-6">
+            <Text className="text-foreground text-2xl font-bold">{link.device.name} is set up</Text>
+            <Text className="text-secondary text-base">
               It now has your location history and will see your groups’ locations shortly.
             </Text>
             <Button onPress={() => router.back()}>

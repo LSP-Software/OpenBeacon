@@ -40,7 +40,7 @@ export const InviteMemberToGroupDialog = ({
           <DialogTitle>Invite a member</DialogTitle>
         </DialogHeader>
         <Tabs value={value} onValueChange={setValue}>
-          <TabsList className="flex justify-center w-full bg-secondary mb-4">
+          <TabsList className="mb-4 w-full">
             <TabsTrigger value="email" className="flex-1">
               <Icon as={MailIcon} />
               <Text>Email</Text>
@@ -128,7 +128,7 @@ export const InviteMembersInputs = ({
   return (
     <View className="flex flex-col gap-4">
       <View className="flex flex-col gap-2">
-        <Text className="text-foreground font-semibold text-md">Email Addresses</Text>
+        <Text variant="label">Email addresses</Text>
         <Text className="text-secondary text-sm">
           If there are accounts associated with the provided emails an invite will be sent to them.
         </Text>
@@ -143,7 +143,6 @@ export const InviteMembersInputs = ({
                   autoCapitalize="none"
                   autoComplete="email"
                   textContentType="emailAddress"
-                  className="h-12 rounded-xl border border-border bg-input px-4 py-0 text-base text-foreground"
                 />
                 {canInviteAdmins && (
                   <View>
@@ -159,43 +158,37 @@ export const InviteMembersInputs = ({
                   </View>
                 )}
                 <Pressable
-                  className="h-10 w-10 items-center justify-center"
+                  accessibilityRole="button"
+                  accessibilityLabel="Remove this email"
+                  className="size-[52px] items-center justify-center"
                   onPress={() => handleRemoveInvite(index)}
                 >
-                  <Icon as={Trash2Icon} className="text-destructive size-5" />
+                  <Icon as={Trash2Icon} className="text-destructive-text size-5" />
                 </Pressable>
               </View>
             );
           })}
         </View>
-        <Button
-          variant="outline"
-          size="sm"
-          onPress={handleAddNewInvite}
-          className="mt-2 h-12 rounded-xl border-border bg-card"
-        >
-          <Icon as={PlusIcon} className="size-5 text-primary" />
-          <Text className="text-primary">Add another email</Text>
+        <Button variant="ghost" size="sm" onPress={handleAddNewInvite} className="self-start">
+          <Icon as={PlusIcon} className="text-primary-text size-4" />
+          <Text>Add another email</Text>
         </Button>
       </View>
-      <View className="flex flex-col gap-2 rounded-xl p-2">
-        <Text className="text-md font-semibold">Role Permissions:</Text>
-        <View className="flex flex-col">
+      <View className="flex flex-col gap-2">
+        <Text variant="label">Role permissions</Text>
+        <View className="flex flex-col gap-1 pb-2">
           <Text className="text-secondary text-sm">
-            <Text className="font-semibold">Member:</Text> Can view locations of all family members
+            <Text className="text-foreground text-sm font-semibold">Member:</Text> Can view
+            locations of all group members
           </Text>
           {canInviteAdmins && (
             <Text className="text-secondary text-sm">
-              <Text className="font-semibold">Admin:</Text> Can view locations, invite and remove
-              members, and manage group settings
+              <Text className="text-foreground text-sm font-semibold">Admin:</Text> Can view
+              locations, invite and remove members, and manage group settings
             </Text>
           )}
         </View>
-        <Button
-          size="sm"
-          onPress={form.handleSubmit(onSubmit)}
-          loading={inviteMemberMutation.isPending}
-        >
+        <Button onPress={form.handleSubmit(onSubmit)} loading={inviteMemberMutation.isPending}>
           <Icon as={MailIcon} className="text-white" />
           <Text>Send invitation{fields.length > 1 ? "s" : ""}</Text>
         </Button>

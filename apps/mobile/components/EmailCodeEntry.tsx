@@ -26,7 +26,7 @@ export const EmailCodeEntry = ({
   resentMessage = "We've sent a new code. Earlier codes no longer work.",
   repeatedInvalidCodeHint = "If new codes keep being rejected, wait a few hours and try again.",
   description = (
-    <Text className="text-muted">
+    <Text className="text-secondary">
       We sent a 6-digit code to <Text className="font-semibold">{email}</Text>. It expires in 10
       minutes. If it hasn't arrived, check your spam folder.
     </Text>
@@ -117,7 +117,7 @@ export const EmailCodeEntry = ({
         accessibilityRole="button"
         accessibilityState={{ disabled: resendDisabled }}
       >
-        <Text className={resendDisabled ? "text-muted" : "font-semibold text-primary-text"}>
+        <Text className={resendDisabled ? "text-secondary" : "font-semibold text-primary-text"}>
           {resending
             ? "Sending a new code…"
             : secondsLeft > 0
@@ -126,7 +126,7 @@ export const EmailCodeEntry = ({
         </Text>
       </Pressable>
       {resendMessage ? (
-        <Text className="text-center text-sm text-muted">{resendMessage}</Text>
+        <Text className="text-center text-sm text-secondary">{resendMessage}</Text>
       ) : null}
     </View>
   );

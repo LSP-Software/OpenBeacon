@@ -2,10 +2,9 @@ import { notificationTypes } from "@openbeacon/schemas";
 import { useMutation, useMutationState, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BellOffIcon } from "lucide-react-native";
 import { ScrollView, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
 import { PromptCard } from "../../components/PromptCard.tsx";
-import { BackButton } from "../../components/headers/BackButton.tsx";
+import { ScreenHeader } from "../../components/headers/ScreenHeader.tsx";
 import { Button } from "../../components/ui/Button.tsx";
 import { Switch } from "../../components/ui/Switch.tsx";
 import { Text } from "../../components/ui/Text.tsx";
@@ -87,26 +86,17 @@ const NotificationsScreen = () => {
 
   return (
     <View className="flex-1 bg-background">
-      <SafeAreaView edges={["top"]} className="border-b border-border bg-background px-6 py-4">
-        <View className="flex-row items-center justify-between">
-          <BackButton />
-          <Text className="text-foreground text-2xl font-bold">Notifications</Text>
-          <View className="w-10" />
-        </View>
-      </SafeAreaView>
+      <ScreenHeader title="Notifications" />
 
       <ScrollView
         className="flex-1"
-        contentContainerClassName="gap-6 px-6 py-6 pb-32"
+        contentContainerClassName="gap-6 px-4 pb-32 pt-2"
         showsVerticalScrollIndicator={false}
       >
-        <View className="gap-2">
-          <Text className="text-foreground text-3xl font-bold">Notifications</Text>
-          <Text className="text-muted-foreground text-base leading-6">
-            Choose what you hear about. These settings are the same on all your phones. Security
-            notifications go to your other phones, not the one that made the change.
-          </Text>
-        </View>
+        <Text className="text-secondary text-base">
+          Choose what you hear about. These settings are the same on all your phones. Security
+          notifications go to your other phones, not the one that made the change.
+        </Text>
 
         {notifications.enabled === false && (
           <PromptCard
@@ -124,7 +114,7 @@ const NotificationsScreen = () => {
         {settings.isError && (
           <View className="gap-3">
             <Text>Unable to load your notification settings. Please try again.</Text>
-            <Button variant="outline" onPress={() => settings.refetch()}>
+            <Button variant="secondary" onPress={() => settings.refetch()}>
               <Text>Try again</Text>
             </Button>
           </View>
@@ -140,23 +130,21 @@ const NotificationsScreen = () => {
             const emailColumn = showEmail && rows.some(({ email }) => email !== null);
             return (
               <View key={section.key} className="gap-2">
-                <Text className="text-muted-foreground px-1 text-sm font-semibold uppercase tracking-wider">
-                  {section.title}
-                </Text>
+                <Text variant="label">{section.title}</Text>
                 {section.key === "security" && showEmail && (
-                  <Text className="text-muted-foreground px-1 text-sm">
+                  <Text className="text-tertiary text-sm">
                     Turning any of these off sends an email to your account’s address.
                   </Text>
                 )}
-                <View className="overflow-hidden rounded-3xl border border-border bg-card">
+                <View className="overflow-hidden rounded-2xl border border-border bg-card">
                   {showEmail && (
-                    <View className="flex-row justify-end gap-4 px-5 pt-3">
+                    <View className="flex-row justify-end gap-4 px-4 pt-3">
                       {emailColumn && (
-                        <Text className="text-muted-foreground w-12 text-center text-xs font-semibold">
+                        <Text className="text-tertiary w-12 text-center text-xs font-semibold">
                           Email
                         </Text>
                       )}
-                      <Text className="text-muted-foreground w-12 text-center text-xs font-semibold">
+                      <Text className="text-tertiary w-12 text-center text-xs font-semibold">
                         Phone
                       </Text>
                     </View>
@@ -170,14 +158,14 @@ const NotificationsScreen = () => {
                       <View
                         key={row.type}
                         className={cn(
-                          "flex-row items-center gap-4 px-5 py-4",
-                          index > 0 && "border-t border-border/50",
+                          "flex-row items-center gap-4 px-4 py-3.5",
+                          index > 0 && "border-t border-border/60",
                         )}
                       >
                         <View className="flex-1 gap-1">
-                          <Text className="text-foreground text-base font-medium">{label}</Text>
+                          <Text className="text-foreground font-medium">{label}</Text>
                           {description && (
-                            <Text className="text-muted-foreground text-sm">{description}</Text>
+                            <Text className="text-tertiary text-sm">{description}</Text>
                           )}
                         </View>
                         {emailColumn && row.email !== null && (

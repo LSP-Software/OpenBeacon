@@ -5,8 +5,7 @@ import { TRPCClientError } from "@trpc/client";
 import { CheckIcon } from "lucide-react-native";
 import { useState } from "react";
 import { Platform, Pressable, ScrollView, TextInput, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { BackButton } from "../../components/headers/BackButton.tsx";
+import { ScreenHeader } from "../../components/headers/ScreenHeader.tsx";
 import { Button } from "../../components/ui/Button.tsx";
 import { Icon } from "../../components/ui/Icon.tsx";
 import { Text } from "../../components/ui/Text.tsx";
@@ -58,15 +57,9 @@ const ContactUsScreen = () => {
 
   return (
     <View className="flex-1 bg-background">
-      <SafeAreaView edges={["top"]} className="border-b border-border bg-background px-6 py-4">
-        <View className="flex-row items-center justify-between">
-          <BackButton />
-          <Text className="text-foreground text-2xl font-bold">Contact Us</Text>
-          <View className="w-10" />
-        </View>
-      </SafeAreaView>
+      <ScreenHeader title="Contact us" />
       <ScrollView
-        contentContainerClassName="gap-5 px-6 py-6"
+        contentContainerClassName="gap-5 px-4 pb-6 pt-2"
         automaticallyAdjustKeyboardInsets
         keyboardShouldPersistTaps="handled"
       >
@@ -74,14 +67,14 @@ const ContactUsScreen = () => {
           Your feedback is sent directly to the developers of OpenBeacon
           {selfHosted ? ", rather than to the operator of your self-hosted server." : "."}
         </Text>
-        <Text className="text-muted-foreground">
+        <Text className="text-tertiary">
           Feedback is not linked to your account. Please do not include personal information unless
           you want to share it. Your app, MapLibre React Native, server
           {Platform.OS === "android" ? ", and Android" : ""} versions are included with your
           feedback.
         </Text>
         {selfHosted && (
-          <Text className="text-muted-foreground">
+          <Text className="text-tertiary">
             Deleting your account on your self-hosted server does not remove feedback you have sent
             to OpenBeacon. To have it removed, contact us using this form with the same email.
           </Text>
@@ -95,9 +88,9 @@ const ContactUsScreen = () => {
             onChangeText={setMessage}
             placeholder="How can we help?"
             textAlignVertical="top"
-            className="min-h-40 rounded-lg border border-border bg-input p-4 text-foreground placeholder:text-secondary dark:placeholder:text-muted-foreground"
+            className="min-h-40 rounded-lg border border-border bg-input p-4 text-foreground placeholder:text-tertiary"
           />
-          <Text className="self-end text-sm text-muted-foreground">
+          <Text className="self-end text-sm text-tertiary">
             {message.length}/{FEEDBACK_MESSAGE_MAX_LENGTH}
           </Text>
         </View>
@@ -115,7 +108,7 @@ const ContactUsScreen = () => {
           </Text>
         </Pressable>
         {includeEmail && !session && (
-          <Text className="text-sm text-muted-foreground">
+          <Text className="text-sm text-tertiary">
             Your account email isn't available yet. Sign in again, or untick this option to send
             without it.
           </Text>

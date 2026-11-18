@@ -42,8 +42,11 @@ mock.module("react-native-safe-area-context", () => ({
 }));
 mock.module("lucide-react-native", () => ({
   ChevronRightIcon: () => null,
+  LockIcon: () => null,
+  MailIcon: () => null,
   PlusIcon: () => null,
-  ShieldIcon: () => null,
+  QrCodeIcon: () => null,
+  UsersIcon: () => null,
 }));
 mock.module("../lib/api.ts", () => ({
   trpc: {
@@ -117,7 +120,7 @@ test("a failed first load offers a retry instead of saying there are no groups",
   const root = await render();
   const output = JSON.stringify(root.container.toJSON());
   expect(output).toContain("We couldn’t load your groups");
-  expect(output).not.toContain("Your Groups");
+  expect(output).not.toContain("No groups yet");
 
   const retry = root.container.queryAll((node) => node.type === "pressable").at(-1);
   const onPress = retry?.props["onPress"];
@@ -138,7 +141,7 @@ test("a failed refresh keeps the groups already shown and says they may be out o
 
 test("an empty list with no errors shows the normal page", async () => {
   const output = JSON.stringify((await render()).container.toJSON());
-  expect(output).toContain("Your Groups");
+  expect(output).toContain("No groups yet");
   expect(output).not.toContain("out of date");
   expect(output).not.toContain("couldn’t load");
 });
