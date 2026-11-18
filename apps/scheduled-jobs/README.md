@@ -12,6 +12,8 @@ This file covers the implementation details behind each job: batch sizes, lockin
 
 Run it locally with `bun run dev --filter=@openbeacon/scheduled-jobs`; it reads the root `.env`.
 
+The image also carries two operator commands: `delete-account` (see [Account deletion](../../docs/development/account-deletion.md#operations)) and `turn-off-sign-in-codes` (see [Sign-in codes](../../docs/development/sign-in-codes.md)).
+
 ## Adding a job
 
 Register an object in `src/jobs/index.ts` with a unique stable `name`, a positive integer `delay` in milliseconds (at most 2,147,483,647), and an async `run` function. Put job-specific work in `src/jobs`. The shared Prisma, image storage and map storage clients are available from `src/services.ts`; pass them to jobs explicitly. Create and validate additional clients once at startup and close them after the scheduler stops. Grant only the permissions jobs need in addition to the startup checks.

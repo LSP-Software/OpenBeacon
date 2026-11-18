@@ -1,4 +1,7 @@
+import { signInCodeHeader, signInTokenHeader } from "@openbeacon/shared";
+import { z } from "zod";
 import { authClient } from "./auth-client.ts";
+import { passwordErrorMessage } from "./passwordErrorMessage.ts";
 
 const post = <Data>(path: string, body: Record<string, string>) =>
   authClient.$fetch<Data>(path, { method: "POST", body });
@@ -15,10 +18,82 @@ export const emailCodes = {
   requestPasswordReset: (email: string) =>
     post<{ success: boolean }>("/email-code/request-password-reset", { email }),
   verifyPasswordResetCode: (email: string, code: string) =>
-    post<{ resetToken: string }>("/email-code/verify-password-reset-code", { email, code }),
+    post<{ resetToken: string; signInToken?: string }>("/email-code/verify-password-reset-code", {
+      email,
+      code,
+    }),
 };
 
 export const invalidCodeMessage = "The code is wrong or has expired. Check it, or send a new code.";
+
+export const signInWithPassword = ({
+  email,
+  password,
+  signInToken,
+  code,
+}: {
+  email: string;
+  password: string;
+  signInToken?: string | undefined;
+  code?: string | undefined;
+}) =>
+  authClient.signIn.email({
+    email,
+    password,
+    fetchOptions: {
+      headers: {
+        ...(signInToken ? { [signInTokenHeader]: signInToken } : {}),
+        ...(code ? { [signInCodeHeader]: code } : {}),
+      },
+    },
+  });
+
+type SignInOutcome =
+  | { kind: "signedIn" }
+  | { kind: "codeRequired"; notice: string | undefined }
+  | { kind: "invalidCode" }
+  | { kind: "wrongPassword"; message: string }
+  | { kind: "failed"; code: string | undefined; message: string };
+
+export const readSignInError = (error: unknown): SignInOutcome => {
+  if (!error) return { kind: "signedIn" };
+  const parsed = z
+    .object({
+      status: z.number(),
+      code: z.string().optional(),
+      message: z.string().optional(),
+      codeSent: z.boolean().optional(),
+    })
+    .safeParse(error);
+  if (!parsed.success) {
+    return { kind: "failed", code: undefined, message: "Check your connection and try again." };
+  }
+  const { code, codeSent } = parsed.data;
+  if (code === "SIGN_IN_CODE_REQUIRED") {
+    return {
+      kind: "codeRequired",
+      notice:
+        codeSent === false
+          ? "Too many codes have been requested. Use the last code we sent, or try again in a few minutes."
+          : undefined,
+    };
+  }
+  if (code === "INVALID_CODE") return { kind: "invalidCode" };
+  const message = passwordErrorMessage(parsed.data, "Something went wrong. Try again.");
+  if (code === "INVALID_EMAIL_OR_PASSWORD") return { kind: "wrongPassword", message };
+  return { kind: "failed", code, message };
+};
+
+export const signInCodeEntryError = (outcome: SignInOutcome, codeEntered: boolean) => {
+  if (outcome.kind === "codeRequired") {
+    return codeEntered
+      ? (outcome.notice ?? "We've emailed you a new code. Enter the new one.")
+      : outcome.notice;
+  }
+  if (outcome.kind === "invalidCode") return invalidCodeMessage;
+  if (outcome.kind === "failed") return outcome.message;
+  return undefined;
+};
 
 type CodeRejections = { total: number; codes: number; currentCodeRejected: boolean };
 

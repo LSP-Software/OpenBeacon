@@ -11,16 +11,14 @@ const pendingAlerts = new Set<Promise<unknown>>();
 export const services = {
   db: prisma,
   s3: s3Client,
-  securityAlerts: emailEnabled
-    ? createSecurityAlerts({
-        db: prisma,
-        sendSecurityAlertEmail,
-        runInBackground: (task) => {
-          pendingAlerts.add(task);
-          void task.finally(() => pendingAlerts.delete(task));
-        },
-      })
-    : null,
+  securityAlerts: createSecurityAlerts({
+    db: prisma,
+    sendSecurityAlertEmail: emailEnabled ? sendSecurityAlertEmail : null,
+    runInBackground: (task) => {
+      pendingAlerts.add(task);
+      void task.finally(() => pendingAlerts.delete(task));
+    },
+  }),
 };
 
 export const waitForSecurityAlerts = async () => {

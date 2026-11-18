@@ -141,6 +141,8 @@ describe("account notices", () => {
         "DEVICE_REMOVED",
         "DELETION_SCHEDULED",
         "ALERTS_TURNED_OFF",
+        "SIGN_IN_CODES_TURNED_ON",
+        "SIGN_IN_CODES_TURNED_OFF",
       ] as const
     ).map((type) => describeAccountNotice(account(type)).link.url);
     expect(urls).toEqual([
@@ -153,6 +155,8 @@ describe("account notices", () => {
       "openbeacon:///account/devices",
       "openbeacon:///account/delete",
       "openbeacon:///account/notifications",
+      "openbeacon:///account/password",
+      "openbeacon:///account/password",
     ]);
   });
 

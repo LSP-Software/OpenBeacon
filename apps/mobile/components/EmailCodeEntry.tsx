@@ -60,7 +60,7 @@ export const EmailCodeEntry = ({
   }, [now, resendAvailableAt]);
 
   const secondsLeft = Math.max(0, Math.ceil((resendAvailableAt - now) / 1000));
-  const resendDisabled = secondsLeft > 0 || resending;
+  const resendDisabled = secondsLeft > 0 || resending || submitting;
 
   const submit = async ({ code }: z.infer<typeof emailCodeSchema>) => {
     setSubmitting(true);
@@ -105,9 +105,9 @@ export const EmailCodeEntry = ({
         maxLength={6}
         autoFocus
         returnKeyType="done"
-        onSubmitEditing={submitting ? undefined : form.handleSubmit(submit)}
+        onSubmitEditing={submitting || resending ? undefined : form.handleSubmit(submit)}
       />
-      <Button onPress={form.handleSubmit(submit)} loading={submitting}>
+      <Button onPress={form.handleSubmit(submit)} loading={submitting} disabled={resending}>
         <Text>{submitLabel}</Text>
       </Button>
       <Pressable

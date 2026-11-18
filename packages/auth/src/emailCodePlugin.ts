@@ -154,9 +154,13 @@ export const emailCodePlugin = (codes: EmailCodes | null) =>
             : null;
           if (!hasPassword(user)) throw invalidCode();
           await ctx.context.internalAdapter.updateUser(user.user.id, { emailVerified: true });
-          return ctx.json({
-            resetToken: await codes.issueToken({ purpose: "password-reset", value: user.user.id }),
-          });
+          const [resetToken, signInToken] = await Promise.all([
+            codes.issueToken({ purpose: "password-reset", value: user.user.id }),
+            (await codes.hasSignInCodes(user.user.id))
+              ? codes.issueToken({ purpose: "sign-in", value: user.user.id })
+              : undefined,
+          ]);
+          return ctx.json({ resetToken, ...(signInToken ? { signInToken } : {}) });
         },
       ),
     },

@@ -19,6 +19,8 @@ const render = (
 
 const neverSwitchable: SecurityAlert[] = [
   { type: "alerts-turned-off", alerts: [{ type: "NEW_SIGN_IN", channel: "email" }] },
+  { type: "sign-in-codes-turned-on" },
+  { type: "sign-in-codes-turned-off" },
   { type: "account-deleted" },
 ];
 const uncapped: SecurityAlert[] = [

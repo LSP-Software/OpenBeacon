@@ -65,6 +65,9 @@ mock.module("../lib/auth-client.ts", () => ({
   authClient: { changePassword, listAccounts: async () => ({ data: [] }) },
 }));
 mock.module("../lib/deviceKeys.ts", () => ({ ensureDeviceKeyRegistration }));
+mock.module("../lib/api.ts", () => ({
+  trpc: { signInCodes: { status: { queryOptions: () => ({}) } } },
+}));
 mock.module("../lib/sessionLink.ts", () => ({
   isSessionLinkRefused: (error: unknown) =>
     error instanceof TRPCClientError && error.data?.code === "FORBIDDEN",

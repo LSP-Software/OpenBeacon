@@ -12,6 +12,7 @@ import { BackButton } from "../../components/headers/BackButton.tsx";
 import { Button } from "../../components/ui/Button.tsx";
 import { Input } from "../../components/ui/Input.tsx";
 import { Text } from "../../components/ui/Text.tsx";
+import { trpc } from "../../lib/api.ts";
 import { passwordErrorMessage } from "../../lib/passwordErrorMessage.ts";
 import { authClient } from "../../lib/auth-client.ts";
 import { changePasswordFormSchema } from "../../lib/changePasswordSchema.ts";
@@ -29,6 +30,7 @@ const PasswordScreen = () => {
     },
   });
   const hasPassword = accounts.data?.some((account) => account.providerId === "credential");
+  const signInCodes = useQuery(trpc.signInCodes.status.queryOptions());
   const form = useForm<z.infer<typeof changePasswordFormSchema>>({
     resolver: zodResolver(changePasswordFormSchema),
     mode: "onTouched",
@@ -155,6 +157,31 @@ const PasswordScreen = () => {
               </Button>
             </Link>
           </View>
+          {hasPassword && signInCodes.isError && (
+            <View className="gap-4">
+              <Text className="text-foreground text-xl font-bold">Sign-in codes</Text>
+              <Text className="text-muted-foreground text-base leading-6">
+                We couldn’t load this setting. Check your connection and try again.
+              </Text>
+            </View>
+          )}
+          {hasPassword &&
+            signInCodes.data &&
+            (signInCodes.data.on || signInCodes.data.canTurnOn) && (
+              <View className="gap-4">
+                <Text className="text-foreground text-xl font-bold">Sign-in codes</Text>
+                <Text className="text-muted-foreground text-base leading-6">
+                  {signInCodes.data.on
+                    ? "On. Signing in on a new phone also needs a code we email you."
+                    : "Off. Turn on to also need a code from your email when you sign in on a new phone, so your password alone isn’t enough."}
+                </Text>
+                <Link href="/account/sign-in-codes" asChild>
+                  <Button variant="outline">
+                    <Text>Manage sign-in codes</Text>
+                  </Button>
+                </Link>
+              </View>
+            )}
         </ScrollView>
       </KeyboardAvoidingView>
     </View>

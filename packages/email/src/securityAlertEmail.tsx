@@ -144,6 +144,24 @@ const alertCopy = (
         ],
         ifNotYou: `Sign in to the app now to cancel it. ${secureAccountAdvice(hasPassword)}`,
       };
+    case "sign-in-codes-turned-on":
+      return {
+        subject: "Sign-in codes are on for your OpenBeacon account",
+        title: "Sign-in codes turned on",
+        happened:
+          "Signing in to OpenBeacon with your password now also needs a code we email to this address. Phones that are already signed in stay signed in.",
+        details: [{ label: "Turned on at", value: happenedAt }],
+        ifNotYou: signedInAdvice(hasPassword),
+      };
+    case "sign-in-codes-turned-off":
+      return {
+        subject: "Sign-in codes are off for your OpenBeacon account",
+        title: "Sign-in codes turned off",
+        happened:
+          "Signing in to OpenBeacon now only needs your password. We no longer email a code when someone signs in.",
+        details: [{ label: "Turned off at", value: happenedAt }],
+        ifNotYou: `${signedInAdvice(hasPassword)} Then turn sign-in codes back on in Account → Password and Security.`,
+      };
     case "account-deleted":
       return {
         subject: "Your OpenBeacon account was deleted",
