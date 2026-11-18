@@ -32,8 +32,11 @@ export const buildTimelineDayPicker = ({
   const counts = new Map<string, number>();
   for (const device of shown) {
     for (const { count, hour } of device.hours) {
-      const { key } = localDayOf(hour.getTime());
-      counts.set(key, (counts.get(key) ?? 0) + count);
+      const keys = new Set([
+        localDayOf(hour.getTime()).key,
+        localDayOf(hour.getTime() + 60 * 60_000 - 1).key,
+      ]);
+      for (const key of keys) counts.set(key, (counts.get(key) ?? 0) + count);
     }
   }
 

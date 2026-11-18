@@ -145,8 +145,26 @@ export const timelineArrows = ({
   };
 
   const chevrons: Coordinate[][] = [];
+  const placed = new Map<string, Array<{ heading: number; x: number; y: number }>>();
   const place = (tip: { x: number; y: number }, direction: { x: number; y: number }) => {
     if (tip.x < area.left || tip.x > area.right || tip.y < area.top || tip.y > area.bottom) return;
+    const heading = Math.atan2(direction.y, direction.x);
+    const cellX = Math.floor(tip.x / spacingPx);
+    const cellY = Math.floor(tip.y / spacingPx);
+    for (let dx = -1; dx <= 1; dx += 1) {
+      for (let dy = -1; dy <= 1; dy += 1) {
+        const crowded = placed
+          .get(`${cellX + dx}:${cellY + dy}`)
+          ?.some(
+            (other) =>
+              Math.hypot(other.x - tip.x, other.y - tip.y) < spacingPx * 0.75 &&
+              Math.cos(other.heading - heading) > Math.cos(Math.PI / 4),
+          );
+        if (crowded) return;
+      }
+    }
+    const cell = `${cellX}:${cellY}`;
+    placed.set(cell, [...(placed.get(cell) ?? []), { heading, x: tip.x, y: tip.y }]);
     const arm = (angle: number) => {
       const cos = Math.cos(angle);
       const sin = Math.sin(angle);

@@ -19,6 +19,13 @@ export type TimelineDeviceData = {
   userId: string;
 };
 
+export type TimelineDecryptProgress = {
+  decrypted: number;
+  done: boolean;
+  total: number;
+  userId: string;
+};
+
 export type TimelineDay = {
   end: number;
   key: string;

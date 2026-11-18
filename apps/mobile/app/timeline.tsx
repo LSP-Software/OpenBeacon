@@ -23,7 +23,9 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { ActivityIndicator, BackHandler, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNativeMapStyle } from "../components/map/useNativeMapStyle.ts";
+import { TimelineDecryptCard } from "../components/timeline/TimelineDecryptCard.tsx";
 import { TimelineMapLayers } from "../components/timeline/TimelineMapLayers.tsx";
+import { TimelinePeopleChooser } from "../components/timeline/TimelinePeopleChooser.tsx";
 import { TimelinePin } from "../components/timeline/TimelinePin.tsx";
 import { TimelineScrubber } from "../components/timeline/TimelineScrubber.tsx";
 import { DecryptedAvatarImage } from "../components/image/DecryptedAvatarImage.tsx";
@@ -32,6 +34,7 @@ import { Button } from "../components/ui/Button.tsx";
 import { Icon } from "../components/ui/Icon.tsx";
 import { Text } from "../components/ui/Text.tsx";
 import { useCachedGroup } from "../hooks/useCachedGroup.ts";
+import { useReducedMotion } from "../hooks/useReducedMotion.ts";
 import { useTimelineDay, useTimelineDays } from "../hooks/useTimeline.ts";
 import { trpc } from "../lib/api.ts";
 import { authClient } from "../lib/auth-client.ts";
@@ -42,11 +45,13 @@ import { loadPersonalNicknames } from "../lib/personalNicknames.ts";
 import { groupPlacesQueryOptions } from "../lib/placeSync.ts";
 import { getSymbolVisibility } from "../lib/protomaps-style.ts";
 import { pickPersonDevices, timelineDayStats, timelinePositionAt } from "../lib/timeline.ts";
+import { pickTimelinePeople } from "../lib/timelineBudget.ts";
 import { rememberTimelineGroup } from "../lib/timelineGroup.ts";
 import { timelineLaneRuns, timelineRoute } from "../lib/timelineMap.ts";
 
 const SPEEDS = [60, 300, 900] as const;
 const STEP_MS = 15 * 60_000;
+const DRAW_IN_MS = 1200;
 
 const TimelineScreen = () => {
   const { groupId, userId } = useLocalSearchParams<{ groupId: string; userId?: string }>();
@@ -135,7 +140,13 @@ const TimelineView = ({
   const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(60);
   const [following, setFollowing] = useState(true);
   const [timeState, setTimeState] = useState<{ key: string; time: number } | null>(null);
-  const [drawIn, setDrawIn] = useState({ key: "", progress: 0 });
+  const [drawIn, setDrawIn] = useState<{ clock: number; starts: Record<string, number> }>({
+    clock: 0,
+    starts: {},
+  });
+  const [chosenPeople, setChosenPeople] = useState<string[] | null>(null);
+  const [chooserOpen, setChooserOpen] = useState(false);
+  const reduceMotion = useReducedMotion();
   const timeRef = useRef(0);
   const dayStripRef = useRef<ScrollView>(null);
 
@@ -157,20 +168,6 @@ const TimelineView = ({
     days?.find((item) => item.key === pickedDayKey && item.selectable) ??
     days?.findLast((item) => item.selectable) ??
     null;
-  const {
-    progress,
-    query: dayQuery,
-    timeline,
-  } = useTimelineDay({
-    day,
-    groupId: group.id,
-    windowStart,
-  });
-
-  useEffect(() => {
-    rememberTimelineGroup(selfUserId, group.id);
-  }, [group.id, selfUserId]);
-
   const members = useMemo(
     () =>
       group.members
@@ -191,6 +188,52 @@ const TimelineView = ({
         .sort((first, second) => Number(first.isSelf) - Number(second.isSelf)),
     [group.members, nicknames.data, selfUserId],
   );
+  const budget = useMemo(
+    () =>
+      day && daysQuery.data
+        ? pickTimelinePeople({
+            chosen: chosenPeople,
+            day,
+            devices: daysQuery.data.devices,
+            memberIds: members.map((member) => member.userId),
+            now: daysQuery.dataUpdatedAt,
+            selectedUserId: personId,
+          })
+        : null,
+    [chosenPeople, day, daysQuery.data, daysQuery.dataUpdatedAt, members, personId],
+  );
+  const {
+    joinStart,
+    progress,
+    query: dayQuery,
+    timeline,
+  } = useTimelineDay({
+    day,
+    groupId: group.id,
+    userIds: budget?.shown ?? [],
+    windowStart,
+  });
+  const peopleWithLocations = budget?.people.filter((person) => person.points > 0) ?? [];
+  const hiddenCount = peopleWithLocations.filter(
+    (person) => !budget?.shown.includes(person.userId),
+  ).length;
+  const memberLook = useCallback(
+    (userId: string) =>
+      members.find((member) => member.userId === userId) ?? {
+        color: GROUP_COLOR_PALETTE[0],
+        image: null,
+        initials: initialsFromName("Former member"),
+        isSelf: false,
+        name: "Former member",
+        userId,
+      },
+    [members],
+  );
+
+  useEffect(() => {
+    rememberTimelineGroup(selfUserId, group.id);
+  }, [group.id, selfUserId]);
+
   const people = useMemo(() => {
     if (!timeline) return [];
     const userIds = [...new Set(timeline.devices.map((device) => device.userId))];
@@ -201,14 +244,7 @@ const TimelineView = ({
         const devices = [picked.selected, ...picked.others];
         return [
           {
-            ...(members.find((member) => member.userId === userId) ?? {
-              color: GROUP_COLOR_PALETTE[0],
-              image: null,
-              initials: initialsFromName("Former member"),
-              isSelf: false,
-              name: "Former member",
-              userId,
-            }),
+            ...memberLook(userId),
             device:
               devices.find((device) => device.deviceId === deviceChoice[userId]) ?? picked.selected,
             devices,
@@ -223,7 +259,7 @@ const TimelineView = ({
           (secondIndex === -1 ? members.length : secondIndex)
         );
       });
-  }, [deviceChoice, members, timeline]);
+  }, [deviceChoice, memberLook, members, timeline]);
   const shownPeople = useMemo(
     () => (personId ? people.filter((person) => person.userId === personId) : people),
     [people, personId],
@@ -247,8 +283,26 @@ const TimelineView = ({
       };
     });
   }, [places.data, shownPeople]);
-  const routeKey = `${timeline?.day.key ?? ""}:${routes.map((route) => route.deviceId).join(",")}`;
-  const drawInProgress = drawIn.key === routeKey ? drawIn.progress : 0;
+  const routeIds = routes.map((route) => route.deviceId).join(",");
+  const routeKey = `${timeline?.day.key ?? ""}:${routeIds}`;
+  const drawn = useMemo(
+    () =>
+      Object.fromEntries(
+        routes.map((route) => [
+          route.deviceId,
+          Math.min(
+            Math.max(
+              (drawIn.clock -
+                (drawIn.starts[`${timeline?.day.key}:${route.deviceId}`] ?? Infinity)) /
+                DRAW_IN_MS,
+              0,
+            ),
+            1,
+          ),
+        ]),
+      ),
+    [drawIn, routes, timeline?.day.key],
+  );
   const visitedPlaces = useMemo(
     () =>
       (places.data ?? []).filter(
@@ -320,19 +374,27 @@ const TimelineView = ({
     return () => cancelAnimationFrame(frame);
   }, [playing, speed, timelineDayKey, timelineTo]);
 
-  const hasTimeline = timeline !== null;
   useEffect(() => {
-    if (!hasTimeline) return;
+    if (timelineDayKey === undefined || routeIds === "") return;
     const start = performance.now();
+    setDrawIn((current) => {
+      const starts = Object.fromEntries(
+        Object.entries(current.starts).filter(([key]) => key.startsWith(`${timelineDayKey}:`)),
+      );
+      for (const deviceId of routeIds.split(",")) {
+        starts[`${timelineDayKey}:${deviceId}`] ??= reduceMotion ? -Infinity : start;
+      }
+      return { clock: start, starts };
+    });
+    if (reduceMotion) return;
     let frame = 0;
     const step = (now: number) => {
-      const progress = Math.min((now - start) / 1200, 1);
-      setDrawIn({ key: routeKey, progress });
-      if (progress < 1) frame = requestAnimationFrame(step);
+      setDrawIn((current) => ({ ...current, clock: now }));
+      if (now - start < DRAW_IN_MS) frame = requestAnimationFrame(step);
     };
     frame = requestAnimationFrame(step);
     return () => cancelAnimationFrame(frame);
-  }, [hasTimeline, routeKey]);
+  }, [reduceMotion, routeIds, timelineDayKey]);
 
   useEffect(() => {
     if (!groupMenuOpen) return;
@@ -422,7 +484,6 @@ const TimelineView = ({
     (total, person) => total + person.device.undecryptable,
     0,
   );
-  const joinStart = dayQuery.data?.joinStart ?? null;
   const status = (() => {
     if (!timeline) return null;
     const date = formatDate(timeline.day.start);
@@ -602,6 +663,7 @@ const TimelineView = ({
               image={member.image}
               initials={member.initials}
               label={member.name}
+              notShown={budget !== null && !budget.shown.includes(member.userId)}
               selected={member.userId === personId}
               onPress={() => {
                 setPersonId(member.userId);
@@ -613,6 +675,7 @@ const TimelineView = ({
       </View>
     ),
     [
+      budget,
       day,
       days,
       group,
@@ -688,7 +751,7 @@ const TimelineView = ({
               layout={{ visibility: getSymbolVisibility(map.showSymbols) }}
             />
           ))}
-          <TimelineMapLayers drawn={drawInProgress} routes={routes} viewport={viewport} />
+          <TimelineMapLayers drawn={drawn} routes={routes} viewport={viewport} />
           {visitedPlaces.map((place) => {
             if (!place.geometry) return null;
             const stopLabel = placeStopLabel(place.id);
@@ -779,28 +842,16 @@ const TimelineView = ({
         </Pressable>
       ) : null}
 
-      {day && dayQuery.isPending ? (
-        <View
-          className="absolute left-6 right-6 gap-2 rounded-2xl bg-foreground p-4"
-          style={{ top: topHeight + 40 }}
-          accessibilityLiveRegion="polite"
-        >
-          <Text className="font-semibold text-background">Decrypting on this phone…</Text>
-          <Text className="text-sm text-background opacity-80">
-            {progress
-              ? `${progress.decrypted.toLocaleString()} of ${progress.total.toLocaleString()} points`
-              : "Downloading locations"}
-          </Text>
-          <View className="h-1.5 overflow-hidden rounded-full bg-background/20">
-            <View
-              className="h-full rounded-full bg-primary"
-              style={{
-                width: `${progress && progress.total > 0 ? (progress.decrypted / progress.total) * 100 : 0}%`,
-              }}
-            />
-          </View>
-        </View>
-      ) : null}
+      <TimelineDecryptCard
+        loading={day !== null && dayQuery.isPending}
+        people={
+          progress?.map((person) => {
+            const look = memberLook(person.userId);
+            return { ...person, color: look.color, name: look.name };
+          }) ?? null
+        }
+        top={topHeight + 40}
+      />
 
       <View
         className="absolute left-3 right-3 rounded-2xl border border-border bg-card px-4 pb-3 pt-3 shadow-md shadow-black/15"
@@ -960,6 +1011,22 @@ const TimelineView = ({
                 </Text>
               </View>
             ) : null}
+            {personId === null && hiddenCount > 0 ? (
+              <View className="gap-2 rounded-xl border border-amber-600 dark:border-amber-400 bg-card p-3">
+                <Text className="text-sm text-foreground">
+                  There are too many locations on this day to show everyone, so Timeline is showing{" "}
+                  {peopleWithLocations.length - hiddenCount} of {peopleWithLocations.length} people.
+                </Text>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="self-start"
+                  onPress={() => setChooserOpen(true)}
+                >
+                  <Text>Choose people</Text>
+                </Button>
+              </View>
+            ) : null}
             {undecryptable > 0 ? (
               <Text className="text-xs text-muted">
                 {undecryptable === 1
@@ -970,6 +1037,23 @@ const TimelineView = ({
           </View>
         )}
       </View>
+
+      {budget ? (
+        <TimelinePeopleChooser
+          open={chooserOpen}
+          people={peopleWithLocations.map((person) => ({
+            ...person,
+            color: memberLook(person.userId).color,
+            name: memberLook(person.userId).name,
+          }))}
+          shown={budget.shown}
+          onApply={(userIds) => {
+            setChooserOpen(false);
+            setChosenPeople(userIds);
+          }}
+          onClose={() => setChooserOpen(false)}
+        />
+      ) : null}
     </View>
   );
 };
@@ -979,6 +1063,7 @@ const PersonChip = ({
   image,
   initials,
   label,
+  notShown = false,
   onPress,
   selected,
 }: {
@@ -986,17 +1071,20 @@ const PersonChip = ({
   image?: string | null;
   initials?: string;
   label: string;
+  notShown?: boolean;
   onPress: () => void;
   selected: boolean;
 }) => (
   <Pressable
     accessibilityRole="button"
+    accessibilityLabel={notShown ? `${label}, not shown on this day` : label}
     accessibilityState={{ selected }}
     onPress={onPress}
     className={cn(
       "min-h-10 flex-row items-center gap-1.5 rounded-full border py-1 pl-1 pr-3",
       selected ? "border-foreground bg-foreground" : "border-border bg-card",
       !color && "pl-3",
+      notShown && "opacity-50",
     )}
   >
     {color && initials ? (

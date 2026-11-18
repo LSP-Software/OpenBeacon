@@ -149,3 +149,69 @@ describe("buildTimelineDayPicker", () => {
     expect(days.map(({ selectable }) => selectable)).toEqual([false, false]);
   });
 });
+
+describe("buildTimelineDayPicker in zones offset by part of an hour", () => {
+  const pickDays = (receivedAt: string) =>
+    buildTimelineDayPicker({
+      devices: [
+        {
+          firstReceivedAt: new Date(receivedAt),
+          hours: hours([`${receivedAt.slice(0, 13)}:00:00Z`, 3]),
+          senderUserId: "alice",
+        },
+      ],
+      now: Date.parse("2026-07-04T06:00:00Z"),
+      windowStart: new Date("2026-07-01T06:00:00Z"),
+    }).map(({ key, pointCount, selectable }) => [key, pointCount, selectable]);
+
+  const inTimeZone = (timeZone: string, run: () => void) => {
+    process.env.TZ = timeZone;
+    try {
+      run();
+    } finally {
+      process.env.TZ = "Europe/London";
+    }
+  };
+
+  test("Kolkata: a point at 23:45 dots that day and the next, which its hour runs into", () => {
+    inTimeZone("Asia/Kolkata", () => {
+      expect(pickDays("2026-07-02T18:15:00Z")).toEqual([
+        ["2026-07-01", 0, false],
+        ["2026-07-02", 3, true],
+        ["2026-07-03", 3, true],
+        ["2026-07-04", 0, true],
+      ]);
+    });
+  });
+
+  test("Kathmandu: a point at 23:45 dots that day and the next, which its hour runs into", () => {
+    inTimeZone("Asia/Kathmandu", () => {
+      expect(pickDays("2026-07-02T18:00:00Z")).toEqual([
+        ["2026-07-01", 0, false],
+        ["2026-07-02", 3, true],
+        ["2026-07-03", 3, true],
+        ["2026-07-04", 0, true],
+      ]);
+    });
+  });
+
+  test("Kathmandu: an hour that ends at 23:45 dots only its own day", () => {
+    inTimeZone("Asia/Kathmandu", () => {
+      expect(pickDays("2026-07-02T17:25:00Z")).toEqual([
+        ["2026-07-01", 0, false],
+        ["2026-07-02", 3, true],
+        ["2026-07-03", 0, true],
+        ["2026-07-04", 0, true],
+      ]);
+    });
+  });
+
+  test("London: a point at 23:45 dots only its own day", () => {
+    expect(pickDays("2026-07-02T22:45:00Z")).toEqual([
+      ["2026-07-01", 0, false],
+      ["2026-07-02", 3, true],
+      ["2026-07-03", 0, true],
+      ["2026-07-04", 0, true],
+    ]);
+  });
+});

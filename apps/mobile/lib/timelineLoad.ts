@@ -6,12 +6,17 @@ import {
   TRACKING_POINT_KIND,
 } from "@openbeacon/encryption";
 import type { RouterInputs, RouterOutputs } from "./api.ts";
-import type { TimelineDay, TimelineDeviceData } from "./timelineTypes.ts";
+import type { TimelineDay, TimelineDecryptProgress, TimelineDeviceData } from "./timelineTypes.ts";
 
 type EpochWraps = RouterOutputs["groupEpoch"]["listEpochKeyWraps"];
 type RangePage = RouterOutputs["groupTracking"]["historyRange"];
 
 const HOUR_MS = 60 * 60_000;
+
+export const timelineFetchWindow = (day: TimelineDay, now: number) => ({
+  from: day.start - 3 * HOUR_MS,
+  to: Math.min(day.end + 24 * HOUR_MS, now),
+});
 
 export const loadTimelineDay = async ({
   chunkSize = 250,
@@ -20,9 +25,11 @@ export const loadTimelineDay = async ({
   groupId,
   listEpochs,
   now,
+  onPersonReady,
   onProgress,
   signal,
   unwrapEpoch,
+  userIds,
   yieldToUi,
 }: {
   chunkSize?: number;
@@ -31,16 +38,23 @@ export const loadTimelineDay = async ({
   groupId: string;
   listEpochs: (cursor: number | null) => Promise<EpochWraps>;
   now: number;
-  onProgress?: (progress: { decrypted: number; total: number }) => void;
+  onPersonReady?: (ready: {
+    devices: TimelineDeviceData[];
+    joinStart: number | null;
+    userId: string;
+  }) => void;
+  onProgress?: (people: TimelineDecryptProgress[]) => void;
   signal?: AbortSignal;
   unwrapEpoch: (epoch: EpochWraps["epochs"][number]) => Promise<EpochKeyMaterial | null>;
+  userIds: readonly string[];
   yieldToUi: () => Promise<void>;
 }): Promise<{ devices: TimelineDeviceData[]; joinStart: number | null }> => {
   const stopIfCancelled = () => {
     if (signal?.aborted) throw new Error("Timeline load cancelled.");
   };
-  const from = new Date(day.start - 3 * HOUR_MS);
-  const to = new Date(Math.min(day.end + 24 * HOUR_MS, now));
+  const range = timelineFetchWindow(day, now);
+  const from = new Date(range.from);
+  const to = new Date(range.to);
 
   const streams = new Map<string, RangePage["streams"][number]>();
   const encrypted: RangePage["points"] = [];
@@ -66,7 +80,20 @@ export const loadTimelineDay = async ({
     cursor = page.cursor;
   }
 
-  const neededEpochs = new Set([...streams.values()].map((stream) => stream.epochId));
+  const wanted = new Set(userIds);
+  const byPerson = new Map<string, RangePage["points"]>();
+  for (const point of encrypted) {
+    const userId = streams.get(point.streamId)?.senderUserId;
+    if (userId === undefined || !wanted.has(userId)) continue;
+    const points = byPerson.get(userId) ?? [];
+    points.push(point);
+    byPerson.set(userId, points);
+  }
+  const neededEpochs = new Set(
+    [...streams.values()]
+      .filter((stream) => wanted.has(stream.senderUserId))
+      .map((stream) => stream.epochId),
+  );
   const epochKeys = new Map<string, EpochKeyMaterial>();
   let joinStart: number | null = null;
   let epochCursor: number | null = null;
@@ -87,64 +114,79 @@ export const loadTimelineDay = async ({
     epochCursor = page.nextCursor;
   }
 
-  const devices = new Map<string, TimelineDeviceData>();
-  for (let index = 0; index < encrypted.length; index += chunkSize) {
-    stopIfCancelled();
-    for (const point of encrypted.slice(index, index + chunkSize)) {
-      const stream = streams.get(point.streamId);
-      if (!stream) continue;
-      const deviceKey = JSON.stringify([stream.senderUserId, stream.senderDeviceId]);
-      const device = devices.get(deviceKey) ?? {
-        deviceId: stream.senderDeviceId,
-        points: [],
-        undecryptable: 0,
-        userId: stream.senderUserId,
-      };
-      devices.set(deviceKey, device);
-      const epochKey = epochKeys.get(stream.epochId);
-      if (!epochKey) {
-        device.undecryptable += 1;
-        continue;
-      }
-      try {
-        const metadata = {
-          epochId: stream.epochId,
-          groupId,
-          kind: TRACKING_POINT_KIND,
-          senderDeviceId: stream.senderDeviceId,
+  const progress: TimelineDecryptProgress[] = [...new Set(userIds)].flatMap((userId) => {
+    const total = byPerson.get(userId)?.length ?? 0;
+    return total > 0 ? [{ decrypted: 0, done: false, total, userId }] : [];
+  });
+  stopIfCancelled();
+  onProgress?.(progress.map((person) => ({ ...person })));
+
+  const ready: TimelineDeviceData[] = [];
+  for (const person of progress) {
+    const points = byPerson.get(person.userId) ?? [];
+    const devices = new Map<string, TimelineDeviceData>();
+    for (let index = 0; index < points.length; index += chunkSize) {
+      stopIfCancelled();
+      for (const point of points.slice(index, index + chunkSize)) {
+        const stream = streams.get(point.streamId);
+        if (!stream) continue;
+        const device = devices.get(stream.senderDeviceId) ?? {
+          deviceId: stream.senderDeviceId,
+          points: [],
+          undecryptable: 0,
+          userId: stream.senderUserId,
         };
-        const decrypted = decryptGroupPayload({
-          encryptedPayload: {
-            ...metadata,
-            algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
-            ciphertext: point.ciphertext,
-            createdAt: point.receivedAt,
-            nonce: point.nonce,
-          },
-          epochKey,
-          expectedMetadata: metadata,
-        });
-        device.points.push({
-          ...decodeTrackingPoint(decrypted.bytes.expose()),
-          pointId: point.pointId,
-          revisionPrefix: stream.revisionPrefix,
-          streamId: stream.id,
-        });
-      } catch {
-        device.undecryptable += 1;
+        devices.set(stream.senderDeviceId, device);
+        const epochKey = epochKeys.get(stream.epochId);
+        if (!epochKey) {
+          device.undecryptable += 1;
+          continue;
+        }
+        try {
+          const metadata = {
+            epochId: stream.epochId,
+            groupId,
+            kind: TRACKING_POINT_KIND,
+            senderDeviceId: stream.senderDeviceId,
+          };
+          const decrypted = decryptGroupPayload({
+            encryptedPayload: {
+              ...metadata,
+              algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
+              ciphertext: point.ciphertext,
+              createdAt: point.receivedAt,
+              nonce: point.nonce,
+            },
+            epochKey,
+            expectedMetadata: metadata,
+          });
+          device.points.push({
+            ...decodeTrackingPoint(decrypted.bytes.expose()),
+            pointId: point.pointId,
+            revisionPrefix: stream.revisionPrefix,
+            streamId: stream.id,
+          });
+        } catch {
+          device.undecryptable += 1;
+        }
       }
+      person.decrypted = Math.min(index + chunkSize, points.length);
+      person.done = person.decrypted === points.length;
+      if (person.done) {
+        for (const device of devices.values()) {
+          device.points.sort((a, b) => a.time - b.time || a.pointId.localeCompare(b.pointId));
+        }
+      }
+      stopIfCancelled();
+      onProgress?.(progress.map((item) => ({ ...item })));
+      if (person.done) {
+        ready.push(...devices.values());
+        onPersonReady?.({ devices: [...devices.values()], joinStart, userId: person.userId });
+      }
+      await yieldToUi();
     }
-    stopIfCancelled();
-    onProgress?.({
-      decrypted: Math.min(index + chunkSize, encrypted.length),
-      total: encrypted.length,
-    });
-    await yieldToUi();
   }
 
   stopIfCancelled();
-  for (const device of devices.values()) {
-    device.points.sort((a, b) => a.time - b.time || a.pointId.localeCompare(b.pointId));
-  }
-  return { devices: [...devices.values()], joinStart };
+  return { devices: ready, joinStart };
 };

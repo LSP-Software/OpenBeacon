@@ -138,6 +138,26 @@ describe("timelineArrows", () => {
   const arrows = (runs: Coordinate[][], zoom: number, bounds = world) =>
     timelineArrows({ runs, sizePx: 5, spacingPx: 44, viewport: { bounds, zoom } });
 
+  test("doesn't stack chevrons when the same way is travelled again", () => {
+    const once = arrows([eastward], 8).length;
+    const lap: Coordinate[] = [...eastward, [1, 0.0001], [0.0001, 0.0001]];
+    const backAndForth = arrows(
+      [
+        lap,
+        [
+          [0.013, 0],
+          [0.6, 0],
+          [1, 0],
+        ],
+      ],
+      8,
+    );
+    const eastbound = backAndForth.filter(([arm, tip]) => (tip?.[0] ?? 0) > (arm?.[0] ?? 0));
+    const westbound = backAndForth.filter(([arm, tip]) => (tip?.[0] ?? 0) < (arm?.[0] ?? 0));
+    expect(eastbound).toHaveLength(once);
+    expect(westbound.length).toBeGreaterThan(0);
+  });
+
   test("places a chevron every spacing in screen pixels", () => {
     const lengthPx = (zoom: number) => (512 * 2 ** zoom) / 360;
     expect(arrows([eastward], 8)).toHaveLength(Math.round(lengthPx(8) / 44));

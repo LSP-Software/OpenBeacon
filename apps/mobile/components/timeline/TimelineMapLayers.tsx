@@ -10,7 +10,7 @@ export const TimelineMapLayers = memo(
     routes,
     viewport,
   }: {
-    drawn: number;
+    drawn: Readonly<Record<string, number>>;
     routes: ReadonlyArray<{
       color: string;
       deviceId: string;
@@ -29,23 +29,40 @@ export const TimelineMapLayers = memo(
     const arrows = useMemo(
       () =>
         JSON.stringify({
-          type: "Feature",
-          properties: {},
-          geometry: {
-            type: "MultiLineString",
-            coordinates:
-              bounds && zoom !== null
-                ? timelineArrows({
-                    runs: routes.flatMap((route) => route.runs),
-                    sizePx: 6,
-                    spacingPx: 44,
-                    viewport: { bounds, zoom },
-                  })
-                : [],
-          },
+          type: "FeatureCollection",
+          features:
+            bounds && zoom !== null
+              ? routes.map((route) => ({
+                  type: "Feature" as const,
+                  properties: { deviceId: route.deviceId },
+                  geometry: {
+                    type: "MultiLineString" as const,
+                    coordinates: timelineArrows({
+                      runs: route.runs,
+                      sizePx: 6,
+                      spacingPx: 44,
+                      viewport: { bounds, zoom },
+                    }),
+                  },
+                }))
+              : [],
         }),
       [bounds, routes, zoom],
     );
+    const drawnOpacity = (
+      scale: number,
+    ): number | ["match", ["get", string], string, number, ...Array<string | number>, number] => {
+      const [first, ...rest] = routes;
+      if (!first) return 0;
+      return [
+        "match",
+        ["get", "deviceId"],
+        first.deviceId,
+        (drawn[first.deviceId] ?? 0) * scale,
+        ...rest.flatMap((route) => [route.deviceId, (drawn[route.deviceId] ?? 0) * scale]),
+        0,
+      ];
+    };
     const data = useMemo(
       () => ({
         lines: new Map(
@@ -64,7 +81,7 @@ export const TimelineMapLayers = memo(
             route.pauses.map((pause, index) => ({
               type: "Feature" as const,
               id: `${route.deviceId}:${index}`,
-              properties: {},
+              properties: { deviceId: route.deviceId },
               geometry: {
                 type: "LineString" as const,
                 coordinates: pause.map((point) => [...point]),
@@ -78,7 +95,7 @@ export const TimelineMapLayers = memo(
             route.stops.map((stop, index) => ({
               type: "Feature" as const,
               id: `${route.deviceId}:${index}`,
-              properties: { color: route.color },
+              properties: { color: route.color, deviceId: route.deviceId },
               geometry: {
                 type: "Point" as const,
                 coordinates: [stop.longitude, stop.latitude],
@@ -98,7 +115,7 @@ export const TimelineMapLayers = memo(
             layout={{ "line-cap": "round" }}
             paint={{
               "line-color": colors.textSecondary,
-              "line-opacity": 0.6 * drawn,
+              "line-opacity": drawnOpacity(0.6),
               "line-width": 7,
             }}
           />
@@ -109,7 +126,7 @@ export const TimelineMapLayers = memo(
             paint={{
               "line-color": "#FFFFFF",
               "line-dasharray": [0, 2],
-              "line-opacity": drawn,
+              "line-opacity": drawnOpacity(1),
               "line-width": 4,
             }}
           />
@@ -137,7 +154,7 @@ export const TimelineMapLayers = memo(
                     ...timelineRouteGradient({
                       alpha: { from: 0.2, to: 0.45 },
                       color: casing,
-                      drawn,
+                      drawn: drawn[route.deviceId] ?? 0,
                       gaps: route.gaps,
                     }),
                   ],
@@ -156,7 +173,7 @@ export const TimelineMapLayers = memo(
                     ["line-progress"],
                     ...timelineRouteGradient({
                       color: route.color,
-                      drawn,
+                      drawn: drawn[route.deviceId] ?? 0,
                       gaps: route.gaps,
                     }),
                   ],
@@ -172,7 +189,7 @@ export const TimelineMapLayers = memo(
             layout={{ "line-cap": "round", "line-join": "round" }}
             paint={{
               "line-color": "#FFFFFF",
-              "line-opacity": drawn,
+              "line-opacity": drawnOpacity(1),
               "line-width": 3,
             }}
           />
@@ -183,10 +200,10 @@ export const TimelineMapLayers = memo(
             type="circle"
             paint={{
               "circle-color": colors.surface,
-              "circle-opacity": drawn,
+              "circle-opacity": drawnOpacity(1),
               "circle-radius": 6,
               "circle-stroke-color": ["get", "color"],
-              "circle-stroke-opacity": drawn,
+              "circle-stroke-opacity": drawnOpacity(1),
               "circle-stroke-width": 3,
             }}
           />

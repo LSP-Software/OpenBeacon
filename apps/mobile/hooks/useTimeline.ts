@@ -6,7 +6,11 @@ import { createHistoryKeyReader, unwrapEpochKeyFromWraps } from "../lib/epochKey
 import { buildTimeline } from "../lib/timeline.ts";
 import { buildTimelineDayPicker } from "../lib/timelineDays.ts";
 import { loadTimelineDay } from "../lib/timelineLoad.ts";
-import type { TimelineDay } from "../lib/timelineTypes.ts";
+import type {
+  TimelineDay,
+  TimelineDecryptProgress,
+  TimelineDeviceData,
+} from "../lib/timelineTypes.ts";
 
 export const useTimelineDays = (groupId: string, userId?: string) => {
   const query = useQuery(trpc.groupTracking.historyDays.queryOptions({ groupId }));
@@ -29,25 +33,35 @@ export const useTimelineDays = (groupId: string, userId?: string) => {
 export const useTimelineDay = ({
   day,
   groupId,
+  userIds,
   windowStart,
 }: {
   day: TimelineDay | null;
   groupId: string;
+  userIds: readonly string[];
   windowStart: Date | null;
 }) => {
+  const people = [...userIds].sort();
+  const loadKey = JSON.stringify([day?.key, people]);
   const [progress, setProgress] = useState<{
-    dayKey: string;
-    decrypted: number;
-    total: number;
+    loadKey: string;
+    people: TimelineDecryptProgress[];
+  } | null>(null);
+  const [partial, setPartial] = useState<{
+    devices: TimelineDeviceData[];
+    joinStart: number | null;
+    loadKey: string;
+    now: number;
   } | null>(null);
   const query = useQuery({
-    enabled: day !== null,
-    queryKey: ["timelineDay", groupId, day?.key],
+    enabled: day !== null && userIds.length > 0,
+    queryKey: ["timelineDay", groupId, day?.key, people],
     staleTime: 60_000,
     queryFn: async ({ signal }) => {
       if (!day) throw new Error("No day is selected.");
       const device = await ensureDeviceKeyRegistration();
       const getHistoryKey = createHistoryKeyReader(device.userId);
+      const now = Date.now();
       return loadTimelineDay({
         day,
         fetchRange: (input) => trpcClient.groupTracking.historyRange.query(input, { signal }),
@@ -57,33 +71,49 @@ export const useTimelineDay = ({
             { cursor, deviceId: device.deviceId, groupId },
             { signal },
           ),
-        now: Date.now(),
+        now,
+        onPersonReady: ({ devices, joinStart }) => {
+          if (signal.aborted) return;
+          setPartial((current) => ({
+            devices: [
+              ...(current?.loadKey === loadKey && current.now === now ? current.devices : []),
+              ...devices,
+            ],
+            joinStart,
+            loadKey,
+            now,
+          }));
+        },
         onProgress: (value) => {
-          if (!signal.aborted) setProgress({ ...value, dayKey: day.key });
+          if (!signal.aborted) setProgress({ loadKey, people: value });
         },
         signal,
         unwrapEpoch: (epoch) =>
           unwrapEpochKeyFromWraps({ device, epochId: epoch.epochId, getHistoryKey, wraps: epoch }),
+        userIds,
         yieldToUi: () => new Promise((resolve) => setTimeout(resolve, 0)),
       });
     },
   });
   const { data, dataUpdatedAt } = query;
-  const timeline = useMemo(
-    () =>
-      data && day && windowStart
-        ? buildTimeline({
-            day,
-            devices: data.devices,
-            joinStart: data.joinStart,
-            now: dataUpdatedAt,
-            windowStart: windowStart.getTime(),
-          })
-        : null,
-    [data, dataUpdatedAt, day, windowStart],
-  );
+  const shownPartial = partial?.loadKey === loadKey ? partial : null;
+  const timeline = useMemo(() => {
+    if (!day || !windowStart) return null;
+    const loaded = data
+      ? { devices: data.devices, joinStart: data.joinStart, now: dataUpdatedAt }
+      : shownPartial;
+    if (!loaded) return null;
+    return buildTimeline({
+      day,
+      devices: loaded.devices,
+      joinStart: loaded.joinStart,
+      now: loaded.now,
+      windowStart: windowStart.getTime(),
+    });
+  }, [data, dataUpdatedAt, day, shownPartial, windowStart]);
   return {
-    progress: progress && progress.dayKey === day?.key ? progress : null,
+    joinStart: data?.joinStart ?? shownPartial?.joinStart ?? null,
+    progress: progress?.loadKey === loadKey ? progress.people : null,
     query,
     timeline,
   };

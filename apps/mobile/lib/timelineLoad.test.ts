@@ -1,16 +1,22 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import {
+  createDeviceKeyPair,
+  createHistoryKeyPair,
   encodeTrackingPoint,
   encryptGroupPayload,
   type EpochKeyMaterial,
   generateGroupEpochKey,
   TRACKING_POINT_KIND,
   type TrackingPoint,
+  unwrapHistoryEpochKey,
+  WRAPPED_EPOCH_KEY_ALGORITHM,
+  wrapEpochKeyForHistoryKey,
 } from "@openbeacon/encryption";
 import type { RouterInputs, RouterOutputs } from "./api.ts";
 import { buildTimeline, timelinePositionAt } from "./timeline.ts";
 import { loadTimelineDay } from "./timelineLoad.ts";
+import type { TimelineDecryptProgress } from "./timelineTypes.ts";
 
 type RangePage = RouterOutputs["groupTracking"]["historyRange"];
 type EpochWraps = RouterOutputs["groupEpoch"]["listEpochKeyWraps"];
@@ -143,7 +149,7 @@ describe("loadTimelineDay", () => {
         streams: [stream("10", "epoch-1")],
       },
     ];
-    const progress: Array<{ decrypted: number; total: number }> = [];
+    const progress: TimelineDecryptProgress[][] = [];
     let yields = 0;
 
     const result = await loadTimelineDay({
@@ -163,6 +169,7 @@ describe("loadTimelineDay", () => {
       now: dayStart + 30 * HOUR_MS,
       onProgress: (value) => progress.push(value),
       unwrapEpoch: async () => epochKey,
+      userIds: ["alice"],
       yieldToUi: async () => {
         yields += 1;
       },
@@ -185,8 +192,9 @@ describe("loadTimelineDay", () => {
       },
     ]);
     expect(progress).toEqual([
-      { decrypted: 2, total: 3 },
-      { decrypted: 3, total: 3 },
+      [{ decrypted: 0, done: false, total: 3, userId: "alice" }],
+      [{ decrypted: 2, done: false, total: 3, userId: "alice" }],
+      [{ decrypted: 3, done: true, total: 3, userId: "alice" }],
     ]);
     expect(yields).toBe(2);
     expect(result.joinStart).toBe(dayStart - 40 * HOUR_MS);
@@ -213,6 +221,7 @@ describe("loadTimelineDay", () => {
       listEpochs: async () => ({ epochs: [], nextCursor: null }),
       now: dayStart + 5 * HOUR_MS,
       unwrapEpoch: async () => null,
+      userIds: ["alice"],
       yieldToUi: async () => {},
     });
 
@@ -287,6 +296,7 @@ describe("loadTimelineDay", () => {
       }),
       now: day.end,
       unwrapEpoch: async (wraps) => (wraps.epochId === "epoch-2" ? epochKey : null),
+      userIds: ["alice"],
       yieldToUi: async () => {},
     });
 
@@ -316,6 +326,7 @@ describe("loadTimelineDay", () => {
       },
       now: day.end,
       unwrapEpoch: async () => generateGroupEpochKey(),
+      userIds: ["alice"],
       yieldToUi: async () => {},
     });
 
@@ -368,6 +379,7 @@ describe("loadTimelineDay", () => {
       }),
       now: dayStart + 9 * HOUR_MS,
       unwrapEpoch: async () => epochKey,
+      userIds: ["alice"],
       yieldToUi: async () => {},
     });
 
@@ -387,31 +399,183 @@ describe("loadTimelineDay", () => {
     );
   });
 
-  test("doesn't report progress or finish once cancelled mid-decrypt", async () => {
+  test("decrypts one person at a time in the order asked and leaves out everyone else", async () => {
+    const epochKey = generateGroupEpochKey();
+    const people = [
+      { epochId: "epoch-1", points: 3, userId: "alice" },
+      { epochId: "epoch-2", points: 1, userId: "bob" },
+      { epochId: "epoch-1", points: 2, userId: "carol" },
+    ];
+    const points = people.flatMap(({ epochId, points: count, userId }) =>
+      Array.from({ length: count }, (_, index) =>
+        encryptPoint({
+          epochId,
+          epochKey,
+          payload: movingPoint(dayStart + (index + 1) * HOUR_MS, 51.5),
+          pointId: `${userId}-${index}`,
+          receivedAt: dayStart + (index + 1) * HOUR_MS,
+          senderDeviceId: `${userId}-phone`,
+          streamId: userId,
+        }),
+      ),
+    );
+    const events: string[] = [];
+    const unwrapped: string[] = [];
+
+    const result = await loadTimelineDay({
+      chunkSize: 2,
+      day,
+      fetchRange: async () => ({
+        cursor: null,
+        hasMore: false,
+        lookback: [],
+        points,
+        streams: people.map(({ epochId, userId }) => ({
+          ...stream(userId, epochId, `${userId}-phone`),
+          senderUserId: userId,
+        })),
+      }),
+      groupId,
+      listEpochs: async () => ({
+        epochs: [
+          epoch("epoch-2", 2, dayStart - 20 * HOUR_MS),
+          epoch("epoch-1", 1, dayStart - 40 * HOUR_MS),
+        ],
+        nextCursor: null,
+      }),
+      now: day.end,
+      onPersonReady: ({ devices, joinStart, userId }) =>
+        events.push(
+          `ready ${userId}: ${devices.map((device) => `${device.deviceId} ${device.points.length}`).join(", ")} from ${joinStart}`,
+        ),
+      onProgress: (progress) =>
+        events.push(
+          progress
+            .map(
+              ({ decrypted, done, total, userId }) =>
+                `${userId} ${decrypted}/${total}${done ? " done" : ""}`,
+            )
+            .join(", "),
+        ),
+      unwrapEpoch: async (wraps) => {
+        unwrapped.push(wraps.epochId);
+        return epochKey;
+      },
+      userIds: ["carol", "alice", "dave"],
+      yieldToUi: async () => {},
+    });
+
+    const joinedAt = dayStart - 40 * HOUR_MS;
+    expect(events).toEqual([
+      "carol 0/2, alice 0/3",
+      "carol 2/2 done, alice 0/3",
+      `ready carol: carol-phone 2 from ${joinedAt}`,
+      "carol 2/2 done, alice 2/3",
+      "carol 2/2 done, alice 3/3 done",
+      `ready alice: alice-phone 3 from ${joinedAt}`,
+    ]);
+    expect(unwrapped).toEqual(["epoch-1"]);
+    expect(result.devices.map(({ deviceId }) => deviceId)).toEqual(["carol-phone", "alice-phone"]);
+    expect(result.joinStart).toBe(joinedAt);
+  });
+
+  test("uses a history wrap for an epoch this phone has no device wrap for", async () => {
+    const userId = "me";
+    const historyKey = createHistoryKeyPair();
+    const sender = createDeviceKeyPair();
+    const joinEpochKey = generateGroupEpochKey();
+    const laterEpochKey = generateGroupEpochKey();
+    const joinedAt = dayStart - 30 * HOUR_MS;
+    const joinEpoch = {
+      ...epoch("epoch-1", 1, joinedAt),
+      historyWraps: [
+        {
+          ...wrapEpochKeyForHistoryKey({
+            epochId: "epoch-1",
+            epochKey: joinEpochKey,
+            historyKey: { publicKey: historyKey.publicKey, userId, version: 1 },
+            senderPrivateKey: sender.privateKey,
+          }),
+          createdAt: new Date(joinedAt),
+        },
+      ],
+    };
+    const deviceKeys = new Map([["epoch-2", laterEpochKey]]);
+    const pointIn = (epochId: string, epochKey: EpochKeyMaterial, hour: number) =>
+      encryptPoint({
+        epochId,
+        epochKey,
+        payload: movingPoint(dayStart + hour * HOUR_MS, 51.5),
+        pointId: epochId,
+        receivedAt: dayStart + hour * HOUR_MS,
+        streamId: epochId,
+      });
+
+    const result = await loadTimelineDay({
+      day,
+      fetchRange: async () => ({
+        cursor: null,
+        hasMore: false,
+        lookback: [],
+        points: [pointIn("epoch-1", joinEpochKey, 1), pointIn("epoch-2", laterEpochKey, 2)],
+        streams: [stream("epoch-1", "epoch-1"), stream("epoch-2", "epoch-2")],
+      }),
+      groupId,
+      listEpochs: async () => ({
+        epochs: [epoch("epoch-2", 2, dayStart - 10 * HOUR_MS), joinEpoch],
+        nextCursor: null,
+      }),
+      now: day.end,
+      unwrapEpoch: async (wraps) => {
+        const fromDevice = deviceKeys.get(wraps.epochId);
+        if (fromDevice) return fromDevice;
+        const wrap = wraps.historyWraps[0];
+        if (wrap?.algorithm !== WRAPPED_EPOCH_KEY_ALGORITHM) return null;
+        return unwrapHistoryEpochKey({
+          epochId: wraps.epochId,
+          historyKeyVersion: wrap.historyKeyVersion,
+          historyPrivateKey: historyKey.privateKey,
+          userId,
+          wrappedEpochKey: { ...wrap, algorithm: WRAPPED_EPOCH_KEY_ALGORITHM },
+        });
+      },
+      userIds: ["alice"],
+      yieldToUi: async () => {},
+    });
+
+    expect(result.devices[0]?.points.map(({ pointId }) => pointId)).toEqual(["epoch-1", "epoch-2"]);
+    expect(result.devices[0]?.undecryptable).toBe(0);
+    expect(result.joinStart).toBe(joinedAt);
+  });
+
+  test("stops before the next person once cancelled", async () => {
     const epochKey = generateGroupEpochKey();
     const controller = new AbortController();
-    const points = [1, 2, 3].map((index) =>
+    const points = ["alice", "bob"].map((userId, index) =>
       encryptPoint({
         epochId: "epoch-1",
         epochKey,
         payload: movingPoint(dayStart + index * HOUR_MS, 51.5),
         pointId: String(index),
         receivedAt: dayStart + index * HOUR_MS,
-        streamId: "10",
+        senderDeviceId: `${userId}-phone`,
+        streamId: userId,
       }),
     );
-    const progress: Array<{ decrypted: number; total: number }> = [];
+    const events: string[] = [];
 
     await expect(
       loadTimelineDay({
-        chunkSize: 2,
         day,
         fetchRange: async () => ({
           cursor: null,
           hasMore: false,
           lookback: [],
           points,
-          streams: [stream("10", "epoch-1")],
+          streams: [
+            stream("alice", "epoch-1", "alice-phone"),
+            { ...stream("bob", "epoch-1", "bob-phone"), senderUserId: "bob" },
+          ],
         }),
         groupId,
         listEpochs: async () => ({
@@ -419,18 +583,19 @@ describe("loadTimelineDay", () => {
           nextCursor: null,
         }),
         now: day.end,
-        onProgress: (value) => progress.push(value),
+        onPersonReady: ({ userId }) => {
+          events.push(`ready ${userId}`);
+          controller.abort();
+        },
+        onProgress: (people) =>
+          events.push(people.map((person) => `${person.userId} ${person.decrypted}`).join(", ")),
         signal: controller.signal,
         unwrapEpoch: async () => epochKey,
-        yieldToUi: async () => {
-          if (progress.length === 2) controller.abort();
-        },
+        userIds: ["alice", "bob"],
+        yieldToUi: async () => {},
       }),
     ).rejects.toThrow("Timeline load cancelled.");
-    expect(progress).toEqual([
-      { decrypted: 2, total: 3 },
-      { decrypted: 3, total: 3 },
-    ]);
+    expect(events).toEqual(["alice 0, bob 0", "alice 1, bob 0", "ready alice"]);
   });
 
   test("gives up when cancelled", async () => {
@@ -447,6 +612,7 @@ describe("loadTimelineDay", () => {
         now: day.end,
         signal: controller.signal,
         unwrapEpoch: async () => null,
+        userIds: ["alice"],
         yieldToUi: async () => {},
       }),
     ).rejects.toThrow("Timeline load cancelled.");
