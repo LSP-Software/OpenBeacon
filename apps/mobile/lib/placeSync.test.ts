@@ -14,6 +14,7 @@ const epochKeys = new Map<string, EpochKeyMaterial>([
 let latestEpochIds: string[] = [];
 let failures: unknown[] = [];
 let keyLookupError: Error | null = null;
+let placeLimit: number | undefined;
 type SentPlace = { geometry: ReturnType<typeof encryptPlaceGeometry>; name: string };
 const sent: { epochId: string; input: SentPlace }[] = [];
 const rotate = mock(async (_groupId: string) => true);
@@ -44,6 +45,7 @@ mock.module("./api.ts", () => ({
         query: async () => ({
           latestEpochId: "epoch-2",
           placesRevision: 3,
+          ...(placeLimit === undefined ? {} : { placeLimit }),
           places: [
             {
               ...encryptPlaceGeometry({
@@ -84,7 +86,7 @@ mock.module("./epochKeys.ts", () => ({
 }));
 mock.module("./groupEncryption.ts", () => ({ rotateGroupEpochIfRequired: rotate }));
 
-const { loadGroupPlaces, savePlace } = await import("./placeSync.ts");
+const { loadGroupPlaceList, loadGroupPlaces, savePlace } = await import("./placeSync.ts");
 
 const saveHome = () =>
   savePlace({ emoji: "🏠", existing: null, geometry: home, groupId: "family", name: "Home" });
@@ -150,4 +152,11 @@ test("loads places and leaves the ones this phone can't read yet as syncing", as
 test("fails the load when the group's keys can't be fetched instead of showing syncing", async () => {
   keyLookupError = new Error("Network request failed");
   await expect(loadGroupPlaces("family")).rejects.toThrow("Network request failed");
+});
+
+test("takes the place limit from the server, and has none when an older server doesn't send it", async () => {
+  placeLimit = 50;
+  expect((await loadGroupPlaceList("family")).placeLimit).toBe(50);
+  placeLimit = undefined;
+  expect((await loadGroupPlaceList("family")).placeLimit).toBeNull();
 });

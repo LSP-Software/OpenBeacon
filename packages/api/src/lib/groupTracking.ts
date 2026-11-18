@@ -16,10 +16,10 @@ import {
   historyFirstHourSql,
   readUploaderHistoryWindow,
 } from "./historyShare.ts";
-import { HISTORY_RETENTION_MS } from "./placeTransitions.ts";
+import { historyRetentionMs } from "./limits.ts";
 
 const HOUR_MS = 3_600_000;
-const HISTORY_RETENTION_HOURS = HISTORY_RETENTION_MS / HOUR_MS;
+const HISTORY_RETENTION_HOURS = historyRetentionMs / HOUR_MS;
 
 type GroupTrackingDb = GroupWriteChecksDb & {
   userDevice: {

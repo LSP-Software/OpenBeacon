@@ -9,7 +9,9 @@ import { errorReason } from "./errorReason.ts";
 import { rotateGroupEpochIfRequired } from "./groupEncryption.ts";
 import { decryptPlaceGeometry, encryptPlaceGeometry, type GroupPlace } from "./places.ts";
 
-export const loadGroupPlaces = async (groupId: string): Promise<GroupPlace[]> => {
+export const loadGroupPlaceList = async (
+  groupId: string,
+): Promise<{ placeLimit: number | null; places: GroupPlace[] }> => {
   const [list, device] = await Promise.all([
     trpcClient.groupPlaces.list.query({ groupId }),
     ensureDeviceKeyRegistration(),
@@ -20,23 +22,31 @@ export const loadGroupPlaces = async (groupId: string): Promise<GroupPlace[]> =>
     epochKeys.set(epochId, loaded);
     return loaded;
   };
-  return Promise.all(
-    list.places.map(async (place) => {
-      const key = await epochKey(place.epochId);
-      return {
-        ...place,
-        geometry: key ? decryptPlaceGeometry({ epochKey: key, groupId, place }) : null,
-      };
-    }),
-  );
+  const { placeLimit }: { placeLimit?: number } = list;
+  return {
+    placeLimit: placeLimit ?? null,
+    places: await Promise.all(
+      list.places.map(async (place) => {
+        const key = await epochKey(place.epochId);
+        return {
+          ...place,
+          geometry: key ? decryptPlaceGeometry({ epochKey: key, groupId, place }) : null,
+        };
+      }),
+    ),
+  };
 };
+
+export const loadGroupPlaces = async (groupId: string) =>
+  (await loadGroupPlaceList(groupId)).places;
 
 export const groupPlacesQueryKey = (groupId: string) => ["groupPlaces", groupId] as const;
 
 export const groupPlacesQueryOptions = (groupId: string, userId: string | undefined) =>
   queryOptions({
     queryKey: [...groupPlacesQueryKey(groupId), userId],
-    queryFn: userId ? () => loadGroupPlaces(groupId) : skipToken,
+    queryFn: userId ? () => loadGroupPlaceList(groupId) : skipToken,
+    select: ({ places }) => places,
     staleTime: 5 * 60_000,
   });
 

@@ -14,7 +14,8 @@ import {
   persistGroupEpoch,
 } from "../../lib/groupEpochs.ts";
 import { emailInviteCreatedAfter } from "../../lib/emailInvites.ts";
-import { assertAccountBelowGroupLimit, maxGroupsPerAccount } from "../../lib/groupLimit.ts";
+import { assertAccountBelowGroupLimit } from "../../lib/groupLimit.ts";
+import { limits } from "../../lib/limits.ts";
 import { groupAdminProcedure } from "../../procedures/auth/group.ts";
 import { protectedProcedure } from "../../procedures/auth/runtime.ts";
 import { imageKeySelect, toStoredImageKey } from "../../lib/imageKeys.ts";
@@ -96,7 +97,7 @@ const getInvitePreview = async ({
       ? null
       : !user || user.pendingDeletion
         ? ("PENDING_DELETION" as const)
-        : groupCount >= maxGroupsPerAccount
+        : groupCount >= limits.groupsPerAccount
           ? ("GROUP_LIMIT" as const)
           : null,
   };

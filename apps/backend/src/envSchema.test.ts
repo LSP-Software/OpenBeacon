@@ -9,6 +9,14 @@ test("treats a backend as self-hosted unless SELF_HOSTED is explicitly false", (
   expect(envSchema.SELF_HOSTED.safeParse("maybe").success).toBe(false);
 });
 
+test("never lets people set their own seats unless ALLOW_SELF_SET_SEATS is explicitly true", () => {
+  expect(envSchema.ALLOW_SELF_SET_SEATS.parse(undefined)).toBe(false);
+  expect(envSchema.ALLOW_SELF_SET_SEATS.parse("")).toBe(false);
+  expect(envSchema.ALLOW_SELF_SET_SEATS.parse("false")).toBe(false);
+  expect(envSchema.ALLOW_SELF_SET_SEATS.parse("true")).toBe(true);
+  expect(envSchema.ALLOW_SELF_SET_SEATS.safeParse("maybe").success).toBe(false);
+});
+
 test("only accepts a Discord webhook URL for feedback alerts and treats empty as unset", () => {
   const schema = envSchema.DISCORD_FEEDBACK_WEBHOOK_URL;
   expect(schema.parse(undefined)).toBeUndefined();

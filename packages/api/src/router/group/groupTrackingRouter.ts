@@ -23,6 +23,7 @@ import {
   readPlacesSummary,
   uploadPlaceTransitions,
 } from "../../lib/placeTransitions.ts";
+import { limits } from "../../lib/limits.ts";
 import { getTrackingKeyState } from "../../lib/trackingKeyState.ts";
 import { ReasonError } from "../../lib/reasonError.ts";
 import { groupMemberProcedure } from "../../procedures/auth/group.ts";
@@ -84,7 +85,7 @@ export const groupTrackingRouter = {
       const historyAllowance = (deviceId: string, cost: number) => ({
         namespace: "groupTracking.historyAllowance",
         identifier: { type: "deviceGroup" as const, deviceId, groupId: input.groupId },
-        limit: 2_880,
+        limit: limits.dailyHistoryAllowance,
         windowMs: 86_400_000,
         cost,
       });

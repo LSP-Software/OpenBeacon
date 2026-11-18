@@ -25,6 +25,8 @@ Turning email off on a server locks accounts with sign-in codes on out of passwo
 
 `bun run announce` adds, lists and ends the banners the app shows at the top of its main tabs and sign-in screens, for example before planned downtime. Run it with no arguments for its options. Announcements live in the `Announcement` table and the app filters them by platform and app version itself, so it never sends those to the server for this. See [Announcements](https://docs.openbeacon.net/docs/self-host/running-your-server/announcements).
 
+`bun run seats` shows or sets an account's seat count, found by email: `bun run seats show <email>` or `bun run seats set <email> <seats>`. It prints the seats the account uses, which is every activated device in every group it owns. Self-hosted servers never check seats.
+
 ## Startup
 
 The Docker image validates its settings, applies Prisma migrations, then checks PostgreSQL, Redis, picture storage, the map bucket and, if configured, the email provider. If a check or migration fails, the container doesn't start. Rolling back an image doesn't reverse migrations, so migrations must stay compatible with the previous release.

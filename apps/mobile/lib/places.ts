@@ -9,7 +9,6 @@ import {
   type PlaceGeometryV1,
   validatePlaceGeometryV1,
 } from "@openbeacon/encryption";
-import { MAX_PLACES_PER_GROUP } from "@openbeacon/schemas";
 import type { ErrorReason } from "@openbeacon/shared";
 import type { RouterOutputs } from "./api.ts";
 
@@ -286,9 +285,6 @@ export const placeErrorMessage = (reason: ErrorReason | null, fallback: string) 
   if (reason === "PLACE_CHANGED")
     return "Someone else just changed this place. Check it and try again.";
   if (reason === "PLACE_GONE") return "This place has been deleted.";
-  if (reason === "PLACE_LIMIT_REACHED") {
-    return `A group can have up to ${MAX_PLACES_PER_GROUP} places.`;
-  }
   if (reason === "EPOCH_ROTATION_PENDING" || reason === "EPOCH_NOT_LATEST") {
     return "This group’s keys are changing. Try again in a moment.";
   }

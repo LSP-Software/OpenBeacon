@@ -4,7 +4,6 @@ import {
   createPlaceSchema,
   deletePlaceSchema,
   listPlacesSchema,
-  MAX_PLACES_PER_GROUP,
   PLACE_GEOMETRY_KIND,
   reEncryptPlacesSchema,
   updatePlaceSchema,
@@ -19,6 +18,7 @@ import {
   assertSentFromThisDevice,
   lockGroupMemberForWrite,
 } from "../../lib/groupWriteChecks.ts";
+import { limits } from "../../lib/limits.ts";
 import { ReasonError } from "../../lib/reasonError.ts";
 import { groupAdminProcedure, groupMemberProcedure } from "../../procedures/auth/group.ts";
 
@@ -64,6 +64,7 @@ export const groupPlacesRouter = {
       return {
         latestEpochId: latestEpoch?.id ?? null,
         placesRevision: group?.placesRevision ?? 0,
+        placeLimit: limits.placesPerGroup,
         places: places.map((place) => ({ ...place, kind: PLACE_GEOMETRY_KIND })),
       };
     }),
@@ -80,11 +81,11 @@ export const groupPlacesRouter = {
         userId: ctx.session.user.id,
         write: async (tx) => {
           if (
-            (await tx.place.count({ where: { groupId: input.groupId } })) >= MAX_PLACES_PER_GROUP
+            (await tx.place.count({ where: { groupId: input.groupId } })) >= limits.placesPerGroup
           ) {
             throw new TRPCError({
               code: "BAD_REQUEST",
-              message: `A group can have at most ${MAX_PLACES_PER_GROUP} places.`,
+              message: `A group can have at most ${limits.placesPerGroup} places.`,
               cause: new ReasonError("PLACE_LIMIT_REACHED"),
             });
           }
@@ -173,8 +174,14 @@ export const groupPlacesRouter = {
   reEncrypt: groupMemberProcedure
     .meta({ rateLimit: { limit: 240, windowMs: 60_000 } })
     .input(reEncryptPlacesSchema)
-    .mutation(async ({ ctx, input }) =>
-      writePlace({
+    .mutation(async ({ ctx, input }) => {
+      if (input.places.length > limits.placesPerGroup) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `A group can have at most ${limits.placesPerGroup} places.`,
+        });
+      }
+      return await writePlace({
         db: ctx.db,
         deviceId: ctx.deviceId,
         geometries: input.places.map(({ geometry }) => geometry),
@@ -225,8 +232,8 @@ export const groupPlacesRouter = {
           };
         },
         changesPlaces: (result) => result.places.length > 0,
-      }),
-    ),
+      });
+    }),
   delete: groupAdminProcedure
     .meta({ rateLimit: { limit: 60, windowMs: 60_000 } })
     .input(deletePlaceSchema)

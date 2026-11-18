@@ -10,7 +10,8 @@
     "dev": "NODE_ENV=development bun run --cwd ../.. --env-file=.env --hot apps/backend/src/index.ts",
     "typecheck": "bun check",
     "test": "bun test --isolate",
-    "announce": "bun run --cwd ../.. --env-file=.env apps/backend/src/announce.ts"
+    "announce": "bun run --cwd ../.. --env-file=.env apps/backend/src/announce.ts",
+    "seats": "bun run --cwd ../.. --env-file=.env apps/backend/src/seats.ts"
   },
   "dependencies": {
     "@openbeacon/api": "workspace:*",

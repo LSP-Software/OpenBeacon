@@ -66,6 +66,21 @@ describe("production environment validation", () => {
     expect(result.exitCode).toBe(0);
   });
 
+  test("only lets hosted servers allow people to set their own seats", () => {
+    const run = (overrides: Record<string, string>) =>
+      Bun.spawnSync({
+        cmd: [process.execPath, `${import.meta.dir}/validateEnv.ts`],
+        env: { ...env, ...overrides },
+      });
+    expect(run({ SELF_HOSTED: "false", ALLOW_SELF_SET_SEATS: "true" }).exitCode).toBe(0);
+    for (const selfHosted of [{ SELF_HOSTED: "true" }, { SELF_HOSTED: "" }]) {
+      const result = run({ ...selfHosted, ALLOW_SELF_SET_SEATS: "true" });
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr.toString()).toContain("ALLOW_SELF_SET_SEATS: only allowed when");
+    }
+    expect(run({ ALLOW_SELF_SET_SEATS: "maybe" }).exitCode).not.toBe(0);
+  });
+
   test("rejects invalid proxy and storage configuration", () => {
     for (const invalid of [
       { TRUSTED_PROXY_PROVIDER: "" },

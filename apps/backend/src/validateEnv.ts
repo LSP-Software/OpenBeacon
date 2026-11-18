@@ -24,6 +24,11 @@ validateEnv({
       Boolean(process.env["GOOGLE_CLIENT_SECRET"]?.trim())
         ? "GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET: both are required for Google sign-in"
         : null,
+    () =>
+      backendEnvSchema.ALLOW_SELF_SET_SEATS.safeParse(process.env["ALLOW_SELF_SET_SEATS"]).data &&
+      backendEnvSchema.SELF_HOSTED.safeParse(process.env["SELF_HOSTED"]).data !== false
+        ? "ALLOW_SELF_SET_SEATS: only allowed when SELF_HOSTED=false, because self-hosted servers have no seats"
+        : null,
     () => resolveFcmSettings(process.env).error,
     () => {
       const emailError = findEmailSettingsError();

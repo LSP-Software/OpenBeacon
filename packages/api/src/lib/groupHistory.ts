@@ -6,11 +6,8 @@ import {
 } from "@openbeacon/database";
 import type { groupHistoryCategorySchema } from "@openbeacon/schemas";
 import type z from "zod";
-import {
-  HISTORY_RETENTION_MS,
-  placeTransitionSelect,
-  toPlaceTransitionView,
-} from "./placeTransitions.ts";
+import { historyRetentionMs } from "./limits.ts";
+import { placeTransitionSelect, toPlaceTransitionView } from "./placeTransitions.ts";
 
 const personSelect = { select: { id: true, name: true } } as const;
 
@@ -81,7 +78,7 @@ export const readGroupHistory = async ({
   memberSince: Date;
   now: Date;
 }) => {
-  const since = new Date(Math.max(now.getTime() - HISTORY_RETENTION_MS, memberSince.getTime()));
+  const since = new Date(Math.max(now.getTime() - historyRetentionMs, memberSince.getTime()));
   const eventTypes = categories?.flatMap((category) => categoryEventTypes[category]);
   const includeArrivals = !categories || categories.includes("arrivals");
   const [events, transitions] = await Promise.all([
@@ -146,7 +143,7 @@ export const readGroupHistoryLatest = async ({
       SELECT max(e."createdAt") FROM "GroupEvent" e
       WHERE e."groupId" = m."groupId"
         AND e."createdAt" >= m."createdAt"
-        AND e."createdAt" >= (${new Date(now.getTime() - HISTORY_RETENTION_MS).toISOString()}::timestamptz AT TIME ZONE 'UTC')
+        AND e."createdAt" >= (${new Date(now.getTime() - historyRetentionMs).toISOString()}::timestamptz AT TIME ZONE 'UTC')
         AND COALESCE(e."actorUserId", e."subjectUserId") IS DISTINCT FROM ${userId}
     ) AS "latestAt"
     FROM "GroupMember" m

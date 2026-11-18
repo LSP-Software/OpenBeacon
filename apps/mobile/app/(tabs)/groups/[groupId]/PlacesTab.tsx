@@ -1,5 +1,4 @@
 import { useIsFocused } from "@react-navigation/native";
-import { MAX_PLACES_PER_GROUP } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import { skipToken, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "expo-router";
@@ -53,7 +52,12 @@ const PlacesTab = ({
     ...groupPlacesQueryOptions(groupId, userId),
     subscribed: isFocused,
     refetchInterval: (query) =>
-      query.state.data?.some((place) => !place.geometry) ? 60_000 : false,
+      query.state.data?.places.some((place) => !place.geometry) ? 60_000 : false,
+  });
+  const { data: placeLimit } = useQuery({
+    ...groupPlacesQueryOptions(groupId, userId),
+    select: (data) => data.placeLimit,
+    subscribed: isFocused,
   });
   const memberName = useMemberNames(groupId);
   const sharingQueryOptions = trpc.placeSharing.get.queryOptions({ groupId });
@@ -94,7 +98,7 @@ const PlacesTab = ({
     storage.set("places.notificationsAsked", true);
     void tryCatch(requestNotificationPermissions());
   }, [isFocused]);
-  const atLimit = placeCount >= MAX_PLACES_PER_GROUP;
+  const atLimit = placeLimit != null && placeCount >= placeLimit;
   const now = Date.now();
 
   if (places.isPending) {
@@ -127,7 +131,7 @@ const PlacesTab = ({
         onPress={() =>
           Alert.alert(
             "Too many places",
-            `A group can have up to ${MAX_PLACES_PER_GROUP} places. Delete one to add another.`,
+            `A group can have up to ${placeLimit} places. Delete one to add another.`,
           )
         }
       >

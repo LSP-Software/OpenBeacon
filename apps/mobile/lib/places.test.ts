@@ -322,8 +322,8 @@ describe("place geometry encryption", () => {
 });
 
 test("explains place errors in plain words", () => {
-  expect(placeErrorMessage("PLACE_LIMIT_REACHED", "fallback")).toBe(
-    "A group can have up to 50 places.",
+  expect(placeErrorMessage("PLACE_LIMIT_REACHED", "A group can have at most 50 places.")).toBe(
+    "A group can have at most 50 places.",
   );
   expect(placeErrorMessage("EPOCH_ROTATION_PENDING", "fallback")).toContain("Try again");
   expect(placeErrorMessage(null, "fallback")).toBe("fallback");

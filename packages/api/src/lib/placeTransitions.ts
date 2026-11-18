@@ -5,8 +5,7 @@ import { effectiveNotificationSetting } from "@openbeacon/schemas";
 import { resolveLocationSharing } from "@openbeacon/shared";
 import type z from "zod";
 import { assertActiveDevices } from "./groupWriteChecks.ts";
-
-export const HISTORY_RETENTION_MS = 14 * 24 * 60 * 60_000;
+import { historyRetentionMs } from "./limits.ts";
 
 export const placeTransitionSelect = {
   id: true,
@@ -83,7 +82,7 @@ export const uploadPlaceTransitions = async ({
   const placeIds = new Set(places.map(({ id }) => id));
   const sharing = resolveLocationSharing(device.user, device, now.getTime());
   const earliest = Math.max(
-    now.getTime() - HISTORY_RETENTION_MS,
+    now.getTime() - historyRetentionMs,
     memberSince.getTime(),
     sharing.resumeAfter?.getTime() ?? 0,
     placeSharing?.updatedAt.getTime() ?? 0,
@@ -250,7 +249,7 @@ export const readRecentPlaceTransitions = async ({
   now: Date;
 }) => {
   const limit = 100;
-  const since = Math.max(now.getTime() - HISTORY_RETENTION_MS, memberSince.getTime());
+  const since = Math.max(now.getTime() - historyRetentionMs, memberSince.getTime());
   const rows = await db.placeTransition.findMany({
     where: {
       groupId,

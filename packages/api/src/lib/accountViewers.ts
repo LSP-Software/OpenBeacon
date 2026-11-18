@@ -1,5 +1,5 @@
 import { GroupEventType, type PrismaClient } from "@openbeacon/database";
-import { HISTORY_RETENTION_MS } from "./placeTransitions.ts";
+import { historyRetentionMs } from "./limits.ts";
 
 const startTypes: GroupEventType[] = [GroupEventType.GROUP_CREATED, GroupEventType.MEMBER_JOINED];
 const endTypes: GroupEventType[] = [
@@ -122,7 +122,7 @@ export const readAccountViewers = async ({
   now: Date;
   userId: string;
 }) => {
-  const since = new Date(now.getTime() - HISTORY_RETENTION_MS);
+  const since = new Date(now.getTime() - historyRetentionMs);
   const [memberships, ownEvents] = await Promise.all([
     db.groupMember.findMany({ where: { userId }, select: { groupId: true } }),
     db.groupEvent.findMany({

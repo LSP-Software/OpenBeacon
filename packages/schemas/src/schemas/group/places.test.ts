@@ -7,7 +7,6 @@ import {
 import {
   createPlaceSchema,
   placeEmojiSchema,
-  MAX_PLACES_PER_GROUP,
   placeNameSchema,
   reEncryptPlacesSchema,
   updatePlaceSchema,
@@ -123,15 +122,6 @@ describe("place input schemas", () => {
     expect(reEncryptPlacesSchema.safeParse({ groupId: "group-1", places: [] }).success).toBe(false);
     expect(
       reEncryptPlacesSchema.safeParse({ groupId: "group-1", places: [place, place] }).success,
-    ).toBe(false);
-    expect(
-      reEncryptPlacesSchema.safeParse({
-        groupId: "group-1",
-        places: Array.from({ length: MAX_PLACES_PER_GROUP + 1 }, (_, index) => ({
-          ...place,
-          placeId: `place-${index}`,
-        })),
-      }).success,
     ).toBe(false);
     const { expectedCiphertext: _, ...withoutExpected } = place;
     expect(

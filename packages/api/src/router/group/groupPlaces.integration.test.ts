@@ -11,8 +11,8 @@ import {
   type PlaceGeometryV1,
   validatePlaceGeometryV1,
 } from "@openbeacon/encryption";
-import { MAX_PLACES_PER_GROUP } from "@openbeacon/schemas";
 import { deleteAccountRecords } from "../../lib/account-deletion.ts";
+import { limits } from "../../lib/limits.ts";
 import { holdRowLock } from "../../lib/databaseLocks.testUtil.ts";
 import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
@@ -218,6 +218,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(listed).toMatchObject({
         latestEpochId,
         placesRevision: before + 1,
+        placeLimit: limits.placesPerGroup,
         places: [
           {
             id: place.id,
@@ -507,6 +508,20 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(await revision()).toBe(before);
     });
 
+    test("re-encrypting more places than a group can hold is refused", async () => {
+      const school = await seedPlace({ id: `${prefix}-a`, epochId: oldEpochId });
+      await expect(
+        caller(member).groupPlaces.reEncrypt({
+          groupId,
+          places: Array.from({ length: limits.placesPerGroup + 1 }, (_, index) => ({
+            ...reEncryptRequest(school),
+            placeId: `${prefix}-${index}`,
+          })),
+        }),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      expect(await prisma.place.findUniqueOrThrow({ where: { id: school.id } })).toEqual(school);
+    });
+
     test("a place from another group is never touched through this group", async () => {
       const foreign = await seedPlace({
         id: `${prefix}-foreign`,
@@ -533,10 +548,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(await prisma.place.findUniqueOrThrow({ where: { id: foreign.id } })).toEqual(foreign);
     });
 
-    test(`a group holds at most ${MAX_PLACES_PER_GROUP} places`, async () => {
+    test(`a group holds at most ${limits.placesPerGroup} places`, async () => {
       const geometry = sealGeometry({ senderDeviceId: deviceOf(owner) });
       await prisma.place.createMany({
-        data: Array.from({ length: MAX_PLACES_PER_GROUP }, (_, index) => ({
+        data: Array.from({ length: limits.placesPerGroup }, (_, index) => ({
           groupId,
           name: `Place ${index}`,
           emoji: "📍",
@@ -551,13 +566,13 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await expect(createPlace(owner, "One too many")).rejects.toMatchObject({
         cause: { reason: "PLACE_LIMIT_REACHED" },
       });
-      expect(await prisma.place.count({ where: { groupId } })).toBe(MAX_PLACES_PER_GROUP);
+      expect(await prisma.place.count({ where: { groupId } })).toBe(limits.placesPerGroup);
     });
 
     test("two admins saving the last free place at once can't go over the limit", async () => {
       const geometry = sealGeometry({ senderDeviceId: deviceOf(owner) });
       await prisma.place.createMany({
-        data: Array.from({ length: MAX_PLACES_PER_GROUP - 1 }, (_, index) => ({
+        data: Array.from({ length: limits.placesPerGroup - 1 }, (_, index) => ({
           groupId,
           name: `Place ${index}`,
           emoji: "📍",
@@ -587,7 +602,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(results.find((result) => result.status === "rejected")).toMatchObject({
         reason: { cause: { reason: "PLACE_LIMIT_REACHED" } },
       });
-      expect(await prisma.place.count({ where: { groupId } })).toBe(MAX_PLACES_PER_GROUP);
+      expect(await prisma.place.count({ where: { groupId } })).toBe(limits.placesPerGroup);
       expect(await revision()).toBe(before + 1);
     });
 

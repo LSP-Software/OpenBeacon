@@ -1,4 +1,5 @@
 import { effectiveHistoryShareSql, historyFirstHourSql } from "@openbeacon/api/historyShare.ts";
+import { historyRetentionMs } from "@openbeacon/api/limits.ts";
 import { deleteTrackingPointsInBatches } from "@openbeacon/api/trackingCleanup.ts";
 import { Prisma } from "@openbeacon/database";
 import { errorCode, tryCatch } from "@openbeacon/shared";
@@ -6,13 +7,13 @@ import { getDatabaseTime } from "../databaseTime.ts";
 import { services } from "../services.ts";
 
 const retentionCutoff = async () =>
-  new Date((await getDatabaseTime()).getTime() - 14 * 24 * 60 * 60_000).toISOString();
+  new Date((await getDatabaseTime()).getTime() - historyRetentionMs).toISOString();
 
 export const createLocationHistoryCleanup =
   ({ batchSize = 1_000, runLimit = 500_000 }: { batchSize?: number; runLimit?: number } = {}) =>
   async () => {
     const now = await getDatabaseTime();
-    const cutoff = new Date(now.getTime() - 14 * 24 * 60 * 60_000).toISOString();
+    const cutoff = new Date(now.getTime() - historyRetentionMs).toISOString();
     const nowHour = Math.floor(now.getTime() / 3_600_000);
     const cutoffHour = Math.floor(new Date(cutoff).getTime() / 3_600_000);
     const result = await tryCatch(
