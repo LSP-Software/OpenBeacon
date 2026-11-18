@@ -53,9 +53,9 @@ object PushRuntime {
   }
 
   fun forget(context: Context, scope: String): Boolean {
-    val forgotten = tokens(context).forget(scope)
-    if (forgotten.deleteToken && initialize(context)) {
-      val messaging = FirebaseMessaging.getInstance()
+    val messaging = if (initialize(context)) FirebaseMessaging.getInstance() else null
+    val forgotten = tokens(context).forget(scope, autoInitEnabled = messaging?.isAutoInitEnabled == true)
+    if (messaging != null && forgotten.deleteToken) {
       messaging.isAutoInitEnabled = false
       messaging.deleteToken().addOnFailureListener { error -> Log.w(TAG, "Couldn't delete the push token.", error) }
     }

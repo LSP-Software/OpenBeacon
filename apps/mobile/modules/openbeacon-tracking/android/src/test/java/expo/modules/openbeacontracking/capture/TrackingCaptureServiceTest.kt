@@ -17,6 +17,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.work.Configuration
 import androidx.work.testing.SynchronousExecutor
 import androidx.work.testing.WorkManagerTestInitHelper
+import com.google.android.gms.location.FusedLocationProviderClient
 import expo.modules.openbeacontracking.Notice
 import expo.modules.openbeacontracking.Notices
 import expo.modules.openbeacontracking.TrackingRuntime
@@ -44,6 +45,7 @@ import org.robolectric.android.controller.ServiceController
 import org.robolectric.shadows.ShadowNetwork
 import org.robolectric.shadows.ShadowNetworkCapabilities
 import java.util.Calendar
+import java.lang.reflect.Proxy
 import java.util.Date
 
 @RunWith(RobolectricTestRunner::class)
@@ -446,6 +448,26 @@ class TrackingCaptureServiceTest {
 
     assertEquals(Service.START_NOT_STICKY, service.onStartCommand(null, 0, 1))
     assertFalse(hasNotice(expo.modules.openbeacontracking.R.string.openbeacon_notice_location_permission_body))
+  }
+
+  @Test
+  fun aResumeThatLosesLocationAccessLeavesNoSharingNotification() {
+    val service = createService()
+    service.onStartCommand(startIntent(TrackingRuntime.captureCommands.start()), 0, 1)
+    assertTrue(TrackingRuntime.isCaptureRunning)
+    val refusingClient =
+      Proxy.newProxyInstance(FusedLocationProviderClient::class.java.classLoader, arrayOf(FusedLocationProviderClient::class.java)) { _, method, _ ->
+        if (method.name == "requestLocationUpdates") throw SecurityException("Location access was removed.")
+        null
+      } as FusedLocationProviderClient
+    TrackingCaptureService::class.java.getDeclaredField("fusedLocationClient\$delegate").apply { isAccessible = true }.set(service, lazyOf(refusingClient))
+    assertTrue(TrackingRuntime.applySharingState(application, "test-owner", "tablet", SharingCaptureState(revisionPrefix = "s0.2:")))
+
+    service.onStartCommand(Intent(application, TrackingCaptureService::class.java).apply { action = TrackingCaptureService.ACTION_SHARING_CHANGED }, 0, 2)
+
+    assertFalse(TrackingRuntime.isCaptureRunning)
+    assertTrue(shadowOf(service).isStoppedBySelf)
+    assertTrue(shadowOf(application.getSystemService(NotificationManager::class.java)).allNotifications.isEmpty())
   }
 
   private fun hasNotice(body: Int) =

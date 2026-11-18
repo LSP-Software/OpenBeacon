@@ -55,7 +55,7 @@
     "scheme": "openbeacon",
     "plugins": [
       ["expo-router", { "sitemap": false }],
-      "expo-secure-store",
+      ["expo-secure-store", { "configureAndroidBackup": false }],
       [
         "expo-build-properties",
         {

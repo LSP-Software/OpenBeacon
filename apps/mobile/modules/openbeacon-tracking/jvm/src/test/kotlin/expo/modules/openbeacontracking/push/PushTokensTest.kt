@@ -118,28 +118,35 @@ class PushTokensTest {
   fun signingOutClearsTheServerOnlyWhenItHoldsTheToken() {
     registered()
     tokens.confirm(scope, "token-1", pushAvailable = true)
-    assertEquals(PushTokens.Forgotten(clearOnServer = true, deleteToken = true), tokens.forget(scope))
+    assertEquals(PushTokens.Forgotten(clearOnServer = true, deleteToken = true), tokens.forget(scope, autoInitEnabled = false))
     assertNull(tokens.pending(scope))
     assertEquals(PushTokenState(), store.state)
-    assertEquals(PushTokens.Forgotten(clearOnServer = false, deleteToken = false), tokens.forget(scope))
+    assertEquals(PushTokens.Forgotten(clearOnServer = false, deleteToken = false), tokens.forget(scope, autoInitEnabled = false))
   }
 
   @Test
   fun signingOutBeforeTheTokenReachedTheServerOnlyDeletesIt() {
     registered()
-    assertEquals(PushTokens.Forgotten(clearOnServer = false, deleteToken = true), tokens.forget(scope))
+    assertEquals(PushTokens.Forgotten(clearOnServer = false, deleteToken = true), tokens.forget(scope, autoInitEnabled = false))
   }
 
   @Test
   fun aPhoneThatNeverUsedPushLeavesFirebaseAlone() {
     tokens.confirm(scope, null, pushAvailable = false)
-    assertEquals(PushTokens.Forgotten(clearOnServer = false, deleteToken = false), tokens.forget(scope))
+    assertEquals(PushTokens.Forgotten(clearOnServer = false, deleteToken = false), tokens.forget(scope, autoInitEnabled = false))
+  }
+
+  @Test
+  fun signingOutAfterARestartDeletesATokenFirebaseMayStillBeFetching() {
+    assertNotNull(tokens.confirm(scope, null, pushAvailable = true))
+    val restarted = PushTokens(store) { now }
+    assertEquals(PushTokens.Forgotten(clearOnServer = false, deleteToken = true), restarted.forget(scope, autoInitEnabled = true))
   }
 
   @Test
   fun aTokenArrivingAfterSigningOutIsIgnored() {
     val requested = assertNotNull(tokens.confirm(scope, null, pushAvailable = true))
-    tokens.forget(scope)
+    tokens.forget(scope, autoInitEnabled = false)
     assertFalse(tokens.receive("token-1", requested))
     assertFalse(tokens.receive("token-1"))
     val next = "[\"https://api.openbeacon.net\",\"user-2\",\"device-3\"]"
@@ -151,7 +158,7 @@ class PushTokensTest {
   @Test
   fun aTokenFromTheLastAccountsRequestIsIgnoredByTheNextAccount() {
     val old = assertNotNull(tokens.confirm(scope, null, pushAvailable = true))
-    tokens.forget(scope)
+    tokens.forget(scope, autoInitEnabled = false)
     val next = "[\"https://api.openbeacon.net\",\"user-2\",\"device-3\"]"
     val current = assertNotNull(tokens.confirm(next, null, pushAvailable = true))
     assertFalse(tokens.receive("token-old", old))

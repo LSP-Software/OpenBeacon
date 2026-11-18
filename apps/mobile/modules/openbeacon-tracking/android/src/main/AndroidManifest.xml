@@ -26,7 +26,7 @@
       android:name=".capture.TrackingCaptureService"
       android:exported="false"
       android:foregroundServiceType="location" />
-    <receiver android:name=".capture.TrackingBootReceiver" android:exported="true">
+    <receiver android:name=".capture.TrackingBootReceiver" android:exported="false">
       <intent-filter>
         <action android:name="android.intent.action.BOOT_COMPLETED" />
         <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
