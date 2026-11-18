@@ -438,7 +438,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         groupId,
         places: [
           reEncryptRequest(upToDate),
-          { ...reEncryptRequest(edited), expectedCiphertext: "stale" },
+          { ...reEncryptRequest(edited), expectedCiphertext: "A".repeat(192) },
           { ...reEncryptRequest(newEmoji), emoji: "🏡" },
           { ...reEncryptRequest(renamed), name: "Old home" },
           { ...reEncryptRequest(school), placeId: `${prefix}-g-missing` },

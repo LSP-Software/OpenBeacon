@@ -247,7 +247,7 @@ export const createSendSecurityAlertEmail =
     userId: string;
   }) => {
     const { cappable, ...email } = await renderSecurityAlertEmail({ ...alert, serverName });
-    return sendEmail({ to, ...email, userId, optional: cappable });
+    return sendEmail({ to, ...email, userId, cap: cappable ? "alerts" : null });
   };
 
 export const formatAlertTime = (date: Date, timezone: string | null) => {

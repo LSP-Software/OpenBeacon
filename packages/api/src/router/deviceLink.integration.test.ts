@@ -307,6 +307,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect((await deviceState(account.pending.deviceId)).revokedAt).toEqual(expect.any(Date));
       expect(await prisma.deviceLink.count({ where: { id: linkId } })).toBe(0);
       expect(await prisma.session.count({ where: { deviceId: account.pending.deviceId } })).toBe(0);
+      expect(await rotationRequired(account.groupId)).toBe(false);
       await expect(account.active.api.deviceLink.decline({ linkId })).rejects.toMatchObject({
         cause: { reason: "CODE_EXPIRED" },
         code: "NOT_FOUND",

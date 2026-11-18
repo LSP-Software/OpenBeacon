@@ -724,7 +724,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           {
             target: { kind: "member", memberId: adminMemberId },
             fileName: admins.fileName,
-            expectedCiphertext: "stale-ciphertext",
+            expectedCiphertext: "A".repeat(64),
             key: adminKey,
           },
           {
@@ -736,13 +736,13 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           {
             target: { kind: "member", memberId: uploaderMemberId },
             fileName: crypto.randomUUID(),
-            expectedCiphertext: "missing",
+            expectedCiphertext: "B".repeat(64),
             key: ownerKey,
           },
           {
             target: { kind: "member", memberId: secondGroupMemberId },
             fileName: crypto.randomUUID(),
-            expectedCiphertext: "elsewhere",
+            expectedCiphertext: "C".repeat(64),
             key: ownerKey,
           },
         ],

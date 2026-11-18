@@ -59,7 +59,7 @@ export const sendCodeEmail = async ({
     to,
     ...(await renderCodeEmail({ purpose, code, serverName })),
     ...(userId ? { userId } : {}),
-    optional: false,
+    cap: null,
   });
 
 export const sendAccountExistsEmail = async ({
@@ -75,7 +75,7 @@ export const sendAccountExistsEmail = async ({
     to,
     ...(await renderAccountExistsEmail({ hasPassword, serverName })),
     userId,
-    optional: true,
+    cap: "notices",
   });
 
 export const sendGoogleSignInEmail = async ({ to, userId }: { to: string; userId: string }) =>
@@ -83,7 +83,7 @@ export const sendGoogleSignInEmail = async ({ to, userId }: { to: string; userId
     to,
     ...(await renderGoogleSignInEmail({ serverName })),
     userId,
-    optional: true,
+    cap: "notices",
   });
 
 export const sendSecurityAlertEmail = createSendSecurityAlertEmail({ sendEmail, serverName });

@@ -64,7 +64,11 @@ export const createAuth = ({
     ],
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
-        if (ctx.path === "/reset-password/:token" || ctx.path === "/callback/:id") {
+        if (
+          ctx.path === "/reset-password/:token" ||
+          ctx.path === "/callback/:id" ||
+          (ctx.path === "/sign-in/social" && !ctx.body?.idToken)
+        ) {
           throw new APIError("NOT_FOUND");
         }
         if (ctx.path === "/change-password") {
@@ -260,11 +264,13 @@ export const createAuth = ({
               scope: ["email", "profile"],
               mapProfileToUser: () => ({ image: undefined }),
               verifyIdToken: async (token, nonce) =>
-                (await verifyGoogleIdToken({
-                  token,
-                  audience: env.GOOGLE_CLIENT_ID ?? "",
-                  nonce,
-                })) !== null,
+                (
+                  await verifyGoogleIdToken({
+                    token,
+                    audience: env.GOOGLE_CLIENT_ID ?? "",
+                    nonce,
+                  })
+                )?.["email_verified"] === true,
             },
           }
         : undefined,

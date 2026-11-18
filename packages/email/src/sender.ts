@@ -10,23 +10,23 @@ export const createSendEmail =
   ) =>
   async ({
     userId,
-    optional,
+    cap,
     ...message
-  }: EmailMessage & { userId?: string; optional: boolean }): Promise<
+  }: EmailMessage & { userId?: string; cap: "alerts" | "notices" | null }): Promise<
     { sent: true } | { sent: false; reason: "disabled" | "capped" | "unavailable" }
   > => {
     if (!dependencies) return { sent: false, reason: "disabled" };
-    if (userId) {
+    if (userId && cap) {
       const rateLimit = await dependencies.rateLimits.consume(
         {
-          namespace: "email",
+          namespace: `email.${cap}`,
           identifier: { type: "userId", value: userId },
           limit: 20,
           windowMs: 60 * 60 * 1000,
         },
-        { whenUnavailable: optional ? "deny" : "allow" },
+        { whenUnavailable: "deny" },
       );
-      if (!rateLimit.allowed && optional)
+      if (!rateLimit.allowed)
         return { sent: false, reason: rateLimit.unavailable ? "unavailable" : "capped" };
     }
     await dependencies.transport.send(message);

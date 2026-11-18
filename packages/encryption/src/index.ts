@@ -520,6 +520,7 @@ export {
   decryptImageKey,
   encryptImage,
   encryptImageKey,
+  ENCRYPTED_IMAGE_KEY_LENGTH,
   generateImageKey,
   IMAGE_ENCRYPTION_CONTEXT,
   IMAGE_ENCRYPTION_VERSION,

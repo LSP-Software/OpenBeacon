@@ -1,5 +1,6 @@
-import { PAYLOAD_ENCRYPTION_ALGORITHM } from "@openbeacon/encryption";
+import { ENCRYPTED_IMAGE_KEY_LENGTH, PAYLOAD_ENCRYPTION_ALGORITHM } from "@openbeacon/encryption";
 import z from "zod";
+import { encodedBytes } from "../auth/registerDeviceKey.ts";
 import { groupPayloadNonceSchema } from "../group/tracking.ts";
 
 export const MAX_IMAGE_KEY_REENCRYPTS = 100;
@@ -10,7 +11,7 @@ export const imageFileNameSchema = z
   .string()
   .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
 
-const imageKeyCiphertextSchema = z.string().min(1).max(128);
+const imageKeyCiphertextSchema = encodedBytes(ENCRYPTED_IMAGE_KEY_LENGTH);
 
 export const encryptedImageKeySchema = z.object({
   algorithm: z.literal(PAYLOAD_ENCRYPTION_ALGORITHM),

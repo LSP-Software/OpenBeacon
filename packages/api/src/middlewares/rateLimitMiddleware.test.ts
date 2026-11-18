@@ -213,6 +213,42 @@ describe("rateLimitMiddleware", () => {
     warning.mockRestore();
   });
 
+  test("a call refused at the device gate spends none of the account's budget", async () => {
+    const cache = new TestOpenBeaconCache({
+      redisUrl: "redis://localhost:6379",
+      hashSecret: testRedisHashSecret,
+      now: () => 0,
+    });
+    const { createTRPCRouter, protectedProcedure } = createModules();
+    const router = createTRPCRouter({
+      protectedRoute: protectedProcedure
+        .meta({ rateLimit: { limit: 2, windowMs: 60_000 } })
+        .query(() => "protected"),
+    });
+    type CallerContext = Parameters<typeof router.createCaller>[0];
+    const callerFor = (deviceActive: boolean) => {
+      const context: CallerContext = {
+        cache,
+        db: {},
+        deviceId: deviceActive ? "device-active" : "device-pending",
+        deviceActive,
+        session: { user: { id: "user-1" } },
+      };
+      return router.createCaller(context);
+    };
+
+    for (let index = 0; index < 5; index += 1) {
+      await expect(callerFor(false).protectedRoute()).rejects.toMatchObject({
+        code: "FORBIDDEN",
+      });
+    }
+    await expect(callerFor(true).protectedRoute()).resolves.toBe("protected");
+    await expect(callerFor(true).protectedRoute()).resolves.toBe("protected");
+    await expect(callerFor(true).protectedRoute()).rejects.toMatchObject({
+      code: "TOO_MANY_REQUESTS",
+    });
+  });
+
   test("uses user ids across IP changes and hides rate limit details from clients", async () => {
     const cache = new TestOpenBeaconCache({
       redisUrl: "redis://localhost:6379",

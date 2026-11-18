@@ -110,7 +110,12 @@ export const createTRPCComponents = () => {
         if (error.code === "TOO_MANY_REQUESTS") {
           return {
             ...shape,
-            message: "Too many requests. Please try again later.",
+            message:
+              error.message === "" ||
+              error.message === error.code ||
+              error.message === error.cause?.message
+                ? "Too many requests. Please try again later."
+                : error.message,
             data: {
               code: shape.data.code,
               httpStatus: shape.data.httpStatus,

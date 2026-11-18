@@ -1,5 +1,9 @@
 import { GroupEventType, GroupRole, Prisma } from "@openbeacon/database";
-import { devicePlatformSchema, removeGroupMemberSchema } from "@openbeacon/schemas";
+import {
+  devicePlatformSchema,
+  removeGroupMemberSchema,
+  sealedPersonalDataSchema,
+} from "@openbeacon/schemas";
 import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
 import { errorCode, tryCatch } from "@openbeacon/shared";
@@ -134,8 +138,8 @@ export const groupMembershipRouter = {
       z.object({
         groupId: z.string().min(1),
         memberId: z.string().min(1),
-        ciphertext: z.string().min(1).max(50000).nullable(),
-        expectedCiphertext: z.string().min(1).max(50000).nullable(),
+        ciphertext: sealedPersonalDataSchema.nullable(),
+        expectedCiphertext: sealedPersonalDataSchema.nullable(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -195,8 +199,8 @@ export const groupMembershipRouter = {
     .input(
       z.object({
         groupId: z.string().min(1),
-        ciphertext: z.string().min(1).max(50000),
-        expectedCiphertext: z.string().min(1).max(50000).optional(),
+        ciphertext: sealedPersonalDataSchema,
+        expectedCiphertext: sealedPersonalDataSchema.optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {

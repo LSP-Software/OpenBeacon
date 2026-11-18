@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { auth } from "@openbeacon/auth";
+import { auth, passwordFailureLimitFor } from "@openbeacon/auth";
 import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { Prisma, prisma } from "@openbeacon/database";
 import { WRAPPED_EPOCH_KEY_ALGORITHM } from "@openbeacon/encryption";
@@ -51,6 +51,39 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await prisma.accountDeletionCleanup.deleteMany({ where: { userId } });
       await prisma.user.deleteMany({ where: { id: userId } });
       await prisma.$disconnect();
+    });
+
+    test("a wrong password counts towards the account's password lockout, which then refuses even the right one", async () => {
+      const lockoutEmail = `deletion-lockout-${crypto.randomUUID()}@example.test`;
+      const created = await auth.api.signUpEmail({
+        body: { email: lockoutEmail, password, name: "Lockout Test" },
+      });
+      const id = created.user.id;
+      await addActiveDevice(id);
+      const session = await prisma.session.findFirstOrThrow({ where: { userId: id } });
+      const lockoutCache = createIntegrationTestCache(() => 0);
+      const lockoutCaller = appRouter.createCaller(
+        withDeviceActive({
+          cache: lockoutCache,
+          db: prisma,
+          clientIp: "127.0.0.1",
+          deviceId: `${id}-device`,
+          session: { user: { id, email: lockoutEmail }, session: { id: session.id } },
+        }) as Parameters<typeof appRouter.createCaller>[0],
+      );
+      const limit = passwordFailureLimitFor(lockoutEmail);
+
+      await expect(
+        lockoutCaller.account.requestDeletion({ password: "incorrect" }),
+      ).rejects.toThrow("Password is incorrect");
+      expect((await lockoutCache.rateLimits.peek(limit)).remaining).toBe(9);
+      for (let index = 0; index < 9; index += 1) await lockoutCache.rateLimits.consume(limit);
+      await expect(lockoutCaller.account.requestDeletion({ password })).rejects.toMatchObject({
+        code: "TOO_MANY_REQUESTS",
+        cause: { reason: "TOO_MANY_PASSWORD_ATTEMPTS" },
+      });
+      expect((await prisma.user.findUniqueOrThrow({ where: { id } })).pendingDeletion).toBe(false);
+      await prisma.user.delete({ where: { id } });
     });
 
     test("rejects a sole owner, revokes all sessions, and cancels on successful login", async () => {

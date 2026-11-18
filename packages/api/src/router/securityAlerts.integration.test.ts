@@ -92,7 +92,10 @@ const createAccount = async () => {
         securityAlerts,
         clientIp: `ip-${user.id}`,
         deviceId,
-        session: { user: { id: user.id }, session: { id: sessionId, createdAt: new Date() } },
+        session: {
+          user: { id: user.id, email },
+          session: { id: sessionId, createdAt: new Date() },
+        },
       }) as Parameters<typeof appRouter.createCaller>[0],
     );
   const newPhoneCaller = async () => {

@@ -50,6 +50,7 @@ import {
 } from "./schemas/feedback/submitFeedback.ts";
 import { createGroupSchema, newGroupIdSchema } from "./schemas/group/create.ts";
 import { inviteMemberToGroupSchema } from "./schemas/group/inviteMember.ts";
+import { sealedPersonalDataSchema } from "./schemas/group/personalData.ts";
 import {
   createPlaceSchema,
   deletePlaceSchema,
@@ -131,6 +132,7 @@ export {
   FEEDBACK_MESSAGE_MAX_LENGTH,
   HISTORY_RECIPIENT_MISMATCH_MESSAGE,
   newGroupIdSchema,
+  sealedPersonalDataSchema,
   groupEpochBundleSchema,
   groupTrackingGetLatestSchema,
   groupTrackingHistoryDaysSchema,

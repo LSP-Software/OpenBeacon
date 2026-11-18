@@ -20,6 +20,7 @@ export { clientIpHeader } from "./createAuth.ts";
 export { createEmailCodes, type EmailCodes } from "./emailCode.ts";
 export { createSecurityAlerts, type SecurityAlerts } from "./securityAlerts.ts";
 export { createPushSender, type PushSender } from "./push.ts";
+export { checkPasswordWithinLimit, passwordFailureLimitFor } from "./passwordAttempts.ts";
 export { createGoogleDeletionAuthorization, verifyGoogleDeletionCode } from "./googleDeletion.ts";
 
 export const authPublicPath = getPublicUrl(env.BETTER_AUTH_URL).path;

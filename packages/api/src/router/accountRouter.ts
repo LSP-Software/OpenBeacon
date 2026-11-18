@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import {
   auth,
   authCapabilities,
+  checkPasswordWithinLimit,
   createGoogleDeletionAuthorization,
   verifyGoogleDeletionCode,
 } from "@openbeacon/auth";
@@ -34,6 +35,7 @@ import { beginAccountDeletion, deleteAccountRecords } from "../lib/account-delet
 import { deviceRemovedError } from "../lib/deviceRemoved.ts";
 import { deviceUnverifiedError } from "../lib/deviceUnverified.ts";
 import { removeUserDevice, toAlertDevice } from "../lib/removeDevice.ts";
+import { ReasonError } from "../lib/reasonError.ts";
 import {
   freshSessionProcedure,
   protectedProcedure,
@@ -314,6 +316,35 @@ export const accountRouter = {
           });
         googleSubject = verification.data;
       }
+      if ("password" in input) {
+        const { password } = input;
+        const check = await checkPasswordWithinLimit({
+          rateLimits: ctx.cache.rateLimits,
+          email: ctx.session.user.email,
+          check: async () => {
+            const account = await ctx.db.account.findFirst({
+              where: { userId, providerId: "credential" },
+              select: { password: true },
+            });
+            if (!account?.password) return false;
+            const authContext = await auth.$context;
+            return authContext.password.verify({ hash: account.password, password });
+          },
+        });
+        if (check === "unavailable")
+          throw new TRPCError({
+            code: "SERVICE_UNAVAILABLE",
+            message: "Passwords can't be checked right now. Try again shortly.",
+          });
+        if (check === "locked")
+          throw new TRPCError({
+            code: "TOO_MANY_REQUESTS",
+            message: "Too many attempts. Try again in 15 minutes.",
+            cause: new ReasonError("TOO_MANY_PASSWORD_ATTEMPTS"),
+          });
+        if (check === "incorrect")
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Password is incorrect." });
+      }
       const result = await ctx.db.$transaction(async (tx) => {
         await tx.$queryRaw(
           Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR NO KEY UPDATE`,
@@ -322,25 +353,7 @@ export const accountRouter = {
           where: { id: ctx.session.session.id, userId },
         });
         if (!session) throw new TRPCError({ code: "UNAUTHORIZED" });
-        if ("password" in input) {
-          const account = await tx.account.findFirst({
-            where: { userId, providerId: "credential" },
-            select: { password: true },
-          });
-          const authContext = await auth.$context;
-          if (
-            !account?.password ||
-            !(await authContext.password.verify({
-              hash: account.password,
-              password: input.password,
-            }))
-          ) {
-            throw new TRPCError({
-              code: "UNAUTHORIZED",
-              message: "Password is incorrect.",
-            });
-          }
-        } else {
+        if (!("password" in input)) {
           const account = await tx.account.findFirst({
             where: { userId, providerId: "google", accountId: googleSubject ?? "" },
             select: { id: true },
