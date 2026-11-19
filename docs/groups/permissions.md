@@ -1,6 +1,6 @@
 # Group permissions
 
-Every group has one owner: the account whose seats the group uses. The owner is always an Admin, so the Owner column lists what the owner can do on top of being an Admin.
+Every group has one owner: the account that makes room for the group's people. The owner is always an Admin, so the Owner column lists what the owner can do on top of being an Admin.
 
 | Action                                   | Owner                          | Admin                       | Editor | Member |
 | ---------------------------------------- | ------------------------------ | --------------------------- | ------ | ------ |
@@ -25,7 +25,7 @@ Every group has one owner: the account whose seats the group uses. The owner is 
 
 The creator is the owner. Nobody can remove the owner or change the owner's role. Only the owner manages Admins: other Admins can't make someone an Admin, change an Admin's role or remove an Admin. Email invites can make someone an Editor or a Member, while link and code invites always join as members.
 
-To hand a group on, the owner asks an Admin to become the owner. The Admin sees the request on their own phone, with how many seats the group uses on the hosted service, and accepts or declines it there. Once they accept, they're the owner and the old owner stays an Admin. The owner can cancel the request until then, and it's cancelled if the Admin stops being an Admin or leaves.
+To hand a group on, the owner asks an Admin to become the owner. The Admin sees the request on their own phone, with how many of the group's people they'd need to make room for on the hosted service, and accepts or declines it there. Once they accept, they're the owner and the old owner stays an Admin. The owner can cancel the request until then, and it's cancelled if the Admin stops being an Admin or leaves.
 
 When the owner leaves, the group is deleted for everyone, and deleting the owner's account deletes every group they own. Leaving as the last person also deletes the group. Removing or leaving a group rotates its encryption key and deletes the departing person's group location history. Places someone created stay in the group after they leave or are removed, and are deleted with their account.
 

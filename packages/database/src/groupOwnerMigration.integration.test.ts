@@ -6,7 +6,7 @@ const migrationsPath = `${import.meta.dir}/../prisma/migrations`;
 const target = "20261118154141_group_owner";
 
 describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("group owner migration", () => {
-  test("each group's earliest-joined OWNER not being deleted becomes its owner, every role is renamed and owners get a seat for every phone", async () => {
+  test("each group's earliest-joined OWNER not being deleted becomes its owner, every role is renamed and owners get a seat for every person in their groups", async () => {
     const schema = `migration_${crypto.randomUUID().replaceAll("-", "")}`;
     const sql = new SQL(process.env["DATABASE_URL"] ?? "");
     const connection = await sql.reserve();
@@ -32,7 +32,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("group owner migr
           ('several', 'Several owners', now()),
           ('empty', 'No members', now()),
           ('leaving', 'Owner leaving', now()),
-          ('allLeaving', 'Every owner leaving', now());
+          ('allLeaving', 'Every owner leaving', now()),
+          ('benToo', 'Ben again', now());
         INSERT INTO "GroupMember" ("id", "userId", "groupId", "role", "joinedEpochNumber", "createdAt", "updatedAt") VALUES
           ('single-ann', 'ann', 'single', 'MEMBER', 1, '2026-01-01', now()),
           ('single-ben', 'ben', 'single', 'OWNER', 1, '2026-01-02', now()),
@@ -44,7 +45,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("group owner migr
           ('leaving-eve', 'eve', 'leaving', 'OWNER', 1, '2026-03-01', now()),
           ('leaving-dan', 'dan', 'leaving', 'OWNER', 1, '2026-03-02', now()),
           ('allLeaving-eve', 'eve', 'allLeaving', 'OWNER', 1, '2026-04-01', now()),
-          ('allLeaving-ann', 'ann', 'allLeaving', 'MEMBER', 1, '2026-04-02', now());
+          ('allLeaving-ann', 'ann', 'allLeaving', 'MEMBER', 1, '2026-04-02', now()),
+          ('benToo-ben', 'ben', 'benToo', 'OWNER', 1, '2026-05-01', now()),
+          ('benToo-ann', 'ann', 'benToo', 'MEMBER', 1, '2026-05-02', now()),
+          ('benToo-dan', 'dan', 'benToo', 'MEMBER', 1, '2026-05-03', now());
         INSERT INTO "GroupEvent" ("id", "groupId", "type", "subjectUserId", "role") VALUES
           ('made-owner', 'several', 'ROLE_CHANGED', 'ann', 'OWNER'),
           ('made-admin', 'several', 'ROLE_CHANGED', 'ben', 'ADMIN');
@@ -61,6 +65,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("group owner migr
 
       expect(await connection.unsafe(`SELECT "id", "ownerId" FROM "Group" ORDER BY "id"`)).toEqual([
         { id: "allLeaving", ownerId: "ann" },
+        { id: "benToo", ownerId: "ben" },
         { id: "leaving", ownerId: "dan" },
         { id: "several", ownerId: "cat" },
         { id: "single", ownerId: "ben" },
@@ -70,6 +75,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("group owner migr
       ).toEqual([
         { id: "allLeaving-ann", role: "ADMIN" },
         { id: "allLeaving-eve", role: "ADMIN" },
+        { id: "benToo-ann", role: "MEMBER" },
+        { id: "benToo-ben", role: "ADMIN" },
+        { id: "benToo-dan", role: "MEMBER" },
         { id: "leaving-dan", role: "ADMIN" },
         { id: "leaving-eve", role: "ADMIN" },
         { id: "several-ann", role: "ADMIN" },
@@ -87,8 +95,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("group owner migr
         { id: "made-owner", role: "ADMIN" },
       ]);
       expect(await connection.unsafe(`SELECT "id", "seats" FROM "User" ORDER BY "id"`)).toEqual([
-        { id: "ann", seats: 3 },
-        { id: "ben", seats: 3 },
+        { id: "ann", seats: 2 },
+        { id: "ben", seats: 4 },
         { id: "cat", seats: 5 },
         { id: "dan", seats: 2 },
         { id: "eve", seats: 2 },

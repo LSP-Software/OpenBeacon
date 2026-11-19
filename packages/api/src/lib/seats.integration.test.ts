@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { prisma } from "@openbeacon/database";
-import { freeSeats, groupSeats, seatsUsed } from "./seats.ts";
+import { freeSeats, newPeopleFor, seatsUsed } from "./seats.ts";
 
 const prefix = `seats-${crypto.randomUUID()}`;
 const id = (name: string) => `${prefix}-${name}`;
@@ -85,39 +85,34 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("seats with Postg
     expect(await seatsUsed(prisma, pendingOnly)).toBe(0);
   });
 
-  test("counts the owner's own devices, two phones as two seats, and a member in two owned groups twice", async () => {
-    const familySeats = 2 + 2 + 1;
-    const friendsSeats = 2 + 1;
-    expect(await seatsUsed(prisma, owner)).toBe(familySeats + friendsSeats);
+  test("counts each person in the owner's groups once, however many phones or groups they have", async () => {
+    expect(await seatsUsed(prisma, owner)).toBe(4);
   });
 
-  test("the owner of another group pays for the seats there, not its members or other Admins", async () => {
-    expect(await seatsUsed(prisma, otherOwner)).toBe(1 + 2 + 2);
+  test("the owner of another group pays for the people there, not its members or other Admins", async () => {
+    expect(await seatsUsed(prisma, otherOwner)).toBe(3);
     expect(await seatsUsed(prisma, twoPhones)).toBe(0);
   });
 
-  test("a group's seats are its members' active phones, and move to whoever owns it", async () => {
-    expect(await groupSeats(prisma, family)).toBe(2 + 2 + 1);
-    expect(await groupSeats(prisma, friends)).toBe(2 + 1);
-    expect(await groupSeats(prisma, notOwned)).toBe(1 + 2 + 2);
-    const ownerBefore = await seatsUsed(prisma, owner);
+  test("taking over a group needs room only for people who aren't already yours", async () => {
+    expect(await newPeopleFor({ db: prisma, groupId: notOwned, ownerId: owner })).toBe(1);
+    expect(await newPeopleFor({ db: prisma, groupId: family, ownerId: owner })).toBe(0);
+    expect(await newPeopleFor({ db: prisma, groupId: family, ownerId: unused })).toBe(4);
     await prisma.group.update({ where: { id: notOwned }, data: { ownerId: owner } });
     try {
-      expect(await groupSeats(prisma, notOwned)).toBe(1 + 2 + 2);
-      expect(await seatsUsed(prisma, owner)).toBe(ownerBefore + 1 + 2 + 2);
+      expect(await seatsUsed(prisma, owner)).toBe(5);
       expect(await seatsUsed(prisma, otherOwner)).toBe(0);
     } finally {
       await prisma.group.update({ where: { id: notOwned }, data: { ownerId: otherOwner } });
     }
   });
 
-  test("a pending device takes a seat once it activates, and a removed one gives it back", async () => {
+  test("setting up or removing phones never changes the seats used", async () => {
     const before = await seatsUsed(prisma, owner);
     await prisma.userDevice.update({
       where: { id: id(`${pendingOnly}-phone`) },
       data: { activatedAt: new Date() },
     });
-    expect(await seatsUsed(prisma, owner)).toBe(before + 1);
     await prisma.userDevice.update({
       where: { id: id(`${twoPhones}-work phone`) },
       data: { revokedAt: new Date() },

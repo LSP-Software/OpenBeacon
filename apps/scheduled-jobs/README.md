@@ -82,12 +82,6 @@ It checks each listed page of versions against users, groups and pending uploads
 
 Logs the 10 accounts that stored the most location history points in the last 24 hours (live-only uploads aren't stored, so they don't count), with how many groups each is in. It logs nothing when there were no uploads.
 
-### `seats-ended` (every hour)
-
-Finds accounts whose paid period has ended and that haven't been told about that end yet. An account has no seats from the moment its paid period ends, so every phone in the groups it owns goes on hold straight away. If any phones had seats just before the end, the job sends the owner one `SEATS_ENDED` account notice and an email listing the phones now on hold. It records the paid-period end in `seatsEndedNoticeFor` so the owner isn't told again, even after the cleanup job deletes the notice. A failed email is retried on the next run. Holds themselves are worked out live by the backend, and renewing lifts them, so this job only tells the owner.
-
-Self-hosted servers never set `paidPeriodEndsAt`, so the job finds nothing to do there.
-
 ## Releases
 
 The runner image is built and released with the backend's and doesn't apply migrations; the backend owns them. Future schema changes must stay compatible while old and new containers overlap. See [Publishing releases](https://docs.openbeacon.net/docs/contribute/publishing-releases).

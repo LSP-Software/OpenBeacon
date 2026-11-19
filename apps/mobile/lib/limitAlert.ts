@@ -12,5 +12,5 @@ export const limitAlert = (error: unknown) => {
   if (reason !== "NO_FREE_SEATS" && reason !== "GROUP_FULL") return null;
   const message =
     typeof error === "object" && error !== null && "message" in error ? String(error.message) : "";
-  return { title: reason === "GROUP_FULL" ? "Group full" : "No free seats", message };
+  return { title: reason === "GROUP_FULL" ? "Group full" : "No room", message };
 };

@@ -234,9 +234,9 @@ export const InviteConfirmation = ({
             {joinBlockedBy === "GROUP_LIMIT"
               ? "You’re already in as many groups as your account allows. Leave a group before joining another."
               : joinBlockedBy === "NO_FREE_SEATS"
-                ? `This group has no free seats for your phones. Ask ${owner.name} to add seats.`
+                ? `${owner.name} has no room for more people in their groups. Ask ${owner.name} to make room.`
                 : joinBlockedBy === "GROUP_FULL"
-                  ? `This group is full. A group can have up to ${seats.perGroup} phones.`
+                  ? `This group is full. A group can have up to ${seats.perGroup} people.`
                   : "Your account is scheduled for deletion, so it can’t join groups."}
           </Text>
         ) : (

@@ -6,7 +6,7 @@ const migrationsPath = `${import.meta.dir}/../prisma/migrations`;
 const target = "20261118145758_user_seats";
 
 describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("user seats migration", () => {
-  test("every existing account gets 2 seats and no paid period", async () => {
+  test("every existing account gets 2 seats", async () => {
     const schema = `migration_${crypto.randomUUID().replaceAll("-", "")}`;
     const sql = new SQL(process.env["DATABASE_URL"] ?? "");
     const connection = await sql.reserve();
@@ -29,14 +29,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("user seats migra
         `INSERT INTO "User" ("id", "name", "email", "updatedAt") VALUES ('new', 'C', 'c@example.test', now())`,
       );
 
-      expect(
-        await connection.unsafe(
-          `SELECT "id", "seats", "paidPeriodEndsAt", "seatsEndedNoticeFor" FROM "User" ORDER BY "id"`,
-        ),
-      ).toEqual([
-        { id: "first", seats: 2, paidPeriodEndsAt: null, seatsEndedNoticeFor: null },
-        { id: "new", seats: 2, paidPeriodEndsAt: null, seatsEndedNoticeFor: null },
-        { id: "second", seats: 2, paidPeriodEndsAt: null, seatsEndedNoticeFor: null },
+      expect(await connection.unsafe(`SELECT "id", "seats" FROM "User" ORDER BY "id"`)).toEqual([
+        { id: "first", seats: 2 },
+        { id: "new", seats: 2 },
+        { id: "second", seats: 2 },
       ]);
     } finally {
       await connection.unsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);

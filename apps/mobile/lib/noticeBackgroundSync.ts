@@ -25,9 +25,7 @@ export const getNoticesCursor = (userId: string) => readCursor(cursorKey(userId)
 
 export const getAccountNoticesCursor = (userId: string) => readCursor(accountCursorKey(userId));
 
-const accountLink = (
-  screen: "devices" | "password" | "recovery" | "delete" | "notifications" | "usage",
-) => ({
+const accountLink = (screen: "devices" | "password" | "recovery" | "delete" | "notifications") => ({
   href: `/account/${screen}` as const,
   url: `openbeacon:///account/${screen}`,
 });
@@ -103,12 +101,6 @@ export const describeAccountNotice = (notice: AccountNotices["notices"][number])
           : "You’ve been asked to become a group’s owner",
         body: "Open Groups to see what it means and accept or decline.",
         link: { href: "/(tabs)/groups/list" as const, url: "openbeacon:///groups/list" },
-      };
-    case "SEATS_ENDED":
-      return {
-        title: "Phones in your groups are on hold",
-        body: "Your seats have ended, so phones in the groups you own are on hold until you renew your seats. Open Account › Usage to see which.",
-        link: accountLink("usage"),
       };
     case "ALERTS_TURNED_OFF": {
       const turnedOff = notice.turnedOff

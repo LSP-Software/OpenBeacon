@@ -41,6 +41,7 @@ const createCaller = (
     group: {
       findUniqueOrThrow: mock(async () => ({
         owner: { id: "owner-user", name: "Owner" },
+        _count: { groupMembers: 1 },
       })),
     },
     groupMember: {
@@ -53,10 +54,7 @@ const createCaller = (
       findMany: mock(async () => []),
     },
     user: {
-      findUniqueOrThrow: mock(async () => ({
-        seats: 2,
-        paidPeriodEndsAt: null,
-      })),
+      findUniqueOrThrow: mock(async () => ({ seats: 2 })),
       findMany: mock(async () => [
         { id: "target-user", email: "target@example.test", receivedGroupMemberInvites: [] },
       ]),

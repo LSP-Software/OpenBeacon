@@ -164,7 +164,7 @@ const OwnershipOffers = ({ offers }: { offers: RouterOutputs["groupOwnership"]["
           icon={CrownIcon}
           tone="primary"
           title={`Become the owner of ${offer.groupName}?`}
-          description={`${offer.owner.name} asked you to take over ${offer.groupName}.${offer.seats === null ? "" : ` The owner’s account pays for every seat in the group, so it will use ${pluralize(offer.seats, "seat")} of yours (one for each phone in it).`} Only the owner can delete the group or hand it on. ${offer.owner.name} stays an Admin.`}
+          description={`${offer.owner.name} asked you to take over ${offer.groupName}.${offer.seats === null ? "" : offer.seats === 0 ? " Everyone in it is already in your groups, so it needs no more room." : ` Taking it over needs room for ${pluralize(offer.seats, "more person", "more people")} in your groups.`} Only the owner can delete the group or hand it on. ${offer.owner.name} stays an Admin.`}
         >
           <Button
             className="flex-1"

@@ -123,22 +123,16 @@ export const LiveMapMissingPersonSheet = ({
           <View className="rounded-xl bg-secondary p-3">
             <Text className="text-sm">
               {ownedGroupNames.length > 0
-                ? `${person.isSelf ? "Your phones are" : `${person.name}’s phones are`} on hold, because you don’t have enough seats for them in ${joinNames(ownedGroupNames)}. Add seats or remove a phone from your groups to free one.`
+                ? `${person.isSelf ? "You’re" : `${person.name} is`} on hold, because you don’t have room for everyone in ${joinNames(ownedGroupNames)}. Remove someone from your groups to make room.`
                 : person.isSelf
-                  ? "Your phones are on hold, because the group’s owner has no free seats for them. Ask the owner to add seats, or remove a phone you no longer use."
-                  : `${person.name}’s phones are on hold, because the group’s owner has no free seat for them. Their location shows again on its own once a seat is free.`}
+                  ? "You’re on hold, because the group’s owner has no room for you in their groups. Ask the owner to make room."
+                  : `${person.name} is on hold, because the group’s owner has no room for them in their groups. Their location shows again on its own once there’s room.`}
             </Text>
           </View>
           {ownedGroupNames.length > 0 ? (
             <Link href="/account/usage" asChild>
               <Button variant="secondary" accessibilityRole="link">
                 <Text>See usage</Text>
-              </Button>
-            </Link>
-          ) : person.isSelf ? (
-            <Link href="/account/devices" asChild>
-              <Button variant="secondary" accessibilityRole="link">
-                <Text>Your phones</Text>
               </Button>
             </Link>
           ) : null}

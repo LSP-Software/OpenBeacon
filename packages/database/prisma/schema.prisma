@@ -31,8 +31,6 @@ model User {
   historyShare   HistoryShare    @default(MAXIMUM)
   historyShareChangedAt DateTime?
   seats          Int             @default(2)
-  paidPeriodEndsAt DateTime?
-  seatsEndedNoticeFor DateTime?
   sessions       Session[]
   accounts       Account[]
   pendingUploads PendingUpload[]
@@ -107,7 +105,6 @@ enum AccountNoticeType {
   SIGN_IN_CODES_TURNED_ON
   SIGN_IN_CODES_TURNED_OFF
   OWNERSHIP_OFFERED
-  SEATS_ENDED
 }
 
 model AccountNotice {
@@ -120,7 +117,6 @@ model AccountNotice {
   deviceModel     String?
   devicePlatform  String?
   deletionDate    DateTime?
-  emailedAt       DateTime?
   turnedOffEmail  NotificationType[] @default([])
   turnedOffPhone  NotificationType[] @default([])
   groupId         String?

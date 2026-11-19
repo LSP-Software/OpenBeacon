@@ -52,7 +52,7 @@ export const InviteMemberToGroupDialog = ({
         {blocked ? (
           <View className="gap-2">
             <Text variant="large">
-              {blocked.blockedBy === "GROUP_FULL" ? "Group full" : "No free seats"}
+              {blocked.blockedBy === "GROUP_FULL" ? "Group full" : "No room"}
             </Text>
             <Text className="text-secondary">{blocked.message}</Text>
             <View className="mt-2 gap-2">

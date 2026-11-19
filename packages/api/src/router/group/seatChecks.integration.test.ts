@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, spyOn, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
 import {
@@ -11,7 +11,6 @@ import {
 import { activateDevice } from "../../lib/deviceActivation.ts";
 import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
 import { freeSeats, heldSeatDevices, seatsUsed } from "../../lib/seats.ts";
-import { sendSeatsEndedNotices } from "../../lib/seatsEnded.ts";
 import { encryptedTrackingPoint, testClientPointId } from "../../lib/trackingPoints.testUtil.ts";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
 import { accountNoticesRouter } from "../accountNoticesRouter.ts";
@@ -243,32 +242,29 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await prisma.$disconnect();
     });
 
-    test("an account with no seats, or too few for its phones, can't create a group", async () => {
+    test("an account with no room can't create its first group, and an owner needs no new seat for another", async () => {
       const noSeats = await createUser({ seats: 0 });
       await expect(
         caller(noSeats).groupLifecycle.create(await createInput(noSeats)),
       ).rejects.toMatchObject({
         ...noFreeSeats,
-        message: "Your account has no seats. Add seats to create a group.",
+        message: "Your account has no room for people. Add room to create a group.",
       });
+      expect(await prisma.group.count({ where: { ownerId: noSeats.id } })).toBe(0);
 
-      const twoPhones = await createUser({ phones: 2, seats: 1 });
-      await expect(
-        caller(twoPhones).groupLifecycle.create(await createInput(twoPhones)),
-      ).rejects.toMatchObject({
-        ...noFreeSeats,
-        message:
-          "Creating a group needs 2 seats, one for each of your phones, and you have 1 free seat.",
-      });
-      expect(
-        await prisma.group.count({ where: { ownerId: { in: [noSeats.id, twoPhones.id] } } }),
-      ).toBe(0);
+      const owner = await createUser({ phones: 3, seats: 1 });
+      await createGroup(owner);
+      await createGroup(owner);
+      expect(await freeSeats(prisma, owner.id)).toEqual({ seats: 1, used: 1, free: 0 });
+      await setSeats(owner, 0);
+      await createGroup(owner);
+      expect(await prisma.group.count({ where: { ownerId: owner.id } })).toBe(3);
     });
 
-    test("an owner with 2 seats and one phone can invite one person, then can't create another invite", async () => {
+    test("an owner with room for 2 can invite one person, then can't create another invite", async () => {
       const owner = await createUser({ seats: 2 });
       const editor = await createUser();
-      const joiner = await createUser();
+      const joiner = await createUser({ phones: 3 });
       const groupId = await createGroup(owner);
       expect(await caller(owner).groupInvites.seats({ groupId })).toEqual({
         blockedBy: null,
@@ -278,10 +274,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await joinWithCode(joiner, await invite(owner, groupId));
       expect(await seatsUsed(prisma, owner.id)).toBe(2);
 
+      const full =
+        "You have room for 2 people and they're all in your groups. Add room or remove someone to invite more people.";
       await expect(caller(owner).groupInvites.createShared({ groupId })).rejects.toMatchObject({
         ...noFreeSeats,
-        message:
-          "You're using all 2 of your seats. Add seats or remove someone to invite more people.",
+        message: full,
       });
       await expect(
         caller(owner).groupInvites.send({
@@ -291,25 +288,21 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       ).rejects.toMatchObject(noFreeSeats);
       expect(await caller(owner).groupInvites.seats({ groupId })).toEqual({
         blockedBy: "NO_FREE_SEATS",
-        message:
-          "You're using all 2 of your seats. Add seats or remove someone to invite more people.",
+        message: full,
       });
 
       await prisma.groupMember.create({
         data: { groupId, userId: editor.id, role: "EDITOR", joinedEpochNumber: 1 },
       });
-      await prisma.user.update({ where: { id: owner.id }, data: { seats: 4 } });
+      await setSeats(owner, 4);
       await caller(editor).groupInvites.createShared({ groupId });
-      await prisma.user.update({ where: { id: owner.id }, data: { seats: 3 } });
-      const noRoom = `Name ${owner.id} owns this group and has no free seats. Ask Name ${owner.id} to add seats or to remove someone.`;
+      await setSeats(owner, 3);
+      const noRoom = `Name ${owner.id} owns this group and has no room for more people. Ask Name ${owner.id} to add room or to remove someone.`;
       await expect(caller(editor).groupInvites.createShared({ groupId })).rejects.toMatchObject({
         ...noFreeSeats,
         message: noRoom,
       });
-      await prisma.user.update({ where: { id: owner.id }, data: { seats: 2 } });
-      await expect(caller(editor).groupInvites.createShared({ groupId })).rejects.toMatchObject({
-        message: noRoom,
-      });
+      await setSeats(owner, 2);
       expect(await caller(editor).groupInvites.seats({ groupId })).toEqual({
         blockedBy: "NO_FREE_SEATS",
         message: noRoom,
@@ -317,48 +310,66 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(await caller(owner).groupInvites.seats({ groupId })).toEqual({
         blockedBy: "NO_FREE_SEATS",
         message:
-          "You're using 3 seats but have 2. Add seats or remove someone to invite more people.",
+          "You have room for 2 people but 3 are in your groups. Add room or remove someone to invite more people.",
       });
+      await setSeats(owner, 1);
+      expect((await caller(owner).groupInvites.seats({ groupId })).message).toBe(
+        "You have room for 1 person but 3 are in your groups. Add room or remove someone to invite more people.",
+      );
     });
 
-    test("a joiner with two phones can't join with only one free seat, and is told before trying", async () => {
-      const owner = await createUser({ seats: 2 });
-      const joiner = await createUser({ phones: 2 });
-      const groupId = await createGroup(owner);
-      const code = await invite(owner, groupId);
+    test("joining needs a free seat unless the joiner is already one of the owner's people, and is told before trying", async () => {
+      const owner = await createUser({ seats: 3 });
+      const known = await createUser({ phones: 2 });
+      const filler = await createUser();
+      const stranger = await createUser();
+      const family = await createGroup(owner);
+      const friends = await createGroup(owner);
+      await joinWithCode(known, await invite(owner, family));
+      const knownCode = await invite(owner, friends);
+      const strangerCode = await invite(owner, friends);
+      await joinWithCode(filler, await invite(owner, family));
+      expect(await freeSeats(prisma, owner.id)).toEqual({ seats: 3, used: 3, free: 0 });
 
-      expect(await caller(joiner).groupInvites.sharedPreview({ code })).toMatchObject({
+      expect(
+        await caller(stranger).groupInvites.sharedPreview({ code: strangerCode }),
+      ).toMatchObject({
         owner: { name: `Name ${owner.id}` },
-        seats: { needed: 2, perGroup: 64 },
+        seats: { needed: 1, perGroup: 64 },
         joinBlockedBy: "NO_FREE_SEATS",
       });
-      expect(await caller(joiner).groupInvites.sharedPreview({ code })).not.toHaveProperty(
-        "seats.free",
-      );
-      await expect(joinWithCode(joiner, code)).rejects.toMatchObject({
+      expect(
+        await caller(stranger).groupInvites.sharedPreview({ code: strangerCode }),
+      ).not.toHaveProperty("seats.free");
+      await expect(joinWithCode(stranger, strangerCode)).rejects.toMatchObject({
         ...noFreeSeats,
-        message: `This group has no free seats for your phones. Ask Name ${owner.id} to add seats.`,
+        message: `This group has no room for you. Ask Name ${owner.id} to make room.`,
       });
 
-      const emailInvite = await prisma.groupMemberInvite.create({
-        data: { groupId, inviterId: owner.id, recipientId: joiner.id, role: "MEMBER" },
+      expect(await caller(known).groupInvites.sharedPreview({ code: knownCode })).toMatchObject({
+        seats: { needed: 0, perGroup: 64 },
+        joinBlockedBy: null,
       });
-      expect(await caller(joiner).groupInvites.preview({ inviteId: emailInvite.id })).toMatchObject(
-        {
-          joinBlockedBy: "NO_FREE_SEATS",
-        },
-      );
-      const context = await caller(joiner).groupInvites.acceptanceContext({
+      await joinWithCode(known, knownCode);
+      expect(await seatsUsed(prisma, owner.id)).toBe(3);
+
+      const emailInvite = await prisma.groupMemberInvite.create({
+        data: { groupId: friends, inviterId: owner.id, recipientId: stranger.id, role: "MEMBER" },
+      });
+      expect(
+        await caller(stranger).groupInvites.preview({ inviteId: emailInvite.id }),
+      ).toMatchObject({ joinBlockedBy: "NO_FREE_SEATS" });
+      const context = await caller(stranger).groupInvites.acceptanceContext({
         inviteId: emailInvite.id,
       });
       await expect(
-        caller(joiner).groupInvites.accept({
+        caller(stranger).groupInvites.accept({
           inviteId: emailInvite.id,
           nextEpoch: bundle(
             createNextGroupEpoch({
               creator: {
-                deviceId: joiner.deviceIds[0]!,
-                privateKey: keys.get(joiner.deviceIds[0]!)!.privateKey,
+                deviceId: stranger.deviceIds[0]!,
+                privateKey: keys.get(stranger.deviceIds[0]!)!.privateKey,
               },
               previousEpoch: context.latestEpoch!,
               recipients: context.recipients,
@@ -366,11 +377,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           ),
         }),
       ).rejects.toMatchObject(noFreeSeats);
-      expect(await prisma.groupMember.count({ where: { groupId } })).toBe(1);
+      expect(await prisma.groupMember.count({ where: { groupId: friends } })).toBe(2);
     });
 
     test("two joins into different groups racing for the owner's last seat let exactly one in", async () => {
-      const owner = await createUser({ seats: 3 });
+      const owner = await createUser({ seats: 2 });
       const [first, second] = [await createUser(), await createUser()];
       const firstGroup = await createGroup(owner);
       const secondGroup = await createGroup(owner);
@@ -387,19 +398,19 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(results.filter(({ status }) => status === "fulfilled")).toHaveLength(1);
       const rejected = results.find((result) => result.status === "rejected");
       expect(rejected?.status === "rejected" && rejected.reason).toMatchObject(noFreeSeats);
-      expect(await seatsUsed(prisma, owner.id)).toBe(3);
+      expect(await seatsUsed(prisma, owner.id)).toBe(2);
     });
 
-    test("a member in two of the owner's groups uses two seats", async () => {
-      const owner = await createUser({ seats: 4 });
-      const member = await createUser();
+    test("the owner and a person in two of the owner's groups each count once, whatever their phones", async () => {
+      const owner = await createUser({ phones: 2, seats: 4 });
+      const member = await createUser({ phones: 3 });
       for (const groupId of [await createGroup(owner), await createGroup(owner)]) {
         await joinWithCode(member, await invite(owner, groupId));
       }
-      expect((await caller(owner).account.usage()).seats).toMatchObject({ seats: 4, used: 4 });
+      expect((await caller(owner).account.usage()).seats).toMatchObject({ seats: 4, used: 2 });
     });
 
-    test("a 65th seat in a group is refused, on hosted and self-hosted servers", async () => {
+    test("a 65th person in a group is refused, on hosted and self-hosted servers", async () => {
       const owner = await createUser({ seats: 1_024 });
       const joiner = await createUser();
       const groupId = await createGroup(owner);
@@ -411,18 +422,21 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         joinBlockedBy: "GROUP_FULL",
       });
       for (const selfHosted of [false, true]) {
-        await expect(joinWithCode(joiner, code, { selfHosted })).rejects.toMatchObject(groupFull);
+        await expect(joinWithCode(joiner, code, { selfHosted })).rejects.toMatchObject({
+          ...groupFull,
+          message: "This group is full. A group can have up to 64 people.",
+        });
         await expect(
           caller(owner, { selfHosted }).groupInvites.createShared({ groupId }),
         ).rejects.toMatchObject(groupFull);
       }
       expect(await caller(owner).groupInvites.seats({ groupId })).toEqual({
         blockedBy: "GROUP_FULL",
-        message: "This group is full. A group can have up to 64 phones.",
+        message: "This group is full. A group can have up to 64 people.",
       });
     });
 
-    test("activating a third device puts it on hold in a group whose owner is full", async () => {
+    test("activating another phone never holds it or uses a seat", async () => {
       const owner = await createUser({ seats: 2 });
       const member = await createUser();
       const groupId = await createGroup(owner);
@@ -445,57 +459,45 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         activateDevice({ activatedBy: "phrase", db: tx, deviceId: newDeviceId, userId: member.id }),
       );
 
-      expect(await heldDeviceIds({ groupId, selfHosted: false })).toEqual(new Set([newDeviceId]));
-      expect(await heldDeviceIds({ groupId, selfHosted: true })).toEqual(new Set());
-      await expect(
-        caller(member, { deviceId: newDeviceId }).groupTracking.getLatest({ groupId }),
-      ).rejects.toMatchObject({ code: "FORBIDDEN", cause: { reason: "SEAT_ON_HOLD" } });
-      await caller(member).groupTracking.getLatest({ groupId });
-
-      const epoch = await prisma.groupEpoch.findFirstOrThrow({
-        where: { groupId },
-        orderBy: { epochNumber: "desc" },
-      });
-      const clientPointId = testClientPointId("held");
-      const uploaded = await caller(member, { deviceId: newDeviceId }).groupTracking.uploadBatch({
-        groupId,
-        points: [
-          encryptedTrackingPoint({
-            clientPointId,
-            epochId: epoch.id,
-            epochKey: generateGroupEpochKey(),
-            groupId,
-            senderDeviceId: newDeviceId,
-          }),
-        ],
-      });
-      expect(uploaded).toMatchObject({ accepted: [], discarded: [clientPointId] });
-
-      await prisma.user.update({ where: { id: owner.id }, data: { seats: 3 } });
       expect(await heldDeviceIds({ groupId, selfHosted: false })).toEqual(new Set());
+      expect(await freeSeats(prisma, owner.id)).toEqual({ seats: 2, used: 2, free: 0 });
+      await caller(member, { deviceId: newDeviceId }).groupTracking.getLatest({ groupId });
     });
 
-    test("taking over a group needs a free seat for every seat in it", async () => {
-      const owner = await createUser({ seats: 2 });
-      const admin = await createUser({ seats: 1 });
+    test("taking over a group needs room for each of its people who isn't already yours", async () => {
+      const owner = await createUser({ seats: 3 });
+      const admin = await createUser({ seats: 2 });
+      const member = await createUser();
       const groupId = await createGroup(owner);
       await joinWithCode(admin, await invite(owner, groupId));
+      await joinWithCode(member, await invite(owner, groupId));
       const membership = await prisma.groupMember.update({
         where: { userId_groupId: { userId: admin.id, groupId } },
         data: { role: "ADMIN" },
       });
       await caller(owner).groupOwnership.offer({ groupId, memberId: membership.id });
-      expect((await caller(admin).groupOwnership.offers())[0]?.seats).toBe(2);
-
+      expect((await caller(admin).groupOwnership.offers())[0]?.seats).toBe(3);
       await expect(caller(admin).groupOwnership.accept({ groupId })).rejects.toMatchObject({
         ...noFreeSeats,
-        message: "Taking over this group needs 2 seats and you have 1 free seat. Add seats first.",
+        message:
+          "Taking over this group needs room for 3 more people, and you have room for 2 more. Add room first.",
       });
-      await prisma.user.update({ where: { id: admin.id }, data: { seats: 2 } });
+
+      const theirs = await createGroup(admin);
+      await joinWithCode(member, await invite(admin, theirs));
+      expect((await caller(admin).groupOwnership.offers())[0]?.seats).toBe(1);
+      await expect(caller(admin).groupOwnership.accept({ groupId })).rejects.toMatchObject({
+        ...noFreeSeats,
+        message:
+          "Taking over this group needs room for 1 more person, and you have no room left. Add room first.",
+      });
+      await setSeats(admin, 3);
       await caller(admin).groupOwnership.accept({ groupId });
       expect((await prisma.group.findUniqueOrThrow({ where: { id: groupId } })).ownerId).toBe(
         admin.id,
       );
+      expect(await seatsUsed(prisma, admin.id)).toBe(3);
+      expect(await seatsUsed(prisma, owner.id)).toBe(0);
     });
 
     test("setSeats only works while the server allows it, within 0 to 1,024", async () => {
@@ -522,14 +524,14 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(await allowed.account.setSeats({ seats: 0 })).toEqual({ seats: 0 });
     });
 
-    test("self-hosted servers skip every seat check", async () => {
+    test("self-hosted servers skip every seat check and hold no one", async () => {
       const selfHosted = { selfHosted: true };
       const owner = await createUser({ seats: 0 });
       const joiner = await createUser({ phones: 2, seats: 0 });
       const groupId = await createGroup(owner, selfHosted);
       const code = await invite(owner, groupId, selfHosted);
       expect(await caller(joiner, selfHosted).groupInvites.sharedPreview({ code })).toMatchObject({
-        seats: { needed: 2, perGroup: 64 },
+        seats: { needed: 0, perGroup: 64 },
         joinBlockedBy: null,
       });
       await joinWithCode(joiner, code, selfHosted);
@@ -537,8 +539,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         blockedBy: null,
         message: null,
       });
-      expect((await caller(owner, selfHosted).account.usage()).seats).toBeNull();
       expect(await heldDeviceIds({ groupId, selfHosted: true })).toEqual(new Set());
+      expect(
+        (await caller(joiner, selfHosted).groupMembership.list()).find(({ id }) => id === groupId)
+          ?.onHold,
+      ).toBe(false);
+      await caller(joiner, selfHosted).groupTracking.getLatest({ groupId });
 
       const membership = await prisma.groupMember.update({
         where: { userId_groupId: { userId: joiner.id, groupId } },
@@ -549,45 +555,85 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await caller(joiner, selfHosted).groupOwnership.accept({ groupId });
     });
 
-    test("holds follow seat order across an owner's groups and lift when seats are added, someone leaves or a phone is removed", async () => {
+    test("fewer seats hold the people who joined last, in all the owner's groups and on all their phones, and the owner last", async () => {
       const owner = await createUser({ seats: 5 });
-      const [first, second, third] = [await createUser(), await createUser(), await createUser()];
+      const first = await createUser({ phones: 2 });
+      const second = await createUser();
+      const third = await createUser({ phones: 2 });
       const family = await createGroup(owner);
       const friends = await createGroup(owner);
       await joinWithCode(first, await invite(owner, family));
       await joinWithCode(second, await invite(owner, friends));
       await joinWithCode(third, await invite(owner, family));
+      await joinWithCode(third, await invite(owner, friends));
+      await joinWithCode(first, await invite(owner, friends));
       const held = async () =>
         (await heldSeatDevices({ db: prisma, groupIds: [family, friends], selfHosted: false }))
-          .map(({ deviceId }) => deviceId)
+          .map(
+            ({ groupId, deviceId }) => `${groupId === family ? "family" : "friends"} ${deviceId}`,
+          )
+          .toSorted();
+      const heldIn = (groups: string[], users: TestUser[]) =>
+        groups
+          .flatMap((group) =>
+            users.flatMap(({ deviceIds }) => deviceIds.map((id) => `${group} ${id}`)),
+          )
           .toSorted();
       expect(await held()).toEqual([]);
 
       await setSeats(owner, 3);
-      expect(await held()).toEqual([second.deviceIds[0], third.deviceIds[0]].toSorted());
+      expect(await held()).toEqual(heldIn(["family", "friends"], [third]));
       expect(
-        (await caller(third).groupMembership.list()).find(({ id }) => id === family)?.onHold,
-      ).toBe(true);
-      expect(
-        (await caller(first).groupMembership.list()).find(({ id }) => id === family)?.onHold,
-      ).toBe(false);
+        (await caller(third, { deviceId: third.deviceIds[1]! }).groupMembership.list()).map(
+          ({ onHold }) => onHold,
+        ),
+      ).toEqual([true, true]);
+      expect((await caller(first).groupMembership.list()).map(({ onHold }) => onHold)).toEqual([
+        false,
+        false,
+      ]);
+
+      await setSeats(owner, 2);
+      expect(await held()).toEqual(
+        [...heldIn(["family", "friends"], [third]), ...heldIn(["friends"], [second])].toSorted(),
+      );
       expect(await caller(second).accountNotices.sync({ cursor: null })).toMatchObject({
         heldGroupIds: [friends],
       });
 
-      await setSeats(owner, 4);
-      expect(await held()).toEqual([third.deviceIds[0]]);
+      await setSeats(owner, 1);
+      expect(await held()).toEqual(
+        [
+          ...heldIn(["family", "friends"], [first, third]),
+          ...heldIn(["friends"], [second]),
+        ].toSorted(),
+      );
+      await caller(owner).groupTracking.getLatest({ groupId: family });
 
-      await leave(first, family);
-      expect(await held()).toEqual([]);
+      await setSeats(owner, 0);
+      expect(await held()).toEqual(
+        [
+          ...heldIn(["family", "friends"], [owner, first, third]),
+          ...heldIn(["friends"], [second]),
+        ].toSorted(),
+      );
 
       await setSeats(owner, 3);
-      expect(await held()).toEqual([third.deviceIds[0]]);
+      expect(await held()).toEqual(heldIn(["family", "friends"], [third]));
+      await leave(first, family);
+      expect(await held()).toEqual(heldIn(["friends"], [first]));
+      await leave(first, friends);
+      expect(await held()).toEqual([]);
+
+      await setSeats(owner, 2);
+      expect(await held()).toEqual(heldIn(["family", "friends"], [third]));
       await prisma.userDevice.update({
-        where: { id: second.deviceIds[0]! },
+        where: { id: third.deviceIds[1]! },
         data: { revokedAt: new Date() },
       });
-      expect(await held()).toEqual([]);
+      expect(await held()).toEqual(
+        heldIn(["family", "friends"], [{ ...third, deviceIds: [third.deviceIds[0]!] }]),
+      );
     });
 
     test("a held phone can't upload to or read that group, but still shares in its other groups and can leave", async () => {
@@ -678,273 +724,90 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       ).toBe(true);
     });
 
-    const seatsEnded = (
-      now: Date,
-      sendEmail: Parameters<typeof sendSeatsEndedNotices>[0]["sendEmail"] = null,
-      db = prisma,
-    ) => sendSeatsEndedNotices({ db, now, sendEmail });
-
-    test("a paid period ending puts every phone in the owner's groups on hold at once, and renewing lifts the holds", async () => {
-      const owner = await createUser({ seats: 2 });
-      const member = await createUser();
-      const groupId = await createGroup(owner);
-      await joinWithCode(member, await invite(owner, groupId));
-      const bothPhones = new Set([owner.deviceIds[0], member.deviceIds[0]]);
-      const endedAt = new Date(Date.now() - 1_000);
-      await prisma.user.update({ where: { id: owner.id }, data: { paidPeriodEndsAt: endedAt } });
-
-      expect(await heldDeviceIds({ groupId, selfHosted: false })).toEqual(bothPhones);
-      expect((await caller(owner).account.usage()).seats).toMatchObject({
-        seats: 0,
-        paidSeats: 2,
-        onHold: 2,
-        paidPeriodEndsAt: endedAt,
-      });
-      await expect(
-        caller(owner).groupLifecycle.create(await createInput(owner)),
-      ).rejects.toMatchObject(noFreeSeats);
-
-      await prisma.user.update({
-        where: { id: owner.id },
-        data: { paidPeriodEndsAt: new Date(Date.now() + 30 * 86_400_000) },
-      });
-      expect(await heldDeviceIds({ groupId, selfHosted: false })).toEqual(new Set());
-      expect((await caller(owner).account.usage()).seats?.seats).toBe(2);
-
-      await prisma.user.update({ where: { id: owner.id }, data: { paidPeriodEndsAt: endedAt } });
-      expect(await heldDeviceIds({ groupId, selfHosted: false })).toEqual(bothPhones);
-      await prisma.user.update({ where: { id: owner.id }, data: { paidPeriodEndsAt: null } });
-      expect(await heldDeviceIds({ groupId, selfHosted: false })).toEqual(new Set());
-    });
-
-    test("the owner gets one notice and one email each time a paid period ends, and members get nothing", async () => {
-      const owner = await createUser({ seats: 2 });
-      const member = await createUser();
-      const groupId = await createGroup(owner);
-      await joinWithCode(member, await invite(owner, groupId));
-      const endedAt = new Date(Date.now() - 3_600_000);
-      await prisma.user.update({ where: { id: owner.id }, data: { paidPeriodEndsAt: endedAt } });
-      const emails: Array<{ to: string; endedAt: Date; holds: Array<{ deviceId: string }> }> = [];
-      const run = (now: Date) =>
-        seatsEnded(now, async (email) => {
-          if (email.userId === owner.id) emails.push(email);
-        });
-      const notices = () =>
-        prisma.accountNotice.findMany({
-          where: { userId: { in: [owner.id, member.id] } },
-          select: { userId: true, type: true, groupId: true },
-        });
-
-      await run(new Date());
-      await run(new Date());
-      expect(await notices()).toEqual([{ userId: owner.id, type: "SEATS_ENDED", groupId: null }]);
-      expect(emails).toMatchObject([{ to: `${owner.id}@example.test`, endedAt }]);
-      expect(emails[0]?.holds.map(({ deviceId }) => deviceId).toSorted()).toEqual(
-        [owner.deviceIds[0], member.deviceIds[0]].toSorted(),
-      );
-      expect(
-        (await prisma.user.findUniqueOrThrow({ where: { id: owner.id } })).seatsEndedNoticeFor,
-      ).toEqual(endedAt);
-
-      await prisma.accountNotice.deleteMany({ where: { userId: owner.id } });
-      await run(new Date(Date.now() + 2 * 86_400_000));
-      expect(await notices()).toEqual([]);
-      expect(emails).toHaveLength(1);
-
-      await prisma.user.update({
-        where: { id: owner.id },
-        data: { paidPeriodEndsAt: new Date(Date.now() + 30 * 86_400_000) },
-      });
-      await run(new Date());
-      expect(await notices()).toEqual([]);
-      const endedAgain = new Date(Date.now() - 60_000);
-      await prisma.user.update({
-        where: { id: owner.id },
-        data: { paidPeriodEndsAt: endedAgain },
-      });
-      await run(new Date());
-      await run(new Date());
-      expect(await notices()).toEqual([{ userId: owner.id, type: "SEATS_ENDED", groupId: null }]);
-      expect(emails.map((email) => email.endedAt)).toEqual([endedAt, endedAgain]);
-    });
-
-    test("nothing is sent when no phone had a seat before the paid period ended", async () => {
-      const owner = await createUser({ seats: 0 });
-      await prisma.user.update({
-        where: { id: owner.id },
-        data: { paidPeriodEndsAt: new Date(Date.now() - 3_600_000) },
-      });
-      const emailed: string[] = [];
-      await seatsEnded(new Date(), async (email) => {
-        emailed.push(email.userId);
-      });
-      expect(await prisma.accountNotice.findMany({ where: { userId: owner.id } })).toEqual([]);
-      expect(emailed).not.toContain(owner.id);
-    });
-
-    test("a seats ended email that fails is sent once on the next run", async () => {
-      const owner = await createUser({ seats: 2 });
-      const member = await createUser();
-      const groupId = await createGroup(owner);
-      await joinWithCode(member, await invite(owner, groupId));
-      await prisma.user.update({
-        where: { id: owner.id },
-        data: { paidPeriodEndsAt: new Date(Date.now() - 3_600_000) },
-      });
-      let sent = 0;
-      let failing = true;
-      const run = () =>
-        seatsEnded(new Date(), async (email) => {
-          if (email.userId !== owner.id) return;
-          if (failing) throw new Error("Email provider unavailable");
-          sent++;
-        });
-      const consoleError = spyOn(console, "error").mockImplementation(() => {});
-      await run();
-      expect(consoleError).toHaveBeenCalledWith("Seats ended email failed");
-      consoleError.mockRestore();
-      expect(sent).toBe(0);
-      expect(
-        await prisma.accountNotice.findMany({
-          where: { userId: owner.id },
-          select: { type: true, emailedAt: true },
-        }),
-      ).toEqual([{ type: "SEATS_ENDED", emailedAt: null }]);
-
-      failing = false;
-      await run();
-      await run();
-      expect(sent).toBe(1);
-    });
-
-    test("one account failing doesn't stop the others being told or emailed", async () => {
-      const [failing, working] = [await createUser(), await createUser()];
-      const endedAt = new Date(Date.now() - 3_600_000);
-      for (const owner of [failing, working]) {
-        await createGroup(owner);
-        await prisma.user.update({ where: { id: owner.id }, data: { paidPeriodEndsAt: endedAt } });
-      }
-      const db = new Proxy(prisma, {
-        get: (target, property) =>
-          property === "userDevice"
-            ? new Proxy(target.userDevice, {
-                get: (devices, method) =>
-                  method === "findMany"
-                    ? (args: Parameters<typeof devices.findMany>[0]) =>
-                        JSON.stringify(args?.where).includes(failing.deviceIds[0]!)
-                          ? Promise.reject(new Error("Database unavailable"))
-                          : devices.findMany(args)
-                    : Reflect.get(devices, method),
-              })
-            : Reflect.get(target, property),
-      });
-      const emailed: string[] = [];
-      const consoleError = spyOn(console, "error").mockImplementation(() => {});
-      await seatsEnded(
-        new Date(),
-        async (email) => {
-          emailed.push(email.userId);
-        },
-        db,
-      );
-      expect(consoleError).toHaveBeenCalledWith("Seats ended check failed for an account");
-      consoleError.mockRestore();
-      expect(
-        (
-          await prisma.accountNotice.findMany({
-            where: { userId: { in: [failing.id, working.id] } },
-            select: { userId: true },
-          })
-        ).map(({ userId }) => userId),
-      ).toEqual([working.id]);
-      expect(emailed).toContain(working.id);
-      expect(emailed).not.toContain(failing.id);
-    });
-
-    test("usage shows seats per owned group in seat order with holds, and no seats for other owners' groups", async () => {
-      const owner = await createUser({ seats: 2 });
+    test("usage lists the people in each owned group in seat order with holds, and only your own hold elsewhere", async () => {
+      const owner = await createUser({ phones: 2, seats: 3 });
       const member = await createUser({ phones: 2 });
+      const late = await createUser();
       const other = await createUser({ seats: 4 });
       const family = await createGroup(owner);
-      await setSeats(owner, 3);
       await joinWithCode(member, await invite(owner, family));
+      await joinWithCode(late, await invite(owner, family));
       const theirs = await createGroup(other);
       await joinWithCode(owner, await invite(other, theirs));
       await setSeats(owner, 2);
       const usage = await caller(owner, { allowSelfSetSeats: true }).account.usage();
-      expect(usage.gauges).toEqual([
-        {
-          id: "seats",
-          label: "Seats",
-          used: 3,
-          max: 2,
-          onHold: 1,
-          unit: { one: "seat", other: "seats" },
-        },
-        {
-          id: "groups",
-          label: "Groups",
-          used: 2,
-          max: 16,
-          onHold: 0,
-          unit: { one: "group", other: "groups" },
-        },
-        {
-          id: "devices",
-          label: "Devices",
-          used: 1,
-          max: 10,
-          onHold: 0,
-          unit: { one: "device", other: "devices" },
-        },
-      ]);
-      expect(usage.limits).toEqual([
-        {
-          id: "history",
-          label: "Location history kept",
-          value: 30,
-          unit: { one: "day", other: "days" },
-        },
-      ]);
-      expect(usage.seats).toEqual({
-        seats: 2,
-        paidSeats: 2,
-        used: 3,
-        onHold: 1,
-        max: 1_024,
-        selfSetAllowed: true,
-        paidPeriodEndsAt: null,
-      });
-      const [familyUsage, theirsUsage] = usage.groups;
-      expect(familyUsage).toMatchObject({ id: family, isOwner: true, yourPhonesOnHold: [] });
-      expect(familyUsage?.seats).toMatchObject({ used: 3, max: 64, onHold: 1 });
-      expect(
-        familyUsage?.seats?.phones.map(({ deviceId, isThisPhone, onHold }) => ({
-          deviceId,
-          isThisPhone,
-          onHold,
-        })),
-      ).toEqual([
-        { deviceId: owner.deviceIds[0], isThisPhone: true, onHold: false },
-        { deviceId: member.deviceIds[0], isThisPhone: false, onHold: false },
-        { deviceId: member.deviceIds[1], isThisPhone: false, onHold: true },
-      ]);
-      expect(theirsUsage).toMatchObject({
-        id: theirs,
-        isOwner: false,
-        owner: { userId: other.id },
-        seats: null,
-        yourPhonesOnHold: [],
+      expect(usage).toEqual({
+        gauges: [
+          {
+            id: "seats",
+            label: "People",
+            used: 3,
+            max: 2,
+            onHold: 1,
+            unit: { one: "person", other: "people" },
+          },
+          {
+            id: "groups",
+            label: "Groups",
+            used: 2,
+            max: 16,
+            onHold: 0,
+            unit: { one: "group", other: "groups" },
+          },
+          {
+            id: "phones",
+            label: "Phones",
+            used: 2,
+            max: 10,
+            onHold: 0,
+            unit: { one: "phone", other: "phones" },
+          },
+        ],
+        limits: [
+          {
+            id: "history",
+            label: "Location history kept",
+            value: 30,
+            unit: { one: "day", other: "days" },
+          },
+        ],
+        seats: { seats: 2, used: 3, onHold: 1, max: 1_024, selfSetAllowed: true },
+        groups: [
+          {
+            id: family,
+            name: "Family",
+            owner: { userId: owner.id, name: `Name ${owner.id}` },
+            isOwner: true,
+            people: [
+              { userId: owner.id, name: `Name ${owner.id}`, isYou: true, onHold: false },
+              { userId: member.id, name: `Name ${member.id}`, isYou: false, onHold: false },
+              { userId: late.id, name: `Name ${late.id}`, isYou: false, onHold: true },
+            ],
+            youAreOnHold: false,
+          },
+          {
+            id: theirs,
+            name: "Family",
+            owner: { userId: other.id, name: `Name ${other.id}` },
+            isOwner: false,
+            people: null,
+            youAreOnHold: false,
+          },
+        ],
       });
       expect((await caller(owner).account.usage()).seats?.selfSetAllowed).toBe(false);
+      expect((await caller(late).account.usage()).groups).toMatchObject([
+        { id: family, isOwner: false, people: null, youAreOnHold: true },
+      ]);
 
       await setSeats(other, 1);
-      expect((await caller(owner).account.usage()).groups[1]?.yourPhonesOnHold).toEqual([
-        { deviceId: owner.deviceIds[0], deviceName: "Phone", isThisPhone: true },
-      ]);
+      expect((await caller(owner).account.usage()).groups[1]).toMatchObject({
+        id: theirs,
+        youAreOnHold: true,
+      });
     });
 
-    test("usage on a self-hosted server shows groups only", async () => {
+    test("usage on a self-hosted server shows groups and phones only", async () => {
       const owner = await createUser({ seats: 0 });
       const member = await createUser();
       const groupId = await createGroup(owner, { selfHosted: true });
@@ -956,7 +819,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         allowSelfSetSeats: true,
         selfHosted: true,
       }).account.usage();
-      expect(usage.gauges.map(({ id }) => id)).toEqual(["groups", "devices"]);
+      expect(usage.gauges.map(({ id }) => id)).toEqual(["groups", "phones"]);
       expect(usage.gauges[0]).toMatchObject({ used: 1, max: 16 });
       expect(usage.seats).toBeNull();
       expect(usage.groups).toEqual([
@@ -965,77 +828,15 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           name: "Family",
           owner: { userId: owner.id, name: `Name ${owner.id}` },
           isOwner: true,
-          seats: null,
-          yourPhonesOnHold: [],
+          people: null,
+          youAreOnHold: false,
         },
       ]);
       expect((await caller(member, { selfHosted: true }).account.usage()).groups[0]).toMatchObject({
         isOwner: false,
-        seats: null,
+        people: null,
+        youAreOnHold: false,
       });
-    });
-
-    test("the debug setting ends and renews the paid period only where self-set seats are allowed", async () => {
-      const owner = await createUser({ seats: 2 });
-      await expect(caller(owner).account.setPaidPeriodEnded({ ended: true })).rejects.toMatchObject(
-        { code: "FORBIDDEN" },
-      );
-      await expect(
-        caller(owner, { allowSelfSetSeats: true, selfHosted: true }).account.setPaidPeriodEnded({
-          ended: true,
-        }),
-      ).rejects.toMatchObject({ code: "FORBIDDEN" });
-      const ended = await caller(owner, { allowSelfSetSeats: true }).account.setPaidPeriodEnded({
-        ended: true,
-      });
-      expect(ended.paidPeriodEndsAt).toBeInstanceOf(Date);
-      expect((await caller(owner).account.usage()).seats).toMatchObject({ seats: 0 });
-      await caller(owner, { allowSelfSetSeats: true }).account.setPaidPeriodEnded({ ended: false });
-      expect((await caller(owner).account.usage()).seats).toMatchObject({
-        paidPeriodEndsAt: null,
-        seats: 2,
-      });
-    });
-
-    test("a phone beyond 64 in a group is held there without taking one of the owner's seats", async () => {
-      const owner = await createUser({ seats: 100 });
-      const member = await createUser();
-      const groupId = await createGroup(owner);
-      await joinWithCode(member, await invite(owner, groupId));
-      await addMembers(groupId, 62);
-      const newDeviceId = `${member.id}-device-65th`;
-      await prisma.userDevice.create({
-        data: {
-          id: newDeviceId,
-          userId: member.id,
-          publicKey: createDeviceKeyPair().publicKey,
-          publicKeyAlgorithm: "X25519",
-          name: "Tablet",
-          icon: "tablet",
-        },
-      });
-      await prisma.$transaction((tx) =>
-        activateDevice({ activatedBy: "phrase", db: tx, deviceId: newDeviceId, userId: member.id }),
-      );
-
-      for (const selfHosted of [false, true]) {
-        expect(await heldDeviceIds({ groupId, selfHosted })).toEqual(new Set([newDeviceId]));
-      }
-      expect(await seatsUsed(prisma, owner.id)).toBe(64);
-      expect(await freeSeats(prisma, owner.id)).toEqual({ seats: 100, used: 64, free: 36 });
-      const usage = await caller(owner).account.usage();
-      expect(usage.gauges[0]).toMatchObject({ id: "seats", used: 64, onHold: 0 });
-      expect(usage.seats).toMatchObject({ used: 64, onHold: 0 });
-      expect(usage.groups[0]?.seats).toMatchObject({ used: 64, onHold: 1 });
-      expect(usage.groups[0]?.seats?.phones).toHaveLength(65);
-      expect(
-        (await caller(member, { deviceId: newDeviceId }).groupMembership.list())[0]?.onHold,
-      ).toBe(true);
-      expect(
-        (
-          await caller(member, { deviceId: newDeviceId, selfHosted: true }).groupMembership.list()
-        )[0]?.onHold,
-      ).toBe(true);
     });
   },
 );

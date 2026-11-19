@@ -11,12 +11,10 @@ import { recordGroupEvent } from "../../lib/groupHistory.ts";
 import { groupGoneError, notOwnerError } from "../../lib/groupRoles.ts";
 import { ReasonError } from "../../lib/reasonError.ts";
 import {
-  freeSeatCount,
   freeSeats,
-  groupSeats,
   lockOwnerThenGroup,
+  newPeopleFor,
   noFreeSeatsError,
-  seatCount,
   seatsEnforced,
 } from "../../lib/seats.ts";
 import { groupMemberProcedure } from "../../procedures/auth/group.ts";
@@ -113,7 +111,9 @@ export const groupOwnershipRouter = {
         groupName: group.name,
         owner: { userId: group.owner.id, name: group.owner.name },
         offeredAt: group.ownershipOfferedAt,
-        seats: seatsEnforced(ctx) ? await groupSeats(ctx.db, group.id) : null,
+        seats: seatsEnforced(ctx)
+          ? await newPeopleFor({ db: ctx.db, groupId: group.id, ownerId: ctx.session.user.id })
+          : null,
       })),
     );
   }),
@@ -150,11 +150,11 @@ export const groupOwnershipRouter = {
       if (seatsEnforced(ctx)) {
         const [{ free }, needed] = await Promise.all([
           freeSeats(tx, ctx.session.user.id),
-          groupSeats(tx, input.groupId),
+          newPeopleFor({ db: tx, groupId: input.groupId, ownerId: ctx.session.user.id }),
         ]);
         if (needed > free) {
           throw noFreeSeatsError(
-            `Taking over this group needs ${seatCount(needed)} and you have ${freeSeatCount(free)}. Add seats first.`,
+            `Taking over this group needs room for ${needed} more ${needed === 1 ? "person" : "people"}, and you have ${free === 0 ? "no room left" : `room for ${free} more`}. Add room first.`,
           );
         }
       }

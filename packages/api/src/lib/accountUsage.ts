@@ -1,29 +1,25 @@
 import type { PrismaClient } from "@openbeacon/database";
 import { limits, maxAccountSeats } from "./limits.ts";
-import { currentSeats, seatAccountSelect, seatsEnforced, type SeatHolds } from "./seats.ts";
+import { seatsEnforced, type SeatHolds } from "./seats.ts";
 
 type Unit = { one: string; other: string };
 
 export const readAccountUsage = async ({
   allowSelfSetSeats,
   db,
-  deviceId,
-  now,
   seatHolds,
   selfHosted,
   userId,
 }: {
   allowSelfSetSeats: boolean;
   db: PrismaClient;
-  deviceId: string;
-  now: Date;
   seatHolds: SeatHolds;
   selfHosted: boolean;
   userId: string;
 }) => {
   const enforced = seatsEnforced({ selfHosted });
-  const [account, memberships, ownPhones, ownSeats] = await Promise.all([
-    db.user.findUniqueOrThrow({ where: { id: userId }, select: seatAccountSelect }),
+  const [account, memberships, phones, people] = await Promise.all([
+    db.user.findUniqueOrThrow({ where: { id: userId }, select: { seats: true } }),
     db.groupMember.findMany({
       where: { userId },
       select: {
@@ -32,67 +28,42 @@ export const readAccountUsage = async ({
         },
       },
     }),
-    db.userDevice.findMany({
-      where: { userId, activatedAt: { not: null }, revokedAt: null },
-      select: { id: true, name: true },
-    }),
-    enforced ? seatHolds.ownSeats() : Promise.resolve([]),
+    db.userDevice.count({ where: { userId, activatedAt: { not: null }, revokedAt: null } }),
+    seatHolds.people(),
   ]);
-  const seats = currentSeats(account, now);
-  const seatDevices = await db.userDevice.findMany({
-    where: { id: { in: ownSeats.map(({ deviceId }) => deviceId) } },
-    select: { id: true, name: true, user: { select: { name: true } } },
+  const yourPeople = people.filter((person) => person.ownerId === userId);
+  const names = await db.user.findMany({
+    where: { id: { in: [...new Set(yourPeople.map(({ userId }) => userId))] } },
+    select: { id: true, name: true },
   });
 
-  const groups = await Promise.all(
-    memberships.map(async ({ group }) => {
-      const held = await seatHolds.heldIn(group.id);
-      const isOwner = group.ownerId === userId;
-      const phones =
+  const groups = memberships.map(({ group }) => {
+    const isOwner = group.ownerId === userId;
+    return {
+      id: group.id,
+      name: group.name,
+      owner: { userId: group.ownerId, name: group.owner.name },
+      isOwner,
+      people:
         enforced && isOwner
-          ? ownSeats
-              .filter((seat) => seat.groupId === group.id)
-              .flatMap((seat) => {
-                const device = seatDevices.find(({ id }) => id === seat.deviceId);
-                return device
-                  ? [
-                      {
-                        deviceId: seat.deviceId,
-                        deviceName: device.name,
-                        userId: seat.userId,
-                        memberName: device.user.name,
-                        isThisPhone: seat.deviceId === deviceId,
-                        onHold: seat.held,
-                      },
-                    ]
-                  : [];
-              })
-          : null;
-      return {
-        id: group.id,
-        name: group.name,
-        owner: { userId: group.ownerId, name: group.owner.name },
-        isOwner,
-        seats: phones && {
-          used: Math.min(phones.length, limits.seatsPerGroup),
-          max: limits.seatsPerGroup,
-          onHold: phones.filter(({ onHold }) => onHold).length,
-          phones,
-        },
-        yourPhonesOnHold: ownPhones
-          .filter((phone) => held.has(phone.id))
-          .map((phone) => ({
-            deviceId: phone.id,
-            deviceName: phone.name,
-            isThisPhone: phone.id === deviceId,
-          })),
-      };
-    }),
-  );
+          ? yourPeople
+              .filter((person) => person.groupId === group.id)
+              .map((person) => ({
+                userId: person.userId,
+                name: names.find(({ id }) => id === person.userId)?.name ?? "",
+                isYou: person.userId === userId,
+                onHold: person.held,
+              }))
+          : null,
+      youAreOnHold: people.some(
+        (person) => person.groupId === group.id && person.userId === userId && person.held,
+      ),
+    };
+  });
   groups.sort((a, b) => Number(b.isOwner) - Number(a.isOwner) || a.name.localeCompare(b.name));
 
-  const seatsUsed = ownSeats.filter(({ overGroupLimit }) => !overGroupLimit).length;
-  const seatsOnHold = ownSeats.filter(({ held, overGroupLimit }) => held && !overGroupLimit).length;
+  const used = new Set(yourPeople.map((person) => person.userId)).size;
+  const onHold = new Set(yourPeople.filter(({ held }) => held).map((person) => person.userId)).size;
   const gauges: Array<{
     id: string;
     label: string;
@@ -105,11 +76,11 @@ export const readAccountUsage = async ({
       ? [
           {
             id: "seats",
-            label: "Seats",
-            used: seatsUsed,
-            max: seats,
-            onHold: seatsOnHold,
-            unit: { one: "seat", other: "seats" },
+            label: "People",
+            used,
+            max: account.seats,
+            onHold,
+            unit: { one: "person", other: "people" },
           },
         ]
       : []),
@@ -122,12 +93,12 @@ export const readAccountUsage = async ({
       unit: { one: "group", other: "groups" },
     },
     {
-      id: "devices",
-      label: "Devices",
-      used: ownPhones.length,
+      id: "phones",
+      label: "Phones",
+      used: phones,
       max: limits.devicesPerAccount,
       onHold: 0,
-      unit: { one: "device", other: "devices" },
+      unit: { one: "phone", other: "phones" },
     },
   ];
 
@@ -150,13 +121,11 @@ export const readAccountUsage = async ({
     limits: usageLimits,
     seats: enforced
       ? {
-          seats,
-          paidSeats: account.seats,
-          used: seatsUsed,
-          onHold: seatsOnHold,
+          seats: account.seats,
+          used,
+          onHold,
           max: maxAccountSeats,
           selfSetAllowed: allowSelfSetSeats,
-          paidPeriodEndsAt: account.paidPeriodEndsAt,
         }
       : null,
     groups,

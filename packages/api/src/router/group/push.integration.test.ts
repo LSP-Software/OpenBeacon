@@ -344,11 +344,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("push wake-ups", 
 
     test("devices on hold in the group aren't woken by its events or arrivals", async () => {
       const f = await setup();
-      await prisma.user.update({ where: { id: f.alice }, data: { seats: 3 } });
+      await prisma.user.update({ where: { id: f.alice }, data: { seats: 2 } });
       const held = (
         await heldSeatDevices({ db: prisma, groupIds: [f.groupId], selfHosted: false })
       ).map(({ deviceId }) => deviceId);
-      expect(held).toHaveLength(3);
+      expect(held.toSorted()).toEqual([`${f.carol}-phone`, `${f.dave}-phone`].sort());
       const holdingPush = () =>
         testPush().withHeldDevices((groupIds) =>
           heldSeatDevices({ db: prisma, groupIds, selfHosted: false }),

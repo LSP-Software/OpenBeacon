@@ -13,16 +13,12 @@ import { Icon } from "../../components/ui/Icon.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { useAppForeground } from "../../hooks/useAppForeground.ts";
 import { trpc } from "../../lib/api.ts";
-import { authClient } from "../../lib/auth-client.ts";
 import { cn } from "../../lib/cn.ts";
 import { pluralize } from "../../lib/pluralize.ts";
 
 const UsageScreen = () => {
   const isFocused = useIsFocused();
-  const { data: session } = authClient.useSession();
-  const [selected, setSelected] = useState<{ groupId: string; deviceId: string | null } | null>(
-    null,
-  );
+  const [selected, setSelected] = useState<{ groupId: string; userId: string | null } | null>(null);
   const usage = useQuery({
     ...trpc.account.usage.queryOptions(),
     staleTime: 0,
@@ -31,13 +27,12 @@ const UsageScreen = () => {
   useAppForeground(() => {
     if (isFocused) void usage.refetch();
   });
-  const formatDate = (date: Date) => date.toLocaleDateString(undefined, { dateStyle: "medium" });
   const seats = usage.data?.seats ?? null;
-  const ownedGroups = usage.data?.groups.filter((group) => group.seats !== null) ?? [];
-  const otherGroups = usage.data?.groups.filter((group) => group.seats === null) ?? [];
+  const ownedGroups = usage.data?.groups.filter((group) => group.people !== null) ?? [];
+  const otherGroups = usage.data?.groups.filter((group) => group.people === null) ?? [];
   const selectedGroup = usage.data?.groups.find((group) => group.id === selected?.groupId);
-  const selectedPhone = selectedGroup?.seats?.phones.find(
-    (phone) => phone.deviceId === selected?.deviceId,
+  const selectedPerson = selectedGroup?.people?.find(
+    (person) => person.userId === selected?.userId,
   );
 
   return (
@@ -67,8 +62,9 @@ const UsageScreen = () => {
         >
           {seats && (
             <Text className="text-secondary text-base">
-              Each phone in a group you own takes one of your seats, including your own phones.
-              Groups owned by someone else use their seats, not yours.
+              Everyone in the groups you own, including you, counts once towards the people you have
+              room for, however many of your groups they’re in and however many phones they have.
+              Groups owned by someone else use their room, not yours.
             </Text>
           )}
 
@@ -113,16 +109,15 @@ const UsageScreen = () => {
           {seats && seats.onHold > 0 && (
             <View className="gap-2 rounded-2xl border border-warning-accent bg-card p-5">
               <Text className="text-foreground font-semibold">
-                {pluralize(seats.onHold, "phone")} {seats.onHold === 1 ? "is" : "are"} on hold
+                {pluralize(seats.onHold, "person", "people")} {seats.onHold === 1 ? "is" : "are"} on
+                hold
               </Text>
               <Text className="text-tertiary text-sm leading-5">
-                {seats.seats === 0 && seats.paidPeriodEndsAt
-                  ? `Your seats ended on ${formatDate(seats.paidPeriodEndsAt)}, so every phone in the groups you own is on hold until you renew.`
-                  : seats.seats === 0
-                    ? "Your account has no seats, so every phone in the groups you own is on hold."
-                    : `You’re using more phones than your ${pluralize(seats.seats, "seat")}. The phones that took a seat last are on hold.`}{" "}
-                A phone on hold doesn’t share its location in that group and can’t see anyone in it.
-                To free a seat, remove someone from a group or remove one of your phones.
+                {seats.seats === 0
+                  ? "You don’t have room for anyone in the groups you own, so everyone in them is on hold."
+                  : `You have room for ${pluralize(seats.seats, "person", "people")} in the groups you own, so the people who joined last are on hold.`}{" "}
+                Their phones don’t share their location in your groups, and can’t see anyone there,
+                until you have room. To make room, remove someone from your groups.
               </Text>
             </View>
           )}
@@ -142,35 +137,30 @@ const UsageScreen = () => {
                       {group.name}
                     </Text>
                     <Text className="text-tertiary text-sm">
-                      {pluralize(group.seats?.used ?? 0, "seat")}
+                      {pluralize(group.people?.length ?? 0, "person", "people")}
                     </Text>
                   </View>
-                  {group.seats?.phones.map((phone, index, phones) => (
+                  {group.people?.map((person, index, people) => (
                     <Pressable
-                      key={phone.deviceId}
+                      key={person.userId}
                       accessibilityRole="button"
                       accessibilityLabel={[
-                        `${phone.memberName}${phone.isThisPhone ? " (this phone)" : ""}`,
-                        phone.deviceName,
-                        phone.onHold ? "On hold" : null,
+                        person.isYou ? "You" : person.name,
+                        person.onHold ? "On hold" : null,
                       ]
                         .filter(Boolean)
                         .join(", ")}
                       accessibilityHint="Opens details"
-                      onPress={() => setSelected({ groupId: group.id, deviceId: phone.deviceId })}
+                      onPress={() => setSelected({ groupId: group.id, userId: person.userId })}
                       className={cn(
                         "flex-row items-center gap-3 px-5 py-3 active:bg-secondary/60",
-                        index < phones.length - 1 && "border-b border-border/50",
+                        index < people.length - 1 && "border-b border-border/50",
                       )}
                     >
-                      <View className="flex-1">
-                        <Text className="text-foreground text-base">
-                          {phone.memberName}
-                          {phone.isThisPhone ? " (this phone)" : ""}
-                        </Text>
-                        <Text className="text-tertiary text-sm">{phone.deviceName}</Text>
-                      </View>
-                      {phone.onHold && (
+                      <Text className="text-foreground flex-1 text-base">
+                        {person.isYou ? "You" : person.name}
+                      </Text>
+                      {person.onHold && (
                         <Text className="text-warning-text text-sm font-medium">On hold</Text>
                       )}
                       <Icon as={ChevronRightIcon} className="size-4 text-tertiary" />
@@ -192,14 +182,12 @@ const UsageScreen = () => {
                     accessibilityLabel={[
                       group.name,
                       group.isOwner ? "You own this group" : `Owned by ${group.owner.name}`,
-                      group.yourPhonesOnHold.length > 0
-                        ? `On hold here: ${group.yourPhonesOnHold.map(({ deviceName }) => deviceName).join(", ")}`
-                        : null,
+                      group.youAreOnHold ? "You’re on hold here" : null,
                     ]
                       .filter(Boolean)
                       .join(", ")}
                     accessibilityHint="Opens details"
-                    onPress={() => setSelected({ groupId: group.id, deviceId: null })}
+                    onPress={() => setSelected({ groupId: group.id, userId: null })}
                     className={cn(
                       "flex-row items-center gap-3 px-5 py-4 active:bg-secondary/60",
                       index < otherGroups.length - 1 && "border-b border-border/50",
@@ -210,14 +198,11 @@ const UsageScreen = () => {
                       <Text className="text-tertiary text-sm">
                         {group.isOwner ? "You own this group" : `Owned by ${group.owner.name}`}
                       </Text>
-                      {group.yourPhonesOnHold.length > 0 && (
+                      {group.youAreOnHold && (
                         <View className="mt-1 flex-row items-center gap-1.5">
                           <Icon as={CircleSlashIcon} className="size-4 text-warning-accent" />
                           <Text className="text-warning-text flex-1 text-sm">
-                            {group.yourPhonesOnHold.length === 1 &&
-                            group.yourPhonesOnHold[0]?.isThisPhone
-                              ? "This phone is on hold here"
-                              : `On hold here: ${group.yourPhonesOnHold.map(({ deviceName }) => deviceName).join(", ")}`}
+                            You’re on hold here
                           </Text>
                         </View>
                       )}
@@ -253,59 +238,46 @@ const UsageScreen = () => {
 
       <BottomSheet
         visible={
-          selectedGroup !== undefined &&
-          (selected?.deviceId === null || selectedPhone !== undefined)
+          selectedGroup !== undefined && (selected?.userId === null || selectedPerson !== undefined)
         }
         onClose={() => setSelected(null)}
         closeLabel="Close details"
       >
-        {selectedGroup && selectedPhone ? (
+        {selectedGroup && selectedPerson ? (
           <>
             <View className="gap-1">
               <Text accessibilityRole="header" className="text-foreground text-xl font-bold">
-                {selectedPhone.memberName}
-                {selectedPhone.isThisPhone ? " (this phone)" : ""}
+                {selectedPerson.isYou ? "You" : selectedPerson.name}
               </Text>
-              <Text className="text-secondary text-sm">
-                {selectedPhone.deviceName} · {selectedGroup.name}
-              </Text>
+              <Text className="text-secondary text-sm">{selectedGroup.name}</Text>
             </View>
             <View className="gap-2 rounded-2xl bg-secondary/60 p-4">
               <Text
                 className={cn(
                   "text-base font-semibold",
-                  selectedPhone.onHold ? "text-warning-text" : "text-foreground",
+                  selectedPerson.onHold ? "text-warning-text" : "text-foreground",
                 )}
               >
-                {selectedPhone.onHold ? "On hold" : "Has a seat"}
+                {selectedPerson.onHold ? "On hold" : "Has room"}
               </Text>
               <Text className="text-tertiary text-sm leading-5">
-                {selectedPhone.onHold
-                  ? `This phone doesn’t share its location in ${selectedGroup.name} and can’t see anyone in it. To free a seat, remove someone from one of your groups or remove one of your own phones.`
-                  : `This phone uses one of your seats in ${selectedGroup.name}.`}
+                {selectedPerson.onHold
+                  ? `${selectedPerson.isYou ? "Your phones don’t share your" : `${selectedPerson.name}’s phones don’t share their`} location in your groups, and can’t see anyone there, until you have room. To make room, remove someone from your groups.`
+                  : `${selectedPerson.isYou ? "You count" : `${selectedPerson.name} counts`} as one person across all the groups you own, however many phones ${selectedPerson.isYou ? "you have" : "they have"}.`}
               </Text>
             </View>
-            <View className="gap-2">
-              <Link
-                href={{
-                  pathname: "/groups/[groupId]",
-                  params: { groupId: selectedGroup.id, tab: "members" },
-                }}
-                asChild
-                onPress={() => setSelected(null)}
-              >
-                <Button>
-                  <Text>Open group</Text>
-                </Button>
-              </Link>
-              {selectedPhone.userId === session?.user.id && (
-                <Link href="/account/devices" asChild onPress={() => setSelected(null)}>
-                  <Button variant="secondary">
-                    <Text>Your phones</Text>
-                  </Button>
-                </Link>
-              )}
-            </View>
+            <Link
+              href={{
+                pathname: "/groups/[groupId]",
+                params: { groupId: selectedGroup.id, tab: "members" },
+              }}
+              asChild
+              onPress={() => setSelected(null)}
+            >
+              <Button>
+                <Text>Open group</Text>
+              </Button>
+            </Link>
           </>
         ) : selectedGroup ? (
           <>
@@ -319,47 +291,34 @@ const UsageScreen = () => {
                   : `Owned by ${selectedGroup.owner.name}`}
               </Text>
             </View>
-            {selectedGroup.yourPhonesOnHold.length > 0 ? (
+            {selectedGroup.youAreOnHold ? (
               <View className="gap-2 rounded-2xl bg-secondary/60 p-4">
                 <Text className="text-warning-text text-base font-semibold">
-                  On hold here:{" "}
-                  {selectedGroup.yourPhonesOnHold
-                    .map(
-                      (phone) => `${phone.deviceName}${phone.isThisPhone ? " (this phone)" : ""}`,
-                    )
-                    .join(", ")}
+                  You’re on hold here
                 </Text>
                 <Text className="text-tertiary text-sm leading-5">
-                  A phone on hold doesn’t share its location in this group and can’t see anyone in
-                  it. {selectedGroup.owner.name} needs a free seat for it to share again.
+                  Your phones don’t share your location in {selectedGroup.owner.name}’s groups, and
+                  can’t see anyone there, until {selectedGroup.owner.name} has room for you. Sharing
+                  starts again on its own when they do.
                 </Text>
               </View>
             ) : (
               seats &&
               !selectedGroup.isOwner && (
                 <Text className="text-tertiary text-sm leading-5">
-                  This group uses {selectedGroup.owner.name}’s seats, not yours.
+                  This group uses {selectedGroup.owner.name}’s room for people, not yours.
                 </Text>
               )
             )}
-            <View className="gap-2">
-              <Link
-                href={{ pathname: "/groups/[groupId]", params: { groupId: selectedGroup.id } }}
-                asChild
-                onPress={() => setSelected(null)}
-              >
-                <Button>
-                  <Text>Open group</Text>
-                </Button>
-              </Link>
-              {selectedGroup.yourPhonesOnHold.length > 0 && (
-                <Link href="/account/devices" asChild onPress={() => setSelected(null)}>
-                  <Button variant="secondary">
-                    <Text>Your phones</Text>
-                  </Button>
-                </Link>
-              )}
-            </View>
+            <Link
+              href={{ pathname: "/groups/[groupId]", params: { groupId: selectedGroup.id } }}
+              asChild
+              onPress={() => setSelected(null)}
+            >
+              <Button>
+                <Text>Open group</Text>
+              </Button>
+            </Link>
           </>
         ) : null}
       </BottomSheet>

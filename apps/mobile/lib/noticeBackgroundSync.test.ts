@@ -163,14 +163,6 @@ describe("account notices", () => {
     ]);
   });
 
-  test("tell the owner their seats have ended and where to see the phones on hold", () => {
-    expect(describeAccountNotice(account("SEATS_ENDED"))).toMatchObject({
-      title: "Phones in your groups are on hold",
-      body: "Your seats have ended, so phones in the groups you own are on hold until you renew your seats. Open Account › Usage to see which.",
-      link: { url: "openbeacon:///account/usage" },
-    });
-  });
-
   test("name the group a request to become its owner is about", () => {
     expect(
       describeAccountNotice(account("OWNERSHIP_OFFERED", { group: { id: "g1", name: "Family" } })),

@@ -187,7 +187,7 @@ const MembersTab = ({
   const askToTakeOver = (member: { id: string; user: { name: string } }) =>
     Alert.alert(
       `Ask ${member.user.name} to become the owner?`,
-      `${member.user.name} will see the request on their phone and can accept or decline it. Once they accept, ${hasCustomServerUrl() ? "" : "their account pays for this group’s seats and "}only they can delete the group or hand it on. You’ll stay an Admin.`,
+      `${member.user.name} will see the request on their phone and can accept or decline it.${hasCustomServerUrl() ? "" : " They’ll need room in their groups for everyone in this group."} Once they accept, only they can delete the group or hand it on. You’ll stay an Admin.`,
       [
         { text: "Cancel", style: "cancel" },
         {

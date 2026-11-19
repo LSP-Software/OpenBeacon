@@ -25,7 +25,7 @@ Turning email off on a server locks accounts with sign-in codes on out of passwo
 
 `bun run announce` adds, lists and ends the banners the app shows at the top of its main tabs and sign-in screens, for example before planned downtime. Run it with no arguments for its options. Announcements live in the `Announcement` table and the app filters them by platform and app version itself, so it never sends those to the server for this. See [Announcements](https://docs.openbeacon.net/docs/self-host/running-your-server/announcements).
 
-`bun run seats` shows or sets an account's seat count, found by email: `bun run seats show <email>` or `bun run seats set <email> <seats>`. It prints the seats the account uses, which is every activated device in every group it owns. Self-hosted servers never check seats. To test a paid period ending before billing exists, `bun run seats end-period <email> [hours-ago]` ends the account's paid period and `bun run seats renew <email>` clears it. Once a paid period ends the account has 0 seats, so every phone in the groups it owns goes on hold straight away, and renewing lifts the holds.
+`bun run seats` shows or sets an account's seat count, found by email: `bun run seats show <email>` or `bun run seats set <email> <seats>`. It prints the seats the account uses, which is one for every person in the groups it owns, counted once however many of those groups they're in and however many phones they have. When an account has fewer seats than people, the people who joined its groups last go on hold in all of them until it has enough again. Self-hosted servers never check seats.
 
 ## Startup
 

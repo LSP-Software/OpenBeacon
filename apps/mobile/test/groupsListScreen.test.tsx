@@ -195,7 +195,7 @@ test("an invite card names the group and opens the invite", async () => {
   });
 });
 
-test("a request to become the owner says how many seats it uses and is answered on this phone", async () => {
+test("a request to become the owner says how much room it needs and is answered on this phone", async () => {
   queries["offers"] = query("offers", {
     data: [
       {
@@ -210,7 +210,7 @@ test("a request to become the owner says how many seats it uses and is answered 
   const root = await render();
   const output = JSON.stringify(root.container.toJSON());
   expect(output).toContain("Become the owner of Smith Family?");
-  expect(output).toContain("it will use 5 seats of yours");
+  expect(output).toContain("Taking it over needs room for 5 more people in your groups.");
   expect(output).toContain("Alex stays an Admin");
   const accept = root.container
     .queryAll((node) => node.type === "pressable")

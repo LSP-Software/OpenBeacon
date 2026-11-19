@@ -33,16 +33,10 @@ export const countActivatedDevices = (
   userId: string,
 ) => db.userDevice.count({ where: { userId, activatedAt: { not: null }, revokedAt: null } });
 
-export const lockActivatingAccount = async (
-  db: Pick<Prisma.TransactionClient, "$queryRaw" | "group">,
+export const lockActivatingAccount = (
+  db: Pick<Prisma.TransactionClient, "$queryRaw">,
   userId: string,
-) => {
-  const owners = await db.group.findMany({
-    where: { groupMembers: { some: { userId } } },
-    select: { ownerId: true },
-  });
-  await lockAccounts(db, [userId, ...owners.map(({ ownerId }) => ownerId)]);
-};
+) => lockAccounts(db, [userId]);
 
 export const activateDevice = async ({
   activatedBy,

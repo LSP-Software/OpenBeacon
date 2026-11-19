@@ -12,7 +12,7 @@ if (parsed.command === "error") {
 }
 
 const { prisma } = await import("@openbeacon/database");
-const { currentSeats, seatAccountSelect, seatsUsed } = await import("@openbeacon/api/seats.ts");
+const { freeSeats } = await import("@openbeacon/api/seats.ts");
 const { envSchema } = await import("./envSchema.ts");
 
 const selfHosted = envSchema.SELF_HOSTED.safeParse(process.env["SELF_HOSTED"]).data !== false;
@@ -23,34 +23,14 @@ const user = await prisma.user.findUnique({
 if (!user) {
   console.error(`No account has the email ${parsed.email}.`);
   process.exitCode = 1;
-} else if (parsed.command === "end-period" && selfHosted) {
-  console.error("This server is self-hosted, so it has no paid periods.");
-  process.exitCode = 1;
 } else {
-  const now = new Date();
-  const data =
-    parsed.command === "set"
-      ? { seats: parsed.seats }
-      : parsed.command === "end-period"
-        ? { paidPeriodEndsAt: new Date(now.getTime() - parsed.hoursAgo * 3_600_000) }
-        : parsed.command === "renew"
-          ? { paidPeriodEndsAt: null }
-          : null;
-  const account = data
-    ? await prisma.user.update({ where: { id: user.id }, data, select: seatAccountSelect })
-    : await prisma.user.findUniqueOrThrow({ where: { id: user.id }, select: seatAccountSelect });
-  const seats = currentSeats(account, now);
-  const used = await seatsUsed(prisma, user.id);
-  console.log(
-    `${parsed.command === "set" ? `Set ${account.seats} seats. ` : ""}Has ${seats} seats, using ${used}${used > seats ? `, which is ${used - seats} more than it has` : ""}.`,
-  );
-  if (account.paidPeriodEndsAt) {
-    console.log(
-      account.paidPeriodEndsAt > now
-        ? `The paid period ends at ${account.paidPeriodEndsAt.toISOString()}.`
-        : `The paid period ended at ${account.paidPeriodEndsAt.toISOString()}, so it has 0 seats until it renews.`,
-    );
+  if (parsed.command === "set") {
+    await prisma.user.update({ where: { id: user.id }, data: { seats: parsed.seats } });
   }
+  const { seats, used } = await freeSeats(prisma, user.id);
+  console.log(
+    `${parsed.command === "set" ? `Set ${seats} seats. ` : ""}Has ${seats} seats, using ${used}${used > seats ? `, which is ${used - seats} more than it has` : ""}.`,
+  );
   if (selfHosted) console.log("This server is self-hosted, so seats aren't enforced.");
 }
 

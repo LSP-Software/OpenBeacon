@@ -17,14 +17,12 @@ import { emailInviteCreatedAfter } from "../../lib/emailInvites.ts";
 import { assertAccountBelowGroupLimit } from "../../lib/groupLimit.ts";
 import { limits } from "../../lib/limits.ts";
 import {
-  activatedDevices,
   assertRoomToInvite,
   assertRoomToJoin,
   groupFullError,
   groupSeatState,
-  joinBlockedBy,
-  noFreeSeatsToInviteMessage,
   lockOwnerThenGroup,
+  noFreeSeatsToInviteMessage,
 } from "../../lib/seats.ts";
 import { groupEditorProcedure } from "../../procedures/auth/group.ts";
 import { protectedProcedure } from "../../procedures/auth/runtime.ts";
@@ -77,7 +75,7 @@ const getInvitePreview = async ({
   selfHosted,
   userId,
 }: {
-  db: Pick<Prisma.TransactionClient, "$queryRaw" | "group" | "groupMember" | "user" | "userDevice">;
+  db: Pick<Prisma.TransactionClient, "$queryRaw" | "group" | "groupMember" | "user">;
   groupId: string;
   inviter: { name: string };
   notFoundMessage: string;
@@ -98,10 +96,7 @@ const getInvitePreview = async ({
   ]);
   if (!group) throw new TRPCError({ code: "NOT_FOUND", message: notFoundMessage });
   const alreadyMember = member !== null;
-  const [seats, needed] = await Promise.all([
-    groupSeatState({ db, groupId, selfHosted }),
-    activatedDevices(db, userId),
-  ]);
+  const seats = await groupSeatState({ db, groupId, joinerId: userId, selfHosted });
   return {
     group: {
       id: group.id,
@@ -111,7 +106,7 @@ const getInvitePreview = async ({
     },
     inviter: { name: inviter.name, image: null },
     owner: { name: seats.owner.name },
-    seats: { needed, perGroup: seats.seatsPerGroup },
+    seats: { needed: seats.needed, perGroup: limits.peoplePerGroup },
     alreadyMember,
     joinBlockedBy: alreadyMember
       ? null
@@ -119,7 +114,7 @@ const getInvitePreview = async ({
         ? ("PENDING_DELETION" as const)
         : groupCount >= limits.groupsPerAccount
           ? ("GROUP_LIMIT" as const)
-          : joinBlockedBy({ free: seats.free, groupSeats: seats.groupSeats, needed }),
+          : seats.blockedBy,
   };
 };
 
@@ -175,13 +170,12 @@ export const groupInvitesRouter = {
       groupId: input.groupId,
       selfHosted: ctx.selfHosted,
     });
-    const blockedBy = joinBlockedBy({ free: state.free, groupSeats: state.groupSeats, needed: 1 });
     return {
-      blockedBy,
+      blockedBy: state.blockedBy,
       message:
-        blockedBy === "GROUP_FULL"
+        state.blockedBy === "GROUP_FULL"
           ? groupFullError().message
-          : blockedBy === "NO_FREE_SEATS"
+          : state.blockedBy === "NO_FREE_SEATS"
             ? noFreeSeatsToInviteMessage({ ...state, userId: ctx.session.user.id })
             : null,
     };

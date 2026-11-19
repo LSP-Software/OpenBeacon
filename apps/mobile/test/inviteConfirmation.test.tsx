@@ -418,9 +418,9 @@ test.each([
   ["PENDING_DELETION" as const, "scheduled for deletion"],
   [
     "NO_FREE_SEATS" as const,
-    "This group has no free seats for your phones. Ask Sam Smith to add seats.",
+    "Sam Smith has no room for more people in their groups. Ask Sam Smith to make room.",
   ],
-  ["GROUP_FULL" as const, "A group can have up to 64 phones."],
+  ["GROUP_FULL" as const, "A group can have up to 64 people."],
 ])("a %s block shows the group but not Join group", async (joinBlockedBy, expected) => {
   showPreview({ joinBlockedBy });
   const codeRoot = await render(code);

@@ -15,14 +15,14 @@ describe("limitAlert", () => {
     });
   });
 
-  test("shows the server's message when the owner has no free seats or the group is full", () => {
+  test("shows the server's message when the owner has no room or the group is full", () => {
     expect(
       limitAlert({
         message: "Your account has no seats. Add seats to create a group.",
         data: { code: "PRECONDITION_FAILED", reason: "NO_FREE_SEATS" },
       }),
     ).toEqual({
-      title: "No free seats",
+      title: "No room",
       message: "Your account has no seats. Add seats to create a group.",
     });
     expect(

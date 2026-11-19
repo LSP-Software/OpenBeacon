@@ -10,7 +10,6 @@ const runEpochCleanup = mock(async () => {});
 const runStalePendingUploadCleanup = mock(async () => {});
 const runImageStorageSweep = mock(async () => {});
 const runUploadGrowthReport = mock(async () => {});
-const runSeatsEnded = mock(async () => {});
 
 mock.module("./accountDeletion.ts", () => ({ runAccountDeletion }));
 mock.module("./expiredRecordsCleanup.ts", () => ({ runExpiredRecordsCleanup }));
@@ -25,7 +24,6 @@ mock.module("./imageUploadCleanup.ts", () => ({
   runImageStorageSweep,
 }));
 mock.module("./uploadGrowthReport.ts", () => ({ runUploadGrowthReport }));
-mock.module("./seatsEnded.ts", () => ({ runSeatsEnded }));
 const { jobs } = await import("./index.ts");
 afterAll(() => mock.restore());
 
@@ -40,7 +38,6 @@ test("registers the clean-up jobs alongside account deletion", async () => {
     { name: "pending-upload-cleanup", delay: 3_600_000, run: runStalePendingUploadCleanup },
     { name: "image-storage-sweep", delay: 86_400_000, run: runImageStorageSweep },
     { name: "upload-growth-report", delay: 86_400_000, run: runUploadGrowthReport },
-    { name: "seats-ended", delay: 3_600_000, run: runSeatsEnded },
   ]);
   await startScheduler(jobs)();
   expect(runExpiredRecordsCleanup).toHaveBeenCalledTimes(1);
@@ -51,5 +48,4 @@ test("registers the clean-up jobs alongside account deletion", async () => {
   expect(runStalePendingUploadCleanup).toHaveBeenCalledTimes(1);
   expect(runImageStorageSweep).toHaveBeenCalledTimes(1);
   expect(runUploadGrowthReport).toHaveBeenCalledTimes(1);
-  expect(runSeatsEnded).toHaveBeenCalledTimes(1);
 });

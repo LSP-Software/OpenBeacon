@@ -33,35 +33,31 @@ export const SeatHoldBanner = ({
             </Text>
             <Text>
               {group.ownerId === userId
-                ? `You don’t have a seat for this phone, so it isn’t sharing your location with ${group.name} and can’t see anyone in it. Add seats or remove someone from your groups.`
-                : `${owner ?? "The owner"} has no free seat for this phone, so it isn’t sharing your location with ${group.name} and can’t see anyone in it. Ask ${owner ?? "the owner"} to add seats, remove another of your phones, or leave the group.`}{" "}
-              Sharing starts again on its own when a seat is free.
+                ? `You don’t have room for everyone in your groups, so this phone isn’t sharing your location with ${group.name} and can’t see anyone in it. Remove someone from your groups to make room.`
+                : `${owner ?? "The owner"} has no room for you in their groups, so this phone isn’t sharing your location with ${group.name} and can’t see anyone in it. Ask ${owner ?? "the owner"} to make room, or leave the group.`}{" "}
+              Sharing starts again on its own when there’s room.
             </Text>
-            <View className="flex-row flex-wrap items-center gap-3">
-              {linkToGroup ? (
-                <Link
-                  href={{ pathname: "/(tabs)/groups/[groupId]", params: { groupId: group.id } }}
-                  asChild
-                >
-                  <Button size="sm">
-                    <Text>Open {group.name}</Text>
-                  </Button>
-                </Link>
-              ) : null}
-              {group.ownerId === userId ? (
-                <Link href="/account/usage" asChild>
-                  <Button size="sm" variant="secondary">
-                    <Text>See usage</Text>
-                  </Button>
-                </Link>
-              ) : (
-                <Link href="/account/devices" asChild>
-                  <Button size="sm" variant="secondary">
-                    <Text>Your phones</Text>
-                  </Button>
-                </Link>
-              )}
-            </View>
+            {linkToGroup || group.ownerId === userId ? (
+              <View className="flex-row flex-wrap items-center gap-3">
+                {linkToGroup ? (
+                  <Link
+                    href={{ pathname: "/(tabs)/groups/[groupId]", params: { groupId: group.id } }}
+                    asChild
+                  >
+                    <Button size="sm">
+                      <Text>Open {group.name}</Text>
+                    </Button>
+                  </Link>
+                ) : null}
+                {group.ownerId === userId ? (
+                  <Link href="/account/usage" asChild>
+                    <Button size="sm" variant="secondary">
+                      <Text>See usage</Text>
+                    </Button>
+                  </Link>
+                ) : null}
+              </View>
+            ) : null}
           </View>
         );
       })}

@@ -457,8 +457,6 @@ export const accountRouter = {
     readAccountUsage({
       allowSelfSetSeats: selfSetSeatsAllowed(ctx),
       db: ctx.db,
-      deviceId: ctx.deviceId,
-      now: new Date(),
       seatHolds: ctx.seatHolds,
       selfHosted: ctx.selfHosted,
       userId: ctx.session.user.id,
@@ -468,25 +466,18 @@ export const accountRouter = {
     .meta({ rateLimit: { limit: 30, windowMs: 60_000 } })
     .input(z.object({ seats: z.number().int().min(0).max(maxAccountSeats) }))
     .mutation(async ({ ctx, input }) => {
-      assertSelfSetSeats(ctx);
+      if (!selfSetSeatsAllowed(ctx)) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "This server doesn't let you set how many people you have room for.",
+        });
+      }
       const user = await ctx.db.user.update({
         where: { id: ctx.session.user.id },
         data: { seats: input.seats },
         select: { seats: true },
       });
       return { seats: user.seats };
-    }),
-  setPaidPeriodEnded: protectedProcedure
-    .meta({ rateLimit: { limit: 30, windowMs: 60_000 } })
-    .input(z.object({ ended: z.boolean() }))
-    .mutation(async ({ ctx, input }) => {
-      assertSelfSetSeats(ctx);
-      const user = await ctx.db.user.update({
-        where: { id: ctx.session.user.id },
-        data: { paidPeriodEndsAt: input.ended ? new Date() : null },
-        select: { paidPeriodEndsAt: true },
-      });
-      return { paidPeriodEndsAt: user.paidPeriodEndsAt };
     }),
   viewers: protectedProcedure
     .meta({ rateLimit: { limit: 60, windowMs: 60_000 } })
@@ -697,11 +688,3 @@ export const accountRouter = {
 
 const selfSetSeatsAllowed = (ctx: { allowSelfSetSeats: boolean; selfHosted: boolean }) =>
   ctx.allowSelfSetSeats && !ctx.selfHosted;
-
-const assertSelfSetSeats = (ctx: { allowSelfSetSeats: boolean; selfHosted: boolean }) => {
-  if (selfSetSeatsAllowed(ctx)) return;
-  throw new TRPCError({
-    code: "FORBIDDEN",
-    message: "This server doesn't let you set your own seats.",
-  });
-};

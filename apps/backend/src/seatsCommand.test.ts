@@ -27,31 +27,6 @@ describe("parseSeatsCommand", () => {
     }
   });
 
-  test("ends and renews the paid period", () => {
-    expect(parseSeatsCommand(["end-period", "sam@example.test"])).toEqual({
-      command: "end-period",
-      email: "sam@example.test",
-      hoursAgo: 0,
-    });
-    expect(parseSeatsCommand(["end-period", "sam@example.test", "150"])).toEqual({
-      command: "end-period",
-      email: "sam@example.test",
-      hoursAgo: 150,
-    });
-    expect(parseSeatsCommand(["renew", "sam@example.test"])).toEqual({
-      command: "renew",
-      email: "sam@example.test",
-    });
-    for (const args of [
-      ["end-period", "sam@example.test", "-1"],
-      ["end-period", "sam@example.test", "9000"],
-      ["renew", "sam@example.test", "1"],
-      ["reset-grace", "sam@example.test"],
-    ]) {
-      expect(parseSeatsCommand(args)).toMatchObject({ command: "error" });
-    }
-  });
-
   test("shows help with no arguments and refuses anything else", () => {
     expect(parseSeatsCommand([])).toEqual({ command: "help" });
     expect(parseSeatsCommand(["help"])).toEqual({ command: "help" });
@@ -61,6 +36,8 @@ describe("parseSeatsCommand", () => {
       ["show"],
       ["show", "sam@example.test", "2"],
       ["remove", "sam@example.test"],
+      ["end-period", "sam@example.test"],
+      ["renew", "sam@example.test"],
     ]) {
       expect(parseSeatsCommand(args)).toMatchObject({ command: "error" });
     }

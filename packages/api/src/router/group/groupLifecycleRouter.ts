@@ -6,11 +6,9 @@ import { deleteGroup } from "../../lib/deleteGroup.ts";
 import { persistGroupEpoch } from "../../lib/groupEpochs.ts";
 import { assertAccountBelowGroupLimit } from "../../lib/groupLimit.ts";
 import {
-  activatedDevices,
   freeSeats,
+  isOneOfOwnersPeople,
   noFreeSeatsError,
-  freeSeatCount,
-  seatCount,
   seatsEnforced,
 } from "../../lib/seats.ts";
 import { groupOwnerProcedure } from "../../procedures/auth/group.ts";
@@ -81,19 +79,15 @@ export const groupLifecycleRouter = {
         if (!user || user.pendingDeletion || !session)
           throw new TRPCError({ code: "UNAUTHORIZED" });
         await assertAccountBelowGroupLimit(tx, ctx.session.user.id);
-        if (seatsEnforced(ctx)) {
-          const [{ free, seats }, needed] = await Promise.all([
-            freeSeats(tx, ctx.session.user.id),
-            activatedDevices(tx, ctx.session.user.id),
-          ]);
-          if (seats === 0) {
-            throw noFreeSeatsError("Your account has no seats. Add seats to create a group.");
-          }
-          if (needed > free) {
-            throw noFreeSeatsError(
-              `Creating a group needs ${needed === 1 ? "a seat for your phone" : `${seatCount(needed)}, one for each of your phones,`} and you have ${freeSeatCount(free)}.`,
-            );
-          }
+        const userId = ctx.session.user.id;
+        if (
+          seatsEnforced(ctx) &&
+          !(await isOneOfOwnersPeople({ db: tx, ownerId: userId, userId })) &&
+          (await freeSeats(tx, userId)).free === 0
+        ) {
+          throw noFreeSeatsError(
+            "Your account has no room for people. Add room to create a group.",
+          );
         }
         const createdGroup = await tx.group.create({
           data: {
