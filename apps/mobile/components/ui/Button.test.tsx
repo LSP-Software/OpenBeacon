@@ -58,5 +58,8 @@ test("a label the caller passes wins, and a button without text gets none", asyn
   expect(await labelOf(<Button accessibilityLabel="Close dialog">{label("Close")}</Button>)).toBe(
     "Close dialog",
   );
+  expect(await labelOf(<Button accessibilityLabel={undefined}>{label("Close")}</Button>)).toBe(
+    "Close",
+  );
   expect(await labelOf(<Button>{label(null)}</Button>)).toBeUndefined();
 });

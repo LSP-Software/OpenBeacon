@@ -64,7 +64,15 @@ type ButtonProps = React.ComponentProps<typeof Pressable> &
     loading?: boolean;
   };
 
-function Button({ className, variant, size, loading, disabled, ...props }: ButtonProps) {
+function Button({
+  className,
+  variant,
+  size,
+  loading,
+  disabled,
+  accessibilityLabel,
+  ...props
+}: ButtonProps) {
   return (
     <TextClassContext.Provider value={buttonTextVariants({ variant, size })}>
       <Pressable
@@ -79,9 +87,10 @@ function Button({ className, variant, size, loading, disabled, ...props }: Butto
         // never clears it afterwards when the view has no accessibility label, so the button is
         // announced as "busy" until it remounts. A label built from the button's text avoids that.
         accessibilityLabel={
-          typeof props.children === "function"
+          accessibilityLabel ??
+          (typeof props.children === "function"
             ? undefined
-            : textOf(props.children).replace(/\s+/g, " ").trim() || undefined
+            : textOf(props.children).replace(/\s+/g, " ").trim() || undefined)
         }
         accessibilityState={{ disabled: !!(loading || disabled), busy: !!loading }}
         {...props}
