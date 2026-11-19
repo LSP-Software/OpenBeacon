@@ -20,6 +20,7 @@ import { HISTORY_RETENTION_MS } from "./historyShare.ts";
 
 const HOUR_MS = 3_600_000;
 const HISTORY_RETENTION_HOURS = HISTORY_RETENTION_MS / HOUR_MS;
+export const HISTORY_POINTS_PER_DEVICE_DAY = 2_880;
 
 type GroupTrackingDb = GroupWriteChecksDb & {
   userDevice: {
@@ -303,8 +304,11 @@ const readLatestPoints = async ({
     FROM "TrackingLatestPoint" AS "latest"
     JOIN "TrackingStream" AS "stream" ON "stream"."id" = "latest"."streamId"
     JOIN "GroupEpoch" AS "epoch" ON "epoch"."id" = "stream"."epochId"
+    JOIN "GroupMember" AS "member"
+      ON "member"."groupId" = "latest"."groupId" AND "member"."userId" = "stream"."senderUserId"
     WHERE "latest"."groupId" = ${groupId}
       AND "epoch"."epochNumber" >= ${joinedEpochNumber}
+      AND "epoch"."epochNumber" >= "member"."joinedEpochNumber"
       ${
         cursor
           ? Prisma.sql`AND ("latest"."updatedAt", "latest"."senderDeviceId") > ((${cursor.updatedAt.toISOString()}::timestamptz AT TIME ZONE 'UTC'), ${cursor.senderDeviceId})`
@@ -411,6 +415,7 @@ const historyStreams = (
     ON "device"."id" = "stream"."senderDeviceId" AND "device"."userId" = "stream"."senderUserId"
   WHERE "stream"."groupId" = ${groupId}
     AND "epoch"."epochNumber" >= ${joinedEpochNumber}
+    AND "epoch"."epochNumber" >= "member"."joinedEpochNumber"
     AND "device"."revokedAt" IS NULL AND "device"."activatedAt" IS NOT NULL
     AND ${effectiveHistoryShareSql} <> 'LAST_LOCATION'
 `;
@@ -558,7 +563,7 @@ export const readGroupTrackingHistoryRange = async ({
               AND "stream"."senderDeviceId" = "lastHour"."senderDeviceId"
               AND "point"."receivedHour" >= ${windowHour}
             ORDER BY "stream"."id", "point"."pointId"
-            LIMIT 100
+            LIMIT ${HISTORY_POINTS_PER_DEVICE_DAY}
           ) AS "batch"
           ORDER BY "batch"."senderUserId", "batch"."senderDeviceId", "batch"."streamId", "batch"."pointId"
         `),

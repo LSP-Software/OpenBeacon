@@ -10,6 +10,7 @@ import { errorCode, tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import {
   getLatestGroupTrackingPoints,
+  HISTORY_POINTS_PER_DEVICE_DAY,
   pollGroupTrackingPoints,
   readGroupTrackingHistoryDays,
   readGroupTrackingHistoryRange,
@@ -83,7 +84,7 @@ export const groupTrackingRouter = {
       const historyAllowance = (deviceId: string, cost: number) => ({
         namespace: "groupTracking.historyAllowance",
         identifier: { type: "deviceGroup" as const, deviceId, groupId: input.groupId },
-        limit: 2_880,
+        limit: HISTORY_POINTS_PER_DEVICE_DAY,
         windowMs: 86_400_000,
         cost,
       });

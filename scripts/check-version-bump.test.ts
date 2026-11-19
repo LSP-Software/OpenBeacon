@@ -3,6 +3,7 @@ import {
   findMissingVersionBumps,
   parseApiCompatibilityLevels,
   parseClientVersion,
+  parseRootPackage,
   parseServerVersion,
 } from "./check-version-bump.ts";
 
@@ -55,7 +56,7 @@ describe("findMissingVersionBumps", () => {
   test("requires only the server version when server-only code changes", () => {
     expect(
       findMissingVersionBumps({
-        changedFiles: ["packages/database/prisma/schema.prisma"],
+        changedFiles: ["packages/database/src/index.ts"],
         base,
         head: base,
       }),
@@ -77,13 +78,12 @@ describe("findMissingVersionBumps", () => {
     ).toEqual([]);
   });
 
-  test("treats Docker build files, the lockfile and bunfig.toml as server code", () => {
+  test("treats Docker build files and bunfig.toml as server code", () => {
     for (const file of [
       "Dockerfile",
       ".dockerignore",
       "apps/scheduled-jobs/.dockerignore",
       "apps/map-tiles/Dockerfile",
-      "bun.lock",
       "bunfig.toml",
     ]) {
       expect(findMissingVersionBumps({ changedFiles: [file], base, head: base })).toEqual([
@@ -122,6 +122,66 @@ describe("findMissingVersionBumps", () => {
         head: bumped,
       }),
     ).toEqual([]);
+  });
+
+  test("requires both versions when the lockfile, the database schema or the root dependencies change", () => {
+    const rootPackage = (catalog: Record<string, string>) =>
+      parseRootPackage(JSON.stringify({ name: "openbeacon", workspaces: { catalog } }));
+    const changes = [
+      { changedFiles: ["bun.lock"], base, head: base },
+      { changedFiles: ["packages/database/prisma/schema.prisma"], base, head: base },
+      {
+        changedFiles: ["package.json"],
+        base: { ...base, rootPackage: rootPackage({ react: "19.2.0" }) },
+        head: { ...base, rootPackage: rootPackage({ react: "19.2.1" }) },
+      },
+      { changedFiles: ["package.json"], base, head: base },
+    ];
+    for (const change of changes) {
+      expect(findMissingVersionBumps(change)).toEqual([
+        "Client code changed: raise expo.version in apps/mobile/app.json above 1.0.4.",
+        "Client code changed: raise expo.ios.buildNumber in apps/mobile/app.json above 5.",
+        "Client code changed: raise expo.android.versionCode in apps/mobile/app.json above 5.",
+        "Server code changed: raise serverVersion in apps/backend/src/version.ts above 0.1.5.",
+      ]);
+      expect(
+        findMissingVersionBumps({
+          ...change,
+          head: { ...bumped, rootPackage: change.head.rootPackage },
+        }),
+      ).toEqual([]);
+    }
+  });
+
+  test("ignores a root package.json change that only touches scripts", () => {
+    const withScripts = (scripts: Record<string, string>) =>
+      parseRootPackage(JSON.stringify({ name: "openbeacon", scripts, overrides: { a: "1" } }));
+    expect(
+      findMissingVersionBumps({
+        changedFiles: ["package.json"],
+        base: { ...base, rootPackage: withScripts({ ci: "bun test" }) },
+        head: { ...base, rootPackage: withScripts({ ci: "bun test scripts" }) },
+      }),
+    ).toEqual([]);
+  });
+
+  test("requires at least a minor server bump when a migration changes", () => {
+    const changedFiles = ["packages/database/prisma/migrations/20261119000000_add/migration.sql"];
+    expect(findMissingVersionBumps({ changedFiles, base, head: bumped })).toEqual([
+      "Database migration changed: raise serverVersion in apps/backend/src/version.ts by at least a minor version above 0.1.5.",
+    ]);
+    expect(findMissingVersionBumps({ changedFiles, base, head: base })).toEqual([
+      "Database migration changed: raise serverVersion in apps/backend/src/version.ts by at least a minor version above 0.1.5.",
+    ]);
+    expect(
+      findMissingVersionBumps({ changedFiles, base, head: { ...base, server: "0.2.0" } }),
+    ).toEqual([]);
+  });
+
+  test("reads the root package.json without its scripts", async () => {
+    const source = await Bun.file(new URL("../package.json", import.meta.url)).text();
+    expect(JSON.parse(parseRootPackage(source))).not.toHaveProperty("scripts");
+    expect(JSON.parse(parseRootPackage(source))).toHaveProperty("workspaces");
   });
 
   test("compares versions numerically rather than as text", () => {

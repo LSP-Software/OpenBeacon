@@ -88,6 +88,8 @@ export const serverNow = () => Date.now() + clockOffset();
 
 export const toDeviceClock = (serverTime: Date) => new Date(serverTime.getTime() - clockOffset());
 
+export const toServerClock = (deviceTime: number) => new Date(deviceTime + clockOffset());
+
 export const getPendingSharingChanges = (userId: string) => ({
   device: readPendingChange(userId, "device")?.input ?? null,
   account: readPendingChange(userId, "account")?.input ?? null,

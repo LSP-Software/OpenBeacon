@@ -9,7 +9,9 @@ const clientPaths = [
   "packages/shared/",
 ];
 const serverPaths = ["apps/backend/", "apps/scheduled-jobs/", "apps/map-tiles/", "packages/"];
-const serverFiles = ["Dockerfile", "bun.lock", "bunfig.toml"];
+const serverFiles = ["Dockerfile", "bunfig.toml"];
+const sharedFiles = ["bun.lock", "packages/database/prisma/schema.prisma"];
+const migrationsPath = "packages/database/prisma/migrations/";
 
 const isServerFile = (file: string) =>
   serverFiles.includes(file) ||
@@ -23,6 +25,7 @@ type Versions = {
   client: { version: string; buildNumber: number; versionCode: number };
   server: string;
   apiCompatibility: ApiCompatibilityLevels | null;
+  rootPackage?: string;
 };
 
 const isShippedFile = (file: string) =>
@@ -147,6 +150,9 @@ export const parseServerVersion = (source: string) => {
   return version;
 };
 
+export const parseRootPackage = (source: string) =>
+  JSON.stringify({ ...JSON.parse(source), scripts: undefined });
+
 export const findMissingVersionBumps = ({
   changedFiles,
   base,
@@ -156,10 +162,17 @@ export const findMissingVersionBumps = ({
   base: Versions;
   head: Versions;
 }) => {
-  const shipped = changedFiles.filter(isShippedFile);
+  const rootPackageChanged =
+    base.rootPackage === undefined || base.rootPackage !== head.rootPackage;
+  const shipped = changedFiles
+    .filter(isShippedFile)
+    .filter((file) => file !== "package.json" || rootPackageChanged);
+  const isSharedFile = (file: string) => sharedFiles.includes(file) || file === "package.json";
   const problems: string[] = [];
 
-  if (shipped.some((file) => clientPaths.some((path) => file.startsWith(path)))) {
+  if (
+    shipped.some((file) => isSharedFile(file) || clientPaths.some((path) => file.startsWith(path)))
+  ) {
     if (!isSemverGreater(head.client.version, base.client.version)) {
       problems.push(
         `Client code changed: raise expo.version in ${appConfigPath} above ${base.client.version}.`,
@@ -177,7 +190,17 @@ export const findMissingVersionBumps = ({
     }
   }
 
-  if (shipped.some(isServerFile) && !isSemverGreater(head.server, base.server)) {
+  if (
+    shipped.some((file) => file.startsWith(migrationsPath)) &&
+    !isMinorBumpOrMore(head.server, base.server)
+  ) {
+    problems.push(
+      `Database migration changed: raise serverVersion in ${serverVersionPath} by at least a minor version above ${base.server}.`,
+    );
+  } else if (
+    shipped.some((file) => isSharedFile(file) || isServerFile(file)) &&
+    !isSemverGreater(head.server, base.server)
+  ) {
     problems.push(
       `Server code changed: raise serverVersion in ${serverVersionPath} above ${base.server}.`,
     );
@@ -199,6 +222,7 @@ if (import.meta.main) {
       const source = await Bun.$`git show ${ref}:${apiCompatibilityPath}`.quiet().nothrow();
       return source.exitCode === 0 ? parseApiCompatibilityLevels(source.text()) : null;
     })(),
+    rootPackage: parseRootPackage(await Bun.$`git show ${ref}:package.json`.text()),
   });
 
   const problems = findMissingVersionBumps({
