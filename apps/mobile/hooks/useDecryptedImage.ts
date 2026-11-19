@@ -67,11 +67,12 @@ export const useDecryptedImage = (url: string | null | undefined) => {
         );
         return;
       }
-      const retryable =
-        result.error ||
-        result.data?.status === "unavailable" ||
-        result.data?.status === "stale-key";
-      if (!retryable) return;
+      const status = result.data?.status;
+      if (status === "undecryptable" || status === "gone") {
+        waitingToRetry.current = true;
+        return;
+      }
+      if (!result.error && status !== "unavailable" && status !== "stale-key") return;
       waitingToRetry.current = true;
       timer = setTimeout(() => setRetry((count) => count + 1), 60_000);
     });

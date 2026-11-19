@@ -37,6 +37,24 @@ class CapturePipelineTest {
   }
 
   @Test
+  fun aGroupWhoseKeyCannotEncryptDoesNotBlockTheOtherGroups() {
+    val keys = InMemoryEpochKeyStore()
+    keys.replaceAll(
+      listOf(
+        ProvisionedEpochKey("broken", "epoch", ByteArray(16), "tablet", "trackingPoint"),
+        ProvisionedEpochKey("group", "epoch", ByteArray(32), "tablet", "trackingPoint"),
+      ),
+    )
+    val queue = InMemoryCiphertextQueue()
+    val failures = mutableListOf<String>()
+    val pipeline = CapturePipeline(epochKeyStore = keys, ciphertextQueue = queue, queueOwner = { "owner" }, onRowFailure = { groupId, _ -> failures += groupId })
+
+    assertEquals(1, pipeline.onFix(51.5, 0.0, at("2026-07-13T18:45:00.000Z"), null, 80, false))
+    assertEquals(listOf("group"), queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).map { it.groupId })
+    assertEquals(listOf("broken"), failures)
+  }
+
+  @Test
   fun pausingDuringEncryptionPreventsQueueingTheFix() {
     val keys = InMemoryEpochKeyStore()
     keys.replaceAll(listOf(ProvisionedEpochKey("group", "epoch", ByteArray(32), "tablet", "trackingPoint")))

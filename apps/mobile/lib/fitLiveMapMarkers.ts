@@ -66,6 +66,19 @@ const hasValidCoordinate = (marker: LiveMapMarker) =>
   marker.longitude >= -180 &&
   marker.longitude <= 180;
 
+export const liveMapMarkersCenter = (
+  markers: readonly { latitude: number; longitude: number }[],
+): [number, number] => {
+  const latitudes = markers.map((marker) => marker.latitude);
+  const { west, east } = shortestLongitudeBounds(
+    markers.map((marker) => normalizeLongitude(marker.longitude)),
+  );
+  return [
+    normalizeLongitude(west + longitudeSpan(west, east) / 2),
+    (Math.max(...latitudes) + Math.min(...latitudes)) / 2,
+  ];
+};
+
 const computeLiveMapFitBounds = (markers: readonly LiveMapMarker[]) => {
   const latitudes = markers.map((marker) => marker.latitude);
   let north = Math.max(...latitudes);

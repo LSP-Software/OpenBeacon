@@ -87,27 +87,45 @@ export default function ServerUrl() {
       Alert.alert("Server saved", undefined, [{ text: "OK", onPress: () => router.back() }]);
     };
 
-    const { verdict, serverVersion } = await checkServerCompatibility(url);
-    if (verdict === "ok") {
+    const checked = await checkServerCompatibility(url);
+    if (checked.verdict === "ok") {
       await save();
       return;
     }
-    Alert.alert(
-      verdict === null
-        ? "Couldn’t reach this server"
-        : verdict === "appTooOld"
-          ? "Update the app first"
-          : "This server needs updating",
-      verdict === null
-        ? "Check the address, that the server is running and that it has a valid HTTPS certificate."
-        : verdict === "appTooOld"
-          ? "This server needs a newer version of OpenBeacon. Update the app before using it."
-          : `This server is running version ${serverVersion}, which is too old for this app. Ask whoever runs it to update it. You won’t be able to share your location until it’s updated.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Save anyway", onPress: () => void save() },
-      ],
-    );
+    const [title, message] =
+      checked.verdict === null
+        ? checked.problem.kind === "notOpenBeacon"
+          ? [
+              "This isn’t an OpenBeacon server",
+              "Something answered at this address, but it isn’t OpenBeacon. Check the address.",
+            ]
+          : checked.problem.kind === "httpStatus"
+            ? [
+                "Couldn’t reach this server",
+                `The server answered with error ${checked.problem.status}. Check the address and that the server is running.`,
+              ]
+            : checked.problem.kind === "timeout"
+              ? [
+                  "Couldn’t reach this server",
+                  "The server took too long to answer. Check the address and that the server is running.",
+                ]
+              : [
+                  "Couldn’t reach this server",
+                  "Check the address, that the server is running and that it has a valid HTTPS certificate.",
+                ]
+        : checked.verdict === "appTooOld"
+          ? [
+              "Update the app first",
+              "This server needs a newer version of OpenBeacon. Update the app before using it.",
+            ]
+          : [
+              "This server needs updating",
+              `This server is running version ${checked.serverVersion}, which is too old for this app. Ask whoever runs it to update it. You won’t be able to share your location until it’s updated.`,
+            ];
+    Alert.alert(title, message, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Save anyway", onPress: () => void save() },
+    ]);
   };
 
   const handleClear = () =>

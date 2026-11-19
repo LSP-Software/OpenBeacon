@@ -1,17 +1,17 @@
 package expo.modules.openbeacontracking.keys
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.util.Log
 import expo.modules.openbeacontracking.crypto.GroupPayloadEncrypt
 import org.json.JSONArray
 import org.json.JSONObject
 
 class SecureEpochKeyStore(
-  context: Context,
+  private val preferences: SharedPreferences,
+  private val sealer: KeystoreSealer = KeystoreSealer(KEY_ALIAS),
 ) : EpochKeyStore {
-  private val preferences =
-    context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-  private val sealer = KeystoreSealer(KEY_ALIAS)
+  constructor(context: Context) : this(context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE))
 
   override var revocations = 0L
     @Synchronized get
@@ -19,7 +19,7 @@ class SecureEpochKeyStore(
 
   @Synchronized
   override fun replaceAll(keys: List<ProvisionedEpochKey>) {
-    preferences.edit().putString(KEYS_JSON, sealer.seal(encodeKeys(keys))).apply()
+    check(preferences.edit().putString(KEYS_JSON, sealer.seal(encodeKeys(keys))).commit())
   }
 
   @Synchronized

@@ -295,7 +295,7 @@ export const placeErrorMessage = (reason: ErrorReason | null, fallback: string) 
   return fallback;
 };
 
-type PlaceEdit = {
+export type PlaceEdit = {
   name: string;
   emoji: string;
   geometry: { latitude: number; longitude: number; radiusMeters: number };

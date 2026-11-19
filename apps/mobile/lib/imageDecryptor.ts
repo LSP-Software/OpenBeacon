@@ -25,6 +25,7 @@ export type DecryptedImageResult =
   | { status: "unavailable" };
 
 const RETRY_AFTER_MS = 60_000;
+const RETRY_BROKEN_AFTER_MS = 15 * 60_000;
 const MAX_DOWNLOADS = 4;
 
 export const imageKeySources = ({
@@ -261,8 +262,13 @@ export const createImageDecryptor = (deps: {
         previous = latest;
         continue;
       }
-      const retryable = result.status === "unavailable" || result.status === "stale-key";
-      if (!retryable || deps.now() - previous.at < RETRY_AFTER_MS) return result;
+      const retryAfter =
+        result.status === "unavailable" || result.status === "stale-key"
+          ? RETRY_AFTER_MS
+          : result.status === "undecryptable" || result.status === "gone"
+            ? RETRY_BROKEN_AFTER_MS
+            : null;
+      if (retryAfter === null || deps.now() - previous.at < retryAfter) return result;
       previous = undefined;
     }
     const forGeneration = currentGeneration();

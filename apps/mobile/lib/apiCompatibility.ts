@@ -145,7 +145,20 @@ export const checkServerCompatibility = async (serverUrl: string) => {
   const body = response.error || !response.data.ok ? null : await readJson(response.data);
   clearTimeout(timer);
   const health = healthSchema.safeParse(body);
-  if (!health.success) return { verdict: null, serverVersion: null, announcements: null };
+  if (!health.success) {
+    return {
+      verdict: null,
+      serverVersion: null,
+      announcements: null,
+      problem: controller.signal.aborted
+        ? ({ kind: "timeout" } as const)
+        : response.error
+          ? ({ kind: "unreachable" } as const)
+          : response.data.ok
+            ? ({ kind: "notOpenBeacon" } as const)
+            : ({ kind: "httpStatus", status: response.data.status } as const),
+    };
+  }
   return {
     verdict: decideApiCompatibility({ server: health.data }),
     serverVersion: health.data.version,

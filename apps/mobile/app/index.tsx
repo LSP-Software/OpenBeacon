@@ -1,4 +1,5 @@
 import { tryCatch } from "@openbeacon/shared";
+import { TRPCClientError } from "@trpc/client";
 import { Link, router, useFocusEffect, useRootNavigationState } from "expo-router";
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -15,8 +16,10 @@ import { ensureDeviceKeyRegistration } from "../lib/deviceKeys.ts";
 import { launchRetryDelayMs } from "../lib/launchRetry.ts";
 import { readOnboarding, startOnboarding } from "../lib/onboarding.ts";
 import { readSavedDeviceLink } from "../lib/savedDeviceLink.ts";
+import { SERVER_UNREACHABLE_MESSAGE } from "../lib/serverUnreachable.ts";
 import { signOutOfThisPhone } from "../lib/signOut.ts";
 import { useColors } from "../lib/theme.ts";
+import { userMessage } from "../lib/userMessage.ts";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const RING_DIAMETERS = [SCREEN_WIDTH * 1.3, SCREEN_WIDTH, SCREEN_WIDTH * 0.72, SCREEN_WIDTH * 0.46];
@@ -81,7 +84,10 @@ export default function HomeScreen() {
   const colors = useColors();
   const rootNavigationState = useRootNavigationState();
 
-  const [failures, setFailures] = useState(0);
+  const [failure, setFailure] = useState<{ count: number; message: string | null }>({
+    count: 0,
+    message: null,
+  });
   const [attempt, setAttempt] = useState(0);
   const [signingOut, setSigningOut] = useState(false);
 
@@ -95,16 +101,25 @@ export default function HomeScreen() {
       let cancelled = false;
       let retry: ReturnType<typeof setTimeout> | undefined;
       let failed = 0;
-      const tryAgainLater = () => {
+      const tryAgainLater = (error: Error) => {
         failed += 1;
-        setFailures(failed);
+        const message = userMessage(error);
+        setFailure({
+          count: failed,
+          message:
+            message === SERVER_UNREACHABLE_MESSAGE
+              ? null
+              : error instanceof TRPCClientError && (error.data?.httpStatus ?? 0) >= 500
+                ? "Something went wrong on the server."
+                : message,
+        });
         retry = setTimeout(() => void route(), launchRetryDelayMs(failed));
       };
       const route = async () => {
         const device = await tryCatch(ensureDeviceKeyRegistration());
         if (cancelled) return;
         if (device.error) {
-          tryAgainLater();
+          tryAgainLater(device.error);
           return;
         }
         const savedLink = await tryCatch(readSavedDeviceLink(device.data));
@@ -116,10 +131,10 @@ export default function HomeScreen() {
         const active = await tryCatch(isThisDeviceActive());
         if (cancelled) return;
         if (active.error) {
-          tryAgainLater();
+          tryAgainLater(active.error);
           return;
         }
-        setFailures(0);
+        setFailure({ count: 0, message: null });
         const { userId } = device.data;
         const onboarding = readOnboarding(userId);
         if (!active.data && onboarding?.kind !== "newDevice") startOnboarding(userId, "newDevice");
@@ -143,19 +158,21 @@ export default function HomeScreen() {
       }),
     );
     setSigningOut(false);
-    setFailures(0);
+    setFailure({ count: 0, message: null });
   };
 
   if (isPending || session) {
     return (
       <LoadingScreen colors={colors}>
-        {session && failures > 0 && (
+        {session && failure.count > 0 && (
           <View className="absolute bottom-0 left-0 right-0 gap-3 px-6 pb-12">
             <AnnouncementBanner />
             <Text className="text-center text-secondary" accessibilityLiveRegion="polite">
-              {hasCustomServerUrl()
-                ? `Couldn’t connect to ${getBaseUrl()}. Check your connection and that your server is running. Trying again automatically.`
-                : "Couldn’t connect to OpenBeacon. Check your connection. Trying again automatically."}
+              {failure.message
+                ? `${failure.message} Trying again automatically.`
+                : hasCustomServerUrl()
+                  ? `Couldn’t connect to ${getBaseUrl()}. Check your connection and that your server is running. Trying again automatically.`
+                  : "Couldn’t connect to OpenBeacon. Check your connection. Trying again automatically."}
             </Text>
             <Button onPress={() => setAttempt((value) => value + 1)}>
               <Text>Try again</Text>

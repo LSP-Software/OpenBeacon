@@ -16,6 +16,7 @@ import { ChoiceList } from "../../components/ui/ChoiceList.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { trpc } from "../../lib/api.ts";
 import { endSession } from "../../lib/endSession.ts";
+import { withOwnScreen } from "../../lib/ownScreen.ts";
 import { userMessage } from "../../lib/userMessage.ts";
 
 const DeleteAccountScreen = () => {
@@ -79,7 +80,9 @@ const DeleteAccountScreen = () => {
       return;
     }
     const result = await tryCatch(
-      WebBrowser.openAuthSessionAsync(authorization.data.url, "openbeacon://google-deletion"),
+      withOwnScreen(() =>
+        WebBrowser.openAuthSessionAsync(authorization.data.url, "openbeacon://google-deletion"),
+      ),
     );
     setIsGoogleVerifying(false);
     if (result.error) {

@@ -8,13 +8,27 @@ import { createRoot } from "test-renderer";
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 const alerts: string[] = [];
+let methods = { google: false, password: true };
+const ownScreenWhileOpen: boolean[] = [];
 const View = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
 
 mock.module("expo-router", () => ({ router: { replace: () => {} } }));
-mock.module("expo-web-browser", () => ({ openAuthSessionAsync: async () => ({}) }));
+mock.module("expo-web-browser", () => ({
+  openAuthSessionAsync: async () => {
+    const { isOwnScreenOpen } = await import("../lib/ownScreen.ts");
+    ownScreenWhileOpen.push(isOwnScreenOpen());
+    return {
+      type: "success",
+      url: "openbeacon://google-deletion?state=state-1&code=code-1",
+    };
+  },
+}));
 mock.module("@tanstack/react-query", () => ({
-  useMutation: () => ({ isPending: false, mutateAsync: async () => ({}) }),
-  useQuery: () => ({ data: { google: false, password: true }, isError: false }),
+  useMutation: () => ({
+    isPending: false,
+    mutateAsync: async () => ({ state: "state-1", url: "https://accounts.example/auth" }),
+  }),
+  useQuery: () => ({ data: methods, isError: false }),
 }));
 mock.module("react-native", () => ({ ScrollView: View, View }));
 mock.module("react-native-safe-area-context", () => ({ SafeAreaView: View }));
@@ -64,6 +78,8 @@ const confirmDeletion = async (password: string) => {
 
 beforeEach(() => {
   alerts.length = 0;
+  ownScreenWhileOpen.length = 0;
+  methods = { google: false, password: true };
 });
 
 test("an empty password doesn't go on to ask about deleting", async () => {
@@ -73,5 +89,22 @@ test("an empty password doesn't go on to ask about deleting", async () => {
 
 test("a typed password goes on to ask about deleting", async () => {
   await confirmDeletion("secret");
+  expect(alerts).toEqual(["Delete account?"]);
+});
+
+test("the Google check counts as the app's own screen, so app lock doesn't ask on the way back", async () => {
+  methods = { google: true, password: false };
+  const root = createRoot();
+  await act(async () => root.render(<DeleteAccountScreen />));
+  const button = root.container
+    .queryAll((item) => item.type === "mock-button")
+    .find((item) => JSON.stringify(item.children).includes("Verify with Google"));
+  if (!button) throw new Error("Missing Verify with Google");
+  await act(async () => (button.props as { onPress: () => Promise<void> }).onPress());
+  await act(async () => root.unmount());
+
+  const { isOwnScreenOpen } = await import("../lib/ownScreen.ts");
+  expect(ownScreenWhileOpen).toEqual([true]);
+  expect(isOwnScreenOpen()).toBe(false);
   expect(alerts).toEqual(["Delete account?"]);
 });

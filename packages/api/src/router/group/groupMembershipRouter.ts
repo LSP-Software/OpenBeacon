@@ -8,7 +8,7 @@ import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
 import { errorCode, tryCatch } from "@openbeacon/shared";
 import { recordGroupEvent } from "../../lib/groupHistory.ts";
-import { deleteGroup } from "../../lib/deleteGroup.ts";
+import { deleteGroup, deleteGroupImages } from "../../lib/deleteGroup.ts";
 import { imageKeySelect, toStoredImageKey } from "../../lib/imageKeys.ts";
 import { deleteTrackingStreams } from "../../lib/trackingCleanup.ts";
 import { getGroupRemovalContext, persistGroupEpoch } from "../../lib/groupEpochs.ts";
@@ -232,6 +232,7 @@ export const groupMembershipRouter = {
       const removed = await ctx.db.$transaction(
         async (tx) => {
           const eventIds: string[] = [];
+          const groupImageKeys: string[] = [];
           await tx.$queryRaw(
             Prisma.sql`SELECT id FROM "Group" WHERE id = ${input.groupId} FOR UPDATE`,
           );
@@ -371,7 +372,9 @@ export const groupMembershipRouter = {
 
           if (isLeaving) {
             if ((await tx.groupMember.count({ where: { groupId: input.groupId } })) === 0) {
-              await deleteGroup({ db: tx, groupId: input.groupId });
+              groupImageKeys.push(
+                ...(await deleteGroup({ db: tx, groupId: input.groupId })).imageKeys,
+              );
             } else {
               await tx.group.update({
                 where: { id: input.groupId },
@@ -384,11 +387,17 @@ export const groupMembershipRouter = {
             SELECT max(id)::text AS id FROM "TrackingStream"
             WHERE "groupId" = ${input.groupId} AND "senderUserId" = ${member.userId}
           `);
-          return { userId: member.userId, lastStreamId: lastStream?.id ?? null, eventIds };
+          return {
+            userId: member.userId,
+            lastStreamId: lastStream?.id ?? null,
+            eventIds,
+            groupImageKeys,
+          };
         },
         { timeout: 15_000 },
       );
       ctx.push?.groupEvents(removed.eventIds);
+      await deleteGroupImages(removed.groupImageKeys);
       const cleanup = await tryCatch(
         removed.lastStreamId === null
           ? Promise.resolve(0)

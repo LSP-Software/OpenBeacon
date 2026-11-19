@@ -41,7 +41,7 @@ const requeued: Array<{ ids: number[]; error: string | null | undefined }> = [];
 const uploadCalls: Array<{
   groupId: string;
   points: Array<Record<string, unknown>>;
-  placeTransitions?: { clientId: string }[];
+  placeTransitions?: { clientId: string; occurredAt?: Date }[];
   placeAlertsCursor?: string | null;
   noticesCursor?: string | null;
 }> = [];
@@ -521,7 +521,7 @@ mock.module("./api.ts", () => ({
         mutate: async (input: {
           groupId: string;
           points: Array<Record<string, unknown>>;
-          placeTransitions?: { clientId: string }[];
+          placeTransitions?: { clientId: string; occurredAt?: Date }[];
           placeAlertsCursor?: string | null;
           noticesCursor?: string | null;
         }) => {
@@ -1034,6 +1034,18 @@ describe("tracking service", () => {
         userId: "user-1",
       };
       uploadGroup = async (input) => placeAnswer(input);
+    });
+
+    test("a transition's time is sent on the server's clock", async () => {
+      storageValues.set(
+        `locationSharing.clockOffset.${JSON.stringify("https://api.example.test")}`,
+        "-600000",
+      );
+      queuedTransitions = [{ ...transition(t1), occurredAt: 1_800_000 }];
+      await flushPendingTrackingPoints();
+      expect(
+        uploadCalls.flatMap((call) => call.placeTransitions ?? []).map((sent) => sent.occurredAt),
+      ).toEqual([new Date(1_200_000)]);
     });
 
     test("transitions ride with their group's points and the cursor goes on one upload", async () => {

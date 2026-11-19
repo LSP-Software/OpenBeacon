@@ -111,14 +111,15 @@ test("a key that can't be read yet is tried again a minute later", async () => {
   expect(loadDecryptedImage).toHaveBeenCalledTimes(2);
 });
 
-test("a picture that can't be decrypted isn't tried again", async () => {
+test("a picture that can't be decrypted isn't retried on a timer, only when the app comes back", async () => {
   nextResult = { status: "undecryptable" };
   await render();
 
-  await advance(10 * 60_000);
-  await comeBackToForeground();
-
+  await advance(30 * 60_000);
   expect(loadDecryptedImage).toHaveBeenCalledTimes(1);
+
+  await comeBackToForeground();
+  expect(loadDecryptedImage).toHaveBeenCalledTimes(2);
 });
 
 test("coming back to the app retries a picture that is waiting to retry", async () => {
@@ -152,14 +153,15 @@ test("a cached picture is dropped once the image cache is cleared", async () => 
   expect(loadDecryptedImage).toHaveBeenCalledTimes(1);
 });
 
-test("a picture that's gone from storage isn't tried again", async () => {
+test("a picture that's gone from storage isn't retried on a timer, only when the app comes back", async () => {
   nextResult = { status: "gone" };
   await render();
 
-  await advance(10 * 60_000);
-  await comeBackToForeground();
-
+  await advance(30 * 60_000);
   expect(loadDecryptedImage).toHaveBeenCalledTimes(1);
+
+  await comeBackToForeground();
+  expect(loadDecryptedImage).toHaveBeenCalledTimes(2);
 });
 
 test("refetching the same keys doesn't load the picture again", async () => {

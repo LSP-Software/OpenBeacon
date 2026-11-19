@@ -51,7 +51,7 @@ const SetUpPhoneScreen = () => {
             id: "restore" as const,
             title: "Enter your recovery phrase",
             description: `This ${noun} gets your full location history.`,
-            href: { pathname: "/account/recovery-restore", params: { setup: "true" } } as const,
+            href: "/account/recovery-restore" as const,
           },
         ]
       : []),
@@ -75,7 +75,7 @@ const SetUpPhoneScreen = () => {
           : "I don’t have another device",
       description:
         "Set up a new recovery phrase. Your location history from before today will be lost.",
-      href: { pathname: "/account/recovery-reset", params: { setup: "true" } },
+      href: "/account/recovery-reset" as const,
     },
   ];
   const [choice, setChoice] = useState<(typeof options)[number]["id"] | null>(null);

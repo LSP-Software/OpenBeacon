@@ -371,10 +371,7 @@ test("Continue goes to the first option until another is chosen", async () => {
   expect(continueHref()).toBe("/setup/link");
   const reset = findByText("mock-pressable", "I’ve lost my phrase");
   await act(async () => (reset.props as { onPress: () => void }).onPress());
-  expect(continueHref()).toEqual({
-    pathname: "/account/recovery-reset",
-    params: { setup: "true" },
-  });
+  expect(continueHref()).toBe("/account/recovery-reset");
 });
 
 test("Continue can't be pressed while cancelling", async () => {

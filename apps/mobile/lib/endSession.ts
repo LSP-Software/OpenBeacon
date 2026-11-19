@@ -11,6 +11,7 @@ import {
 } from "./deviceKeys.ts";
 import { isDeviceRemovedError } from "./deviceRemovedError.ts";
 import { clearGroupColors } from "./groupColor.ts";
+import { settleBy } from "./deadline.ts";
 import { clearImageCache } from "./imageCache.ts";
 import { resetImageKeyCheck } from "./imageKeySelfCheck.ts";
 import { deleteStoredHistoryKeys } from "./historyKeys.ts";
@@ -143,8 +144,10 @@ const isRemovedAfterSessionLoss = async (registered: { deviceId: string }) => {
 
 export const endSession = async ({
   reason,
+  serverDeadline,
 }: {
   reason: EndSessionReason;
+  serverDeadline?: number;
 }): Promise<{ signedOut: boolean }> => {
   resetImageKeyCheck();
   await tryCatch(Promise.resolve().then(clearImageCache));
@@ -165,7 +168,8 @@ export const endSession = async ({
     registered?.userId ??
     (clears.credentials === "keep"
       ? undefined
-      : (await tryCatch(trpcClient.auth.deviceKeyContext.query())).data?.userId);
+      : (await settleBy(tryCatch(trpcClient.auth.deviceKeyContext.query()), serverDeadline, null))
+          ?.data?.userId);
   const deviceId = registered?.deviceId ?? (userId ? getStoredDeviceId(userId) : undefined);
   await queryClient.cancelQueries();
   const recoveryStatus = queryClient.getQueryData(trpc.accountRecovery.status.queryKey());
@@ -195,8 +199,8 @@ export const endSession = async ({
   forgetDeviceKeyRegistration();
   let signedOut = false;
   if (clears.credentials !== "keep") {
-    const result = await tryCatch(authClient.signOut());
-    signedOut = !result.error && !result.data.error;
+    const result = await settleBy(tryCatch(authClient.signOut()), serverDeadline, null);
+    signedOut = !!result && !result.error && !result.data.error;
   }
   if (clears.credentials === "signOutAndDropRevokeToken") {
     await tryCatch(forgetSessionTokenToRevoke());

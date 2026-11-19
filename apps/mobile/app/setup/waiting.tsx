@@ -18,7 +18,7 @@ const WaitingForPhraseScreen = () => {
 
   useEffect(() => {
     if (phraseReady) {
-      router.replace({ pathname: "/account/recovery-restore", params: { setup: "true" } });
+      router.replace("/account/recovery-restore");
     }
   }, [phraseReady]);
 
@@ -50,7 +50,7 @@ const WaitingForPhraseScreen = () => {
             ? "We can’t reach the server right now. We’ll keep trying."
             : `Waiting for your phrase. This ${noun} moves on as soon as it’s ready.`}
         </Text>
-        <Link href={{ pathname: "/account/recovery-reset", params: { setup: "true" } }} asChild>
+        <Link href="/account/recovery-reset" asChild>
           <Button variant="ghost">
             <Text>I can’t get to my other device</Text>
           </Button>
