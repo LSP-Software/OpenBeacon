@@ -1,3 +1,5 @@
+import { liveMapMarkersCenter } from "./fitLiveMapMarkers.ts";
+
 export const INITIAL_MAP_CAMERA = {
   centerCoordinate: [0, 0] as [number, number],
   zoomLevel: 1.25,
@@ -42,21 +44,10 @@ export const mapCameraAfterFittingMarkers = ({
     });
   }
 
-  let north = firstMarker.latitude;
-  let south = firstMarker.latitude;
-  let east = firstMarker.longitude;
-  let west = firstMarker.longitude;
-
-  for (const marker of rest) {
-    north = Math.max(north, marker.latitude);
-    south = Math.min(south, marker.latitude);
-    east = Math.max(east, marker.longitude);
-    west = Math.min(west, marker.longitude);
-  }
-
+  const [longitude, latitude] = liveMapMarkersCenter(markers);
   return mapCameraFromRegionChange({
-    latitude: (north + south) / 2,
-    longitude: (east + west) / 2,
+    latitude,
+    longitude,
     zoomLevel: previousCamera.zoomLevel,
   });
 };

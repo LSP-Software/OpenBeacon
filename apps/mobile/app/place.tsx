@@ -288,7 +288,7 @@ const PlaceEditor = ({
       savePlace({
         emoji: parsedEmoji.data,
         existing: place
-          ? { expectedCiphertext: place.expectedCiphertext, placeId: place.id }
+          ? { before: place, expectedCiphertext: place.expectedCiphertext, placeId: place.id }
           : null,
         geometry,
         groupId,

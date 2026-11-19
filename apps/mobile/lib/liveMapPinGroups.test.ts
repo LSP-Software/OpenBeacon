@@ -45,6 +45,19 @@ describe("groupLiveMapPins", () => {
     expect(groups[1]?.id).toBe("c");
   });
 
+  test("stacks people standing together either side of the antimeridian, on their side of the world", () => {
+    const groups = groupLiveMapPins({
+      zoom: 10,
+      markers: [person("a", -17, 179.9999), person("b", -17, -179.9999)],
+    });
+
+    expect(groups.map((group) => group.members.map((member) => member.userId))).toEqual([
+      ["a", "b"],
+    ]);
+    expect(Math.abs(groups[0]?.longitude ?? 0)).toBeCloseTo(180, 3);
+    expect(groups[0]?.latitude).toBe(-17);
+  });
+
   test("splits a stack once zooming in gives each pin room", () => {
     const markers = [person("a", 52.9, -1.47), person("b", 52.901, -1.47)];
 
@@ -114,6 +127,21 @@ describe("liveMapPinTransition", () => {
     expect(gathering.map(({ marker }) => marker.userId).sort()).toEqual(["a", "b"]);
     expect(gathering[0]!.gatherTo.y * gathering[1]!.gatherTo.y).toBeLessThan(0);
     expect(arrivals.get("stack:a")?.pop).toBe(true);
+  });
+
+  test("sends a pin the short way round the antimeridian to the stack it joins", () => {
+    const zoom = 10;
+    const a = person("a", -17, 179.9999);
+    const b = person("b", -17, -179.9999);
+    const previous = [
+      { id: "a", latitude: a.latitude, longitude: a.longitude, members: [a] },
+      { id: "b", latitude: b.latitude, longitude: b.longitude, members: [b] },
+    ];
+    const next = [{ id: "stack:a", latitude: -17, longitude: 180, members: [a, b] }];
+    const { gathering } = liveMapPinTransition({ next, previous, zoom });
+
+    expect(gathering).toHaveLength(2);
+    for (const { gatherTo } of gathering) expect(Math.abs(gatherTo.x)).toBeLessThan(1);
   });
 
   test("starts split pins at the stack they came from", () => {

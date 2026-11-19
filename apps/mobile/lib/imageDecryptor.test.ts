@@ -286,9 +286,10 @@ describe("requests", () => {
     expect(epochKeyRequests).toHaveLength(1);
   });
 
-  test("a picture that won't decrypt isn't downloaded again", async () => {
+  test("a picture that won't decrypt is downloaded again after 15 minutes, not before", async () => {
     const imageKey = encrypt({ fileName: fileA, ownerId: bob, purpose: "profile-image" });
     const key = wrap({ fileName: fileA, imageKey, kind: "profile-image-key", ownerId: bob });
+    const readable = served.get(urlFor(fileA))!;
     served.set(
       urlFor(fileA),
       encryptImage({ bytes: otherPicture, fileName: fileB, ownerId: bob, purpose: "profile-image" })
@@ -299,9 +300,13 @@ describe("requests", () => {
     await decryptor.load({ sources: [memberSource(key)], url: urlFor(fileA) });
     now = 10 * 60_000;
     const again = await decryptor.load({ sources: [memberSource(key)], url: urlFor(fileA) });
+    served.set(urlFor(fileA), readable);
+    now = 15 * 60_000;
+    const later = await decryptor.load({ sources: [memberSource(key)], url: urlFor(fileA) });
 
     expect(again).toEqual({ status: "undecryptable" });
-    expect(downloads).toHaveLength(1);
+    expect(later.status).toBe("ready");
+    expect(downloads).toHaveLength(2);
   });
 
   test("a new key for the same picture is tried straight away", async () => {
@@ -341,23 +346,29 @@ describe("requests", () => {
     expect(downloads).toHaveLength(2);
   });
 
-  test("a picture gone from storage isn't downloaded again until its keys change", async () => {
+  test("a picture gone from storage is downloaded again when its keys change or after 15 minutes", async () => {
     const imageKey = encrypt({ fileName: fileA, ownerId: bob, purpose: "profile-image" });
     const key = wrap({ fileName: fileA, imageKey, kind: "profile-image-key", ownerId: bob });
     const decryptor = createDecryptor();
-    downloadError = new ImageGoneError("Picture download failed with 404.");
+    downloadError = new ImageGoneError("Picture download failed with 403.");
 
     const first = await decryptor.load({ sources: [memberSource(key)], url: urlFor(fileA) });
     now = 10 * 60_000;
     const later = await decryptor.load({ sources: [memberSource(key)], url: urlFor(fileA) });
-    downloadError = null;
     const fresh = wrap({ fileName: fileA, imageKey, kind: "profile-image-key", ownerId: bob });
     const rekeyed = await decryptor.load({ sources: [memberSource(fresh)], url: urlFor(fileA) });
+    downloadError = null;
+    now = 14 * 60_000;
+    const stillWaiting = await decryptor.load({ sources: [memberSource(key)], url: urlFor(fileA) });
+    now = 15 * 60_000;
+    const retried = await decryptor.load({ sources: [memberSource(key)], url: urlFor(fileA) });
 
     expect(first).toEqual({ status: "gone" });
     expect(later).toEqual({ status: "gone" });
-    expect(rekeyed.status).toBe("ready");
-    expect(downloads).toHaveLength(2);
+    expect(rekeyed).toEqual({ status: "gone" });
+    expect(stillWaiting).toEqual({ status: "gone" });
+    expect(retried.status).toBe("ready");
+    expect(downloads).toHaveLength(3);
   });
 
   test("a picture finishing after sign-out isn't written to the cache", async () => {

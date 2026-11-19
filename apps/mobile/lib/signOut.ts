@@ -3,11 +3,13 @@ import { TRPCClientError } from "@trpc/client";
 import { trpcClient } from "./api.ts";
 import { saveSessionTokenToRevoke } from "./auth-client.ts";
 import { getRegisteredDeviceKey } from "./deviceKeys.ts";
+import { settleBy } from "./deadline.ts";
 import { endSession } from "./endSession.ts";
 import { isDeviceRemovedError } from "./deviceRemovedError.ts";
 import { abandonLocationSharingChanges, syncLocationSharing } from "./locationSharing.ts";
 import { readRegisteredDevice } from "./registeredDevice.ts";
 import { linkSessionToDevice } from "./sessionLink.ts";
+import { SERVER_UNREACHABLE_MESSAGE } from "./serverUnreachable.ts";
 import { requestTrackingSync } from "./trackingEvents.ts";
 
 const removeThisDevice = async () =>
@@ -40,15 +42,17 @@ export const signOutOfThisPhone = async ({
   sessionTokenToRevoke: string | null;
 }): Promise<{ status: "phoneRemoved" | "signedOut" | "serverUnreachable" }> => {
   const tracking = await import("./tracking.ts");
-  await Promise.race([
-    tryCatch(syncLocationSharing()),
-    new Promise((resolve) => setTimeout(resolve, 10_000)),
-  ]);
+  await settleBy(tryCatch(syncLocationSharing()), Date.now() + 10_000, null);
   abandonLocationSharingChanges();
   await tryCatch(tracking.prepareTrackingSignOut());
   onSigningOut();
+  const serverDeadline = Date.now() + 20_000;
   if (removeThisPhone) {
-    const error = await linkAndRemoveThisDevice();
+    const error = await settleBy(
+      linkAndRemoveThisDevice(),
+      serverDeadline,
+      new Error(SERVER_UNREACHABLE_MESSAGE),
+    );
     const deviceRemoved = await import("./deviceRemoved.ts");
     if (!error || isDeviceRemovedError(error) || deviceRemoved.isWipingThisPhone()) {
       await deviceRemoved.wipeAfterRemovingThisPhone();
@@ -63,7 +67,7 @@ export const signOutOfThisPhone = async ({
       return { status: "phoneRemoved" };
     }
   }
-  const { signedOut } = await endSession({ reason: "signedOut" });
+  const { signedOut } = await endSession({ reason: "signedOut", serverDeadline });
   if (!signedOut && sessionTokenToRevoke) {
     await tryCatch(saveSessionTokenToRevoke(sessionTokenToRevoke));
   }

@@ -11,7 +11,7 @@ type ResetResult =
   | { status: "reset"; device: { userId: string } }
   | { status: "reauthenticate" };
 
-let searchParams: { setup?: string } = {};
+let deviceState: "active" | "registered" = "active";
 const backHandlers = new Set<() => boolean>();
 let gestureEnabled: boolean | undefined;
 const pressHardwareBack = () => [...backHandlers].some((handler) => handler());
@@ -51,7 +51,7 @@ mock.module("expo-router", () => ({
     },
   },
   useFocusEffect: (effect: () => () => void) => React.useEffect(effect, [effect]),
-  useLocalSearchParams: () => searchParams,
+  useLocalSearchParams: () => ({}),
 }));
 mock.module("@tanstack/react-query", () => ({
   useQuery: () => ({ data: { email: false }, isPending: false, refetch: async () => {} }),
@@ -86,7 +86,11 @@ mock.module("../lib/api.ts", () => ({
 }));
 mock.module("../lib/emailCodes.ts", () => ({ invalidCodeMessage: "Invalid code" }));
 mock.module("../lib/protectHistory.ts", () => ({ protectHistory }));
-mock.module("../lib/deviceActivation.ts", () => ({ activateWithHistoryKey, isThisDeviceActive }));
+mock.module("../lib/deviceActivation.ts", () => ({
+  activateWithHistoryKey,
+  isThisDeviceActive,
+  readThisDeviceState: () => deviceState,
+}));
 mock.module("../lib/recovery.ts", () => ({
   requestRecoveryResetCode: async () => ({ status: "sent", email: "a@b.c" }),
   resetRecoveryPhrase,
@@ -131,7 +135,7 @@ const reachPhraseStep = async () => {
 
 beforeEach(() => {
   alertMessages.length = 0;
-  searchParams = {};
+  deviceState = "active";
   gestureEnabled = undefined;
   resetRecoveryPhrase.mockClear();
   protectHistory.mockClear();
@@ -185,11 +189,8 @@ test("back is blocked while the new phrase is being saved and history protected"
 });
 
 test("a phrase this phone couldn't save links to restoring it in place of this screen", async () => {
-  for (const [params, href] of [
-    [{}, "/account/recovery-restore"],
-    [{ setup: "true" }, { pathname: "/account/recovery-restore", params: { setup: "true" } }],
-  ] as const) {
-    searchParams = params;
+  for (const state of ["active", "registered"] as const) {
+    deviceState = state;
     resetRecoveryPhrase.mockImplementationOnce(async () => ({
       status: "unsaved",
       device: { userId: "user-1" },
@@ -199,7 +200,7 @@ test("a phrase this phone couldn't save links to restoring it in place of this s
 
     const [link] = root?.container.queryAll((item) => item.type === "expo-link") ?? [];
     const props = link?.props as { href: string; replace?: boolean };
-    expect(JSON.parse(props.href)).toEqual(href);
+    expect(JSON.parse(props.href)).toBe("/account/recovery-restore");
     expect(props.replace).toBe(true);
     await act(async () => root?.unmount());
     root = null;
@@ -207,7 +208,7 @@ test("a phrase this phone couldn't save links to restoring it in place of this s
 });
 
 test("a reset picks up that the server set this phone up before protecting history", async () => {
-  searchParams = { setup: "true" };
+  deviceState = "registered";
   protectHistory.mockImplementationOnce(async () => {
     steps.push("protect");
   });
@@ -218,7 +219,7 @@ test("a reset picks up that the server set this phone up before protecting histo
 });
 
 test("re-entering the account's current phrase sets this phone up with it before protecting history", async () => {
-  searchParams = { setup: "true" };
+  deviceState = "registered";
   serverActive = false;
   protectHistory.mockImplementationOnce(async () => {
     steps.push("protect");
@@ -229,7 +230,7 @@ test("re-entering the account's current phrase sets this phone up with it before
 });
 
 test("a phrase this phone couldn't save doesn't try to set the phone up with it", async () => {
-  searchParams = { setup: "true" };
+  deviceState = "registered";
   serverActive = false;
   resetRecoveryPhrase.mockImplementationOnce(async () => ({
     status: "unsaved",
@@ -252,7 +253,7 @@ const pressButton = async (label: string) => {
 };
 
 test("a reset that can't confirm this phone is set up waits with Try again instead of moving on", async () => {
-  searchParams = { setup: "true" };
+  deviceState = "registered";
   isThisDeviceActive.mockImplementationOnce(async () => {
     throw new Error("Network request failed");
   });
@@ -273,7 +274,7 @@ test("a reset that can't confirm this phone is set up waits with Try again inste
 });
 
 test("a failed set up with the current phrase waits with Try again instead of moving on", async () => {
-  searchParams = { setup: "true" };
+  deviceState = "registered";
   serverActive = false;
   activateWithHistoryKey.mockImplementationOnce(async () => {
     throw new Error("Network request failed");

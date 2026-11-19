@@ -10,14 +10,6 @@ import type {
   MapTrackingStatus,
 } from "./mapTrackingTypes.ts";
 
-export type {
-  LiveMapPosition,
-  MapTrackingCursor,
-  MapTrackingDeps,
-  MapTrackingEncryptedPoint,
-  MapTrackingStatus,
-} from "./mapTrackingTypes.ts";
-
 const STEADY_INTERVAL_MS = 5_000;
 const MAX_BACKOFF_MS = 60_000;
 const RECONCILE_INTERVAL_MS = 5 * 60_000;

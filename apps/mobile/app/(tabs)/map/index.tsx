@@ -1,5 +1,6 @@
 import { useIsFocused } from "@react-navigation/native";
 import {
+  keepPreviousData,
   skipToken,
   useMutation,
   useQueries,
@@ -18,9 +19,8 @@ import { Button } from "../../../components/ui/Button.tsx";
 import { Text } from "../../../components/ui/Text.tsx";
 import { useGroupColorRevision } from "../../../hooks/useGroupColorRevision.ts";
 import { useCurrentGroupKeyAccess } from "../../../hooks/useGroupKeyAccess.ts";
-import { useMapLivePositions } from "../../../hooks/useMapLivePositions.ts";
 import { useHiddenMapGroupIds } from "../../../hooks/useHiddenMapGroupIds.ts";
-import { useMembershipSnapshot } from "../../../hooks/useMembershipSnapshot.ts";
+import { useLiveTrackingPositions } from "../../../hooks/useLiveTrackingPositions.ts";
 import { useTrackingUploadTime } from "../../../hooks/useTrackingUploadTime.ts";
 import { useSelfDeviceLocation } from "../../../hooks/useSelfDeviceLocation.ts";
 import { trpc } from "../../../lib/api.ts";
@@ -65,16 +65,16 @@ const MapScreen = () => {
     dropRemovedDevices,
     positions: livePositions,
     status: trackingStatus,
-  } = useMapLivePositions();
+  } = useLiveTrackingPositions();
   const { data: session } = authClient.useSession();
   const userId = session?.user.id;
   const isFocused = useIsFocused();
   const offline = useOfflineStatus();
-  const { data: groupsQueryData } = useQuery({
+  const { data: groups } = useQuery({
     ...trpc.groupMembership.list.queryOptions(),
     enabled: false,
+    placeholderData: keepPreviousData,
   });
-  const groups = useMembershipSnapshot(groupsQueryData);
   const nicknames = useQueries({
     queries: (groups ?? []).map((group) => ({
       queryKey: ["personalNicknames", group.id, userId],
