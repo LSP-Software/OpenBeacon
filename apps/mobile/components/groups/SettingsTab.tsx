@@ -12,6 +12,7 @@ import { Text } from "../ui/Text.tsx";
 import { useCachedGroup } from "../../hooks/useCachedGroup.ts";
 import { useHistoryShare } from "../../hooks/useHistoryShare.ts";
 import { useHiddenMapGroupIds } from "../../hooks/useHiddenMapGroupIds.ts";
+import { useMemberRemoval } from "../../hooks/useMemberRemoval.tsx";
 import { trpc } from "../../lib/api.ts";
 import { authClient } from "../../lib/auth-client.ts";
 import { groupHistoryShare } from "../../lib/historyShare.ts";
@@ -33,6 +34,7 @@ const SettingsTab = ({ groupId }: { groupId: string }) => {
   const rename = useMutation(trpc.groupSettings.rename.mutationOptions());
   const deleteGroup = useMutation(trpc.groupLifecycle.delete.mutationOptions());
   const historyShare = useHistoryShare();
+  const leaving = useMemberRemoval(groupId);
   const role = group?.members.find((member) => member.userId === session?.user.id)?.role;
 
   return (
@@ -106,6 +108,12 @@ const SettingsTab = ({ groupId }: { groupId: string }) => {
             }
           />
         </View>
+      )}
+      {leaving.successorDialog}
+      {role && (
+        <Button variant="danger" loading={leaving.isPending} onPress={leaving.leave}>
+          <Text>Leave group</Text>
+        </Button>
       )}
       {role === "OWNER" && (
         <Button
