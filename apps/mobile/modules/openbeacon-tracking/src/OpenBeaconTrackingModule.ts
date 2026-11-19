@@ -137,6 +137,7 @@ declare class OpenBeaconTrackingModule extends NativeModule<{
     groupName: string | null,
     link: string,
   ): boolean;
+  clearEventNotices(keepSecurityAlerts: boolean): Promise<void>;
 }
 
 export default requireNativeModule<OpenBeaconTrackingModule>("OpenBeaconTracking");

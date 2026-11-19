@@ -23,6 +23,11 @@ mock.module("./currentServer.ts", () => ({ getBaseUrl: () => "https://api.exampl
 mock.module("./personalNicknames.ts", () => ({
   loadPersonalNicknames: async () => ({ "member-sam": { name: "Mum", ciphertext: "sealed" } }),
 }));
+let roundCurrent = true;
+mock.module("./accountSession.ts", () => ({
+  isRoundCurrent: () => roundCurrent,
+  startAccountRound: (userId: string) => ({ userId, number: 1 }),
+}));
 mock.module("./notifications.ts", () => ({
   showEventNotice: async (notice: {
     kind: string;
@@ -99,6 +104,7 @@ const groups = async () =>
   ] as unknown as Awaited<ReturnType<Parameters<typeof showNotices>[0]["groups"]>>;
 
 beforeEach(() => {
+  roundCurrent = true;
   storageValues.clear();
   shown.length = 0;
   failNotices = false;
@@ -211,7 +217,7 @@ describe("showing notices", () => {
         ],
       },
       groups,
-      userId: "user-1",
+      round: { userId: "user-1", number: 1 },
     });
     expect(shown).toEqual([
       {
@@ -241,13 +247,32 @@ describe("showing notices", () => {
     expect(getAccountNoticesCursor("user-1")).toBeNull();
   });
 
+  test("a round that ended keeps both cursors, so its notices come again", async () => {
+    roundCurrent = false;
+    const round = { userId: "user-1", number: 1 };
+    await showNotices({
+      notices: { cursor: "2026-11-17T10:00:00.000Z|event-1", notices: [groupEvent({})] },
+      groups,
+      round,
+    });
+    await showAccountNotices({
+      notices: {
+        cursor: "2026-11-17T11:00:00.000Z|notice-1",
+        notices: [account("PASSWORD_CHANGED")],
+      },
+      round,
+    });
+    expect(getNoticesCursor("user-1")).toBeNull();
+    expect(getAccountNoticesCursor("user-1")).toBeNull();
+  });
+
   test("account notices are security alerts with their own cursor", async () => {
     await showAccountNotices({
       notices: {
         cursor: "2026-11-17T11:00:00.000Z|notice-1",
         notices: [account("PASSWORD_CHANGED")],
       },
-      userId: "user-1",
+      round: { userId: "user-1", number: 1 },
     });
     expect(shown).toEqual([
       {
@@ -271,7 +296,7 @@ describe("showing notices", () => {
           account("NEW_SIGN_IN"),
         ],
       },
-      userId: "user-1",
+      round: { userId: "user-1", number: 1 },
     });
     expect(shown.map(({ title }) => title)).toEqual(["New sign-in"]);
     expect(getAccountNoticesCursor("user-1")).toBe("2026-11-17T11:00:00.000Z|notice-NEW_SIGN_IN");
@@ -290,7 +315,7 @@ describe("showing notices", () => {
           }),
         ],
       },
-      userId: "user-1",
+      round: { userId: "user-1", number: 1 },
     });
     expect(shown.map(({ title, body }) => ({ title, body }))).toEqual([
       { title: "Security alerts turned off", body: "New sign-in (phone)." },
@@ -310,7 +335,7 @@ describe("showing notices", () => {
         ],
       },
       groups,
-      userId: "user-1",
+      round: { userId: "user-1", number: 1 },
     });
     expect(shown.map(({ title }) => title)).toEqual(["Mum left the group"]);
     expect(getNoticesCursor("user-1")).toBe("2026-11-17T10:00:00.000Z|event-1");
@@ -322,13 +347,13 @@ describe("showing notices", () => {
       showNotices({
         notices: { cursor: "2026-11-17T10:00:00.000Z|", notices: [groupEvent({})] },
         groups,
-        userId: "user-1",
+        round: { userId: "user-1", number: 1 },
       }),
     ).rejects.toThrow("Notifications unavailable");
     await expect(
       showAccountNotices({
         notices: { cursor: "2026-11-17T10:00:00.000Z|", notices: [account("PASSWORD_RESET")] },
-        userId: "user-1",
+        round: { userId: "user-1", number: 1 },
       }),
     ).rejects.toThrow("Notifications unavailable");
     expect(getNoticesCursor("user-1")).toBeNull();

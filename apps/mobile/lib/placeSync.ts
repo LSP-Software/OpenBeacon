@@ -1,3 +1,4 @@
+import type { accountRequest } from "./accountSession.ts";
 import type { EpochKeyMaterial, PlaceGeometryV1 } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
 import { queryOptions, skipToken } from "@tanstack/react-query";
@@ -17,9 +18,12 @@ import {
 import { userMessage } from "./userMessage.ts";
 import { thisDeviceNoun } from "./thisDeviceNoun.ts";
 
-export const loadGroupPlaces = async (groupId: string): Promise<GroupPlace[]> => {
+export const loadGroupPlaces = async (
+  groupId: string,
+  request?: ReturnType<typeof accountRequest>,
+): Promise<GroupPlace[]> => {
   const [list, device] = await Promise.all([
-    trpcClient.groupPlaces.list.query({ groupId }),
+    trpcClient.groupPlaces.list.query({ groupId }, request),
     ensureDeviceKeyRegistration(),
   ]);
   const epochKeys = new Map<string, Promise<EpochKeyMaterial | null>>();

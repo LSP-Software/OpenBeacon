@@ -5,10 +5,11 @@ import { useCallback, useEffect, useState } from "react";
 import { AppState, PermissionsAndroid, Platform } from "react-native";
 import appConfig from "../app.json";
 import { useAppForeground } from "../hooks/useAppForeground.ts";
+import { type AccountRound, isRoundCurrent } from "./accountSession.ts";
 import type { Href } from "expo-router";
 import type { NoticeSlot } from "../modules/openbeacon-tracking/index.ts";
 import type { ApiCompatibilityProblem } from "./apiCompatibility.ts";
-import { showInAppNotice } from "./inAppNotices.ts";
+import { clearInAppNotices, showInAppNotice } from "./inAppNotices.ts";
 import { loadTrackingModule } from "./trackingModule.ts";
 import { withOwnScreen } from "./ownScreen.ts";
 import { useSingleFlight } from "./useSingleFlight.ts";
@@ -38,6 +39,7 @@ export const showEventNotice = async ({
   key,
   kind,
   link,
+  round,
   title,
 }: {
   body: string | null;
@@ -47,14 +49,16 @@ export const showEventNotice = async ({
     NonNullable<Awaited<ReturnType<typeof loadTrackingModule>>>["showEventNotice"]
   >[0];
   link: { href: Href; url: string };
+  round: AccountRound;
   title: string;
 }): Promise<boolean> => {
+  const trackingModule = await loadTrackingModule();
+  if (!isRoundCurrent(round)) return false;
   const active = AppState.currentState === "active";
   if (active) {
     showInAppNotice({ title, body: body ?? groupName, href: link.href });
     if (kind !== "accountAlert") return true;
   }
-  const trackingModule = await loadTrackingModule();
   if (!trackingModule) return active;
   const result = await tryCatch(
     Promise.resolve().then(() =>
@@ -62,6 +66,19 @@ export const showEventNotice = async ({
     ),
   );
   return active || (result.data ?? false);
+};
+
+export const clearEventNotices = async ({
+  keepSecurityAlerts,
+}: {
+  keepSecurityAlerts: boolean;
+}) => {
+  clearInAppNotices();
+  const trackingModule = await loadTrackingModule();
+  if (!trackingModule) return;
+  await tryCatch(
+    Promise.resolve().then(() => trackingModule.clearEventNotices(keepSecurityAlerts)),
+  );
 };
 
 export const dismissNotice = async (slot: NoticeSlot) => {

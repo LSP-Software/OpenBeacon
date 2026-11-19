@@ -56,7 +56,7 @@ const accountSyncCalls: Array<{ cursor: string | null; pushToken?: string | null
 let accountSyncResponse = async (): Promise<typeof accountSyncResult> => accountSyncResult;
 let syncInBatch = false;
 const uploadsBatchedWithSync: boolean[] = [];
-const shownAccountNotices: Array<{ notices: unknown; userId: string }> = [];
+const shownAccountNotices: Array<{ notices: unknown; round: { userId: string } }> = [];
 let pushHeldByServer = false;
 const pushConfirms: Array<{ scope: string; sent: string | null; pushAvailable: boolean }> = [];
 const pushForgets: string[] = [];
@@ -69,7 +69,7 @@ let queuedTransitions: {
   occurredAt: number;
 }[] = [];
 const deletedTransitions: string[][] = [];
-const appliedPlaceUpdates: { updates: unknown; userId: string }[] = [];
+const appliedPlaceUpdates: { updates: unknown; round: { userId: string } }[] = [];
 let storedPlaceCursor: string | null = null;
 const rotationChecks: string[] = [];
 const requests: string[] = [];
@@ -150,6 +150,7 @@ let locationSharingCalls = 0;
 const sharingStates: { owner: string; deviceId: string; prefix: string; paused: boolean }[] = [];
 let registrationWait: Promise<void> | null = null;
 let onRegistration: (() => void) | null = null;
+const uploadAccounts: Array<string | undefined> = [];
 let uploadGroup = async ({
   points,
 }: {
@@ -204,6 +205,10 @@ mock.module("./storage.ts", () => ({
       storageValues.set(key, value);
     },
   },
+}));
+
+mock.module("./registeredDevice.ts", () => ({
+  readRegisteredDeviceNow: () => registeredDevice,
 }));
 
 mock.module("./deviceKeys.ts", () => ({
@@ -293,8 +298,12 @@ let apiCompatibilityRefreshes = 0;
 const notices: Record<string, unknown>[] = [];
 let noticeAllowed = true;
 const dismissedNotices: string[] = [];
+let eventNoticeClears: { keepSecurityAlerts: boolean }[] = [];
 
 mock.module("./notifications.ts", () => ({
+  clearEventNotices: async (options: { keepSecurityAlerts: boolean }) => {
+    eventNoticeClears.push(options);
+  },
   showNotice: async (notice: Record<string, unknown>) => {
     if (!noticeAllowed) return false;
     notices.push(notice);
@@ -306,7 +315,7 @@ mock.module("./notifications.ts", () => ({
 }));
 
 mock.module("./placeBackgroundSync.ts", () => ({
-  applyPlaceUpdates: async (input: { updates: unknown; userId: string }) => {
+  applyPlaceUpdates: async (input: { updates: unknown; round: { userId: string } }) => {
     appliedPlaceUpdates.push(input);
   },
   getPlaceAlertsCursor: () => storedPlaceCursor,
@@ -316,7 +325,7 @@ mock.module("./placeBackgroundSync.ts", () => ({
 mock.module("./noticeBackgroundSync.ts", () => ({
   getNoticesCursor: () => storedNoticesCursor,
   getAccountNoticesCursor: () => storedAccountCursor,
-  showAccountNotices: async (input: { notices: unknown; userId: string }) => {
+  showAccountNotices: async (input: { notices: unknown; round: { userId: string } }) => {
     shownAccountNotices.push(input);
   },
 }));
@@ -518,15 +527,19 @@ mock.module("./api.ts", () => ({
     },
     groupTracking: {
       uploadBatch: {
-        mutate: async (input: {
-          groupId: string;
-          points: Array<Record<string, unknown>>;
-          placeTransitions?: { clientId: string; occurredAt?: Date }[];
-          placeAlertsCursor?: string | null;
-          noticesCursor?: string | null;
-        }) => {
+        mutate: async (
+          input: {
+            groupId: string;
+            points: Array<Record<string, unknown>>;
+            placeTransitions?: { clientId: string; occurredAt?: Date }[];
+            placeAlertsCursor?: string | null;
+            noticesCursor?: string | null;
+          },
+          options?: { context?: { accountRound?: { userId: string } } },
+        ) => {
           requests.push("groupTracking.uploadBatch");
           uploadCalls.push(input);
+          uploadAccounts.push(options?.context?.accountRound?.userId);
           uploadsBatchedWithSync.push(syncInBatch);
           return uploadGroup(input);
         },
@@ -805,7 +818,9 @@ describe("tracking service", () => {
       expect(accountSyncCalls).toEqual([{ cursor: storedAccountCursor, pushToken: "token-1" }]);
       expect(uploadsBatchedWithSync[0]).toBe(true);
       expect(pushConfirms).toEqual([{ scope, sent: "token-1", pushAvailable: true }]);
-      expect(shownAccountNotices).toEqual([{ notices: accountSyncResult, userId: "user-1" }]);
+      expect(shownAccountNotices).toEqual([
+        { notices: accountSyncResult, round: expect.objectContaining({ userId: "user-1" }) },
+      ]);
     });
 
     test("an upload round with nothing to send doesn't ask for account notices", async () => {
@@ -1036,6 +1051,26 @@ describe("tracking service", () => {
       uploadGroup = async (input) => placeAnswer(input);
     });
 
+    test("a round whose session is rejected part-way applies none of its updates", async () => {
+      storedPlaceCursor = "2026-11-15T09:00:00.000Z|";
+      pendingCiphertexts = [
+        createQueueItem({ clientPointId: "p1", groupId: "group-1", id: 1 }),
+        createQueueItem({ clientPointId: "p2", groupId: "group-2", id: 2 }),
+      ];
+      uploadGroup = async (input) => {
+        if (input.groupId === "group-2") {
+          throw Object.assign(new Error("Session revoked"), { data: { code: "UNAUTHORIZED" } });
+        }
+        return placeAnswer(input);
+      };
+
+      await expect(flushPendingTrackingPoints()).rejects.toThrow();
+
+      expect(uploadCalls.some((call) => call.placeAlertsCursor !== undefined)).toBe(true);
+      expect(appliedPlaceUpdates).toEqual([]);
+      expect(shownAccountNotices).toEqual([]);
+    });
+
     test("a transition's time is sent on the server's clock", async () => {
       storageValues.set(
         `locationSharing.clockOffset.${JSON.stringify("https://api.example.test")}`,
@@ -1069,7 +1104,7 @@ describe("tracking service", () => {
       expect(deletedTransitions).toEqual([[t1]]);
       expect(appliedPlaceUpdates).toEqual([
         {
-          userId: "user-1",
+          round: expect.objectContaining({ userId: "user-1" }),
           updates: {
             places: [{ groupId: "group-1", revision: 3, needsCatchUp: false }],
             placeAlerts: { alerts: [], cursor: "2026-11-15T10:00:00.000Z|" },
@@ -2566,6 +2601,23 @@ describe("tracking service", () => {
     expect(notices).toEqual([]);
   });
 
+  test("a revoked session in the background clears alerts about other people but keeps security alerts", async () => {
+    eventNoticeClears = [];
+    captureRunning = true;
+    registrationError = Object.assign(new Error("Session revoked"), {
+      data: { code: "UNAUTHORIZED" },
+    });
+    await syncBackgroundTracking();
+    expect(eventNoticeClears).toEqual([{ keepSecurityAlerts: true }]);
+  });
+
+  test("a phone removed in the background clears security alerts too", async () => {
+    eventNoticeClears = [];
+    captureRunning = true;
+    await revokeTrackingAccess({ notice: "deviceRemoved" });
+    expect(eventNoticeClears).toEqual([{ keepSecurityAlerts: false }]);
+  });
+
   test("stops capture and retains queued points when upload reports a revoked session", async () => {
     captureRunning = true;
     pendingCiphertexts = [createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 })];
@@ -2578,6 +2630,67 @@ describe("tracking service", () => {
     expect(deleted).toEqual([]);
     expect(requeued).toHaveLength(1);
     expect(notices).toEqual([{ kind: "signedOut" }]);
+  });
+
+  test("uploads name the account they were made for", async () => {
+    registeredDevice = {
+      deviceId: "device-1",
+      privateKey: deviceKeyPair.privateKey,
+      userId: "user-1",
+    };
+    uploadAccounts.length = 0;
+    pendingCiphertexts = [createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 })];
+
+    await syncBackgroundTracking();
+
+    expect(uploadAccounts).toEqual(["user-1"]);
+  });
+
+  test("an upload refused because its account signed out is requeued as cancelled, not counted as a failure", async () => {
+    registeredDevice = {
+      deviceId: "device-1",
+      privateKey: deviceKeyPair.privateKey,
+      userId: "user-1",
+    };
+    captureRunning = true;
+    pendingCiphertexts = [createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 })];
+    uploadGroup = async () => {
+      registeredDevice = null;
+      throw new Error("Signed out of the account this request was for.");
+    };
+
+    await expect(flushPendingTrackingPoints()).rejects.toThrow();
+
+    expect(requeued).toEqual([{ ids: [1], error: "UPLOAD_CANCELLED" }]);
+    expect(stopCaptureCalls).toBe(0);
+    expect(notices).toEqual([]);
+  });
+
+  test("a revoked session reported after another account signed in leaves that account alone", async () => {
+    registeredDevice = {
+      deviceId: "device-1",
+      privateKey: deviceKeyPair.privateKey,
+      userId: "user-1",
+    };
+    captureRunning = true;
+    eventNoticeClears = [];
+    pendingCiphertexts = [createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 })];
+    uploadGroup = async () => {
+      registeredDevice = {
+        deviceId: "device-2",
+        privateKey: deviceKeyPair.privateKey,
+        userId: "user-2",
+      };
+      throw Object.assign(new Error("Session revoked"), { data: { code: "UNAUTHORIZED" } });
+    };
+
+    await expect(syncBackgroundTracking()).rejects.toThrow();
+
+    expect(stopCaptureCalls).toBe(0);
+    expect(revokedGroups).toEqual([]);
+    expect(notices).toEqual([]);
+    expect(eventNoticeClears).toEqual([]);
+    expect(registeredDevice?.userId).toBe("user-2");
   });
 
   test("an upload refused because this phone was removed keeps the registration for the wipe", async () => {
@@ -2935,6 +3048,13 @@ describe("tracking service", () => {
     await Promise.all([revokeTrackingAccess(), revokeTrackingAccess({ notice: "deviceRemoved" })]);
 
     expect(notices).toEqual([]);
+  });
+
+  test("a revoke without a sign-out notice keeps alerts about other people", async () => {
+    eventNoticeClears = [];
+    captureRunning = true;
+    await revokeTrackingAccess();
+    expect(eventNoticeClears).toEqual([]);
   });
 
   test("a notice from one revoke isn't carried into the next", async () => {

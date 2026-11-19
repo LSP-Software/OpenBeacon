@@ -120,3 +120,28 @@ test("queries retry only network failures and server errors, never refusals", as
   expect(retry(0, offline)).toBe(true);
   expect(retry(3, offline)).toBe(false);
 });
+
+test("a request made for an account round that has ended is never sent", async () => {
+  const { refuseStartedRounds, startAccountRound } = await import("./accountSession.ts");
+  clearApiCompatibility();
+  respond = () => new Response("{}");
+  stored.set(
+    "encryption.device.registered",
+    JSON.stringify(["https://api.example.test", "user-b", "device-b", "key-b"]),
+  );
+  const otherAccount = startAccountRound("user-a");
+  const rejected = startAccountRound("user-b");
+  refuseStartedRounds();
+
+  for (const accountRound of [otherAccount, rejected]) {
+    await expect(
+      trpcClient.account.version.query(undefined, { context: { accountRound } }),
+    ).rejects.toThrow("Signed out of the account this request was for.");
+  }
+  expect(requests).toEqual([]);
+
+  await trpcClient.account.version
+    .query(undefined, { context: { accountRound: startAccountRound("user-b") } })
+    .catch(() => {});
+  expect(requests).toHaveLength(1);
+});

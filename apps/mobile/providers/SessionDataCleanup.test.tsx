@@ -16,6 +16,7 @@ let sessionState: { data: { user: { id: string } } | null; isPending: boolean } 
 const notify = mock((_signal: string) => {});
 const settledUsers: Array<string | null> = [];
 let savedMapClears = 0;
+const eventNoticeClears: Array<{ keepSecurityAlerts: boolean }> = [];
 const imageCacheClaims: Array<string | null> = [];
 const replace = mock((_href: string) => {});
 let segments: string[] = [];
@@ -47,6 +48,12 @@ mock.module("../lib/endSession.ts", () => ({
 mock.module("../lib/mapCache.ts", () => ({
   clearSavedMap: async () => {
     savedMapClears += 1;
+  },
+}));
+
+mock.module("../lib/notifications.ts", () => ({
+  clearEventNotices: async (options: { keepSecurityAlerts: boolean }) => {
+    eventNoticeClears.push(options);
   },
 }));
 
@@ -97,6 +104,7 @@ const expectSessionDataCleared = () => {
   expect(getTrackingUploadTime("device-1", ["group-1"])).toBeNull();
   expect(storageValues.get("server.url")).toBe("https://beacon.example");
   expect(savedMapClears).toBe(1);
+  expect(eventNoticeClears).toEqual([{ keepSecurityAlerts: true }]);
 };
 
 const unauthorized = () =>
@@ -111,6 +119,7 @@ beforeEach(() => {
   notify.mockClear();
   settledUsers.length = 0;
   savedMapClears = 0;
+  eventNoticeClears.length = 0;
   imageCacheClaims.length = 0;
   replace.mockClear();
   segments = [];
@@ -166,6 +175,7 @@ test("keeps data when the app starts with an existing session", async () => {
   );
   expect(getGroupColor("group-1")).toBe("#2A9D8F");
   expect(savedMapClears).toBe(0);
+  expect(eventNoticeClears).toEqual([]);
 });
 
 test("rechecks the session once when the server rejects it", async () => {

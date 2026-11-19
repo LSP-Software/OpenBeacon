@@ -39,6 +39,17 @@ mock.module("./inAppNotices.ts", () => ({
   showInAppNotice: ({ title, body }: { title: string; body: string | null }) => {
     inApp.push({ title, body });
   },
+  clearInAppNotices: () => {
+    inApp.length = 0;
+  },
+}));
+
+let registeredUserId: string | null = "user-a";
+let nativeEventNoticeClears: boolean[] = [];
+
+mock.module("./registeredDevice.ts", () => ({
+  readRegisteredDeviceNow: () =>
+    registeredUserId ? { userId: registeredUserId, deviceId: "device-a", publicKey: "key" } : null,
 }));
 
 mock.module("expo-linking", () => ({
@@ -62,13 +73,22 @@ mock.module("../modules/openbeacon-tracking/index.ts", () => ({
       shownEvents.push({ kind, title });
       return true;
     },
+    clearEventNotices: (keepSecurityAlerts: boolean) => {
+      nativeEventNoticeClears.push(keepSecurityAlerts);
+    },
     areNotificationsEnabled: () => android.notificationsEnabled,
     shouldShowNotificationRationale: () => android.rationale,
   },
 }));
 
-const { requestNotificationPermissions, showEventNotice, showNotice, turnOnNotifications } =
-  await import("./notifications.ts");
+const {
+  clearEventNotices,
+  requestNotificationPermissions,
+  showEventNotice,
+  showNotice,
+  turnOnNotifications,
+} = await import("./notifications.ts");
+const { refuseStartedRounds, startAccountRound } = await import("./accountSession.ts");
 
 beforeEach(() => {
   shown.length = 0;
@@ -77,6 +97,8 @@ beforeEach(() => {
   settings.opened.length = 0;
   settings.sendIntentFails = false;
   showFails = false;
+  registeredUserId = "user-a";
+  nativeEventNoticeClears = [];
   appState.currentState = "background";
   platform.Version = 34;
   Object.assign(android, {
@@ -99,6 +121,7 @@ describe("showEventNotice", () => {
       kind: "groupActivity",
       link: { href: "/", url: "openbeacon:///" },
       title: "Mum joined",
+      round: startAccountRound("user-a"),
     });
     expect(inApp).toEqual([{ title: "Mum joined", body: "Family" }]);
     expect(shownEvents).toEqual([]);
@@ -113,12 +136,62 @@ describe("showEventNotice", () => {
       kind: "accountAlert",
       link: { href: "/account/password", url: "openbeacon:///account/password" },
       title: "Your password was reset",
+      round: startAccountRound("user-a"),
     });
     expect(shown).toBe(true);
     expect(inApp).toEqual([
       { title: "Your password was reset", body: "Every phone and tablet was signed out." },
     ]);
     expect(shownEvents).toEqual([{ kind: "accountAlert", title: "Your password was reset" }]);
+  });
+});
+
+describe("notices for an account this phone is no longer signed in to", () => {
+  const placeAlert = (round = startAccountRound("user-a")) =>
+    ({
+      body: null,
+      groupName: "Family",
+      key: "alert-1",
+      kind: "alert",
+      link: { href: "/", url: "openbeacon:///" },
+      round,
+      title: "Alice arrived at Home",
+    }) as const;
+
+  test.each([
+    ["signed out", null],
+    ["signed in to another account", "user-b"],
+  ])("are dropped once the phone is %s", async (_state, userId) => {
+    registeredUserId = userId;
+    for (const currentState of ["background", "active"]) {
+      appState.currentState = currentState;
+      expect(await showEventNotice(placeAlert())).toBe(false);
+      expect(await showEventNotice({ ...placeAlert(), kind: "accountAlert" })).toBe(false);
+    }
+    expect(shownEvents).toEqual([]);
+    expect(inApp).toEqual([]);
+  });
+
+  test("a round started before the server rejected the session posts nothing, even after a new round starts", async () => {
+    const rejectedRound = startAccountRound("user-a");
+    refuseStartedRounds();
+    const nextRound = startAccountRound("user-a");
+
+    expect(await showEventNotice(placeAlert(rejectedRound))).toBe(false);
+    expect(shownEvents).toEqual([]);
+    expect(await showEventNotice(placeAlert(nextRound))).toBe(true);
+    expect(shownEvents).toEqual([{ kind: "alert", title: "Alice arrived at Home" }]);
+  });
+
+  test("clearing alerts about others also empties the in-app banners", async () => {
+    appState.currentState = "active";
+    await showEventNotice(placeAlert());
+    expect(inApp).toHaveLength(1);
+
+    await clearEventNotices({ keepSecurityAlerts: true });
+
+    expect(inApp).toEqual([]);
+    expect(nativeEventNoticeClears).toEqual([true]);
   });
 });
 

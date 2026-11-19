@@ -71,6 +71,11 @@ export const SessionDataCleanup = () => {
     clearGroupColors();
     clearTrackingUploadTimes();
     void tryCatch(import("../lib/mapCache.ts").then(({ clearSavedMap }) => clearSavedMap()));
+    void tryCatch(
+      import("../lib/notifications.ts").then(({ clearEventNotices }) =>
+        clearEventNotices({ keepSecurityAlerts: true }),
+      ),
+    );
   }, [isPending, queryClient, userId]);
 
   useEffect(() => {

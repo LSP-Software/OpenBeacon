@@ -11,6 +11,8 @@ let signOuts = 0;
 let picturesAtSignOut = -1;
 let trackingRevocations = 0;
 let pushTokenForgets = 0;
+let eventNoticeClears: { keepSecurityAlerts: boolean }[] = [];
+const registeredAtEventNoticeClears: boolean[] = [];
 let googleSignInForgets = 0;
 let googleSignOut: () => Promise<void> = async () => {};
 let sessionUserId: string | null = "user-a";
@@ -144,6 +146,13 @@ mock.module("./tracking.ts", () => ({
   },
 }));
 
+mock.module("./notifications.ts", () => ({
+  clearEventNotices: async (options: { keepSecurityAlerts: boolean }) => {
+    eventNoticeClears.push(options);
+    registeredAtEventNoticeClears.push(storageValues.has("encryption.device.registered"));
+  },
+}));
+
 const cachedFiles = new Set<string>();
 let imageKeyCheckResets = 0;
 
@@ -249,6 +258,7 @@ const expectWiped = (deviceId: string) => {
 
 describe("wiping a removed phone", () => {
   beforeEach(() => {
+    registeredAtEventNoticeClears.length = 0;
     secureStoreValues.clear();
     storageValues.clear();
     navigations.length = 0;
@@ -511,6 +521,7 @@ describe("wiping a removed phone", () => {
 
 describe("ending a session", () => {
   beforeEach(() => {
+    registeredAtEventNoticeClears.length = 0;
     secureStoreValues.clear();
     storageValues.clear();
     navigations.length = 0;
@@ -702,6 +713,46 @@ describe("ending a session", () => {
       expect([...cachedFiles]).toEqual(["cache/map/tiles.pmtiles"]);
     },
   );
+
+  test.each([
+    ["signedOut", true],
+    ["phoneRemoved", false],
+    ["accountDeleted", false],
+    ["serverChanged", true],
+    ["sessionLost", true],
+  ] as const)(
+    "%s clears alerts once the registration is gone, keeping security alerts: %p",
+    async (reason, keepSecurityAlerts) => {
+      await seedSignedInPhone();
+      eventNoticeClears = [];
+
+      await endSession({ reason });
+
+      expect(eventNoticeClears).toEqual([{ keepSecurityAlerts }]);
+      expect(registeredAtEventNoticeClears).toEqual([false]);
+    },
+  );
+
+  test("a round started before sign-out stays refused when the same account signs back in", async () => {
+    const { isRoundCurrent, startAccountRound } = await import("./accountSession.ts");
+    await seedSignedInPhone();
+    const before = startAccountRound("user-a");
+
+    await endSession({ reason: "signedOut" });
+    await seedSignedInPhone();
+
+    expect(isRoundCurrent(before)).toBe(false);
+    expect(isRoundCurrent(startAccountRound("user-a"))).toBe(true);
+  });
+
+  test("a lost session without a registration keeps alerts, since nobody was signed out", async () => {
+    await seedSignedOutPhone();
+    eventNoticeClears = [];
+
+    await endSession({ reason: "sessionLost" });
+
+    expect(eventNoticeClears).toEqual([]);
+  });
 
   test.each([
     "signedOut",

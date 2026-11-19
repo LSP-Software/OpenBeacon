@@ -21,7 +21,9 @@ import org.robolectric.Shadows.shadowOf
 @RunWith(RobolectricTestRunner::class)
 class ParkedUploadTaskTest {
   private val application: Application = ApplicationProvider.getApplicationContext()
-  private val tasks = HeadlessJsTaskContext.getInstance(BridgeReactContext(application))
+  // HeadlessJsTaskContext only holds its React context weakly, so the test keeps it alive.
+  private val reactContext = BridgeReactContext(application)
+  private val tasks = HeadlessJsTaskContext.getInstance(reactContext)
 
   @Test
   fun theParkedCheckEndsAsSoonAsJavaScriptFinishesIt() {

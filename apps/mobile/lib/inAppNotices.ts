@@ -20,6 +20,10 @@ export const dismissInAppNotice = (id: number) => {
   publish(notices.filter((notice) => notice.id !== id));
 };
 
+export const clearInAppNotices = () => {
+  if (notices.length) publish([]);
+};
+
 const subscribe = (listener: () => void) => {
   listeners.add(listener);
   return () => {

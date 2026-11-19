@@ -58,6 +58,29 @@ enum Notice: String {
   }
 }
 
+enum EventNoticeKind: String, CaseIterable {
+  case alert
+  case placesChanged
+  case groupActivity
+  case accountAlert
+
+  var tag: String {
+    switch self {
+    case .alert: return "openbeacon_place_alert"
+    case .placesChanged: return "openbeacon_places_changed"
+    case .groupActivity: return "openbeacon_group_activity"
+    case .accountAlert: return "openbeacon_account_alert"
+    }
+  }
+
+  var aboutOthers: Bool {
+    switch self {
+    case .alert, .placesChanged, .groupActivity: return true
+    case .accountAlert: return false
+    }
+  }
+}
+
 final class Notices: NSObject, UNUserNotificationCenterDelegate {
   static let shared = Notices()
 
@@ -107,23 +130,29 @@ final class Notices: NSObject, UNUserNotificationCenterDelegate {
   }
 
   static func showEvent(kind: String, key: String, title: String, body: String?, groupName: String?, link: String) -> Bool {
-    let tags = [
-      "alert": "openbeacon_place_alert",
-      "placesChanged": "openbeacon_places_changed",
-      "groupActivity": "openbeacon_group_activity",
-      "accountAlert": "openbeacon_account_alert",
-    ]
-    guard let tag = tags[kind] else { return false }
+    guard let kind = EventNoticeKind(rawValue: kind) else { return false }
     if !areEnabled() { return false }
     let content = UNMutableNotificationContent()
     content.title = title
     if let groupName { content.subtitle = groupName }
     if let body { content.body = body }
-    content.threadIdentifier = tag
+    content.threadIdentifier = kind.tag
     content.userInfo = ["link": link]
-    if kind != "placesChanged" { content.sound = .default }
-    center.add(UNNotificationRequest(identifier: "\(tag).\(key)", content: content, trigger: nil))
+    if kind != .placesChanged { content.sound = .default }
+    center.add(UNNotificationRequest(identifier: identifier(kind, key), content: content, trigger: nil))
     return true
+  }
+
+  static func clearEvents(keepSecurityAlerts: Bool, _ completion: @escaping () -> Void) {
+    let prefixes = EventNoticeKind.allCases.filter { $0.aboutOthers || !keepSecurityAlerts }.map { identifier($0, "") }
+    let isCleared = { (id: String) in prefixes.contains { id.hasPrefix($0) } }
+    center.getPendingNotificationRequests { pending in
+      center.removePendingNotificationRequests(withIdentifiers: pending.map(\.identifier).filter(isCleared))
+      center.getDeliveredNotifications { delivered in
+        center.removeDeliveredNotifications(withIdentifiers: delivered.map(\.request.identifier).filter(isCleared))
+        completion()
+      }
+    }
   }
 
   static func dismiss(_ slot: NoticeSlot) {
@@ -133,6 +162,10 @@ final class Notices: NSObject, UNUserNotificationCenterDelegate {
 
   private static func identifier(_ slot: NoticeSlot) -> String {
     "openbeacon_notice.\(slot.rawValue)"
+  }
+
+  private static func identifier(_ kind: EventNoticeKind, _ key: String) -> String {
+    "\(kind.tag).\(key)"
   }
 
   func userNotificationCenter(
