@@ -45,6 +45,7 @@ mock.module("react-native", () => ({
 mock.module("@tanstack/react-query", () => ({
   useMutation: () => ({ isPending: false, mutate: () => {} }),
   useQuery: () => ({ isError: false, isFetching: false, isSuccess: true }),
+  useQueryClient: () => ({ invalidateQueries: async () => {} }),
 }));
 mock.module("../hooks/useGroupColorRevision.ts", () => ({ useGroupColorRevision: () => 0 }));
 mock.module("../lib/auth-client.ts", () => ({

@@ -306,12 +306,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("account devices"
 
     await callerFor(account).account.updateDevice({
       deviceId: account.deviceId,
-      name: "  Car tablet ",
-      icon: "car",
+      name: "  Star tablet ",
+      icon: "star",
     });
 
     const device = await prisma.userDevice.findUniqueOrThrow({ where: { id: account.deviceId } });
-    expect(device).toMatchObject({ name: "Car tablet", icon: "car" });
+    expect(device).toMatchObject({ name: "Star tablet", icon: "star" });
   });
 
   test("persists the new device identifiers and returns them in the device list", async () => {
