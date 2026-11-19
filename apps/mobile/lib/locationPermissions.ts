@@ -7,7 +7,7 @@ import {
 } from "expo-location";
 import { withOwnScreen } from "./ownScreen.ts";
 
-export type LocationPermissionStatus = "granted" | "denied" | "undetermined";
+type LocationPermissionStatus = "granted" | "denied" | "undetermined";
 
 export type LocationPermissionRequirement = "foreground" | "background" | "precise";
 
@@ -144,27 +144,14 @@ export const getLocationPermissionWarningTitle = (
 export const getLocationPermissionWarningDescription = (
   state: Pick<LocationPermissionState, "missing">,
 ): string => {
-  if (state.missing.length === 0) {
-    return "";
+  if (state.missing.length === 0) return "";
+  if (state.missing.length === 1 && state.missing[0] === "precise") {
+    return "OpenBeacon doesn’t share your location at all while precise location is off. Turn it on to start sharing.";
   }
-
-  if (state.missing.length === 1) {
-    if (state.missing[0] === "foreground") {
-      return "Enable location so your family can see your location.";
-    }
-
-    if (state.missing[0] === "precise") {
-      return "Enable precise location so your family can see your exact location.";
-    }
-
-    return "Allow background location so sharing keeps working when the app is closed.";
+  if (state.missing.length === 1 && state.missing[0] === "background") {
+    return "OpenBeacon doesn’t share your location at all, even while the app is open, until you allow location all the time.";
   }
-
-  if (state.missing.includes("foreground")) {
-    return "Enable location access to continue using the app and share your location with your family.";
-  }
-
-  return "Enable precise and background location so your family can see your exact location even when the app is closed.";
+  return "OpenBeacon doesn’t share your location until you allow location all the time, with precise location on.";
 };
 
 export const getLocationPermissionState = async (): Promise<LocationPermissionState> => {

@@ -9,9 +9,5 @@ export const app = new Hono<AppEnv>();
 
 app.route("/", healthRouter);
 app.use("/api/*", apiCompatibility);
-
-const routes = [authRouter, trpcRouter] as const;
-
-routes.forEach((route) => {
-  app.basePath("/api").route("/", route);
-});
+app.route("/api", authRouter);
+app.route("/api", trpcRouter);

@@ -345,6 +345,7 @@ class TrackingCaptureService : Service() {
         Log.e(TAG, "Failed to resume location sharing.", error)
         stopCapture()
         stopAfterFailedStart()
+        return
       }
     }
     getSystemService(NotificationManager::class.java)?.notify(NOTIFICATION_ID, buildNotification())

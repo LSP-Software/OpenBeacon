@@ -9,7 +9,7 @@ import {
   unwrapEpochKey,
 } from "@openbeacon/encryption";
 import { TRACKING_POINT_KIND } from "@openbeacon/schemas";
-import { deleteAccountRecords } from "../../lib/account-deletion.ts";
+import { deleteDueAccount } from "../../lib/accountDeletion.testUtil.ts";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
 import { groupEpochRouter } from "./groupEpochRouter.ts";
 import { groupTrackingRouter } from "./groupTrackingRouter.ts";
@@ -30,7 +30,6 @@ const caller = router.createCaller(
   withDeviceActive({
     cache,
     db: prisma,
-    clientIp: "127.0.0.1",
     deviceId,
     session: { user: { id: userId } },
   }) as Parameters<typeof router.createCaller>[0],
@@ -83,7 +82,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const outsider = router.createCaller({
         cache,
         db: prisma,
-        clientIp: "127.0.0.1",
         deviceId: `${prefix}-outsider-device`,
         deviceActive: true,
         session: { user: { id: `${prefix}-outsider` } },
@@ -243,10 +241,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           ],
         });
         expect(
-          await deleteAccountRecords({
+          await deleteDueAccount({
             db: prisma,
             userId: departing,
-            mode: "immediate",
             imageUrlPrefix: "https://cdn.example/bucket",
           }),
         ).toBe(true);

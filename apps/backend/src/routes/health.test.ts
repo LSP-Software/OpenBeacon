@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { PrismaClient } from "@openbeacon/database";
 import { apiCompatibilityLevel, minClientApiCompatibilityLevel } from "@openbeacon/shared";
 import { serverVersion } from "../version.ts";
 import { testRedisHashSecret } from "@openbeacon/cache/testing";
@@ -70,15 +71,32 @@ describe("health endpoint", () => {
     );
   });
 
-  test("readiness pings Redis while health stays independent of it", async () => {
+  test("readiness checks Redis and the database while health stays independent of both", async () => {
     const { default: health } = await import("./health.ts");
-    const unreachable = { cache: { ping: async () => false } };
-    expect((await health.request("/health", {}, unreachable)).status).toBe(200);
-    const notReady = await health.request("/ready", {}, unreachable);
-    expect(notReady.status).toBe(503);
-    expect(await notReady.json()).toEqual({ status: "unavailable", redis: "unreachable" });
-    const ready = await health.request("/ready", {}, { cache: { ping: async () => true } });
+    const database = (query: () => Promise<unknown>) =>
+      ({ $queryRaw: query }) as unknown as PrismaClient;
+    const healthyDb = database(async () => [{ "?column?": 1 }]);
+    const failingDb = database(async () => {
+      throw new Error("Can't reach database server");
+    });
+    const silentDb = database(() => new Promise(() => {}));
+    const up = { ping: async () => true };
+    const down = { ping: async () => false };
+
+    expect((await health.request("/health", {}, { cache: down, db: failingDb })).status).toBe(200);
+    const ready = await health.request("/ready", {}, { cache: up, db: healthyDb });
     expect(ready.status).toBe(200);
     expect(await ready.json()).toEqual({ status: "ready" });
+    const noRedis = await health.request("/ready", {}, { cache: down, db: healthyDb });
+    expect(noRedis.status).toBe(503);
+    expect(await noRedis.json()).toEqual({ status: "unavailable", redis: "unreachable" });
+    const noDatabase = await health.request("/ready", {}, { cache: up, db: failingDb });
+    expect(noDatabase.status).toBe(503);
+    expect(await noDatabase.json()).toEqual({ status: "unavailable", database: "unreachable" });
+    const started = performance.now();
+    const wedged = await health.request("/ready", {}, { cache: up, db: silentDb });
+    expect(performance.now() - started).toBeLessThan(3_000);
+    expect(wedged.status).toBe(503);
+    expect(await wedged.json()).toEqual({ status: "unavailable", database: "unreachable" });
   });
 });

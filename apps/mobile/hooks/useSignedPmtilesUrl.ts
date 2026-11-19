@@ -1,6 +1,7 @@
 import { useIsFocused } from "@react-navigation/native";
 import { useQuery } from "@tanstack/react-query";
 import { queryClient, trpc, trpcClient } from "../lib/api.ts";
+import { serverNow } from "../lib/locationSharing.ts";
 import { getPmtilesUrlRefreshDelayMs, shouldRetrySignedPmtilesUrl } from "../lib/pmtilesUrl.ts";
 
 export const useSignedPmtilesUrl = () => {
@@ -16,10 +17,12 @@ export const useSignedPmtilesUrl = () => {
       ),
     subscribed: isFocused,
     staleTime: ({ state }) =>
-      state.data ? getPmtilesUrlRefreshDelayMs({ refreshAt: state.data.refreshAt }) : 0,
+      state.data
+        ? getPmtilesUrlRefreshDelayMs({ now: serverNow, refreshAt: state.data.refreshAt })
+        : 0,
     refetchInterval: ({ state }) =>
       state.data
-        ? Math.max(getPmtilesUrlRefreshDelayMs({ refreshAt: state.data.refreshAt }), 1_000)
+        ? getPmtilesUrlRefreshDelayMs({ now: serverNow, refreshAt: state.data.refreshAt }) || 15_000
         : false,
     retry: (failureCount, error) => shouldRetrySignedPmtilesUrl(failureCount, error.data?.code),
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 30_000),

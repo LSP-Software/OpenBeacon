@@ -5,9 +5,9 @@ import { getUnpublishedHistoryKeyName } from "./currentHistoryKey.ts";
 import { deleteStoredHistoryKeys, storeHistoryKey } from "./historyKeys.ts";
 import { secretOwner } from "./secretStorage.ts";
 import { storage } from "./storage.ts";
+import { thisDeviceNoun } from "./thisDeviceNoun.ts";
 
-export const KEY_NOT_SAVED_MESSAGE =
-  "Unable to save your keys on this phone. Unlock your phone and try again.";
+export const KEY_NOT_SAVED_MESSAGE = `Unable to save your keys on this ${thisDeviceNoun()}. Unlock your ${thisDeviceNoun()} and try again.`;
 
 const publishFirstHistoryKey = async (userId: string, owner: ReturnType<typeof secretOwner>) => {
   const historyKey = createHistoryKeyPair();

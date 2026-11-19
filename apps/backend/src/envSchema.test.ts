@@ -54,3 +54,14 @@ test("treats a missing, blank or over-long CLIENT_UPDATE_MESSAGE as unset withou
   expect(schema.parse(` ${"x".repeat(280)} `)).toBe("x".repeat(280));
   expect(schema.parse(" Update from the Play Store. ")).toBe("Update from the Play Store.");
 });
+
+test("listens on an IPv4 or IPv6 address", () => {
+  const schema = envSchema.OPENBEACON_API_HOSTNAME;
+  expect(schema.parse(undefined)).toBe("0.0.0.0");
+  for (const address of ["0.0.0.0", "127.0.0.1", "::", "::1"]) {
+    expect(schema.parse(address)).toBe(address);
+  }
+  for (const address of ["localhost", "999.0.0.1", ""]) {
+    expect(schema.safeParse(address).success).toBe(false);
+  }
+});

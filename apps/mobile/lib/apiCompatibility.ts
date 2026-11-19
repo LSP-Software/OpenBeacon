@@ -9,8 +9,9 @@ import {
 import { useSyncExternalStore } from "react";
 import { z } from "zod";
 import { healthAnnouncementsSchema, saveAnnouncements } from "./announcements.ts";
-import { baseUrl } from "./currentServer.ts";
+import { getBaseUrl } from "./currentServer.ts";
 import { storage } from "./storage.ts";
+import { appVersion } from "./versions.ts";
 
 const problemSchema = z.enum(["appTooOld", "serverTooOld", "outOfSync"]);
 
@@ -138,7 +139,9 @@ export const readApiCompatibilityResponse = async (
 export const checkServerCompatibility = async (serverUrl: string) => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10_000);
-  const response = await tryCatch(fetch(`${serverUrl}/health`, { signal: controller.signal }));
+  const response = await tryCatch(
+    fetch(`${serverUrl}/health`, { signal: controller.signal, credentials: "omit" }),
+  );
   const body = response.error || !response.data.ok ? null : await readJson(response.data);
   clearTimeout(timer);
   const health = healthSchema.safeParse(body);
@@ -156,6 +159,7 @@ const storageKey = "api_compatibility";
 const savedSchema = z.object({
   serverUrl: z.string(),
   appLevel: z.number(),
+  appVersion: z.string(),
   problem: problemSchema,
   serverVersion: z.string().nullable(),
   message: z.string().max(280).nullable().catch(null),
@@ -163,7 +167,10 @@ const savedSchema = z.object({
   notified: z.boolean(),
 });
 
-type ApiCompatibilityState = Omit<z.infer<typeof savedSchema>, "serverUrl" | "appLevel">;
+type ApiCompatibilityState = Omit<
+  z.infer<typeof savedSchema>,
+  "serverUrl" | "appLevel" | "appVersion"
+>;
 
 const loadSaved = (): ApiCompatibilityState | null => {
   const raw = storage.getString(storageKey);
@@ -175,7 +182,11 @@ const loadSaved = (): ApiCompatibilityState | null => {
     storage.remove(storageKey);
     return null;
   }
-  if (saved.serverUrl !== baseUrl || saved.appLevel !== apiCompatibilityLevel) {
+  if (
+    saved.serverUrl !== getBaseUrl() ||
+    saved.appLevel !== apiCompatibilityLevel ||
+    saved.appVersion !== appVersion
+  ) {
     storage.remove(storageKey);
     return null;
   }
@@ -196,7 +207,12 @@ const setState = (next: ApiCompatibilityState | null) => {
   if (next) {
     storage.set(
       storageKey,
-      JSON.stringify({ serverUrl: baseUrl, appLevel: apiCompatibilityLevel, ...next }),
+      JSON.stringify({
+        serverUrl: getBaseUrl(),
+        appLevel: apiCompatibilityLevel,
+        appVersion,
+        ...next,
+      }),
     );
   } else {
     storage.remove(storageKey);
@@ -278,7 +294,7 @@ export const refreshApiCompatibility = async ({ userRequested }: { userRequested
   latestHealthCheck += 1;
   const healthCheck = latestHealthCheck;
   const { verdict, serverVersion, message, announcements } =
-    await checkServerCompatibility(baseUrl);
+    await checkServerCompatibility(getBaseUrl());
   if (announcements && healthCheck === latestHealthCheck) saveAnnouncements(announcements);
   if (revision === startedAt) {
     applyVerdict({ verdict, serverVersion, message, sticky: false, userRequested });
@@ -293,7 +309,7 @@ export const refreshApiCompatibilityInBackground = async (now = Date.now()) => {
 };
 
 export const apiCompatibilityFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-  const response = await fetch(input, withApiCompatibilityHeader(init));
+  const response = await fetch(input, withApiCompatibilityHeader({ ...init, credentials: "omit" }));
   const { verdict, message, sticky } = await readApiCompatibilityResponse(response);
   if (verdict !== null && verdict !== "ok") revision += 1;
   applyVerdict({ verdict, serverVersion: null, message, sticky, userRequested: false });

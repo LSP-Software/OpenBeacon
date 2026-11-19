@@ -114,7 +114,7 @@ test("a successful resend clears the wrong code error and restarts the cooldown"
   await entry.resend();
 
   expect(entry.rendered()).not.toContain(invalidCodeMessage);
-  expect(entry.rendered()).toContain("We've sent a new code. Earlier codes no longer work.");
+  expect(entry.rendered()).toContain("We’ve sent a new code. Earlier codes no longer work.");
   expect(entry.rendered()).toContain("Resend code in 60s");
   expect(entry.resendDisabled()).toBe(true);
 });

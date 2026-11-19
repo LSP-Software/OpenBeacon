@@ -2,8 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-@custom-variant dark (&:where(.dark, .dark *));
-
 :root {
   --foreground: 269 40% 10%;
   --background: 264 50% 96%;
@@ -14,7 +12,6 @@
   --text-secondary: 261 18% 36%;
   --text-tertiary: 262 15% 44%;
   --muted: 258.75 20% 31.37%;
-  --muted-foreground: 0 0% 63.9%;
   --primary: var(--brand);
   --primary-foreground: 0 0% 100%;
   --primary-text: 340 100% 40%;
@@ -33,13 +30,7 @@
   --destructive-soft: 13 85% 95%;
   --success: 153 71% 28%;
   --success-soft: 148 46% 92%;
-  --ring: 0 0% 63%;
   --radius: 0.75rem;
-  --chart-1: 345 78% 48%;
-  --chart-2: 173 58% 39%;
-  --chart-3: 197 37% 24%;
-  --chart-4: 43 74% 66%;
-  --chart-5: 320 75% 55%;
   --warning: 55 92% 95%;
   --warning-border: 46 97% 65%;
   --warning-text: 39 100% 27%;
@@ -60,7 +51,6 @@
   --text-secondary: 259 22% 75%;
   --text-tertiary: 259 17% 63%;
   --muted: 259 20% 31%;
-  --muted-foreground: 0 0% 63.9%;
   --primary: var(--brand);
   --primary-foreground: 0 0% 100%;
   --primary-text: 340 100% 66%;
@@ -79,12 +69,6 @@
   --destructive-soft: 10 55% 14%;
   --success: 151 57% 60%;
   --success-soft: 151 40% 13%;
-  --ring: 300 0% 45%;
-  --chart-1: 220 70% 50%;
-  --chart-2: 160 60% 45%;
-  --chart-3: 345 78% 48%;
-  --chart-4: 280 65% 60%;
-  --chart-5: 340 75% 55%;
   --warning: 45 30% 12%;
   --warning-border: 45 60% 35%;
   --warning-text: 45 80% 75%;

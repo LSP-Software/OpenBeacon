@@ -1,4 +1,9 @@
-import { PAYLOAD_ENCRYPTION_ALGORITHM, PLACE_GEOMETRY_KIND } from "@openbeacon/encryption";
+import {
+  decodeBase64,
+  encodeBase64,
+  PAYLOAD_ENCRYPTION_ALGORITHM,
+  PLACE_GEOMETRY_KIND,
+} from "@openbeacon/encryption";
 import z from "zod";
 import { isVisibleName } from "../account/fields.ts";
 import { groupPayloadNonceSchema } from "./tracking.ts";
@@ -22,7 +27,17 @@ export const placeEmojiSchema = z
   .max(32)
   .regex(singleEmojiPattern, { message: "Choose one emoji" });
 
-const placeCiphertextSchema = z.string().min(1).max(512);
+const placeCiphertextSchema = z
+  .string()
+  .max(512)
+  .refine((value) => {
+    try {
+      const bytes = decodeBase64(value);
+      return bytes.length > 16 && encodeBase64(bytes) === value;
+    } catch {
+      return false;
+    }
+  }, "Invalid place ciphertext.");
 
 const encryptedPlaceGeometrySchema = z.object({
   algorithm: z.literal(PAYLOAD_ENCRYPTION_ALGORITHM),

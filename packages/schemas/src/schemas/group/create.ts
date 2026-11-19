@@ -1,4 +1,5 @@
 import z from "zod";
+import { sharedNameSchema } from "../account/fields.ts";
 
 export const newGroupIdSchema = z
   .string()
@@ -7,5 +8,5 @@ export const newGroupIdSchema = z
   .regex(/^[A-Za-z0-9_-]+$/);
 
 export const createGroupSchema = z.object({
-  name: z.string().trim().min(1, { message: "Group name is required" }).max(100),
+  name: sharedNameSchema("Group name"),
 });

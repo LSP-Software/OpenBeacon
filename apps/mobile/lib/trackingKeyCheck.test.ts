@@ -17,7 +17,9 @@ const {
   getTrackingKeyCheckGeneration,
   isTrackingKeyCheckDue,
   noteTrackingKeyState,
+  readCursorGroup,
   recordTrackingKeyCheck,
+  rememberCursorGroup,
 } = await import("./trackingKeyCheck.ts");
 
 const minutes = (count: number) => count * 60_000;
@@ -96,4 +98,18 @@ test("signing out forgets the key state", () => {
   noteTrackingKeyState("state-1");
   clearTrackingKeyCheck();
   expect(noteTrackingKeyState("state-1")).toBe(true);
+});
+
+test("the group used for place alerts belongs to one account and is forgotten with the key check", () => {
+  const owner = JSON.stringify(["https://api.example.test", "user-1"]);
+  rememberCursorGroup(owner, [{ id: "group-b" }, { id: "group-a" }]);
+  expect(readCursorGroup(owner)).toBe("group-a");
+  expect(readCursorGroup(JSON.stringify(["https://api.example.test", "user-2"]))).toBeNull();
+
+  rememberCursorGroup(owner, []);
+  expect(readCursorGroup(owner)).toBeNull();
+
+  rememberCursorGroup(owner, [{ id: "group-a" }]);
+  clearTrackingKeyCheck();
+  expect(readCursorGroup(owner)).toBeNull();
 });

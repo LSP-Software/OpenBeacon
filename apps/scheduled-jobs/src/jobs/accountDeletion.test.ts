@@ -101,7 +101,6 @@ test("waits for pending security alerts after the run's deletions and cleanup", 
 test("continues after an account failure and retains failed image cleanup for retry", async () => {
   await runAccountDeletion();
   expect(removeAccount.mock.calls.map(([input]) => input.userId)).toEqual(["due", "blocked"]);
-  expect(removeAccount.mock.calls[0]?.[0]).toMatchObject({ mode: "scheduled" });
   expect(removeImages.mock.calls).toEqual([
     ["bucket", "clean"],
     ["bucket", "retry"],

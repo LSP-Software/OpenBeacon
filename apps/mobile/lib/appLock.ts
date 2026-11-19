@@ -1,4 +1,5 @@
 import { tryCatch } from "@openbeacon/shared";
+import { queryOptions } from "@tanstack/react-query";
 import * as LocalAuthentication from "expo-local-authentication";
 import { useSyncExternalStore } from "react";
 import { AppState, Keyboard, Platform, type AppStateStatus } from "react-native";
@@ -129,13 +130,20 @@ export const useAppLock = () =>
     return () => listeners.delete(listener);
   }, getAppLockState);
 
-export const hasScreenLock = async () => {
+const hasScreenLock = async () => {
   const level = await tryCatch(LocalAuthentication.getEnrolledLevelAsync());
   return (
     (level.data ?? LocalAuthentication.SecurityLevel.NONE) >=
     LocalAuthentication.SecurityLevel.SECRET
   );
 };
+
+export const phoneScreenLockQueryOptions = queryOptions({
+  queryKey: ["phoneScreenLock"],
+  queryFn: hasScreenLock,
+  staleTime: 0,
+  networkMode: "always",
+});
 
 export const confirmWithPhoneLock = async (
   promptMessage: string,

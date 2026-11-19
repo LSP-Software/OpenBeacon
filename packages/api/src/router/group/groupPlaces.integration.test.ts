@@ -12,7 +12,7 @@ import {
   validatePlaceGeometryV1,
 } from "@openbeacon/encryption";
 import { MAX_PLACES_PER_GROUP } from "@openbeacon/schemas";
-import { deleteAccountRecords } from "../../lib/account-deletion.ts";
+import { deleteDueAccount } from "../../lib/accountDeletion.testUtil.ts";
 import { holdRowLock } from "../../lib/databaseLocks.testUtil.ts";
 import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
@@ -49,7 +49,6 @@ const caller = (userId: string) =>
     withDeviceActive({
       cache,
       db: prisma,
-      clientIp: "127.0.0.1",
       deviceId: deviceOf(userId),
       unverifiedDeviceId: null,
       session: { user: { id: userId } },
@@ -438,7 +437,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         groupId,
         places: [
           reEncryptRequest(upToDate),
-          { ...reEncryptRequest(edited), expectedCiphertext: "stale" },
+          { ...reEncryptRequest(edited), expectedCiphertext: "A".repeat(192) },
           { ...reEncryptRequest(newEmoji), emoji: "🏡" },
           { ...reEncryptRequest(renamed), name: "Old home" },
           { ...reEncryptRequest(school), placeId: `${prefix}-g-missing` },
@@ -641,11 +640,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const before = await revision();
       const otherBefore = await revision(otherGroupId);
       await expect(
-        deleteAccountRecords({
+        deleteDueAccount({
           db: prisma,
           userId: creator,
           imageUrlPrefix: "https://cdn.example/bucket",
-          mode: "immediate",
           securityAlerts: null,
         }),
       ).resolves.toBe(true);

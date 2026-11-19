@@ -1,11 +1,11 @@
+import { readDatabaseTime } from "@openbeacon/database";
 import { errorCode, tryCatch } from "@openbeacon/shared";
-import { getDatabaseTime } from "../databaseTime.ts";
 import { services } from "../services.ts";
 
 const day = 24 * 60 * 60_000;
 
 export const runExpiredRecordsCleanup = async () => {
-  const now = await getDatabaseTime();
+  const now = await readDatabaseTime(services.db);
   const nowIso = now.toISOString();
   const dayAgo = new Date(now.getTime() - day).toISOString();
   const monthAgo = new Date(now.getTime() - 30 * day).toISOString();

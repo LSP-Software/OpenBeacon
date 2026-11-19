@@ -90,9 +90,11 @@ const createAccount = async () => {
         db: prisma,
         emailCodes: null,
         securityAlerts,
-        clientIp: `ip-${user.id}`,
         deviceId,
-        session: { user: { id: user.id }, session: { id: sessionId, createdAt: new Date() } },
+        session: {
+          user: { id: user.id, email },
+          session: { id: sessionId, createdAt: new Date() },
+        },
       }) as Parameters<typeof appRouter.createCaller>[0],
     );
   const newPhoneCaller = async () => {
@@ -634,7 +636,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
             },
           },
         }),
-        clientIp: `ip-${account.userId}`,
         deviceId: device.id,
         session: {
           user: { id: account.userId },
@@ -716,7 +717,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
       db: prisma,
       userId: account.userId,
       imageUrlPrefix: "https://cdn.example/bucket",
-      mode: "scheduled",
       securityAlerts,
     });
 

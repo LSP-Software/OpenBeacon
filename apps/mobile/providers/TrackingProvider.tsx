@@ -9,6 +9,7 @@ import { authClient } from "../lib/auth-client.ts";
 import { useThisDeviceState } from "../lib/deviceActivation.ts";
 import { subscribeToTrackingSync } from "../lib/trackingEvents.ts";
 import { useLocationPermissions } from "./LocationPermissionProvider.tsx";
+import { thisDeviceNoun } from "../lib/thisDeviceNoun.ts";
 
 const trackingService = {
   flushPendingTrackingPoints: async (force = false) =>
@@ -124,7 +125,7 @@ export const TrackingProvider = ({
                         if (recovery.error) {
                           Alert.alert(
                             "Upload incomplete",
-                            "Some saved locations may still be on this device. Try again after signing in.",
+                            `Some saved locations may still be on this ${thisDeviceNoun()}. Try again after signing in.`,
                           );
                         }
                       })();

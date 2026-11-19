@@ -1,18 +1,21 @@
-import { effectiveHistoryShareSql, historyFirstHourSql } from "@openbeacon/api/historyShare.ts";
+import {
+  HISTORY_RETENTION_MS,
+  effectiveHistoryShareSql,
+  historyFirstHourSql,
+} from "@openbeacon/api/historyShare.ts";
 import { deleteTrackingPointsInBatches } from "@openbeacon/api/trackingCleanup.ts";
-import { Prisma } from "@openbeacon/database";
+import { Prisma, readDatabaseTime } from "@openbeacon/database";
 import { errorCode, tryCatch } from "@openbeacon/shared";
-import { getDatabaseTime } from "../databaseTime.ts";
 import { services } from "../services.ts";
 
 const retentionCutoff = async () =>
-  new Date((await getDatabaseTime()).getTime() - 14 * 24 * 60 * 60_000).toISOString();
+  new Date((await readDatabaseTime(services.db)).getTime() - HISTORY_RETENTION_MS).toISOString();
 
 export const createLocationHistoryCleanup =
   ({ batchSize = 1_000, runLimit = 500_000 }: { batchSize?: number; runLimit?: number } = {}) =>
   async () => {
-    const now = await getDatabaseTime();
-    const cutoff = new Date(now.getTime() - 14 * 24 * 60 * 60_000).toISOString();
+    const now = await readDatabaseTime(services.db);
+    const cutoff = new Date(now.getTime() - HISTORY_RETENTION_MS).toISOString();
     const nowHour = Math.floor(now.getTime() / 3_600_000);
     const cutoffHour = Math.floor(new Date(cutoff).getTime() / 3_600_000);
     const result = await tryCatch(
@@ -38,10 +41,28 @@ export const createLocationHistoryCleanup =
                 limit: runLimit - deleted,
               })
             : 0;
+        const departedSender = Prisma.sql`NOT EXISTS (
+          SELECT 1 FROM "GroupMember" AS "member"
+          WHERE "member"."groupId" = "stream"."groupId" AND "member"."userId" = "stream"."senderUserId"
+        )`;
+        const departed =
+          deleted + outsideShare < runLimit
+            ? await deleteTrackingPointsInBatches({
+                db: services.db,
+                streams: departedSender,
+                batchSize,
+                limit: runLimit - deleted - outsideShare,
+              })
+            : 0;
         await services.db.$executeRaw`
           DELETE FROM "TrackingLatestPoint"
           WHERE "updatedAt" < (${cutoff}::timestamptz AT TIME ZONE 'UTC')
         `;
+        await services.db.$executeRaw(Prisma.sql`
+          DELETE FROM "TrackingLatestPoint" AS "latest"
+          USING "TrackingStream" AS "stream"
+          WHERE "stream"."id" = "latest"."streamId" AND ${departedSender}
+        `);
         let afterStream = "0";
         while (true) {
           const locked = await services.db.$transaction(async (tx) => {
@@ -68,7 +89,7 @@ export const createLocationHistoryCleanup =
             return streams;
           });
           const last = locked.at(-1);
-          if (!last || locked.length < batchSize) return deleted + outsideShare;
+          if (!last || locked.length < batchSize) return deleted + outsideShare + departed;
           afterStream = last.id;
         }
       })(),
@@ -167,6 +188,12 @@ export const createEpochCleanup =
               )
               AND NOT EXISTS (
                 SELECT 1 FROM "Place" pl WHERE pl."epochId" = e.id
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM "Group" g WHERE g."imageKeyEpochId" = e.id
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM "GroupMember" gm WHERE gm."imageKeyEpochId" = e.id
               )
             FOR UPDATE OF e SKIP LOCKED
           )

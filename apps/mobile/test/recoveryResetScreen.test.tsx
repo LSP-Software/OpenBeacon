@@ -8,7 +8,8 @@ import { createRoot, type Root } from "test-renderer";
 
 type ResetResult =
   | { status: "unsaved"; device: { userId: string } }
-  | { status: "reset"; device: { userId: string } };
+  | { status: "reset"; device: { userId: string } }
+  | { status: "reauthenticate" };
 
 let searchParams: { setup?: string } = {};
 const backHandlers = new Set<() => boolean>();
@@ -73,7 +74,10 @@ mock.module("react-native", () => ({
   View,
 }));
 mock.module("react-native-safe-area-context", () => ({ SafeAreaView: View }));
-mock.module("../lib/alert.ts", () => ({ Alert: { alert: () => {} } }));
+const alertMessages: string[] = [];
+mock.module("../lib/alert.ts", () => ({
+  Alert: { alert: (_title: string, message: string) => alertMessages.push(message) },
+}));
 mock.module("../lib/api.ts", () => ({
   trpc: {
     accountRecovery: { status: { queryKey: () => [] } },
@@ -126,6 +130,7 @@ const reachPhraseStep = async () => {
 };
 
 beforeEach(() => {
+  alertMessages.length = 0;
   searchParams = {};
   gestureEnabled = undefined;
   resetRecoveryPhrase.mockClear();
@@ -284,4 +289,15 @@ test("a failed set up with the current phrase waits with Try again instead of mo
 
   expect(activateWithHistoryKey).toHaveBeenCalledTimes(2);
   expect(replace.mock.calls).toEqual([["/setup/remove-devices"]]);
+});
+
+test("a sign-in that runs out while saving says a new phrase will be shown", async () => {
+  resetRecoveryPhrase.mockImplementationOnce(async () => ({ status: "reauthenticate" }));
+  const { onConfirm } = await reachPhraseStep();
+
+  await act(async () => onConfirm(new Uint8Array(16)));
+
+  expect(alertMessages).toEqual([
+    "Nothing was reset. Confirm it’s you, then write down the new phrase you’re shown.",
+  ]);
 });

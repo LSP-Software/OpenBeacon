@@ -10,9 +10,12 @@ import { env } from "../env.ts";
 
 export const apiCompatibility = createMiddleware(async (c, next) => {
   const clientLevel = parseApiCompatibilityLevel(c.req.header(apiCompatibilityLevelHeader)) ?? 0;
-  const openedByBrowser =
-    c.req.method === "GET" && c.req.path === "/api/auth/google-deletion-callback";
-  if (openedByBrowser || clientLevel >= minClientApiCompatibilityLevel) {
+  const alwaysOpen = [
+    "GET /api/auth/google-deletion-callback",
+    "GET /api/auth/get-session",
+    "POST /api/auth/sign-out",
+  ].includes(`${c.req.method} ${c.req.path}`);
+  if (alwaysOpen || clientLevel >= minClientApiCompatibilityLevel) {
     await next();
   } else {
     c.res = c.json(

@@ -1,6 +1,6 @@
 import { expo } from "@better-auth/expo";
-import { Prisma } from "@openbeacon/database";
-import { accountNameSchema } from "@openbeacon/schemas";
+import { Prisma, prisma as db, readDatabaseTime } from "@openbeacon/database";
+import { accountNameFromProfile, accountNameSchema } from "@openbeacon/schemas";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import {
@@ -9,7 +9,6 @@ import {
   getAuthoritativeSessionFromCtx,
   isAPIError,
 } from "better-auth/api";
-import { db } from "./db.ts";
 import { type EmailCodes, normalizeEmail } from "./emailCode.ts";
 import { emailCodePlugin } from "./emailCodePlugin.ts";
 import { env } from "./env.ts";
@@ -64,7 +63,11 @@ export const createAuth = ({
     ],
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
-        if (ctx.path === "/reset-password/:token" || ctx.path === "/callback/:id") {
+        if (
+          ctx.path === "/reset-password/:token" ||
+          ctx.path === "/callback/:id" ||
+          (ctx.path === "/sign-in/social" && !ctx.body?.idToken)
+        ) {
           throw new APIError("NOT_FOUND");
         }
         if (ctx.path === "/change-password") {
@@ -140,20 +143,22 @@ export const createAuth = ({
       session: {
         create: {
           before: async (session, context) => {
-            if (context?.path !== "/sign-in/email") return;
-            await checkSignInCode({
-              db,
-              emailCodes,
-              userId: session.userId,
-              context,
-              runInBackground: (task) =>
-                runInBackground ? runInBackground(task) : context.context.runInBackground(task),
-            });
+            if (context?.path === "/sign-in/email") {
+              await checkSignInCode({
+                db,
+                emailCodes,
+                userId: session.userId,
+                context,
+                runInBackground: (task) =>
+                  runInBackground ? runInBackground(task) : context.context.runInBackground(task),
+              });
+            }
+            return { data: { ...session, createdAt: await readDatabaseTime(db) } };
           },
           after: async (session) => {
             const expired = await db.$transaction(async (tx) => {
               await tx.$queryRaw(
-                Prisma.sql`SELECT id FROM "User" WHERE id = ${session.userId} FOR UPDATE`,
+                Prisma.sql`SELECT id FROM "User" WHERE id = ${session.userId} FOR NO KEY UPDATE`,
               );
               const [user] = await tx.$queryRaw<
                 Array<{ pendingDeletion: boolean; deletionExpired: boolean }>
@@ -195,14 +200,15 @@ export const createAuth = ({
       user: {
         create: {
           before: async (user, context) => {
+            if (context?.path !== "/sign-up/email") {
+              return { data: { ...user, name: accountNameFromProfile(user.name), image: null } };
+            }
             const result = accountNameSchema.safeParse(user.name);
             if (!result.success)
               throw new APIError("BAD_REQUEST", {
                 message: result.error.issues[0]?.message ?? "Invalid name",
               });
-            if (context?.path !== "/sign-up/email" || !emailCodes) {
-              return { data: { ...user, name: result.data, image: null } };
-            }
+            if (!emailCodes) return { data: { ...user, name: result.data, image: null } };
             const signUpToken: unknown = context.body?.signUpToken;
             const consumed =
               typeof signUpToken === "string" &&
@@ -234,7 +240,7 @@ export const createAuth = ({
       },
     },
     account: { accountLinking: { enabled: false } },
-    session: { freshAge: 30 * 60 },
+    session: { expiresIn: 7 * 24 * 60 * 60, updateAge: 24 * 60 * 60, freshAge: 30 * 60 },
     verification: {
       storeIdentifier: { default: "plain", overrides: { "reset-password:": "hashed" } },
     },
@@ -260,11 +266,13 @@ export const createAuth = ({
               scope: ["email", "profile"],
               mapProfileToUser: () => ({ image: undefined }),
               verifyIdToken: async (token, nonce) =>
-                (await verifyGoogleIdToken({
-                  token,
-                  audience: env.GOOGLE_CLIENT_ID ?? "",
-                  nonce,
-                })) !== null,
+                (
+                  await verifyGoogleIdToken({
+                    token,
+                    audience: env.GOOGLE_CLIENT_ID ?? "",
+                    nonce,
+                  })
+                )?.["email_verified"] === true,
             },
           }
         : undefined,

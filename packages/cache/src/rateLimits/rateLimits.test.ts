@@ -26,45 +26,6 @@ describe("OpenBeaconCache rateLimits", () => {
         }),
     ).toThrowError(expect.objectContaining({ message: expect.stringContaining("redis") }));
 
-    expect(
-      () =>
-        new TestOpenBeaconCache({
-          redisUrl: "redis://localhost:6379",
-          hashSecret: testRedisHashSecret,
-          now: () => Number.NaN,
-        }),
-    ).toThrow();
-
-    expect(
-      () =>
-        new TestOpenBeaconCache({
-          redisUrl: "redis://localhost:6379",
-          hashSecret: testRedisHashSecret,
-          now: () => {
-            throw new Error("clock");
-          },
-        }),
-    ).toThrow();
-
-    expect(
-      () =>
-        new TestOpenBeaconCache({
-          redisUrl: "redis://localhost:6379",
-          hashSecret: testRedisHashSecret,
-          now: () => Number.POSITIVE_INFINITY,
-        }),
-    ).toThrow();
-
-    const nonNumericClock = () => "x";
-    expect(
-      () =>
-        new TestOpenBeaconCache({
-          redisUrl: "redis://localhost:6379",
-          hashSecret: testRedisHashSecret,
-          now: nonNumericClock as () => number,
-        }),
-    ).toThrow();
-
     const cache = new TestOpenBeaconCache({
       redisUrl: "redis://localhost:6379",
       hashSecret: testRedisHashSecret,
@@ -86,8 +47,8 @@ describe("OpenBeaconCache rateLimits", () => {
       cache.rateLimits.peek({
         namespace: "route",
         identifier: {
-          type: "ip",
-          value: "127.0.0.1",
+          type: "email",
+          value: "alex@example.com",
         },
         limit: 0,
         windowMs: 60_000,
@@ -98,11 +59,51 @@ describe("OpenBeaconCache rateLimits", () => {
       cache.rateLimits.reset({
         namespace: "route",
         identifier: {
-          type: "ip",
+          type: "email",
           value: "",
         },
       }),
     ).rejects.toThrow();
+  });
+
+  test("there is no IP address limit to key on", async () => {
+    const cache = new TestOpenBeaconCache({
+      redisUrl: "redis://localhost:6379",
+      hashSecret: testRedisHashSecret,
+    });
+    await expect(
+      cache.rateLimits.consume({
+        namespace: "route",
+        identifier: { type: "ip", value: "203.0.113.7" } as never,
+        limit: 1,
+        windowMs: 1_000,
+      }),
+    ).rejects.toThrow();
+  });
+
+  test("a peek reports whether a consume of its cost would succeed, without spending", async () => {
+    const cache = new TestOpenBeaconCache({
+      redisUrl: "redis://localhost:6379",
+      hashSecret: testRedisHashSecret,
+      now: () => 0,
+    });
+    const input = {
+      namespace: "peek-cost",
+      identifier: { type: "userId" as const, value: "user-1" },
+      limit: 2,
+      windowMs: 60_000,
+    };
+
+    await expect(cache.rateLimits.peek({ ...input, cost: 3 })).resolves.toMatchObject({
+      allowed: false,
+      remaining: 2,
+    });
+    await cache.rateLimits.consume({ ...input, cost: 2 });
+    await expect(cache.rateLimits.peek(input)).resolves.toMatchObject({
+      allowed: false,
+      remaining: 0,
+    });
+    await expect(cache.rateLimits.peek(input)).resolves.toMatchObject({ remaining: 0 });
   });
 
   test("consumes tokens, refills over time, and resets state", async () => {
@@ -277,7 +278,10 @@ describe("OpenBeaconCache rateLimits", () => {
     const cache = createCache(testRedisHashSecret);
     const limit = { namespace: "route", limit: 1, windowMs: 1_000 };
 
-    await cache.rateLimits.consume({ ...limit, identifier: { type: "ip", value: "203.0.113.7" } });
+    await cache.rateLimits.consume({
+      ...limit,
+      identifier: { type: "email", value: "alex@example.com" },
+    });
     await cache.rateLimits.consume({
       ...limit,
       identifier: { type: "email", value: "sam@example.com" },
@@ -285,22 +289,22 @@ describe("OpenBeaconCache rateLimits", () => {
     await cache.rateLimits.consume({ ...limit, identifier: { type: "userId", value: "user-1" } });
     await createCache("another-redis-hash-secret-0000000000").rateLimits.consume({
       ...limit,
-      identifier: { type: "ip", value: "203.0.113.7" },
+      identifier: { type: "email", value: "alex@example.com" },
     });
 
-    expect(keys.join(" ")).not.toContain("203.0.113.7");
+    expect(keys.join(" ")).not.toContain("alex@example.com");
     expect(keys.join(" ")).not.toContain("sam@example.com");
     expect(keys[2]).toBe("openbeacon:ratelimit:route:userId:user-1");
     expect(keys[3]).not.toBe(keys[0]);
     await expect(
-      cache.rateLimits.peek({ ...limit, identifier: { type: "ip", value: "203.0.113.7" } }),
+      cache.rateLimits.peek({ ...limit, identifier: { type: "email", value: "alex@example.com" } }),
     ).resolves.toMatchObject({ remaining: 0 });
     await expect(
-      cache.rateLimits.peek({ ...limit, identifier: { type: "ip", value: "203.0.113.8" } }),
+      cache.rateLimits.peek({ ...limit, identifier: { type: "email", value: "jo@example.com" } }),
     ).resolves.toMatchObject({ remaining: 1 });
 
     for (const identifier of [
-      { type: "ip", value: "203.0.113.7" },
+      { type: "email", value: "alex@example.com" },
       { type: "email", value: "sam@example.com" },
     ] as const) {
       await expect(
@@ -312,12 +316,15 @@ describe("OpenBeaconCache rateLimits", () => {
     }
   });
 
-  test("refuses IP and email rate limits without a hash secret but allows user limits", async () => {
+  test("refuses email rate limits without a hash secret but allows user limits", async () => {
     const cache = new TestOpenBeaconCache({ redisUrl: "redis://localhost:6379", now: () => 0 });
     const limit = { namespace: "route", limit: 1, windowMs: 1_000 };
 
     await expect(
-      cache.rateLimits.consume({ ...limit, identifier: { type: "ip", value: "203.0.113.7" } }),
+      cache.rateLimits.consume({
+        ...limit,
+        identifier: { type: "email", value: "alex@example.com" },
+      }),
     ).rejects.toThrow("needs a hash secret");
     await expect(
       cache.rateLimits.reset({
@@ -413,8 +420,8 @@ describe("OpenBeaconCache rateLimits", () => {
       cache.rateLimits.consume({
         namespace: "route",
         identifier: {
-          type: "ip",
-          value: "127.0.0.1",
+          type: "email",
+          value: "alex@example.com",
         },
         limit: 1,
         windowMs: 1_000,
@@ -425,8 +432,8 @@ describe("OpenBeaconCache rateLimits", () => {
       cache.rateLimits.peek({
         namespace: "route",
         identifier: {
-          type: "ip",
-          value: "127.0.0.1",
+          type: "email",
+          value: "alex@example.com",
         },
         limit: 1,
         windowMs: 1_000,
@@ -437,8 +444,8 @@ describe("OpenBeaconCache rateLimits", () => {
       cache.rateLimits.reset({
         namespace: "route",
         identifier: {
-          type: "ip",
-          value: "127.0.0.1",
+          type: "email",
+          value: "alex@example.com",
         },
       }),
     ).rejects.toThrow("Redis client is closed.");

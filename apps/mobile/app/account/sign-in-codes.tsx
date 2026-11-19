@@ -1,6 +1,5 @@
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { TRPCClientError } from "@trpc/client";
 import { router, useNavigation } from "expo-router";
 import { useEffect, useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
@@ -16,6 +15,7 @@ import { trpc } from "../../lib/api.ts";
 import { errorReason } from "../../lib/errorReason.ts";
 import { invalidCodeMessage } from "../../lib/emailCodes.ts";
 import { needsFreshSignIn } from "../../lib/needsFreshSignIn.ts";
+import { userMessage } from "../../lib/userMessage.ts";
 
 const SignInCodesScreen = () => {
   const [step, setStep] = useState<
@@ -32,11 +32,6 @@ const SignInCodesScreen = () => {
   useEffect(() => {
     if (step.name === "verify" && gate.decision === "ready") setStep({ name: "ready" });
   }, [step.name, gate.decision]);
-
-  const errorMessage = (error: unknown) =>
-    error instanceof TRPCClientError && error.data
-      ? error.message
-      : "Check your connection and try again.";
 
   const confirmAgain = async () => {
     await gate.recheck();
@@ -56,7 +51,7 @@ const SignInCodesScreen = () => {
     if (needsFreshSignIn(result.error)) return confirmAgain();
     if (result.error) {
       setStep({ name: "ready" });
-      Alert.alert("Couldn’t send a code", errorMessage(result.error));
+      Alert.alert("Couldn’t send a code", userMessage(result.error));
       return;
     }
     setStep({ name: "code", email: result.data.email });
@@ -68,7 +63,7 @@ const SignInCodesScreen = () => {
     if (needsFreshSignIn(result.error)) return confirmAgain();
     if (result.error) {
       setStep({ name: "ready" });
-      Alert.alert("Couldn’t turn off sign-in codes", errorMessage(result.error));
+      Alert.alert("Couldn’t turn off sign-in codes", userMessage(result.error));
       return;
     }
     await finish("Sign-in codes are off", "Signing in now only needs your password.");
@@ -112,7 +107,7 @@ const SignInCodesScreen = () => {
             </Text>
           </View>
 
-          {status.isLoading && <LoadingIndicator />}
+          {status.isPending && <LoadingIndicator />}
           {status.isError && (
             <View className="gap-4">
               <Text>
@@ -157,7 +152,7 @@ const SignInCodesScreen = () => {
                       return undefined;
                     }
                     if (errorReason(result.error) === "INVALID_CODE") return invalidCodeMessage;
-                    if (result.error) return errorMessage(result.error);
+                    if (result.error) return userMessage(result.error);
                     await finish(
                       "Sign-in codes are on",
                       "Next time you sign in with your password, we’ll email you a code.",
@@ -170,7 +165,7 @@ const SignInCodesScreen = () => {
                       await confirmAgain();
                       return undefined;
                     }
-                    return result.error ? errorMessage(result.error) : undefined;
+                    return result.error ? userMessage(result.error) : undefined;
                   }}
                 />
               )}

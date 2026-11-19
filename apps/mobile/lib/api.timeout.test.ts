@@ -32,10 +32,20 @@ const server = Bun.listen<{ request: string }>({
 
 const url = `http://127.0.0.1:${server.port.toString()}`;
 mock.module("./storage.ts", () => ({
-  storage: { getString: () => undefined, set: () => {}, remove: () => {}, contains: () => false },
+  storage: {
+    getString: () => undefined,
+    set: () => {},
+    remove: () => {},
+    contains: () => false,
+  },
 }));
-mock.module("./currentServer.ts", () => ({ baseUrl: url, getFeedbackUrl: () => url }));
-mock.module("./auth-client.ts", () => ({ authClient: { getCookie: () => null } }));
+mock.module("./currentServer.ts", () => ({
+  getBaseUrl: () => url,
+  getFeedbackUrl: () => url,
+}));
+mock.module("./auth-client.ts", () => ({
+  authClient: { getCookie: () => null },
+}));
 
 const { queryClient, trpc, trpcClient }: typeof import("./api.ts") = await import("./api.ts");
 
@@ -100,7 +110,9 @@ test("batched calls each give up at their own limit and close the connection aft
 test("a caller's abort ends the call at once and closes the connection", async () => {
   const controller = new AbortController();
   const request = failedAfter(() =>
-    trpcClient.groupMembership.list.query(undefined, { signal: controller.signal }),
+    trpcClient.groupMembership.list.query(undefined, {
+      signal: controller.signal,
+    }),
   );
   expect(await waitUntil(() => openConnections === 1)).toBe(true);
 
@@ -136,20 +148,30 @@ test("a query the server refused is not retried", () => {
   const retry = queryClient.getDefaultOptions().queries?.retry;
   if (typeof retry !== "function") throw new Error("retry is not configured");
 
-  for (const code of [
-    "BAD_REQUEST",
-    "UNAUTHORIZED",
-    "FORBIDDEN",
-    "NOT_FOUND",
-    "TOO_MANY_REQUESTS",
-  ]) {
+  for (const [code, httpStatus] of [
+    ["BAD_REQUEST", 400],
+    ["UNAUTHORIZED", 401],
+    ["FORBIDDEN", 403],
+    ["NOT_FOUND", 404],
+    ["CONFLICT", 409],
+    ["PRECONDITION_FAILED", 412],
+    ["TOO_MANY_REQUESTS", 429],
+  ] as const) {
     const error = new TRPCClientError("Refused", {
-      result: { error: { code: -32603, message: "Refused", data: { code } } },
+      result: {
+        error: { code: -32603, message: "Refused", data: { code, httpStatus } },
+      },
     });
     expect(retry(0, error)).toBe(false);
   }
   const serverError = new TRPCClientError("Failed", {
-    result: { error: { code: -32603, message: "Failed", data: { code: "INTERNAL_SERVER_ERROR" } } },
+    result: {
+      error: {
+        code: -32603,
+        message: "Failed",
+        data: { code: "INTERNAL_SERVER_ERROR", httpStatus: 500 },
+      },
+    },
   });
   expect(retry(0, serverError)).toBe(true);
 });

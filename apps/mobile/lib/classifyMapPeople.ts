@@ -22,7 +22,6 @@ export const classifyMapPeople = ({
   const people: MapPeople = {
     cantLocate: [],
     cantRead: [],
-    connectionLost: status.connection === "failing",
     finding: [],
     hidden: [],
     outOfDate: [],

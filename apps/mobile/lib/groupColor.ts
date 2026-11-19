@@ -64,11 +64,22 @@ export const setGroupColor = (groupId: string, color: GroupColor) => {
   if (!isGroupColor(color)) {
     throw new Error("Group colour must be chosen from the palette");
   }
+  if (storage.getString(storageKey(groupId)) === color) return;
   storage.set(storageKey(groupId), color);
   notifyListeners();
 };
 
+let readCiphertexts: { userId: string; byGroup: Map<string, string> } | null = null;
+
+export const getReadGroupColorCiphertexts = (userId: string) =>
+  readCiphertexts?.userId === userId ? readCiphertexts.byGroup : null;
+
+export const setReadGroupColorCiphertexts = (userId: string, byGroup: Map<string, string>) => {
+  readCiphertexts = { userId, byGroup };
+};
+
 export const clearGroupColors = () => {
+  readCiphertexts = null;
   for (const key of storage.getAllKeys()) {
     if (key.startsWith(STORAGE_PREFIX)) storage.remove(key);
   }

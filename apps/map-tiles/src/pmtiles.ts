@@ -1,8 +1,8 @@
 import { gunzipSync } from "node:zlib";
 import { z } from "zod";
 
-export const SUPPORTED_SCHEMA_MAJOR = 4;
-export const HEADER_CHECK_LENGTH = 16_384;
+const SUPPORTED_SCHEMA_MAJOR = 4;
+const HEADER_CHECK_LENGTH = 16_384;
 
 const metadataSchema = z.object({ version: z.string().min(1) });
 
@@ -25,7 +25,7 @@ export const parseHeader = (bytes: Uint8Array) => {
   };
 };
 
-export const parseMetadata = ({
+const parseMetadata = ({
   bytes,
   internalCompression,
 }: {

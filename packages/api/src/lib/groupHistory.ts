@@ -6,11 +6,8 @@ import {
 } from "@openbeacon/database";
 import type { groupHistoryCategorySchema } from "@openbeacon/schemas";
 import type z from "zod";
-import {
-  HISTORY_RETENTION_MS,
-  placeTransitionSelect,
-  toPlaceTransitionView,
-} from "./placeTransitions.ts";
+import { HISTORY_RETENTION_MS } from "./historyShare.ts";
+import { placeTransitionSelect, toPlaceTransitionView } from "./placeTransitions.ts";
 
 const personSelect = { select: { id: true, name: true } } as const;
 

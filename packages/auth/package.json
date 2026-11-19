@@ -6,6 +6,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./backgroundWork.ts": "./src/backgroundWork.ts",
     "./fcm.ts": "./src/fcm.ts",
     "./push.ts": "./src/push.ts",
     "./securityAlerts.ts": "./src/securityAlerts.ts"
@@ -23,6 +24,7 @@
     "@openbeacon/shared": "workspace:*",
     "@t3-oss/env-core": "^0.13.10",
     "better-auth": "^1.7.22",
-    "jose": "^6.2.17"
+    "jose": "^6.2.17",
+    "zod": "^4.6.7"
   }
 }

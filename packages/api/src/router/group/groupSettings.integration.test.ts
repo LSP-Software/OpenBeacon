@@ -47,7 +47,6 @@ const caller = (
     withDeviceActive({
       cache,
       db: prisma,
-      clientIp: "127.0.0.1",
       ...device,
       session: { user: { id: userId } },
     }) as Parameters<typeof router.createCaller>[0],
@@ -303,7 +302,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       }
     });
 
-    test("only an owner can delete a group image and a storage failure leaves the group", async () => {
+    test("only an owner can delete a group, and a failure deleting its picture keeps the group", async () => {
       const imageGroupId = `${prefix}-image-group`;
       const path = `user/${users[0]}/uploads/group/${imageGroupId}/avatar`;
       await prisma.group.create({
@@ -682,7 +681,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
                 ciphertext: "nickname",
                 expectedCiphertext: null,
               }),
-            () => api.groupMembership.updateColor({ groupId: lockedGroupId, ciphertext: "color" }),
+            () =>
+              api.groupMembership.updateColor({
+                groupId: lockedGroupId,
+                ciphertext: "color",
+                expectedCiphertext: null,
+              }),
             () =>
               api.groupMembership.remove({
                 groupId: lockedGroupId,

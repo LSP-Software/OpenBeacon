@@ -1,5 +1,5 @@
 import { afterAll } from "bun:test";
-import { RedisClient, type RedisOptions } from "bun";
+import { RedisClient } from "bun";
 import { z } from "zod";
 import { OpenBeaconCache } from "./cache/OpenBeaconCache.ts";
 import type { RedisLike } from "./cache/redis.ts";
@@ -10,8 +10,8 @@ const scanReplySchema = z.tuple([z.string(), z.array(z.string())]);
 class IntegrationTestCache extends OpenBeaconCache {
   private used = false;
 
-  protected override createRedisClient(redisUrl: string, redisOptions?: RedisOptions): RedisLike {
-    const client = new RedisClient(redisUrl, redisOptions);
+  protected override createRedisClient(redisUrl: string): RedisLike {
+    const client = new RedisClient(redisUrl, { connectionTimeout: 1000, autoReconnect: false });
     const explainConnectionError = (error: unknown): never => {
       if (
         error instanceof Error &&
@@ -59,7 +59,6 @@ export const createIntegrationTestCache = (now: () => number) => {
     redisUrl: process.env["REDIS_URL"] ?? "redis://localhost:6379",
     hashSecret: testRedisHashSecret,
     keyPrefix: `test-${crypto.randomUUID()}`,
-    redisOptions: { connectionTimeout: 1000, autoReconnect: false },
     now,
   });
   afterAll(() => cache.close());

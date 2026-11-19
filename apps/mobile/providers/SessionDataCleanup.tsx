@@ -4,7 +4,7 @@ import { router, useSegments } from "expo-router";
 import { useEffect, useRef } from "react";
 import { useAppForeground } from "../hooks/useAppForeground.ts";
 import { authClient } from "../lib/auth-client.ts";
-import { baseUrl } from "../lib/currentServer.ts";
+import { getBaseUrl } from "../lib/currentServer.ts";
 import { clearGroupColors } from "../lib/groupColor.ts";
 import { claimImageCache } from "../lib/imageCache.ts";
 import { checkSessionAfterUnauthorized, isUnauthorizedError } from "../lib/sessionCheck.ts";
@@ -42,7 +42,7 @@ export const SessionDataCleanup = () => {
     if (isPending) return;
     void tryCatch(
       Promise.resolve().then(() =>
-        claimImageCache(userId ? JSON.stringify([baseUrl, userId]) : null),
+        claimImageCache(userId ? JSON.stringify([getBaseUrl(), userId]) : null),
       ),
     );
     void tryCatch(

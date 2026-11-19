@@ -41,6 +41,15 @@ mock.module("react-native", () => ({
   Modal: ({ visible, children }: { visible: boolean; children?: React.ReactNode }) =>
     visible ? children : null,
 }));
+mock.module("expo-location", () => ({
+  getBackgroundPermissionsAsync: async () => ({}),
+  getForegroundPermissionsAsync: async () => ({}),
+  requestBackgroundPermissionsAsync: async () => ({}),
+  requestForegroundPermissionsAsync: async () => ({}),
+}));
+mock.module("../providers/LocationPermissionProvider.tsx", () => ({
+  useLocationPermissions: () => ({ permissionState: null }),
+}));
 mock.module("../lib/appLock.ts", () => ({ useAppLock: () => ({ locked: false, away: false }) }));
 mock.module("lucide-react-native", () => ({
   CheckIcon: () => null,
@@ -64,6 +73,9 @@ mock.module("../lib/api.ts", () => ({
       },
       listDevices: { queryKey: () => ["devices"] },
     },
+    groupMembership: {
+      list: { queryOptions: () => ({ queryKey: ["groups"], queryFn: async () => [] }) },
+    },
   },
   trpcClient: {
     account: {
@@ -83,11 +95,14 @@ mock.module("../lib/api.ts", () => ({
 mock.module("../lib/auth-client.ts", () => ({
   authClient: { useSession: () => ({ data: { user: { id: "alex" } } }) },
 }));
-mock.module("../lib/currentServer.ts", () => ({ baseUrl: "https://server.test" }));
+mock.module("../lib/currentServer.ts", () => ({ getBaseUrl: () => "https://server.test" }));
 mock.module("../lib/deviceKeys.ts", () => ({
   getStoredDeviceId: () => "phone",
   getRegisteredDeviceKey: async () => ({ userId: "alex", deviceId: "phone" }),
 }));
+mock.module("../lib/apiCompatibility.ts", () => ({ useApiCompatibility: () => null }));
+mock.module("../lib/thisDeviceNoun.ts", () => ({ thisDeviceNoun: () => "phone" }));
+mock.module("../lib/trackingModule.ts", () => ({ loadTrackingModule: async () => null }));
 mock.module("../lib/networkStatus.ts", () => ({ isDeviceOffline: async () => knownOffline }));
 mock.module("../lib/trackingEvents.ts", () => ({ requestTrackingSync: () => {} }));
 mock.module("../lib/storage.ts", () => ({

@@ -1,4 +1,4 @@
-import { Prisma } from "@openbeacon/database";
+import { Prisma, readDatabaseTime } from "@openbeacon/database";
 import { env } from "@openbeacon/api/env.ts";
 import { buildGroupAvatarPath, buildUserAvatarPath } from "@openbeacon/api/image-upload.ts";
 import {
@@ -7,7 +7,6 @@ import {
   forEachImageVersionPage,
 } from "@openbeacon/api/storage.ts";
 import { errorCode, tryCatch } from "@openbeacon/shared";
-import { getDatabaseTime } from "../databaseTime.ts";
 import { services } from "../services.ts";
 
 const gracePeriodMs = 60 * 60_000;
@@ -31,7 +30,7 @@ const failureCode = (error: unknown) =>
   errorCode(error) ?? (error instanceof Error && error.name !== "Error" ? error.name : null);
 
 export const runStalePendingUploadCleanup = async () => {
-  const cutoff = new Date((await getDatabaseTime()).getTime() - gracePeriodMs);
+  const cutoff = new Date((await readDatabaseTime(services.db)).getTime() - gracePeriodMs);
   const stale = await services.db.pendingUpload.findMany({
     where: { createdAt: { lt: cutoff } },
     orderBy: { createdAt: "asc" },
@@ -98,7 +97,7 @@ export const runImageStorageSweep = async () => {
     );
     return;
   }
-  const cutoff = new Date((await getDatabaseTime()).getTime() - gracePeriodMs);
+  const cutoff = new Date((await readDatabaseTime(services.db)).getTime() - gracePeriodMs);
   const result = await tryCatch(
     forEachImageVersionPage(env.IMAGES_S3_BUCKET_NAME, "user/", async (versions) => {
       const candidates = versions.filter(

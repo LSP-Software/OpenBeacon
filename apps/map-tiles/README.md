@@ -57,7 +57,7 @@ After a rollback the bad map is in the other slot. The manifest records its buil
 
 ## The `map-tiles` command
 
-The command talks to the running service over `127.0.0.1:8080`, so it only works while the service is up and never races an update the service is running. Nothing outside the container can reach that port, so it needs no key.
+The command talks to the running service over `127.0.0.1:8080`, so it only works while the service is up and never races an update the service is running. Nothing outside the container can reach that port, so it needs no key. The service refuses a POST that carries an `Origin` header or isn't `application/json`, so a web page open on the same machine can't start an update or a rollback.
 
 To run it outside a container, start the service from the repository root in one terminal and run commands in another:
 

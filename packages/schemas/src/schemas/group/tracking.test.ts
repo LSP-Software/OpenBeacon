@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   groupTrackingGetLatestSchema,
+  groupTrackingHistoryRangeSchema,
   groupTrackingPointSchema,
   groupTrackingPollSchema,
   groupTrackingUploadBatchSchema,
@@ -175,4 +176,18 @@ describe("groupTrackingGetLatestSchema", () => {
       groupId: "group-1",
     });
   });
+});
+
+test("history cursors outside PostgreSQL's bigint range are refused instead of failing the query", () => {
+  const range = (cursor: { streamId: string; pointId: string }) =>
+    groupTrackingHistoryRangeSchema.safeParse({
+      groupId: "group",
+      fromHour: 0,
+      toHour: 1,
+      cursor: { capturedHour: 0, ...cursor },
+    }).success;
+  expect(range({ streamId: "9223372036854775807", pointId: "-9223372036854775808" })).toBe(true);
+  expect(range({ streamId: "9999999999999999999", pointId: "1" })).toBe(false);
+  expect(range({ streamId: "1", pointId: "9223372036854775808" })).toBe(false);
+  expect(range({ streamId: "1", pointId: "-9223372036854775809" })).toBe(false);
 });

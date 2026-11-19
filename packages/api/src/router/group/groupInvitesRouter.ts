@@ -22,9 +22,8 @@ import type { GroupListItem } from "../../types/GroupListItem.ts";
 
 const creatorCanAdmit = async (
   db: Pick<Prisma.TransactionClient, "groupMember">,
-  invite: { creatorId: string | null; groupId: string },
+  invite: { creatorId: string; groupId: string },
 ) => {
-  if (!invite.creatorId) return false;
   const creator = await db.groupMember.findUnique({
     where: { userId_groupId: { userId: invite.creatorId, groupId: invite.groupId } },
     select: { role: true, user: { select: { pendingDeletion: true } } },
@@ -392,13 +391,6 @@ export const groupInvitesRouter = {
             },
           },
         });
-
-        if (!createdMember.group) {
-          throw new TRPCError({
-            code: "INTERNAL_SERVER_ERROR",
-            message: "Failed to accept invite, group does not exist.",
-          });
-        }
 
         const deletedInvite = await tx.groupMemberInvite.deleteMany({
           where: { id: input.inviteId, recipientId: ctx.session.user.id },

@@ -1,4 +1,5 @@
 import { auth } from "@openbeacon/auth";
+import { type Prisma, readDatabaseTime } from "@openbeacon/database";
 import { TRPCError } from "@trpc/server";
 import { deviceUnverifiedError } from "../../lib/deviceUnverified.ts";
 import { t } from "../../trpcRuntime.ts";
@@ -7,16 +8,19 @@ import { ReasonError } from "../../lib/reasonError.ts";
 
 export const { protectedProcedure, publicProcedure, setupProcedure } = createAuthProcedures({ t });
 
-export const sessionFreshForMs = async (sessionCreatedAt: Date): Promise<number | null> => {
+export const sessionFreshForMs = async (
+  db: Pick<Prisma.TransactionClient, "$queryRaw">,
+  sessionCreatedAt: Date,
+): Promise<number | null> => {
   const { sessionConfig } = await auth.$context;
   if (sessionConfig.freshAge === 0) return null;
-  const sessionAge = Date.now() - new Date(sessionCreatedAt).getTime();
+  const sessionAge = (await readDatabaseTime(db)).getTime() - new Date(sessionCreatedAt).getTime();
   return Math.max(0, sessionConfig.freshAge * 1000 - sessionAge);
 };
 
 export const requireFreshSession = t.middleware(async ({ ctx, next }) => {
   if (!ctx.session) throw new TRPCError({ code: "UNAUTHORIZED" });
-  if ((await sessionFreshForMs(ctx.session.session.createdAt)) === 0) {
+  if ((await sessionFreshForMs(ctx.db, ctx.session.session.createdAt)) === 0) {
     throw new TRPCError({
       code: "FORBIDDEN",
       message: "Sign in again to continue.",

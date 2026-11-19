@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Animated, Pressable, View } from "react-native";
+import { useReducedMotion } from "../../hooks/useReducedMotion.ts";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
 import { LiveMapMarkerPin } from "./LiveMapMarkerPin.tsx";
 import { LiveMapStackPin } from "./LiveMapStackPin.tsx";
@@ -21,19 +22,21 @@ export const LiveMapEdgeChip = ({
   y: number;
 }) => {
   const [lead] = members;
-  const scale = useRef(new Animated.Value(CHIP_SCALE * 0.5)).current;
+  const reduceMotion = useReducedMotion();
+  const scale = useRef(new Animated.Value(CHIP_SCALE * (reduceMotion ? 1 : 0.5))).current;
   const translateX = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(0)).current;
   const previousRef = useRef({ count: members.length, x, y });
 
   useEffect(() => {
-    Animated.spring(scale, { ...SPRING, toValue: CHIP_SCALE }).start();
-  }, [scale]);
+    if (reduceMotion) scale.setValue(CHIP_SCALE);
+    else Animated.spring(scale, { ...SPRING, toValue: CHIP_SCALE }).start();
+  }, [reduceMotion, scale]);
 
   useEffect(() => {
     const previous = previousRef.current;
     previousRef.current = { count: members.length, x, y };
-    if (previous.count === members.length) return;
+    if (previous.count === members.length || reduceMotion) return;
     translateX.setValue(previous.x - x);
     translateY.setValue(previous.y - y);
     scale.setValue(CHIP_SCALE * 1.14);
@@ -42,7 +45,7 @@ export const LiveMapEdgeChip = ({
       Animated.spring(translateY, { ...SPRING, toValue: 0 }),
       Animated.spring(scale, { ...SPRING, toValue: CHIP_SCALE }),
     ]).start();
-  }, [members.length, scale, translateX, translateY, x, y]);
+  }, [members.length, reduceMotion, scale, translateX, translateY, x, y]);
 
   if (!lead) return null;
   const peopleCount = members.length;

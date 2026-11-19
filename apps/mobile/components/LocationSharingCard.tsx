@@ -10,6 +10,7 @@ import { MapPinIcon, PauseIcon } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { trpc } from "../lib/api.ts";
+import { useApiCompatibility } from "../lib/apiCompatibility.ts";
 import { cn } from "../lib/cn.ts";
 import {
   changeLocationSharing,
@@ -22,6 +23,10 @@ import {
 import { useAppLock } from "../lib/appLock.ts";
 import { authClient } from "../lib/auth-client.ts";
 import { formatResumeTime } from "../lib/formatResumeTime.ts";
+import { getLocationPermissionWarningTitle } from "../lib/locationPermissions.ts";
+import { thisDeviceNoun } from "../lib/thisDeviceNoun.ts";
+import { loadTrackingModule } from "../lib/trackingModule.ts";
+import { useLocationPermissions } from "../providers/LocationPermissionProvider.tsx";
 import { BottomSheet } from "./ui/BottomSheet.tsx";
 import { Button } from "./ui/Button.tsx";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/Card.tsx";
@@ -52,6 +57,26 @@ export const LocationSharingCard = ({
   const [now, setNow] = useState(serverNow);
   const [message, setMessage] = useState<string | null>(null);
   const thisDevice = !device || device.isCurrent;
+  const { permissionState } = useLocationPermissions();
+  const missingPermission =
+    thisDevice && permissionState && !permissionState.isReadyForSharing ? permissionState : null;
+  const compatibilityProblem = useApiCompatibility()?.problem;
+  const groups = useQuery({
+    ...trpc.groupMembership.list.queryOptions(),
+    enabled: thisDevice,
+    subscribed: isFocused,
+  });
+  const sharingKeys = useQuery({
+    queryKey: ["thisPhoneHasSharingKeys"],
+    queryFn: async () => {
+      const trackingModule = await loadTrackingModule();
+      return trackingModule ? trackingModule.listProvisionedEpochKeys().length > 0 : null;
+    },
+    enabled: thisDevice,
+    networkMode: "always",
+    refetchInterval: 15_000,
+    subscribed: isFocused,
+  });
   const pending = session?.user.id ? getPendingSharingChanges(session.user.id) : null;
   const pendingDevice = thisDevice ? (pending?.device ?? null) : null;
   const pendingAccount = thisDevice ? (pending?.account ?? null) : null;
@@ -86,7 +111,22 @@ export const LocationSharingCard = ({
       : null;
   const until = effective ? effective.pausedUntil : devicePreference?.sharingPausedUntil;
   const resumeAccount = !device && accountPaused;
-  const target = device && !device.isCurrent ? device.name : "this device";
+  const noun = thisDeviceNoun();
+  const target = device && !device.isCurrent ? device.name : `this ${noun}`;
+  const notSharing =
+    !thisDevice || paused || missingPermission
+      ? null
+      : compatibilityProblem === "appTooOld"
+        ? "appTooOld"
+        : compatibilityProblem === "outOfSync"
+          ? "outOfSync"
+          : sharing.isPending || sharing.isError
+            ? null
+            : groups.data?.length === 0
+              ? "noGroups"
+              : groups.data && sharingKeys.data === false
+                ? "noKeys"
+                : null;
   const selectScope = (selectedScope: "device" | "account") => {
     const selectedAt = serverNow();
     setNow(selectedAt);
@@ -163,12 +203,15 @@ export const LocationSharingCard = ({
         <View
           className={cn(
             "size-10 items-center justify-center rounded-full",
-            paused ? "bg-warning" : "bg-success-soft",
+            paused || notSharing || missingPermission ? "bg-warning" : "bg-success-soft",
           )}
         >
           <Icon
             as={paused ? PauseIcon : MapPinIcon}
-            className={cn("size-5", paused ? "text-warning-text" : "text-success")}
+            className={cn(
+              "size-5",
+              paused || notSharing || missingPermission ? "text-warning-text" : "text-success",
+            )}
           />
         </View>
         <View className="flex-1 gap-1">
@@ -178,11 +221,21 @@ export const LocationSharingCard = ({
               ? "Paused on all your devices"
               : paused
                 ? `Paused on ${target}`
-                : sharing.isPending
-                  ? "Checking sharing status…"
-                  : sharing.isError
-                    ? "Couldn’t check sharing status"
-                    : `Sharing enabled on ${target}`}
+                : missingPermission
+                  ? getLocationPermissionWarningTitle(missingPermission)
+                  : notSharing === "appTooOld"
+                    ? "Not sharing until you update OpenBeacon"
+                    : notSharing === "outOfSync"
+                      ? "Not sharing until the app and server match"
+                      : notSharing === "noGroups"
+                        ? "Not sharing: you’re not in any groups"
+                        : notSharing === "noKeys"
+                          ? `Not sharing: this ${noun} is waiting for its keys`
+                          : sharing.isPending
+                            ? "Checking sharing status…"
+                            : sharing.isError
+                              ? "Couldn’t check sharing status"
+                              : `Sharing enabled on ${target}`}
           </Text>
         </View>
       </CardHeader>
@@ -193,8 +246,8 @@ export const LocationSharingCard = ({
               ? update.isPending
                 ? "Pausing…"
                 : pendingAccount
-                  ? "Sharing stopped on this phone. Your groups and other devices will update when we can reach the server."
-                  : "Sharing stopped on this phone. Your groups will update when we can reach the server."
+                  ? `Sharing stopped on this ${thisDeviceNoun()}. Your groups and other devices will update when we can reach the server.`
+                  : `Sharing stopped on this ${thisDeviceNoun()}. Your groups will update when we can reach the server.`
               : `${
                   until && until.getTime() > now
                     ? formatResumeTime(toDeviceClock(until), toDeviceClock(new Date(now)))
@@ -203,7 +256,17 @@ export const LocationSharingCard = ({
           </Text>
         ) : pendingHere && thisDevice && !update.isPending ? (
           <Text className="text-sm text-tertiary">
-            Sharing resumed on this phone. We’ll update your groups when you’re back online.
+            Sharing resumed on this {thisDeviceNoun()}. We’ll update your groups when you’re back
+            online.
+          </Text>
+        ) : null}
+        {notSharing === "noGroups" ? (
+          <Text className="text-sm text-tertiary">
+            {`Create or join a group to start sharing from this ${noun}.`}
+          </Text>
+        ) : notSharing === "noKeys" ? (
+          <Text className="text-sm text-tertiary">
+            {`This ${noun} doesn’t have the keys it needs to share with your groups yet. It keeps trying while it’s online.`}
           </Text>
         ) : null}
         {rejectedHere && !update.isPending ? (
@@ -250,7 +313,7 @@ export const LocationSharingCard = ({
           >
             <Text>
               {device && accountPaused && !devicePaused
-                ? "Pause this device separately"
+                ? `Pause this ${thisDeviceNoun()} separately`
                 : paused
                   ? "Change pause"
                   : "Pause sharing"}
@@ -259,8 +322,8 @@ export const LocationSharingCard = ({
         </View>
         {accountPaused && devicePaused ? (
           <Text className="text-sm text-tertiary">
-            {device?.name ?? "This device"} also has its own pause. It will stay paused when the
-            account resumes.
+            {device?.name ?? `This ${thisDeviceNoun()}`} also has its own pause. It will stay paused
+            when the account resumes.
           </Text>
         ) : null}
       </CardContent>
@@ -288,7 +351,7 @@ export const LocationSharingCard = ({
               <SegmentedControl
                 accessibilityLabel="Devices to pause"
                 options={[
-                  { value: "device", label: "This device" },
+                  { value: "device", label: `This ${thisDeviceNoun()}` },
                   { value: "account", label: "All my devices" },
                 ]}
                 selected={scope}

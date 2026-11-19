@@ -14,6 +14,7 @@ import { useSingleFlight } from "../lib/useSingleFlight.ts";
 import { RecoveryPhraseGrid } from "./RecoveryPhraseGrid.tsx";
 import { Button } from "./ui/Button.tsx";
 import { Text } from "./ui/Text.tsx";
+import { userMessage } from "../lib/userMessage.ts";
 
 export const NewRecoveryPhrase = ({
   onConfirm,
@@ -50,7 +51,8 @@ export const NewRecoveryPhrase = ({
     }
     await submission.run("confirm", async () => {
       const result = await tryCatch(onConfirm(phrase));
-      if (result.error) Alert.alert("Something went wrong", result.error.message);
+      if (result.error)
+        Alert.alert("Couldn’t save your recovery phrase", userMessage(result.error));
     });
   };
 

@@ -50,12 +50,12 @@ class PushTokens(
   }
 
   @Synchronized
-  fun forget(scope: String): Forgotten {
+  fun forget(scope: String, autoInitEnabled: Boolean): Forgotten {
     val current = state()
     val forgotten =
       Forgotten(
         clearOnServer = current.scope == scope && current.pushAvailable == true && current.sent != null,
-        deleteToken = current.token != null || lastRequestAt != null,
+        deleteToken = autoInitEnabled || current.token != null || lastRequestAt != null,
       )
     update(PushTokenState())
     lastRequestAt = null

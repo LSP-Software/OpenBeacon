@@ -10,7 +10,6 @@ test("a delayed sharing change cannot mutate the newly signed-in account", async
   const caller = router.createCaller({
     cache: { rateLimits: { consume: async () => ({ allowed: true }) } },
     db: { $transaction: transaction },
-    clientIp: "127.0.0.1",
     deviceId: "new-account-phone",
     deviceActive: true,
     session: { user: { id: "new-account" }, session: { id: "new-session" } },
@@ -57,7 +56,6 @@ test("an authenticated request whose linked session ended cannot resume sharing"
   const caller = router.createCaller({
     cache: { rateLimits: { consume: async () => ({ allowed: true }) } },
     db: { $transaction: async (callback: (db: typeof tx) => Promise<unknown>) => callback(tx) },
-    clientIp: "127.0.0.1",
     deviceId: "removed-phone",
     deviceActive: true,
     session: { user: { id: "alex" }, session: { id: "ended-session" } },

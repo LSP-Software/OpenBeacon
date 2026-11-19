@@ -1,11 +1,10 @@
 import { ClockIcon, EyeOffIcon, HourglassIcon, PauseIcon } from "lucide-react-native";
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent } from "react";
 import { View } from "react-native";
 import Svg, { Circle, Defs, Path, RadialGradient, Stop } from "react-native-svg";
-import { useAppForeground } from "../../hooks/useAppForeground.ts";
+import { useLocationStale } from "../../hooks/useLocationStale.ts";
 import { cn } from "../../lib/cn.ts";
 import { type DeviceIcon, deviceIconFor } from "../../lib/deviceIcons.ts";
-import { locationStaleAt } from "../../lib/locationStaleAt.ts";
 import type { MapPersonStatus } from "../../lib/mapPeopleTypes.ts";
 import { DecryptedAvatarImage } from "../image/DecryptedAvatarImage.tsx";
 import { Avatar, AvatarFallback } from "../ui/Avatar.tsx";
@@ -86,27 +85,13 @@ export const LiveMapMarkerPin = ({
   status?: MapPersonStatus | null | undefined;
   timestamp: string | null;
 }) => {
-  const [, setTick] = useState(0);
-  const staleAt = timestamp === null ? Number.NaN : locationStaleAt(timestamp);
-  const isStale = Date.now() >= staleAt;
+  const isStale = useLocationStale(timestamp);
+  const refreshBitmap = useEffectEvent(() => onBitmapContentChange?.());
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: iOS annotation bitmaps need an explicit refresh when the pin's look changes
   useEffect(() => {
-    const delay = staleAt - Date.now();
-    const timer =
-      delay > 0 && Number.isFinite(delay)
-        ? setTimeout(() => setTick((tick) => tick + 1), delay)
-        : null;
-    return () => {
-      if (timer !== null) clearTimeout(timer);
-    };
-  }, [staleAt]);
-
-  useAppForeground(() => setTick((tick) => tick + 1));
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Android marker bitmaps need an explicit refresh when the pin's look changes
-  useEffect(() => {
-    onBitmapContentChange?.();
-  }, [hasUnreadableUpdate, isStale, onBitmapContentChange]);
+    refreshBitmap();
+  }, [hasUnreadableUpdate, isStale]);
   const showHeading = headingDegrees !== null;
   const size = showHeading ? OUTER_SIZE : PIN_SIZE;
   const badgeIcon = deviceIcon ? deviceIconFor(deviceIcon, devicePlatform) : null;

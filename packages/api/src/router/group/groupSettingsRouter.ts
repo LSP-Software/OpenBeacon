@@ -33,27 +33,27 @@ export const groupSettingsRouter = {
     .input(setGroupHistoryShareSchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
-      return ctx.db.$transaction(async (tx) => {
+      const previous = await ctx.db.groupMember.findUnique({
+        where: { userId_groupId: { userId, groupId: input.groupId } },
+        select: { historyShare: true, user: { select: { historyShare: true } } },
+      });
+      if (!previous) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "You are not a member of this group" });
+      }
+      const deletedBefore = await deleteHistoryOutsideShare({
+        db: ctx.db,
+        groupIds: [input.groupId],
+        historyShare: resolveHistoryShare({
+          account: previous.user.historyShare,
+          group: previous.historyShare,
+        }),
+        userId,
+      });
+      const member = await ctx.db.$transaction(async (tx) => {
         await tx.$queryRaw(
           Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR NO KEY UPDATE`,
         );
-        const previous = await tx.groupMember.findUnique({
-          where: { userId_groupId: { userId, groupId: input.groupId } },
-          select: { historyShare: true, user: { select: { historyShare: true } } },
-        });
-        if (!previous) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "You are not a member of this group" });
-        }
-        const deletedBefore = await deleteHistoryOutsideShare({
-          db: tx,
-          groupIds: [input.groupId],
-          historyShare: resolveHistoryShare({
-            account: previous.user.historyShare,
-            group: previous.historyShare,
-          }),
-          userId,
-        });
-        const member = await tx.groupMember.update({
+        const updated = await tx.groupMember.update({
           where: { userId_groupId: { userId, groupId: input.groupId } },
           data: { historyShare: input.historyShare },
           select: { historyShare: true, user: { select: { historyShare: true } } },
@@ -62,23 +62,24 @@ export const groupSettingsRouter = {
           where: { id: userId },
           data: { historyShareChangedAt: new Date() },
         });
-        const historyShare = resolveHistoryShare({
-          account: member.user.historyShare,
-          group: member.historyShare,
-        });
-        const deletedPoints = await deleteHistoryOutsideShare({
-          db: tx,
-          groupIds: [input.groupId],
-          historyShare,
-          userId,
-        });
-        return {
-          groupId: input.groupId,
-          override: member.historyShare,
-          historyShare,
-          deletedPoints: deletedBefore + deletedPoints,
-        };
+        return updated;
       });
+      const historyShare = resolveHistoryShare({
+        account: member.user.historyShare,
+        group: member.historyShare,
+      });
+      const deletedPoints = await deleteHistoryOutsideShare({
+        db: ctx.db,
+        groupIds: [input.groupId],
+        historyShare,
+        userId,
+      });
+      return {
+        groupId: input.groupId,
+        override: member.historyShare,
+        historyShare,
+        deletedPoints: deletedBefore + deletedPoints,
+      };
     }),
 
   rename: groupMemberProcedure
@@ -178,7 +179,7 @@ export const groupSettingsRouter = {
           userId_uploadType_groupId: { userId, uploadType: "groupAvatar", groupId: input.groupId },
         },
       });
-      if (!pending || pending.groupId !== input.groupId) {
+      if (!pending) {
         if (
           !(await ctx.db.group.findUnique({ where: { id: input.groupId }, select: { id: true } }))
         ) {

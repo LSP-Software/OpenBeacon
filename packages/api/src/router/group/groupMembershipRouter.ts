@@ -1,5 +1,9 @@
 import { GroupEventType, GroupRole, Prisma } from "@openbeacon/database";
-import { devicePlatformSchema, removeGroupMemberSchema } from "@openbeacon/schemas";
+import {
+  devicePlatformSchema,
+  removeGroupMemberSchema,
+  sealedPersonalDataSchema,
+} from "@openbeacon/schemas";
 import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
 import { errorCode, tryCatch } from "@openbeacon/shared";
@@ -69,7 +73,7 @@ export const groupMembershipRouter = {
     return { ...group, groupMembers: [ctx.groupMember] };
   }),
   removalContext: groupMemberProcedure
-    .input(z.object({ groupId: z.string().min(1), memberId: z.string().min(1) }))
+    .input(z.object({ groupId: z.string().min(1), memberId: z.string().min(1).max(128) }))
     .query(async ({ ctx, input }) => {
       if (
         ctx.groupMember.id !== input.memberId &&
@@ -133,9 +137,9 @@ export const groupMembershipRouter = {
     .input(
       z.object({
         groupId: z.string().min(1),
-        memberId: z.string().min(1),
-        ciphertext: z.string().min(1).max(50000).nullable(),
-        expectedCiphertext: z.string().min(1).max(50000).nullable(),
+        memberId: z.string().min(1).max(128),
+        ciphertext: sealedPersonalDataSchema.nullable(),
+        expectedCiphertext: sealedPersonalDataSchema.nullable(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -195,28 +199,26 @@ export const groupMembershipRouter = {
     .input(
       z.object({
         groupId: z.string().min(1),
-        ciphertext: z.string().min(1).max(50000),
-        expectedCiphertext: z.string().min(1).max(50000).optional(),
+        ciphertext: sealedPersonalDataSchema,
+        expectedCiphertext: sealedPersonalDataSchema.nullable(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      if (input.expectedCiphertext !== undefined) {
-        const result = await ctx.db.personalGroupColor.updateMany({
-          where: { ownerId: ctx.groupMember.id, ciphertext: input.expectedCiphertext },
-          data: { ciphertext: input.ciphertext },
+      const result =
+        input.expectedCiphertext === null
+          ? await ctx.db.personalGroupColor.createMany({
+              data: { ownerId: ctx.groupMember.id, ciphertext: input.ciphertext },
+              skipDuplicates: true,
+            })
+          : await ctx.db.personalGroupColor.updateMany({
+              where: { ownerId: ctx.groupMember.id, ciphertext: input.expectedCiphertext },
+              data: { ciphertext: input.ciphertext },
+            });
+      if (result.count === 0)
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "Group colour changed. Reload and try again.",
         });
-        if (result.count === 0)
-          throw new TRPCError({
-            code: "CONFLICT",
-            message: "Group colour changed. Reload and try again.",
-          });
-        return;
-      }
-      await ctx.db.personalGroupColor.upsert({
-        where: { ownerId: ctx.groupMember.id },
-        create: { ownerId: ctx.groupMember.id, ciphertext: input.ciphertext },
-        update: { ciphertext: input.ciphertext },
-      });
     }),
   remove: groupMemberProcedure
     .meta({
@@ -258,6 +260,12 @@ export const groupMembershipRouter = {
             throw new TRPCError({
               code: "NOT_FOUND",
               message: "Group member not found",
+            });
+          }
+          if (actor.id !== input.memberId && !input.nextEpoch) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Removing a member needs new group keys.",
             });
           }
           if (
@@ -316,7 +324,7 @@ export const groupMembershipRouter = {
           }
 
           const isLeaving = actor.id === input.memberId;
-          if (!isLeaving) {
+          if (!isLeaving && input.nextEpoch) {
             await persistGroupEpoch({
               db: tx,
               deviceId: ctx.deviceId,
@@ -401,7 +409,7 @@ export const groupMembershipRouter = {
     .input(
       z.object({
         groupId: z.string().min(1),
-        memberId: z.string().min(1),
+        memberId: z.string().min(1).max(128),
         role: z.enum(GroupRole),
       }),
     )

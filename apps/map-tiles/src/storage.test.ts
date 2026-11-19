@@ -49,7 +49,7 @@ describe("createStorageClients", () => {
   });
   afterAll(() => hangingServer.stop(true));
 
-  test("both clients give up on a stalled request instead of only logging a warning", async () => {
+  test("the main client gives up on a stalled request, and part uploads have no whole-request limit", async () => {
     const clients = createStorageClients({
       MAP_S3_ENDPOINT: "https://map-storage.example.com",
       MAP_S3_REGION: "us-east-1",
@@ -58,7 +58,7 @@ describe("createStorageClients", () => {
       MAP_S3_ACCESS_KEY: "secret",
     });
 
-    for (const client of [clients.client, clients.partClient]) {
+    const configOf = async (client: typeof clients.client) => {
       const handler = await client.config.requestHandler;
       await handler
         .handle(
@@ -74,12 +74,17 @@ describe("createStorageClients", () => {
           { abortSignal: AbortSignal.timeout(50) },
         )
         .catch(() => {});
-      expect("httpHandlerConfigs" in handler ? handler.httpHandlerConfigs() : null).toMatchObject({
-        connectionTimeout: 30_000,
-        requestTimeout: 120_000,
-        throwOnRequestTimeout: true,
-      });
-    }
+      return "httpHandlerConfigs" in handler ? handler.httpHandlerConfigs() : null;
+    };
+    expect(await configOf(clients.client)).toMatchObject({
+      connectionTimeout: 30_000,
+      requestTimeout: 120_000,
+      throwOnRequestTimeout: true,
+    });
+    expect(await configOf(clients.partClient)).toMatchObject({
+      connectionTimeout: 30_000,
+      requestTimeout: undefined,
+    });
   });
 
   test("puts the bucket in the path only when asked", () => {

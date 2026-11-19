@@ -166,6 +166,24 @@ test("without email, every type has one switch and nothing mentions email", asyn
   expect(text).toContain("When a new phone or tablet signs in to your account.");
 });
 
+test("a setting a newer server added is left out instead of breaking the screen", async () => {
+  const known = settingsFor(false);
+  query.data = {
+    ...known,
+    settings: [
+      ...known.settings,
+      {
+        type: "SEAT_LIMIT_REACHED" as keyof typeof notificationTypes,
+        email: null,
+        phone: true,
+      },
+    ],
+  };
+  const { switches } = await render();
+
+  expect(switches).toHaveLength(Object.keys(notificationTypes).length);
+});
+
 test("the Notifications are off card shows only when this phone's notifications are off", async () => {
   query.data = settingsFor(true);
   expect((await render()).cards).toHaveLength(0);
@@ -194,7 +212,7 @@ test("a failed change rolls back only its own switch and a slow reply doesn't un
   options.onError(new Error("offline"), signIn, signInContext);
   expect(phoneOf("NEW_SIGN_IN")).toBe(true);
   expect(phoneOf("MEMBER_JOINED")).toBe(false);
-  expect(alerts).toEqual(["Unable to save your notification settings"]);
+  expect(alerts).toEqual(["Couldn’t save your notification settings"]);
 
   options.onSuccess(settingsFor(true));
   expect(phoneOf("MEMBER_JOINED")).toBe(false);

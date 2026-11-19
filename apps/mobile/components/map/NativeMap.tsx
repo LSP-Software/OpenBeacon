@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useReducedMotion } from "../../hooks/useReducedMotion.ts";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
 import {
   type LiveMapPinGroup,
@@ -81,6 +82,7 @@ export const NativeMap = ({
   timelineGroupId?: string | null;
 } = {}) => {
   const insets = useSafeAreaInsets();
+  const reduceMotion = useReducedMotion();
   const colors = useColors();
   const [selectedPlaceKey, setSelectedPlaceKey] = useState<string | null>(null);
   const selectedPlace = places.find((place) => placeKey(place) === selectedPlaceKey) ?? null;
@@ -220,6 +222,7 @@ export const NativeMap = ({
     onClearSelection: closeSheets,
     onSelectDevice: selection.handleAnnotationSelected,
     pmtilesUrl,
+    reduceMotion,
     selectedMarker,
     selectedDeviceId,
     topInset: insets.top,
@@ -394,7 +397,7 @@ export const NativeMap = ({
       >
         <ActivityIndicator />
         <Text className="text-center text-tertiary">
-          The server is still preparing the map. It will appear here when it's ready.
+          The server is still preparing the map. It will appear here when it’s ready.
         </Text>
       </View>
     );
@@ -596,13 +599,26 @@ export const NativeMap = ({
           y={chip.y}
         />
       ))}
-      {map.showRecoverableError || map.isRefreshing ? (
+      {map.isRefreshing ? (
         <View
           className="absolute left-3 rounded-full bg-card p-3"
           style={{ top: insets.top + 56 }}
           accessibilityLabel="Loading map"
         >
           <ActivityIndicator color={colors.primary} />
+        </View>
+      ) : map.showRecoverableError ? (
+        <View
+          className="absolute left-3 right-16 gap-3 rounded-2xl border border-border bg-card p-4 shadow-md shadow-black/15"
+          style={{ top: insets.top + 56 }}
+          accessibilityLiveRegion="polite"
+        >
+          <Text className="text-tertiary">
+            We couldn’t load the map. Check your connection and try again.
+          </Text>
+          <Button variant="secondary" onPress={map.retryMapLoad}>
+            <Text>Try again</Text>
+          </Button>
         </View>
       ) : null}
       <View
@@ -618,7 +634,7 @@ export const NativeMap = ({
               accessibilityLabel="Show everyone"
               accessibilityRole="button"
               onPress={fitEveryoneInFrame}
-              className="size-11 items-center justify-center active:bg-secondary"
+              className="size-12 items-center justify-center active:bg-secondary"
             >
               <Icon as={ScanIcon} size={20} className="text-foreground" />
             </Pressable>
@@ -627,7 +643,7 @@ export const NativeMap = ({
                 accessibilityLabel="Go to current location"
                 accessibilityRole="button"
                 onPress={goToCurrentLocation}
-                className="size-11 items-center justify-center border-t border-border active:bg-secondary"
+                className="size-12 items-center justify-center border-t border-border active:bg-secondary"
               >
                 <Icon as={LocateFixedIcon} size={20} className="text-foreground" />
               </Pressable>
@@ -648,6 +664,7 @@ export const NativeMap = ({
                 : "Groups on the map"
             }
             accessibilityRole="button"
+            hitSlop={{ top: 4, bottom: 4 }}
             accessibilityState={{ expanded: groupMenuOpen }}
             onPress={() => {
               if (groupMenuOpen) {
@@ -686,6 +703,7 @@ export const NativeMap = ({
         <Pressable
           accessibilityLabel="Show map names and symbols"
           accessibilityRole="switch"
+          hitSlop={{ top: 4, bottom: 4 }}
           accessibilityState={{ checked: showSymbols }}
           onPress={map.toggleSymbols}
           className={cn(
@@ -707,6 +725,7 @@ export const NativeMap = ({
             <Pressable
               accessibilityLabel="Timeline"
               accessibilityRole="link"
+              hitSlop={{ top: 4, bottom: 4 }}
               className="h-10 justify-center rounded-full border border-border bg-card px-3 shadow-sm shadow-black/10"
             >
               <Text className="text-foreground text-sm font-semibold">Timeline</Text>
@@ -718,6 +737,7 @@ export const NativeMap = ({
             showAttentionCount ? `People, ${needsAttentionCount} need attention` : "People"
           }
           accessibilityRole="button"
+          hitSlop={{ top: 4, bottom: 4 }}
           accessibilityState={{ expanded: isTrayOpen }}
           onPress={() => {
             if (isTrayOpen) {

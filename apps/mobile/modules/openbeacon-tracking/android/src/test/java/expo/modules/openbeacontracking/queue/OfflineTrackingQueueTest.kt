@@ -39,7 +39,7 @@ class OfflineTrackingQueueTest {
   }
 
   @Test
-  fun `keeps each account's points separate`() {
+  fun keepsEachAccountsPointsSeparate() {
     assertEquals(
       3,
       queue.insertAll(
@@ -65,7 +65,7 @@ class OfflineTrackingQueueTest {
   }
 
   @Test
-  fun `deletes every point an owner has queued, including ones being uploaded`() {
+  fun deletesEveryPointAnOwnerHasQueuedIncludingOnesBeingUploaded() {
     queue.insertAll(listOf(row("a"), row("b"), row("c"), row("other")).mapIndexed { index, row ->
       row.copy(owner = if (index < 3) "server-a/user-a" else "server-a/user-b")
     })
@@ -80,7 +80,7 @@ class OfflineTrackingQueueTest {
   }
 
   @Test
-  fun `deletes an owner's points for one group, including ones being uploaded`() {
+  fun deletesAnOwnersPointsForOneGroupIncludingOnesBeingUploaded() {
     queue.insertAll(
       listOf(
         row("left", owner = "server-a/user-a").copy(groupId = "group-left"),
@@ -100,7 +100,7 @@ class OfflineTrackingQueueTest {
   }
 
   @Test
-  fun `assigns ownerless points only to the device that captured them`() {
+  fun assignsOwnerlessPointsOnlyToTheDeviceThatCapturedThem() {
     val dao = database.ciphertextQueueDao()
     queue.insertAll(listOf(row("legacy"), row("a", owner = "server-a/user-a")))
     assertEquals(1, dao.countUnassigned("device"))
@@ -115,7 +115,7 @@ class OfflineTrackingQueueTest {
   }
 
   @Test
-  fun `drops duplicate client points`() {
+  fun dropsDuplicateClientPoints() {
     assertEquals(1, queue.insertAll(listOf(row("a", owner = "server-a/user-a"))))
     assertEquals(0, queue.insertAll(listOf(row("a", owner = "server-a/user-a"))))
 
@@ -131,7 +131,7 @@ class OfflineTrackingQueueTest {
   }
 
   @Test
-  fun `replaces pending stay and live rows but keeps ones being uploaded`() {
+  fun replacesPendingStayAndLiveRowsButKeepsOnesBeingUploaded() {
     val owner = "server-a/user-a"
     assertEquals(1, queue.insertAll(listOf(row("stay", owner).copy(role = CiphertextQueueRow.ROLE_STAY, ciphertext = "first"))))
     assertEquals(1, queue.insertAll(listOf(row("live-1", owner).copy(role = CiphertextQueueRow.ROLE_LIVE))))
@@ -150,7 +150,7 @@ class OfflineTrackingQueueTest {
   }
 
   @Test
-  fun `stores only ciphertext that decrypts with the group key`() {
+  fun storesOnlyCiphertextThatDecryptsWithTheGroupKey() {
     assertEquals(1, capture(pipeline(), 100))
     val stored = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, "server-a/user-a").single()
     val plaintext =
@@ -173,7 +173,7 @@ class OfflineTrackingQueueTest {
   }
 
   @Test
-  fun `requeues an older stay or live copy only while no newer copy is queued`() {
+  fun requeuesAnOlderStayOrLiveCopyOnlyWhileNoNewerCopyIsQueued() {
     val owner = "server-a/user-a"
     queue.insertAll(
       listOf(
@@ -203,7 +203,7 @@ class OfflineTrackingQueueTest {
   }
 
   @Test
-  fun `drops an interrupted stay or live copy once a newer copy is queued`() {
+  fun dropsAnInterruptedStayOrLiveCopyOnceANewerCopyIsQueued() {
     val owner = "server-a/user-a"
     queue.insertAll(
       listOf(
@@ -229,7 +229,7 @@ class OfflineTrackingQueueTest {
   }
 
   @Test
-  fun `removing an acknowledged stay or live copy also removes older copies still uploading`() {
+  fun removingAnAcknowledgedStayOrLiveCopyAlsoRemovesOlderCopiesStillUploading() {
     val owner = "server-a/user-a"
     queue.insertAll(
       listOf(
@@ -255,7 +255,7 @@ class OfflineTrackingQueueTest {
   }
 
   @Test
-  fun `lists pending points other than stay updates so a lone stay update waits for the next upload`() {
+  fun listsPendingPointsOtherThanStayUpdatesSoALoneStayUpdateWaitsForTheNextUpload() {
     val owner = "server-a/user-a"
     queue.insertAll(listOf(row("stay", owner).copy(role = CiphertextQueueRow.ROLE_STAY)))
 
@@ -271,7 +271,7 @@ class OfflineTrackingQueueTest {
   }
 
   @Test
-  fun `migrates version 1 queues to the current schema and drops their unsendable points`() {
+  fun migratesVersion1QueuesToTheCurrentSchemaAndDropsTheirUnsendablePoints() {
     migrate(
       1,
       "CREATE TABLE ciphertext_queue (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, clientPointId TEXT NOT NULL, captureId TEXT NOT NULL, groupId TEXT NOT NULL, epochId TEXT NOT NULL, senderDeviceId TEXT NOT NULL, kind TEXT NOT NULL, algorithm TEXT NOT NULL, nonce TEXT NOT NULL, ciphertext TEXT NOT NULL, queuedAt INTEGER NOT NULL, attemptCount INTEGER NOT NULL, lastAttemptAt INTEGER, lastError TEXT, status TEXT NOT NULL)",
@@ -283,7 +283,7 @@ class OfflineTrackingQueueTest {
   }
 
   @Test
-  fun `migrates version 3 queues to the current schema and drops their unsendable points`() {
+  fun migratesVersion3QueuesToTheCurrentSchemaAndDropsTheirUnsendablePoints() {
     migrate(
       3,
       "CREATE TABLE ciphertext_queue (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, clientPointId TEXT NOT NULL, captureId TEXT NOT NULL, groupId TEXT NOT NULL, epochId TEXT NOT NULL, senderDeviceId TEXT NOT NULL, kind TEXT NOT NULL, algorithm TEXT NOT NULL, nonce TEXT NOT NULL, ciphertext TEXT NOT NULL, queuedAt INTEGER NOT NULL, attemptCount INTEGER NOT NULL, lastAttemptAt INTEGER, lastError TEXT, status TEXT NOT NULL, owner TEXT)",
@@ -302,7 +302,7 @@ class OfflineTrackingQueueTest {
   }
 
   @Test
-  fun `migrates version 4 queues keeping their points, which have no recorded hour`() {
+  fun migratesVersion4QueuesKeepingTheirPointsWhichHaveNoRecordedHour() {
     migrate(
       4,
       "CREATE TABLE ciphertext_queue (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, clientPointId TEXT NOT NULL, captureId TEXT NOT NULL, groupId TEXT NOT NULL, epochId TEXT NOT NULL, senderDeviceId TEXT NOT NULL, kind TEXT NOT NULL, algorithm TEXT NOT NULL, nonce TEXT NOT NULL, ciphertext TEXT NOT NULL, queuedAt INTEGER NOT NULL, attemptCount INTEGER NOT NULL, lastAttemptAt INTEGER, lastError TEXT, status TEXT NOT NULL, owner TEXT, role TEXT NOT NULL DEFAULT 'POINT')",
@@ -318,7 +318,7 @@ class OfflineTrackingQueueTest {
   }
 
   @Test
-  fun `keeps the recorded hour of a queued point and of a replaced stay`() {
+  fun keepsTheRecordedHourOfAQueuedPointAndOfAReplacedStay() {
     val owner = "server-a/user-a"
     queue.insertAll(listOf(row("point", owner).copy(capturedHour = 498_600), row("live", owner).copy(role = CiphertextQueueRow.ROLE_LIVE)))
     queue.insertAll(listOf(row("stay", owner).copy(role = CiphertextQueueRow.ROLE_STAY, capturedHour = 498_590)))
@@ -330,7 +330,7 @@ class OfflineTrackingQueueTest {
   }
 
   @Test
-  fun `evicts the oldest pending points past the size limit`() {
+  fun evictsTheOldestPendingPointsPastTheSizeLimit() {
     val limit = 256L * 1024
     val boundedQueue = RoomCiphertextQueue(database, maxDatabaseBytes = limit)
     val dao = database.ciphertextQueueDao()
@@ -369,7 +369,7 @@ class OfflineTrackingQueueTest {
   }
 
   @Test
-  fun `reports each eviction until its revision is acknowledged`() {
+  fun reportsEachEvictionUntilItsRevisionIsAcknowledged() {
     val boundedQueue = RoomCiphertextQueue(database, maxDatabaseBytes = 256L * 1024)
     val dao = database.ciphertextQueueDao()
     boundedQueue.insertAll(listOf(sizedRow("server-a/user-b", "group-1", 1)))

@@ -6,9 +6,10 @@ import {
   sendGoogleSignInEmail,
   sendSecurityAlertEmail,
 } from "@openbeacon/email";
+import { createBackgroundWork } from "./backgroundWork.ts";
 import { getAuthCapabilities } from "./capabilities.ts";
 import { createAuth } from "./createAuth.ts";
-import { db } from "./db.ts";
+import { prisma as db } from "@openbeacon/database";
 import { createEmailCodes } from "./emailCode.ts";
 import { env } from "./env.ts";
 import { createFcmClient, resolveFcmSettings } from "./fcm.ts";
@@ -20,6 +21,7 @@ export { clientIpHeader } from "./createAuth.ts";
 export { createEmailCodes, type EmailCodes } from "./emailCode.ts";
 export { createSecurityAlerts, type SecurityAlerts } from "./securityAlerts.ts";
 export { createPushSender, type PushSender } from "./push.ts";
+export { checkPasswordWithinLimit, passwordFailureLimitFor } from "./passwordAttempts.ts";
 export { createGoogleDeletionAuthorization, verifyGoogleDeletionCode } from "./googleDeletion.ts";
 
 export const authPublicPath = getPublicUrl(env.BETTER_AUTH_URL).path;
@@ -51,12 +53,20 @@ const { settings: fcmSettings } = resolveFcmSettings({
 
 export const fcm = fcmSettings ? createFcmClient(fcmSettings) : null;
 
-export const push = createPushSender({ db, fcm });
+export const backgroundWork = createBackgroundWork();
+
+export const push = createPushSender({
+  db,
+  fcm,
+  runInBackground: backgroundWork.run,
+  setTimer: backgroundWork.setTimer,
+});
 
 export const securityAlerts = createSecurityAlerts({
   db,
   push,
   sendSecurityAlertEmail: emailEnabled ? sendSecurityAlertEmail : null,
+  runInBackground: backgroundWork.run,
   alertsTurnedOff: {
     add: async (input) => sharedCache().alertsTurnedOff.add(input),
     take: async (input) => sharedCache().alertsTurnedOff.take(input),
@@ -67,13 +77,9 @@ export const securityAlerts = createSecurityAlerts({
 export const auth = createAuth({
   emailCodes,
   securityAlerts,
+  runInBackground: backgroundWork.run,
   rateLimits: {
     consume: (input, options) => sharedCache().rateLimits.consume(input, options),
     refund: (input) => sharedCache().rateLimits.refund(input),
   },
 });
-
-export type AuthType = {
-  user: typeof auth.$Infer.Session.user | null;
-  session: typeof auth.$Infer.Session.session | null;
-};

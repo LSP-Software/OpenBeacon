@@ -55,7 +55,7 @@ export const useTimelineDay = ({
   const query = useQuery({
     enabled: day !== null && userIds.length > 0,
     queryKey: ["timelineDay", groupId, day?.key, people],
-    staleTime: 60_000,
+    staleTime: day && day.end <= Date.now() ? Number.POSITIVE_INFINITY : 60_000,
     queryFn: async ({ signal }) => {
       if (!day) throw new Error("No day is selected.");
       const device = await ensureDeviceKeyRegistration();
@@ -93,6 +93,19 @@ export const useTimelineDay = ({
       });
     },
   });
+  const sharing = useQuery({
+    ...trpc.groupTracking.getLatest.queryOptions({ groupId }),
+    enabled: day !== null && day.end > Date.now(),
+    select: (latest) => latest.sharing,
+    staleTime: 60_000,
+  });
+  const pausedDeviceIds = useMemo(
+    () =>
+      new Set(
+        (sharing.data ?? []).filter((device) => device.paused).map((device) => device.deviceId),
+      ),
+    [sharing.data],
+  );
   const { data, dataUpdatedAt } = query;
   const shownPartial = partial?.loadKey === loadKey ? partial : null;
   const timeline = useMemo(() => {
@@ -106,10 +119,11 @@ export const useTimelineDay = ({
       devices: loaded.devices,
       joinStart: loaded.joinStart,
       now: loaded.now,
+      pausedDeviceIds,
       senders,
       windowStart: windowStart.getTime(),
     });
-  }, [data, dataUpdatedAt, day, senders, shownPartial, windowStart]);
+  }, [data, dataUpdatedAt, day, pausedDeviceIds, senders, shownPartial, windowStart]);
   return {
     joinStart: data?.joinStart ?? shownPartial?.joinStart ?? null,
     progress: progress?.loadKey === loadKey ? progress.people : null,

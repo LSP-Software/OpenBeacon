@@ -8,6 +8,22 @@ describe("createGroupSchema", () => {
     expect(createGroupSchema.safeParse({ name: "a".repeat(100) }).success).toBe(true);
     expect(createGroupSchema.safeParse({ name: "a".repeat(101) }).success).toBe(false);
   });
+
+  test("refuses control characters the database can't store or a notification would break on", () => {
+    for (const name of ["A\u0000B", "Fam\nily", "Tab\tbed"]) {
+      expect(createGroupSchema.safeParse({ name }).success).toBe(false);
+    }
+    expect(createGroupSchema.parse({ name: "李 O’Connor" }).name).toBe("李 O’Connor");
+  });
+
+  test("refuses direction overrides and isolates, and names with nothing visible", () => {
+    for (const name of ["Family\u202E", "\u2067Family\u2069", "\u200B", "\u2060\u200D"]) {
+      expect(createGroupSchema.safeParse({ name }).success).toBe(false);
+    }
+    expect(createGroupSchema.parse({ name: "\u05DE\u05E9\u05E4\u05D7\u05D4\u200F" }).name).toBe(
+      "\u05DE\u05E9\u05E4\u05D7\u05D4\u200F",
+    );
+  });
 });
 
 test("new group IDs are safe path segments", () => {

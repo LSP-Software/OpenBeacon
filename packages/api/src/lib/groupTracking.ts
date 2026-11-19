@@ -16,7 +16,7 @@ import {
   historyFirstHourSql,
   readUploaderHistoryWindow,
 } from "./historyShare.ts";
-import { HISTORY_RETENTION_MS } from "./placeTransitions.ts";
+import { HISTORY_RETENTION_MS } from "./historyShare.ts";
 
 const HOUR_MS = 3_600_000;
 const HISTORY_RETENTION_HOURS = HISTORY_RETENTION_MS / HOUR_MS;
@@ -44,7 +44,7 @@ type TrackingStreamKey = { epochId: string; revisionPrefix: string; senderDevice
 export const uploadGroupTrackingBatch = async ({
   db,
   groupId,
-  memberSince,
+  joinedEpochNumber,
   points,
   refundAllowance,
   takeAllowance,
@@ -52,7 +52,7 @@ export const uploadGroupTrackingBatch = async ({
 }: {
   db: GroupTrackingDb;
   groupId: string;
-  memberSince?: Date;
+  joinedEpochNumber: number;
   points: z.infer<typeof groupTrackingPointSchema>[];
   refundAllowance: (senderDeviceId: string, count: number) => Promise<void>;
   takeAllowance: (senderDeviceId: string, cost: number) => Promise<number>;
@@ -73,7 +73,7 @@ export const uploadGroupTrackingBatch = async ({
   const foundEpochIds = await findGroupEpochs(db, {
     epochIds: [...new Set(points.map((point) => point.epochId))],
     groupId,
-    ...(memberSince ? { memberSince } : {}),
+    joinedEpochNumber,
   });
   const sharing = await getGroupSharingStates(db, groupId);
 
@@ -82,19 +82,23 @@ export const uploadGroupTrackingBatch = async ({
     .filter((point) => foundEpochIds.has(point.epochId))
     .map((point) => ({ ...point, ...parseClientPointId(point.clientPointId) }));
   const { firstHour, nowHour } = await readUploaderHistoryWindow(db, { groupId, userId });
-  const discarded = current.filter((point) => {
+  const sharingStopped = current.filter((point) => {
     const state = sharing.find(
       (device) => device.deviceId === point.senderDeviceId && device.userId === userId,
     );
-    if (!state || state.paused || point.revisionPrefix !== state.revisionPrefix) return true;
-    if (point.role === "LIVE") return false;
+    return !state || state.paused || point.revisionPrefix !== state.revisionPrefix;
+  });
+  const outsideWindow = current.filter((point) => {
+    if (sharingStopped.includes(point) || point.role === "LIVE") return false;
     const capturedHour = Math.min(
       Math.max(point.capturedHour ?? nowHour, nowHour - HISTORY_RETENTION_HOURS),
       nowHour + 1,
     );
     return capturedHour < firstHour;
   });
-  const kept = current.filter((point) => !discarded.includes(point));
+  const outsideWindowIds = new Set(outsideWindow.map((point) => point.clientPointId));
+  const discarded = [...sharingStopped, ...outsideWindow];
+  const kept = current.filter((point) => !sharingStopped.includes(point));
 
   const streamKey = (point: TrackingStreamKey) =>
     JSON.stringify([point.epochId, point.senderDeviceId, point.revisionPrefix]);
@@ -142,7 +146,9 @@ export const uploadGroupTrackingBatch = async ({
   });
   const pointKey = (point: { pointId: bigint | string; streamId: string }) =>
     `${point.streamId}:${point.pointId}`;
-  const history = withStreams.filter((point) => point.role !== "LIVE");
+  const history = withStreams.filter(
+    (point) => point.role !== "LIVE" && !outsideWindowIds.has(point.clientPointId),
+  );
   const alreadyStored =
     history.length === 0
       ? new Set<string>()
@@ -169,7 +175,9 @@ export const uploadGroupTrackingBatch = async ({
     charged.push(...deviceRows.slice(0, granted));
     overAllowance.push(...deviceRows.slice(granted));
   }
-  const allowed = withStreams.filter((point) => !overAllowance.includes(point));
+  const allowed = withStreams.filter(
+    (point) => !overAllowance.includes(point) && !outsideWindowIds.has(point.clientPointId),
+  );
   const insertOrder = [...allowed].sort((first, second) =>
     first.streamId === second.streamId
       ? Number(first.pointId > second.pointId) - Number(first.pointId < second.pointId)
@@ -221,7 +229,10 @@ export const uploadGroupTrackingBatch = async ({
     withStreams
       .filter(
         (point) =>
-          point.role !== "STAY" && (accepted.includes(point) || overAllowance.includes(point)),
+          point.role !== "STAY" &&
+          (accepted.includes(point) ||
+            overAllowance.includes(point) ||
+            outsideWindowIds.has(point.clientPointId)),
       )
       .map((point) => [`${point.senderDeviceId}:${point.epochId}`, point]),
   );

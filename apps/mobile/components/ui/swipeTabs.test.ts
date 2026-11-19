@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { getActiveSceneHeight, getSceneIndexFromOffset, getSwipeTabsIndex } from "./swipeTabs.ts";
+import { getSceneIndexFromOffset, getSwipeTabsIndex } from "./swipeTabs.ts";
 
 describe("swipeTabs", () => {
   test("returns the active tab index when the value exists", () => {
@@ -32,28 +32,5 @@ describe("swipeTabs", () => {
         sceneCount: 3,
       }),
     ).toBe(2);
-  });
-
-  test("uses the active scene height when it has already been measured", () => {
-    expect(
-      getActiveSceneHeight<string>({
-        sceneHeights: {
-          members: 420,
-          history: 260,
-        },
-        value: "history",
-      }),
-    ).toBe(260);
-  });
-
-  test("falls back to the first measured scene height when the active scene is not measured yet", () => {
-    expect(
-      getActiveSceneHeight<string>({
-        sceneHeights: {
-          members: 420,
-        },
-        value: "settings",
-      }),
-    ).toBe(420);
   });
 });

@@ -78,7 +78,10 @@ mock.module("../components/ui/Button.tsx", () => ({
   Button: ({ children, onPress }: { children?: React.ReactNode; onPress?: () => void }) =>
     React.createElement("mock-button", { onPress }, children),
 }));
-mock.module("../components/ui/Input.tsx", () => ({ Input: () => null }));
+mock.module("../components/ui/Input.tsx", () => ({
+  Input: ({ onSubmitEditing }: { onSubmitEditing?: () => void }) =>
+    React.createElement("mock-input", { onSubmitEditing }),
+}));
 mock.module("../components/ui/Text.tsx", () => ({ Text: View }));
 
 const { default: PasswordScreen } = await import("../app/account/password.tsx");
@@ -102,6 +105,7 @@ beforeEach(() => {
   changeError = null;
   linkError = null;
   signOutAfterRefusedSessionLink.mockClear();
+  changePassword.mockClear();
 });
 
 afterEach(async () => {
@@ -122,7 +126,7 @@ test("a failed password change doesn't try to link a sign-in", async () => {
   await changeThePassword();
 
   expect(steps).toEqual(["changePassword"]);
-  expect(alerts).toEqual(["Unable to change password"]);
+  expect(alerts).toEqual(["Couldn’t change password"]);
 });
 
 test("a password lockout shows when to try again", async () => {
@@ -148,4 +152,29 @@ test("a refused link signs this phone out", async () => {
   await changeThePassword();
 
   expect(steps).toEqual(["changePassword", "register:true", "signOut"]);
+});
+
+test("pressing Done twice only changes the password once", async () => {
+  let finish = () => {};
+  changePassword.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = () => resolve({ error: null });
+      }),
+  );
+  root = createRoot();
+  await act(async () => root?.render(<PasswordScreen />));
+  const done = root.container
+    .queryAll((item) => item.type === "mock-input")
+    .find((item) => (item.props as { onSubmitEditing?: () => void }).onSubmitEditing);
+  if (!done) throw new Error("Missing Done key");
+  const pressDone = (done.props as { onSubmitEditing: () => Promise<void> }).onSubmitEditing;
+  await act(async () => {
+    void pressDone();
+    void pressDone();
+  });
+  await act(async () => finish());
+
+  expect(changePassword).toHaveBeenCalledTimes(1);
+  expect(alerts).toEqual(["Password changed"]);
 });

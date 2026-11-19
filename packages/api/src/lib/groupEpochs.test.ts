@@ -11,7 +11,7 @@ const ephemeralA = createDeviceKeyPair().publicKey;
 const ephemeralB = createDeviceKeyPair().publicKey;
 
 describe("group epoch helpers", () => {
-  test("registers a device without persisting a private key", async () => {
+  test("registers a first device as an activated phone and asks its groups to rotate", async () => {
     const create = mock(async ({ data }: { data: Record<string, unknown> }) => ({
       createdAt: new Date("2026-03-26T12:00:00.000Z"),
       id: data.id as string,
@@ -60,7 +60,7 @@ describe("group epoch helpers", () => {
   });
 
   test("names a new device after its model and picks its icon", async () => {
-    const register = async (input: { model?: string; name?: string; icon?: "car" }) => {
+    const register = async (input: { model?: string; name?: string; icon?: "star" }) => {
       const create = mock(async ({ data }: { data: Record<string, unknown> }) => data);
       await upsertUserDevice({
         db: {
@@ -93,9 +93,9 @@ describe("group epoch helpers", () => {
       icon: "tablet",
     });
     expect(await register({ model: "Galaxy Tab S9" })).toMatchObject({ icon: "tablet" });
-    expect(await register({ model: "iPad Air", name: "Car tablet", icon: "car" })).toMatchObject({
+    expect(await register({ model: "iPad Air", name: "Car tablet", icon: "star" })).toMatchObject({
       name: "Car tablet",
-      icon: "car",
+      icon: "star",
     });
   });
 
@@ -468,11 +468,15 @@ describe("group epoch helpers", () => {
       devices.filter((device) => device.revokedAt === where.revokedAt),
     );
     const wrappedKeyCreatedAt = new Date("2026-03-26T12:00:00.000Z");
+    const databaseNow = new Date("2026-03-26T12:30:00.000Z");
 
     await persistGroupEpoch({
       deviceId: "device-a",
       db: {
-        $queryRaw: async () => [],
+        $queryRaw: async (query: unknown) =>
+          Array.isArray(query) && query.join("").includes("clock_timestamp()")
+            ? [{ now: databaseNow }]
+            : [],
         group: { updateMany: async () => ({ count: 1 }) },
         groupEpoch: {
           create,
@@ -568,6 +572,7 @@ describe("group epoch helpers", () => {
     });
     expect(create).toHaveBeenCalledWith({
       data: {
+        createdAt: databaseNow,
         createdByDeviceId: "device-a",
         senderPublicKey: "public-a",
         epochNumber: 2,

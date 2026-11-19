@@ -8,7 +8,7 @@ import {
   useAnnouncements,
 } from "../lib/announcements.ts";
 import { cn } from "../lib/cn.ts";
-import { baseUrl, hasCustomServerUrl } from "../lib/currentServer.ts";
+import { getBaseUrl, hasCustomServerUrl } from "../lib/currentServer.ts";
 import { formatDowntime } from "../lib/formatDowntime.ts";
 import { appVersion } from "../lib/versions.ts";
 import { Icon } from "./ui/Icon.tsx";
@@ -47,7 +47,9 @@ export const AnnouncementBanner = ({ className }: { className?: string }) => {
   const warning = announcement.severity === "warning";
   const expanded = expandedId === announcement.id;
   const server = hasCustomServerUrl()
-    ? baseUrl.replace(/^https?:\/\//, "").replace(/\/.*$/, "")
+    ? getBaseUrl()
+        .replace(/^https?:\/\//, "")
+        .replace(/\/.*$/, "")
     : null;
   return (
     <View
@@ -66,6 +68,7 @@ export const AnnouncementBanner = ({ className }: { className?: string }) => {
       />
       <View className="flex-1 gap-1">
         <Pressable
+          accessibilityRole="button"
           accessibilityState={{ expanded }}
           onPress={() => setExpandedId(expanded ? null : announcement.id)}
         >

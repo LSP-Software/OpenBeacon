@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
+  encodeBase64,
+  encodePlaceGeometryV1,
+  encryptPayloadWithEpochKey,
+  generateGroupEpochKey,
   PAYLOAD_ENCRYPTION_ALGORITHM,
   PLACE_GEOMETRY_KIND,
   TRACKING_POINT_KIND,
@@ -13,9 +17,21 @@ import {
   updatePlaceSchema,
 } from "./places.ts";
 
+const sealedGeometry = (latitude: number, longitude: number) =>
+  encryptPayloadWithEpochKey({
+    epochKey: generateGroupEpochKey(),
+    metadata: {
+      epochId: "epoch-1",
+      groupId: "group-1",
+      kind: PLACE_GEOMETRY_KIND,
+      senderDeviceId: "device-1",
+    },
+    plaintext: encodePlaceGeometryV1({ v: 1, latitude, longitude, radiusMeters: 1000 }),
+  }).ciphertext;
+
 const geometry = {
   algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
-  ciphertext: "ciphertext",
+  ciphertext: sealedGeometry(51.5, -0.12),
   epochId: "epoch-1",
   kind: PLACE_GEOMETRY_KIND,
   nonce: Buffer.alloc(24, 1).toString("base64"),
@@ -90,14 +106,27 @@ describe("place input schemas", () => {
     expect(JSON.stringify(parsed)).not.toContain("51.5");
   });
 
-  test("limit the ciphertext size and require a valid nonce", () => {
+  test("accept base64 ciphertexts up to 512 characters, and require a valid nonce", () => {
     const input = { groupId: "group-1", name: "Home", emoji: "🏠", geometry };
-    expect(
-      createPlaceSchema.safeParse({
-        ...input,
-        geometry: { ...geometry, ciphertext: "a".repeat(513) },
-      }).success,
-    ).toBe(false);
+    for (const ciphertext of [
+      sealedGeometry(-89.123456789012, -179.123456789012),
+      sealedGeometry(0, 0),
+    ]) {
+      expect(
+        createPlaceSchema.safeParse({ ...input, geometry: { ...geometry, ciphertext } }).success,
+      ).toBe(true);
+    }
+    for (const ciphertext of [
+      "a",
+      "a".repeat(450),
+      `${geometry.ciphertext.slice(0, -4)}~~~~`,
+      encodeBase64(new Uint8Array(16)),
+      encodeBase64(new Uint8Array(400)),
+    ]) {
+      expect(
+        createPlaceSchema.safeParse({ ...input, geometry: { ...geometry, ciphertext } }).success,
+      ).toBe(false);
+    }
     expect(
       createPlaceSchema.safeParse({ ...input, geometry: { ...geometry, nonce: "short" } }).success,
     ).toBe(false);
@@ -106,7 +135,12 @@ describe("place input schemas", () => {
   test("updates need the ciphertext the phone last saw", () => {
     const input = { groupId: "group-1", placeId: "place-1", name: "Home", emoji: "🏠", geometry };
     expect(updatePlaceSchema.safeParse(input).success).toBe(false);
-    expect(updatePlaceSchema.safeParse({ ...input, expectedCiphertext: "old" }).success).toBe(true);
+    expect(updatePlaceSchema.safeParse({ ...input, expectedCiphertext: "old" }).success).toBe(
+      false,
+    );
+    expect(
+      updatePlaceSchema.safeParse({ ...input, expectedCiphertext: geometry.ciphertext }).success,
+    ).toBe(true);
   });
 
   test("re-encrypting takes a batch of distinct places", () => {
@@ -114,7 +148,7 @@ describe("place input schemas", () => {
       placeId: "place-1",
       name: "Home",
       emoji: "🏠",
-      expectedCiphertext: "old",
+      expectedCiphertext: geometry.ciphertext,
       geometry,
     };
     expect(reEncryptPlacesSchema.safeParse({ groupId: "group-1", places: [place] }).success).toBe(

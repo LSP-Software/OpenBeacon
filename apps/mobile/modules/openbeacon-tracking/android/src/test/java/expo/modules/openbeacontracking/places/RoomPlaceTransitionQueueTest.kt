@@ -30,7 +30,7 @@ class RoomPlaceTransitionQueueTest {
   }
 
   @Test
-  fun `keeps each account's transitions separate and ignores repeated client ids`() {
+  fun keepsEachAccountsTransitionsSeparateAndIgnoresRepeatedClientIds() {
     queue.insert(listOf(row("a", owner = "owner-a"), row("b", owner = "owner-b"), row("a", owner = "owner-a")))
     assertEquals(listOf("a"), queue.list("owner-a", 10).map { it.clientId })
     assertTrue(queue.hasAny("owner-b"))
@@ -42,7 +42,7 @@ class RoomPlaceTransitionQueueTest {
   }
 
   @Test
-  fun `removing every place in a group clears its transitions`() {
+  fun removingEveryPlaceInAGroupClearsItsTransitions() {
     queue.insert(listOf(row("a", placeId = "home"), row("b", placeId = "gym"), row("c", groupId = "group-2")))
     queue.deleteByGroupExcept("group-1", listOf("gym"))
     assertEquals(listOf("b", "c"), queue.list("owner-a", 10).map { it.clientId })
@@ -53,7 +53,7 @@ class RoomPlaceTransitionQueueTest {
   }
 
   @Test
-  fun `keeps only the newest transitions when the queue is full`() {
+  fun keepsOnlyTheNewestTransitionsWhenTheQueueIsFull() {
     queue.insert((1..PlaceTransitionQueueLimits.MAX_ROWS + 5).map { row("id-$it") })
     val kept = queue.list("owner-a", PlaceTransitionQueueLimits.MAX_ROWS + 5)
     assertEquals(PlaceTransitionQueueLimits.MAX_ROWS, kept.size)

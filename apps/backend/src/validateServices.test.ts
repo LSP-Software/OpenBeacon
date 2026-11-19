@@ -11,6 +11,10 @@ const findMissingPermissions = mock(async () => ({
   keyPattern: "openbeacon:*",
 }));
 let checks: Record<string, () => Promise<unknown>> = {};
+let optionalChecks: Record<
+  string,
+  { check: () => Promise<unknown>; isUnreachable: (error: Error) => boolean }
+> = {};
 
 mock.module("./db.ts", () => ({ db: { $queryRaw: query } }));
 mock.module("./cache.ts", () => ({ cache: { findMissingPermissions } }));
@@ -18,11 +22,22 @@ mock.module("./env.ts", () => ({ env: { REDIS_URL: "redis://openbeacon:secret@re
 mock.module("@openbeacon/cache", () => ({ pingRedis: ping }));
 mock.module("@openbeacon/api/checkStorage.ts", () => ({ checkImageStorage: s3 }));
 mock.module("@openbeacon/api/mapStorage.ts", () => ({ checkMapStorage: mapStorage }));
-mock.module("@openbeacon/email", () => ({ checkEmail: email, emailEnabled: true }));
+mock.module("@openbeacon/email", () => ({
+  checkEmail: email,
+  emailEnabled: true,
+  emailUnreachableCode: "EMAIL_UNREACHABLE",
+}));
 mock.module("@openbeacon/auth", () => ({ fcm: { getAccessToken } }));
-mock.module("./checkServices.ts", () => ({
+const shared = await import("@openbeacon/shared");
+mock.module("@openbeacon/shared", () => ({
+  ...shared,
   checkServices: async (services: typeof checks) => {
     checks = services;
+  },
+}));
+mock.module("./checkOptionalServices.ts", () => ({
+  checkOptionalServices: async (services: typeof optionalChecks) => {
+    optionalChecks = services;
   },
 }));
 
@@ -30,20 +45,14 @@ await import("./validateServices.ts");
 afterAll(() => mock.restore());
 
 test("wires each configured service into startup validation", async () => {
-  expect(Object.keys(checks)).toEqual([
-    "PostgreSQL",
-    "Redis",
-    "Image storage",
-    "Map storage",
-    "Email",
-    "Push (FCM)",
-  ]);
+  expect(Object.keys(checks)).toEqual(["PostgreSQL", "Redis", "Image storage", "Map storage"]);
+  expect(Object.keys(optionalChecks)).toEqual(["Email", "Push (FCM)"]);
   await Promise.all([
     checks["PostgreSQL"]?.(),
     checks["Image storage"]?.(),
     checks["Map storage"]?.(),
-    checks["Email"]?.(),
-    checks["Push (FCM)"]?.(),
+    optionalChecks["Email"]?.check(),
+    optionalChecks["Push (FCM)"]?.check(),
   ]);
   expect(query).toHaveBeenCalledTimes(1);
   expect(query.mock.calls[0]?.[0]).toEqual(["SELECT 1"]);
@@ -51,6 +60,18 @@ test("wires each configured service into startup validation", async () => {
   expect(mapStorage).toHaveBeenCalledTimes(1);
   expect(email).toHaveBeenCalledTimes(1);
   expect(getAccessToken).toHaveBeenCalledTimes(1);
+});
+
+test("an email provider or Google outage is told apart from a configuration error", () => {
+  const failure = (code: string) => Object.assign(new Error("failed"), { code });
+  const emailUnreachable = optionalChecks["Email"]?.isUnreachable;
+  const pushUnreachable = optionalChecks["Push (FCM)"]?.isUnreachable;
+  expect(emailUnreachable?.(failure("EMAIL_UNREACHABLE"))).toBe(true);
+  expect(emailUnreachable?.(new Error("Resend rejected the API key: invalid_api_key"))).toBe(false);
+  for (const code of ["FCM_AUTH_UNREACHABLE", "FCM_AUTH_503", "FCM_AUTH_429"])
+    expect(pushUnreachable?.(failure(code))).toBe(true);
+  for (const code of ["FCM_AUTH_400", "FCM_AUTH_401", "FCM_AUTH_403", "ERR_JOSE_GENERIC"])
+    expect(pushUnreachable?.(failure(code))).toBe(false);
 });
 
 test("the Redis check fails and says how to grant the commands the Redis user can't run", async () => {

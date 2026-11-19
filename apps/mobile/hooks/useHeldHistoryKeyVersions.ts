@@ -9,6 +9,7 @@ export const useHeldHistoryKeyVersions = (
   useQuery({
     queryKey: ["historyKeyHeld", userId, currentHistoryKey],
     enabled: Boolean(userId && currentHistoryKey),
+    networkMode: "always",
     queryFn: async () => {
       if (!userId || !currentHistoryKey) return [];
       const versions = Array.from({ length: currentHistoryKey.version }, (_, index) => index + 1);

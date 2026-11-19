@@ -32,6 +32,7 @@ const fit = (markers: readonly LiveMapMarker[]) => {
     camera: { easeTo: setCamera, fitBounds } as never,
     markers,
     padding,
+    reduceMotion: false,
   });
   return { animationDuration, fitBounds, setCamera };
 };
@@ -45,12 +46,14 @@ describe("fitLiveMapMarkers", () => {
       camera: null,
       markers: [marker({ latitude: 51.5, longitude: -0.12, userId: "alice" })],
       padding,
+      reduceMotion: false,
     });
 
     fitLiveMapMarkers({
       camera: { easeTo: setCamera, fitBounds } as never,
       markers: [],
       padding,
+      reduceMotion: false,
     });
 
     expect(setCamera).not.toHaveBeenCalled();

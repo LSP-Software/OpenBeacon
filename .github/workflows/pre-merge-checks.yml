@@ -131,6 +131,8 @@ jobs:
           psql -h localhost -U openbeacon -d openbeacon_test -c 'CREATE DATABASE openbeacon_shadow'
           bunx prisma migrate diff --config packages/database/prisma.config.ts --from-migrations packages/database/prisma/migrations --to-schema packages/database/prisma/schema.prisma --exit-code
       - name: Run every integration test file against PostgreSQL and Redis
+        env:
+          REDIS_RESTART_CONTAINER: ${{ job.services.redis.id }}
         run: bun run test:integration
 
   docker-build:

@@ -7,7 +7,7 @@ export const ReturnToHomeHeader = () => {
   return (
     <Pressable
       className="-ml-2.5 size-11 items-center justify-center rounded-full active:bg-secondary"
-      onPress={() => router.push("/")}
+      onPress={() => router.dismissTo("/")}
       accessibilityRole="button"
       accessibilityLabel="Go back"
     >

@@ -8,6 +8,8 @@ import { resolveEpochKey } from "./epochKeys.ts";
 import { errorReason } from "./errorReason.ts";
 import { rotateGroupEpochIfRequired } from "./groupEncryption.ts";
 import { decryptPlaceGeometry, encryptPlaceGeometry, type GroupPlace } from "./places.ts";
+import { userMessage } from "./userMessage.ts";
+import { thisDeviceNoun } from "./thisDeviceNoun.ts";
 
 export const loadGroupPlaces = async (groupId: string): Promise<GroupPlace[]> => {
   const [list, device] = await Promise.all([
@@ -58,7 +60,8 @@ export const savePlace = async ({
     const latest = await trpcClient.groupEpoch.getLatest.query({ groupId });
     if (!latest) throw new Error("This group isn’t ready yet. Try again in a moment.");
     const epochKey = await resolveEpochKey({ device, epochId: latest.epochId, groupId });
-    if (!epochKey) throw new Error("This phone can’t use this group’s current key yet.");
+    if (!epochKey)
+      throw new Error(`This ${thisDeviceNoun()} can’t use this group’s current key yet.`);
     const encrypted = encryptPlaceGeometry({
       epochId: latest.epochId,
       epochKey,
@@ -115,7 +118,7 @@ export const confirmDeletePlace = ({
           const result = await tryCatch(trpcClient.groupPlaces.delete.mutate({ groupId, placeId }));
           if (result.error && errorReason(result.error) !== "PLACE_GONE") {
             onDeleting?.(false);
-            Alert.alert("Unable to delete place", result.error.message);
+            Alert.alert("Couldn’t delete place", userMessage(result.error));
             return;
           }
           onDeleted();

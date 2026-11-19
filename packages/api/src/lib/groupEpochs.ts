@@ -1,5 +1,5 @@
 import type { SecurityAlerts } from "@openbeacon/auth";
-import { Prisma, type PrismaClient } from "@openbeacon/database";
+import { Prisma, type PrismaClient, readDatabaseTime } from "@openbeacon/database";
 import {
   DEVICE_KEY_ALGORITHM,
   decodeBase64,
@@ -537,6 +537,7 @@ export const persistGroupEpoch = async ({
 
   await db.groupEpoch.create({
     data: {
+      createdAt: await readDatabaseTime(db),
       createdByDeviceId: epoch.createdByDeviceId,
       senderPublicKey: actingDevice.publicKey,
       epochNumber: epoch.epochNumber,
@@ -564,7 +565,7 @@ export const persistGroupEpoch = async ({
   });
 };
 
-export const defaultDeviceIcon = (model: string | undefined) =>
+const defaultDeviceIcon = (model: string | undefined) =>
   model && /iPad|Tab/.test(model) ? "tablet" : "phone";
 
 export const upsertUserDevice = async ({

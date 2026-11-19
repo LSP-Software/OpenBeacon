@@ -15,13 +15,14 @@ import {
   markApiCompatibilityNotified,
   refreshApiCompatibilityInBackground,
 } from "./apiCompatibility.ts";
-import { baseUrl, hasCustomServerUrl } from "./currentServer.ts";
+import { getBaseUrl, hasCustomServerUrl } from "./currentServer.ts";
 import { createHistoryKey } from "./createHistoryKey.ts";
 import { getCurrentHistoryKeyState } from "./currentHistoryKey.ts";
 import { isThisDeviceActive } from "./deviceActivation.ts";
 import { getStoredHistoryKey } from "./historyKeys.ts";
 import { secretOwner } from "./secretStorage.ts";
 import { checkSessionAfterUnauthorized } from "./sessionCheck.ts";
+import { refreshSessionIfDue } from "./sessionRefresh.ts";
 import {
   cancelDeviceKeyRegistrations,
   ensureDeviceKeyRegistration,
@@ -54,14 +55,16 @@ import {
   isTrackingKeyCheckDue,
   markTrackingKeysStale,
   noteTrackingKeyState,
+  readCursorGroup,
   recordTrackingKeyCheck,
+  rememberCursorGroup,
 } from "./trackingKeyCheck.ts";
 import { loadTrackingModule } from "./trackingModule.ts";
 import { recordTrackingUpload } from "./trackingUploadTime.ts";
 import { notifyGroupEpochChange } from "./trackingEvents.ts";
 import {
   hasLocallyPausedSharing,
-  hasPendingSharingPause,
+  hasPendingSharingChange,
   syncLocationSharing,
 } from "./locationSharing.ts";
 
@@ -84,10 +87,10 @@ let keyAccessChangePending = false;
 const observedGroupEpochs = new Map<string, string>();
 const lastCleanBackfills = new Map<string, { at: number; missingVersion: number | null }>();
 
-const getOwner = (userId: string) => JSON.stringify([baseUrl, userId]);
+const getOwner = (userId: string) => JSON.stringify([getBaseUrl(), userId]);
 
 const getPushScope = (device: { userId: string; deviceId: string }) =>
-  JSON.stringify([baseUrl, device.userId, device.deviceId]);
+  JSON.stringify([getBaseUrl(), device.userId, device.deviceId]);
 
 const getQueueOwner = async (signal?: AbortSignal) => {
   const device = await getRegisteredDeviceKey();
@@ -100,7 +103,7 @@ const getQueueOwner = async (signal?: AbortSignal) => {
 };
 
 const getKeyCheckScope = (userId: string, startCapture: boolean) =>
-  JSON.stringify([baseUrl, userId, startCapture]);
+  JSON.stringify([getBaseUrl(), userId, startCapture]);
 
 const hasFreshKeyCheck = async (startCapture: boolean) => {
   const device = await getRegisteredDeviceKey();
@@ -187,6 +190,17 @@ const recordCleanBackfill = ({
   }
 };
 
+const isBlockedAsTooOld = () => {
+  const problem = getApiCompatibility()?.problem;
+  return problem === "appTooOld" || problem === "outOfSync";
+};
+
+export const parkCaptureWhileBlocked = async () => {
+  if (!isBlockedAsTooOld()) return;
+  const trackingModule = await loadTrackingModule();
+  if (trackingModule?.isCaptureRunning()) await trackingModule.stopCapture();
+};
+
 const applyCaptureState = async ({
   hasKeys,
   isCurrent,
@@ -198,7 +212,7 @@ const applyCaptureState = async ({
   onlyIfRunning: boolean;
   trackingModule: NonNullable<Awaited<ReturnType<typeof loadTrackingModule>>>;
 }) => {
-  if (!hasKeys) {
+  if (!hasKeys || isBlockedAsTooOld()) {
     if (trackingModule.isCaptureRunning()) await trackingModule.stopCapture();
     return;
   }
@@ -256,6 +270,7 @@ const reconcileTrackingKeysInternal = async ({
     ]);
     if (!isCurrent()) return false;
     if (getErrorCode(device.error) === "UNAUTHORIZED") throw device.error;
+    if (device.data) rememberCursorGroup(getOwner(device.data.userId), groups);
     if (device.data && (await isPending())) return false;
     if (!isCurrent()) return false;
     if (device.data) {
@@ -299,7 +314,7 @@ const reconcileTrackingKeysInternal = async ({
     const registered = await getRegisteredDeviceKey();
     if (
       registered &&
-      (hasPendingSharingPause(registered.userId) || hasLocallyPausedSharing(registered.userId))
+      (hasPendingSharingChange(registered.userId) || hasLocallyPausedSharing(registered.userId))
     ) {
       await syncSharingPreference();
       if (!isCurrent()) return false;
@@ -314,6 +329,18 @@ const reconcileTrackingKeysInternal = async ({
   }
   if (!isCurrent()) return false;
 
+  const cachedDevice = await getRegisteredDeviceKey();
+  if (
+    cachedDevice &&
+    trackingModule.listProvisionedEpochKeys().length > 0 &&
+    !hasPendingSharingChange(cachedDevice.userId) &&
+    !hasLocallyPausedSharing(cachedDevice.userId) &&
+    trackingModule.isQueueOwner(getOwner(cachedDevice.userId), cachedDevice.deviceId)
+  ) {
+    await applyCaptureState({ hasKeys: true, isCurrent, onlyIfRunning, trackingModule });
+    if (!isCurrent()) return false;
+  }
+
   const [deviceKeyContext, groups] = await Promise.all([
     ensureDeviceKeyRegistration({ checkOwner: force }),
     trpcClient.groupMembership.list.query(),
@@ -325,6 +352,7 @@ const reconcileTrackingKeysInternal = async ({
   }
   if (!isCurrent()) return false;
   const owner = getOwner(deviceKeyContext.userId);
+  rememberCursorGroup(owner, groups);
   trackingModule.setQueueOwner(owner, deviceKeyContext.deviceId);
   await syncSharingPreference();
   if (!isCurrent()) return false;
@@ -998,7 +1026,7 @@ const flushPendingTrackingPointsInternal = async (
 
   if (signal.aborted) return;
   const device = await getRegisteredDeviceKey();
-  if (device && hasPendingSharingPause(device.userId)) return;
+  if (device && hasPendingSharingChange(device.userId)) return;
   const owner = await getQueueOwner(signal);
   const round = await startPlaceRound(trackingModule, owner, device);
   let afterId = 0;
@@ -1097,6 +1125,7 @@ export const flushPendingTrackingPoints = (force = false): Promise<void> => {
 
 export const flushForegroundTrackingPoints = async (force = false) => {
   if (!force && (await loadTrackingModule())?.isCaptureRunning()) return;
+  await refreshSessionIfDue();
   await flushPendingTrackingPoints(force);
 };
 
@@ -1111,13 +1140,17 @@ const showApiCompatibilityNotice = async () => {
   if (shown) markApiCompatibilityNotified();
 };
 
-const pollPlaceUpdates = () =>
+const pollPlaceUpdates = ({ onlyWithoutKeys = false }: { onlyWithoutKeys?: boolean } = {}) =>
   inPlaceRound(async () => {
     if (trackingPaused) return;
     const trackingModule = await loadTrackingModule();
     const device = await getRegisteredDeviceKey();
     if (!trackingModule || !device) return;
-    const groupId = trackingModule.listProvisionedEpochKeys()[0]?.groupId;
+    const keyGroupId = trackingModule.listProvisionedEpochKeys()[0]?.groupId;
+    const groupId =
+      keyGroupId && onlyWithoutKeys
+        ? null
+        : (keyGroupId ?? readCursorGroup(getOwner(device.userId)));
     const accountSync = startAccountSync(trackingModule, device);
     const upload = groupId
       ? tryCatch(
@@ -1146,23 +1179,21 @@ const pollPlaceUpdates = () =>
     });
   });
 
-export const syncAccountNotices = () =>
-  inPlaceRound(async () => {
-    if (trackingPaused || getApiCompatibility()) return;
-    const trackingModule = await loadTrackingModule();
-    const device = await getRegisteredDeviceKey();
-    if (!trackingModule || !device) return;
-    await settleAccountSync(trackingModule, startAccountSync(trackingModule, device));
-  });
+export const syncAccountNotices = async () => {
+  if (getApiCompatibility()) return;
+  await pollPlaceUpdates({ onlyWithoutKeys: true });
+};
 
 export type UploadReason = "upload" | "sharing" | "parked" | "push";
 
 const syncBackgroundTrackingInternal = async (reason: UploadReason) => {
+  await refreshSessionIfDue();
   if (getApiCompatibility()) {
     await refreshApiCompatibilityInBackground();
     if (!getApiCompatibility()) await dismissNotice("compatibility");
   }
   if (getApiCompatibility()) {
+    await parkCaptureWhileBlocked();
     await showApiCompatibilityNotice();
     return;
   }
@@ -1186,6 +1217,7 @@ const syncBackgroundTrackingInternal = async (reason: UploadReason) => {
   uploadRejectedKeys = false;
   const result = await tryCatch(flushPendingTrackingPoints());
   if (getApiCompatibility()) {
+    await parkCaptureWhileBlocked();
     await showApiCompatibilityNotice();
     return;
   }
@@ -1339,7 +1371,7 @@ export const getUnassignedTrackingPoints = async () => {
   );
   const deviceIds = counts.filter(({ count }) => count > 0).map(({ deviceId }) => deviceId);
   const count = counts.reduce((total, item) => total + item.count, 0);
-  return count > 0 ? { count, deviceIds, server: baseUrl, userId } : null;
+  return count > 0 ? { count, deviceIds, server: getBaseUrl(), userId } : null;
 };
 
 export const recoverUnassignedTrackingPoints = async ({

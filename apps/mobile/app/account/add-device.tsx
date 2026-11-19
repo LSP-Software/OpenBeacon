@@ -12,6 +12,7 @@ import { trpc, trpcClient } from "../../lib/api.ts";
 import { approveDeviceLink, lookUpDeviceLink } from "../../lib/deviceLink.ts";
 import { errorReason } from "../../lib/errorReason.ts";
 import { withOwnScreen } from "../../lib/ownScreen.ts";
+import { userMessage } from "../../lib/userMessage.ts";
 
 const AddDeviceScreen = () => {
   const queryClient = useQueryClient();
@@ -31,7 +32,7 @@ const AddDeviceScreen = () => {
     setStep("checking");
     const result = await tryCatch(lookUpDeviceLink(code));
     if (result.error) {
-      setProblem(result.error.message);
+      setProblem(userMessage(result.error));
       setStep("scan");
       return;
     }
@@ -57,12 +58,12 @@ const AddDeviceScreen = () => {
     const result = await tryCatch(approveDeviceLink(link));
     if (result.error && codeNoLongerValid(result.error)) {
       scanAgain();
-      setProblem(result.error.message);
+      setProblem(userMessage(result.error));
       return;
     }
     if (result.error) {
       setStep("confirm");
-      Alert.alert(`Unable to add ${link.device.name}`, result.error.message);
+      Alert.alert(`Couldn’t add ${link.device.name}`, userMessage(result.error));
       return;
     }
     await refreshDevices();
@@ -75,12 +76,12 @@ const AddDeviceScreen = () => {
     const result = await tryCatch(trpcClient.deviceLink.decline.mutate({ linkId: link.linkId }));
     if (result.error && codeNoLongerValid(result.error)) {
       scanAgain();
-      setProblem(result.error.message);
+      setProblem(userMessage(result.error));
       return;
     }
     if (result.error) {
       setStep("confirm");
-      Alert.alert(`Unable to remove ${link.device.name}`, result.error.message);
+      Alert.alert(`Couldn’t remove ${link.device.name}`, userMessage(result.error));
       return;
     }
     await refreshDevices();
@@ -102,8 +103,8 @@ const AddDeviceScreen = () => {
         {(step === "scan" || step === "checking") && (
           <View className="gap-4">
             <Text className="text-secondary text-base">
-              On the new phone or tablet, sign in and choose “Yes, link with your other device”.
-              Then scan the code it shows.
+              On the new phone or tablet, sign in and choose “Link with your other device”. Then
+              scan the code it shows.
             </Text>
             {problem && <Text className="text-destructive-text text-base">{problem}</Text>}
             {permission?.granted ? (
@@ -125,7 +126,7 @@ const AddDeviceScreen = () => {
                   scan the code.
                 </Text>
                 <Button onPress={() => void tryCatch(Linking.openSettings())}>
-                  <Text>Open Settings</Text>
+                  <Text>Open settings</Text>
                 </Button>
               </View>
             ) : (

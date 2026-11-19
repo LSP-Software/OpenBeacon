@@ -10,7 +10,7 @@ const slotStatusSchema = z
   })
   .nullable();
 
-export const updateRunSchema = z.object({
+const updateRunSchema = z.object({
   running: z.boolean(),
   startedAt: z.string().nullable(),
   nextCheckAt: z.string().nullable(),
@@ -23,7 +23,7 @@ export const updateRunSchema = z.object({
     .nullable(),
 });
 
-export const mapStatusSchema = z.object({
+const mapStatusSchema = z.object({
   bucket: z.string(),
   current: z.enum(["a", "b"]).nullable(),
   slots: z.object({ a: slotStatusSchema, b: slotStatusSchema }),

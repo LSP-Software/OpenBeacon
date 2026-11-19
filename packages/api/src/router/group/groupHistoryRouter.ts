@@ -1,3 +1,4 @@
+import { readDatabaseTime } from "@openbeacon/database";
 import { groupHistorySchema } from "@openbeacon/schemas";
 import type { TRPCRouterRecord } from "@trpc/server";
 import { readGroupHistory, readGroupHistoryLatest } from "../../lib/groupHistory.ts";
@@ -15,12 +16,16 @@ export const groupHistoryRouter = {
         db: ctx.db,
         groupId: input.groupId,
         memberSince: ctx.groupMember.createdAt,
-        now: new Date(),
+        now: await readDatabaseTime(ctx.db),
       }),
     ),
   latest: protectedProcedure
     .meta({ rateLimit: { limit: 120, windowMs: 60_000 } })
     .query(async ({ ctx }) =>
-      readGroupHistoryLatest({ db: ctx.db, now: new Date(), userId: ctx.session.user.id }),
+      readGroupHistoryLatest({
+        db: ctx.db,
+        now: await readDatabaseTime(ctx.db),
+        userId: ctx.session.user.id,
+      }),
     ),
 } satisfies TRPCRouterRecord;

@@ -1,52 +1,41 @@
-import {
-  beginAccountDeletion,
-  deleteAccountRecords,
-  lockDeletableGroups,
-} from "@openbeacon/api/account-deletion.ts";
-import { Prisma } from "@openbeacon/database";
+import { deleteAccountNow } from "@openbeacon/api/account-deletion.ts";
 import { env } from "@openbeacon/api/env.ts";
 import { tryCatch } from "@openbeacon/shared";
 import { closeServices, services } from "./services.ts";
 
-const email = process.argv[2]?.trim();
+const email = process.argv[2]?.trim().toLowerCase();
 if (!email || process.argv.length !== 3) {
   console.error("Usage: bun run delete-account <email>");
   await closeServices();
   process.exit(1);
 }
 
-let started = false;
 const result = await tryCatch(
   (async () => {
     const user = await services.db.user.findUnique({ where: { email }, select: { id: true } });
     if (!user) throw new Error("Account not found.");
-    const imageUrlPrefix = `${env.IMAGES_S3_CDN_URL}/${env.IMAGES_S3_BUCKET_NAME}`;
-    await services.db.$transaction(async (tx) => {
-      await tx.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id = ${user.id} FOR NO KEY UPDATE`);
-      await lockDeletableGroups(tx, { userId: user.id, imageUrlPrefix });
-      await beginAccountDeletion(tx, { userId: user.id, delayHours: 0 });
-    });
-    started = true;
-    const deleted = await deleteAccountRecords({
+    const deletion = await deleteAccountNow({
       db: services.db,
       userId: user.id,
-      mode: "scheduled",
-      imageUrlPrefix,
-      securityAlerts: null,
+      imageUrlPrefix: `${env.IMAGES_S3_CDN_URL}/${env.IMAGES_S3_BUCKET_NAME}`,
     });
+    if (deletion.error) return deletion.error.message;
     if (
-      !deleted &&
+      !deletion.data &&
       (await services.db.user.findUnique({ where: { id: user.id }, select: { id: true } }))
     )
-      throw new Error("Account deletion is waiting for the scheduled job runner.");
+      return "Account deletion is waiting for the scheduled job runner.";
+    return null;
   })(),
 );
 await closeServices();
 if (result.error) {
+  console.error(`Account deletion failed: ${result.error.message}`);
+  process.exit(1);
+}
+if (result.data !== null) {
   console.error(
-    started
-      ? `Account deletion started but didn't finish: ${result.error.message} The scheduled job runner will finish it.`
-      : `Account deletion failed: ${result.error.message}`,
+    `Account deletion started but didn't finish: ${result.data} The scheduled job runner will finish it.`,
   );
   process.exit(1);
 }

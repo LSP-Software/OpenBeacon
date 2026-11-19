@@ -5,9 +5,10 @@ import { ChoiceList } from "../../components/ui/ChoiceList.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import type { ThemePreference } from "../../lib/themePreferences.ts";
 import { useTheme } from "../../providers/ThemeProvider.tsx";
+import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 
 const themeOptions: { value: ThemePreference; title: string; icon: typeof SunIcon }[] = [
-  { value: "system", title: "Match phone", icon: SmartphoneIcon },
+  { value: "system", title: `Match ${thisDeviceNoun()}`, icon: SmartphoneIcon },
   { value: "light", title: "Light", icon: SunIcon },
   { value: "dark", title: "Dark", icon: MoonIcon },
 ];
@@ -34,7 +35,7 @@ const ThemeScreen = () => {
             onChange={setAppThemePreference}
           />
           <Text className="text-tertiary px-1 text-sm">
-            Match phone follows your phone’s light or dark setting.
+            Match {thisDeviceNoun()} follows your {thisDeviceNoun()}’s light or dark setting.
           </Text>
         </View>
 

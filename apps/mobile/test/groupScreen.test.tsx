@@ -128,10 +128,10 @@ mock.module("../components/ui/SwipeTabs.tsx", () => ({
 mock.module("../components/ui/Text.tsx", () => ({
   Text: ({ children }: { children: React.ReactNode }) => children,
 }));
-mock.module("../app/(tabs)/groups/[groupId]/MembersTab.tsx", () => ({ default: () => null }));
+mock.module("../components/groups/MembersTab.tsx", () => ({ default: () => null }));
 mock.module("../hooks/useMemberNames.ts", () => ({ useMemberNames: () => () => null }));
 mock.module("../components/ui/Icon.tsx", () => ({ Icon: () => null }));
-mock.module("../app/(tabs)/groups/[groupId]/PlacesTab.tsx", () => ({ default: () => null }));
+mock.module("../components/groups/PlacesTab.tsx", () => ({ default: () => null }));
 mock.module("../hooks/useUnseenGroupHistory.ts", () => ({
   useUnseenGroupHistory: () => ({
     latest: [{ groupId: routeGroupId, latestAt }],
@@ -142,10 +142,10 @@ mock.module("../hooks/useUnseenGroupHistory.ts", () => ({
 mock.module("../hooks/useLiveTrackingPositions.ts", () => ({
   useLiveTrackingPositions: () => ({ positions: [], status: { undecryptable: [] } }),
 }));
-mock.module("../app/(tabs)/groups/[groupId]/SettingsTab.tsx", () => ({ default: () => null }));
+mock.module("../components/groups/SettingsTab.tsx", () => ({ default: () => null }));
 
 const { default: GroupScreen } = await import("../app/(tabs)/groups/[groupId]/index.tsx");
-const { default: HistoryTab } = await import("../app/(tabs)/groups/[groupId]/HistoryTab.tsx");
+const { default: HistoryTab } = await import("../components/groups/HistoryTab.tsx");
 
 const family = (members: { role: string; userId: string }[], id = "group-1") => ({
   id,
@@ -323,13 +323,13 @@ test("shows loading rather than not found while checking a group missing from th
   });
   const rendered = JSON.stringify(root.container.toJSON());
   expect(rendered).toContain("Loading");
-  expect(rendered).not.toContain("Group not found");
+  expect(rendered).not.toContain("We couldn’t load this group.");
   await act(async () => {
     root.unmount();
   });
 });
 
-test("shows not found when the group can't be checked, for example offline", async () => {
+test("says the group couldn't be loaded when it can't be checked, for example offline", async () => {
   fetchGroups = async () => {
     throw new Error("Network request failed");
   };
@@ -338,7 +338,7 @@ test("shows not found when the group can't be checked, for example offline", asy
   await act(async () => {
     root.render(<GroupScreen />);
   });
-  expect(JSON.stringify(root.container.toJSON())).toContain("Group not found");
+  expect(JSON.stringify(root.container.toJSON())).toContain("We couldn’t load this group.");
   expect(replace).not.toHaveBeenCalled();
   await act(async () => {
     root.unmount();
@@ -431,13 +431,15 @@ test("keeps history unread after a failed load, then marks only displayed activi
   await act(async () => root.unmount());
 
   const hidden = createRoot();
-  await act(async () => hidden.render(<HistoryTab groupId="group-2" active={false} />));
+  await act(async () =>
+    hidden.render(<HistoryTab groupId="group-2" active={false} latestAt={null} />),
+  );
   expect(storedValues.get("groupHistory.seenAt.user-1.group-2")).toBeUndefined();
   isFocused = false;
-  await act(async () => hidden.render(<HistoryTab groupId="group-2" active />));
+  await act(async () => hidden.render(<HistoryTab groupId="group-2" active latestAt={null} />));
   expect(storedValues.get("groupHistory.seenAt.user-1.group-2")).toBeUndefined();
   isFocused = true;
-  await act(async () => hidden.render(<HistoryTab groupId="group-2" active />));
+  await act(async () => hidden.render(<HistoryTab groupId="group-2" active latestAt={null} />));
   expect(storedValues.get("groupHistory.seenAt.user-1.group-2")).toBe(displayedAt.getTime());
   await act(async () => hidden.unmount());
 });

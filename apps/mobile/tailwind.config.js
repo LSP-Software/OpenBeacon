@@ -20,7 +20,6 @@ module.exports = {
           soft: "hsl(var(--success-soft) / <alpha-value>)",
         },
         input: "hsl(var(--input))",
-        ring: "hsl(var(--ring))",
         brand: "hsl(var(--brand) / <alpha-value>)",
         foreground: "hsl(var(--foreground) / <alpha-value>)",
         background: "hsl(var(--background) / <alpha-value>)",
@@ -44,10 +43,7 @@ module.exports = {
           text: "hsl(var(--destructive-text) / <alpha-value>)",
           soft: "hsl(var(--destructive-soft) / <alpha-value>)",
         },
-        muted: {
-          DEFAULT: "hsl(var(--muted) / <alpha-value>)",
-          foreground: "hsl(var(--muted-foreground))",
-        },
+        muted: "hsl(var(--muted) / <alpha-value>)",
         accent: {
           DEFAULT: "hsl(var(--accent))",
           foreground: "hsl(var(--accent-foreground))",
@@ -60,7 +56,6 @@ module.exports = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
-        "on-primary": "hsl(var(--on-primary) / <alpha-value>)", // todo: remove this and replace it in all compoonents its used in
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -79,24 +74,10 @@ module.exports = {
         border: "hsl(var(--border) / <alpha-value>)",
         "border-strong": "hsl(var(--border-strong) / <alpha-value>)",
       },
-      keyframes: {
-        "accordion-down": {
-          from: { height: "0" },
-          to: { height: "var(--radix-accordion-content-height)" },
-        },
-        "accordion-up": {
-          from: { height: "var(--radix-accordion-content-height)" },
-          to: { height: "0" },
-        },
-      },
-      animation: {
-        "accordion-down": "accordion-down 0.2s ease-out",
-        "accordion-up": "accordion-up 0.2s ease-out",
-      },
     },
   },
   future: {
     hoverOnlyWhenSupported: true,
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [],
 };

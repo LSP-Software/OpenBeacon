@@ -10,11 +10,13 @@ import {
 import { createTRPCRouter } from "../../trpcRuntime.ts";
 import { groupInvitesRouter } from "./groupInvitesRouter.ts";
 import { groupLifecycleRouter } from "./groupLifecycleRouter.ts";
+import { groupSettingsRouter } from "./groupSettingsRouter.ts";
 import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
 
 const router = createTRPCRouter({
   groupInvites: groupInvitesRouter,
   groupLifecycle: groupLifecycleRouter,
+  groupSettings: groupSettingsRouter,
 });
 const cache = createIntegrationTestCache(() => 0);
 const prefix = `shared-${crypto.randomUUID()}`;
@@ -26,11 +28,11 @@ const caller = (userId: string) =>
     withDeviceActive({
       cache,
       db: prisma,
-      clientIp: "127.0.0.1",
       deviceId: `${userId}-device`,
       session: { user: { id: userId }, session: { id: `${userId}-session` } },
     }) as Parameters<typeof router.createCaller>[0],
   );
+const notMember = { code: "FORBIDDEN", message: "You are not a member of this group" };
 const bundle = (result: ReturnType<typeof createInitialGroupEpoch>) => ({
   createdByDeviceId: result.epoch.createdByDeviceId,
   epochId: result.epoch.epochId,
@@ -91,12 +93,51 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       });
     });
     afterAll(async () => {
-      await prisma.group.deleteMany({ where: { id: groupId } });
+      await prisma.group.deleteMany({ where: { id: { in: [groupId, `${prefix}-roles`] } } });
       await prisma.user.deleteMany({ where: { id: { in: users } } });
       await prisma.$disconnect();
     });
-    test("only admins can create; expiry and code hashing are enforced", async () => {
-      await expect(caller(users[1]!).groupInvites.createShared({ groupId })).rejects.toThrow();
+    test("a plain member can't create or check shared invites or change the group picture", async () => {
+      const rolesGroupId = `${prefix}-roles`;
+      await prisma.group.create({
+        data: {
+          id: rolesGroupId,
+          name: "Roles",
+          groupMembers: {
+            create: [
+              { userId: users[0]!, role: "OWNER", joinedEpochNumber: 1 },
+              { userId: users[1]!, role: "MEMBER", joinedEpochNumber: 1 },
+            ],
+          },
+        },
+      });
+      const member = caller(users[1]!);
+      const calls: (() => Promise<unknown>)[] = [
+        () => member.groupInvites.createShared({ groupId: rolesGroupId }),
+        () => member.groupInvites.sharedStatuses({ groupId: rolesGroupId, inviteIds: ["any"] }),
+        () => member.groupSettings.requestGroupImageUpload({ groupId: rolesGroupId }),
+        () =>
+          member.groupSettings.presignGroupImageUpload({
+            groupId: rolesGroupId,
+            fileName: crypto.randomUUID(),
+            fileSize: 1024,
+            contentHash: Buffer.alloc(32).toString("base64"),
+          }),
+      ];
+      for (const call of calls) {
+        await expect(call()).rejects.toMatchObject({
+          code: "FORBIDDEN",
+          message: "You are not an admin of this group",
+        });
+      }
+      expect(await prisma.groupSharedInvite.count({ where: { groupId: rolesGroupId } })).toBe(0);
+      expect(await prisma.pendingUpload.count({ where: { userId: users[1]! } })).toBe(0);
+    });
+
+    test("someone outside the group can't create or check invites; expiry and code hashing are enforced", async () => {
+      await expect(caller(users[1]!).groupInvites.createShared({ groupId })).rejects.toMatchObject(
+        notMember,
+      );
       const created = await caller(users[0]!).groupInvites.createShared({ groupId });
       expect(created.expiresAt.getTime() - Date.now()).toBeGreaterThan(295_000);
       expect(created.expiresInMs).toBeGreaterThan(295_000);
@@ -106,7 +147,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       ).toEqual([{ id: created.id, status: "active" }]);
       await expect(
         caller(users[1]!).groupInvites.sharedStatuses({ groupId, inviteIds: [created.id] }),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject(notMember);
       expect(
         await caller(users[0]!).groupInvites.sharedStatuses({ groupId, inviteIds: ["missing"] }),
       ).toEqual([]);

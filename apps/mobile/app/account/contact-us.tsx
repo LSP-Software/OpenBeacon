@@ -109,7 +109,7 @@ const ContactUsScreen = () => {
         </Pressable>
         {includeEmail && !session && (
           <Text className="text-sm text-tertiary">
-            Your account email isn't available yet. Sign in again, or untick this option to send
+            Your account email isn’t available yet. Sign in again, or untick this option to send
             without it.
           </Text>
         )}
@@ -120,7 +120,7 @@ const ContactUsScreen = () => {
         {status === "error" && <Text>Could not send feedback. Please try again.</Text>}
         {status === "rateLimited" && (
           <Text>
-            Thanks for all your feedback! We've received a lot from you recently, so please wait a
+            Thanks for all your feedback! We’ve received a lot from you recently, so please wait a
             little while before sending more.
           </Text>
         )}

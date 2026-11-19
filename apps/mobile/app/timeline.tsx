@@ -35,21 +35,35 @@ import { Icon } from "../components/ui/Icon.tsx";
 import { Text } from "../components/ui/Text.tsx";
 import { useCachedGroup } from "../hooks/useCachedGroup.ts";
 import { useReducedMotion } from "../hooks/useReducedMotion.ts";
+import { useUses24HourClock } from "../hooks/useUses24HourClock.ts";
 import { useTimelineDay, useTimelineDays } from "../hooks/useTimeline.ts";
 import { trpc } from "../lib/api.ts";
 import { authClient } from "../lib/auth-client.ts";
 import { initialsFromName } from "../lib/buildLiveMapMarkers.ts";
-import { historyShareNote } from "../lib/historyShare.ts";
+import { historyShareNote, timelineEmptyLines } from "../lib/historyShare.ts";
 import { cn } from "../lib/cn.ts";
 import { GROUP_COLOR_PALETTE, getGroupColor } from "../lib/groupColor.ts";
 import { loadPersonalNicknames } from "../lib/personalNicknames.ts";
 import { groupPlacesQueryOptions } from "../lib/placeSync.ts";
 import { getSymbolVisibility } from "../lib/protomaps-style.ts";
-import { pickPersonDevices, timelineDayStats, timelinePositionAt } from "../lib/timeline.ts";
+import {
+  pickPersonDevices,
+  timelineDayStats,
+  timelinePauseDetail,
+  timelinePlayStart,
+  timelinePositionAt,
+} from "../lib/timeline.ts";
+import { formatTimelineClock, formatTimelineDayEnd } from "../lib/timelineClock.ts";
 import { pickTimelinePeople } from "../lib/timelineBudget.ts";
 import { rememberTimelineGroup } from "../lib/timelineGroup.ts";
-import { timelineLaneRuns, timelineRoute } from "../lib/timelineMap.ts";
+import {
+  timelineArrowViewport,
+  timelineFitKeys,
+  timelineLaneRuns,
+  timelineRoute,
+} from "../lib/timelineMap.ts";
 import type { TimelineSender } from "../lib/timelineTypes.ts";
+import { thisDeviceNoun } from "../lib/thisDeviceNoun.ts";
 
 const SPEEDS = [60, 300, 900] as const;
 const STEP_MS = 15 * 60_000;
@@ -61,7 +75,7 @@ const TimelineScreen = () => {
   const router = useRouter();
   const { data: session } = authClient.useSession();
   const selfUserId = session?.user.id;
-  const { group, isPending } = useCachedGroup(groupId);
+  const { group, isError, isPending, refetch } = useCachedGroup(groupId);
   const close = useCallback(() => {
     if (router.canGoBack()) {
       router.back();
@@ -82,11 +96,24 @@ const TimelineScreen = () => {
     );
   }
 
+  if (isError) {
+    return (
+      <View className="flex-1 items-center justify-center gap-4 bg-background px-8">
+        <Text className="text-center text-foreground">
+          Couldn’t load your groups. Check your connection and try again.
+        </Text>
+        <Button variant="secondary" onPress={() => void refetch()}>
+          <Text>Try again</Text>
+        </Button>
+      </View>
+    );
+  }
+
   if (!group) {
     return (
       <View className="flex-1 items-center justify-center gap-4 bg-background px-8">
         <Text className="text-center text-foreground">
-          This group isn’t available on this phone.
+          This group isn’t available on this {thisDeviceNoun()}.
         </Text>
         <Button variant="secondary" onPress={close}>
           <Text>Go back</Text>
@@ -125,6 +152,8 @@ const TimelineView = ({
   selfUserId: string;
 }) => {
   const insets = useSafeAreaInsets();
+  const uses24HourClock = useUses24HourClock();
+  const formatClock = (time: number) => formatTimelineClock(time, uses24HourClock);
   const map = useNativeMapStyle();
   const cameraRef = useRef<CameraRef>(null);
   const mapRef = useRef<MapRef>(null);
@@ -142,6 +171,7 @@ const TimelineView = ({
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(60);
   const [following, setFollowing] = useState(true);
+  const fittedView = useRef({ moved: false, view: "" });
   const [timeState, setTimeState] = useState<{ key: string; time: number } | null>(null);
   const [drawIn, setDrawIn] = useState<{ clock: number; starts: Record<string, number> }>({
     clock: 0,
@@ -295,7 +325,6 @@ const TimelineView = ({
     });
   }, [places.data, shownPeople]);
   const routeIds = routes.map((route) => route.deviceId).join(",");
-  const routeKey = `${timeline?.day.key ?? ""}:${routeIds}`;
   const drawn = useMemo(
     () =>
       Object.fromEntries(
@@ -416,10 +445,19 @@ const TimelineView = ({
     return () => subscription.remove();
   }, [groupMenuOpen]);
 
-  const fitKey = `${routeKey}:${styleLoaded}:${personId ?? ""}:${topHeight > 0 && panelHeight > 0}`;
+  const fit = timelineFitKeys({
+    dayKey: timeline?.day.key ?? "",
+    loaded: dayQuery.data !== undefined,
+    personId,
+    ready: styleLoaded && topHeight > 0 && panelHeight > 0,
+    routeIds: routes.map((route) => route.deviceId),
+    shownUserIds: budget?.shown ?? [],
+  });
   // biome-ignore lint/correctness/useExhaustiveDependencies: the camera moves only when the day, people or layout change, not on every frame
   useEffect(() => {
     if (!styleLoaded || topHeight === 0 || panelHeight === 0) return;
+    if (fittedView.current.view === fit.view && fittedView.current.moved) return;
+    fittedView.current = { moved: false, view: fit.view };
     if (selectedPerson) {
       setFollowing(true);
       const at = timelinePositionAt(selectedPerson.device.segments, timeRef.current);
@@ -450,7 +488,7 @@ const TimelineView = ({
       ],
       { duration: 600, padding: cameraPadding },
     );
-  }, [fitKey]);
+  }, [fit.key]);
 
   const followLongitude = selectedPin?.position.longitude;
   const followLatitude = selectedPin?.position.latitude;
@@ -521,7 +559,13 @@ const TimelineView = ({
       case "pause":
         return {
           title: "Sharing paused",
-          detail: `${selectedPerson.name} paused from ${formatClock(selectedSegment.start)} to ${formatClock(selectedSegment.end)}`,
+          detail: timelinePauseDetail({
+            clock: formatClock,
+            from: Math.max(timeline.from, selectedPerson.device.historyStart),
+            name: selectedPerson.name,
+            segment: selectedSegment,
+            to: timeline.to,
+          }),
         };
       case "noLocation":
         return {
@@ -712,7 +756,10 @@ const TimelineView = ({
   );
 
   const nextSpeed = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length] ?? 60;
-  const clockLabel = timeline && time >= timeline.day.end ? "24:00" : formatClock(time);
+  const clockLabel =
+    timeline && time >= timeline.day.end
+      ? formatTimelineDayEnd(timeline.day.end, uses24HourClock)
+      : formatClock(time);
 
   const scrubTo = (value: number) => {
     setPlaying(false);
@@ -733,11 +780,13 @@ const TimelineView = ({
           touchRotate={false}
           androidView="surface"
           onRegionWillChange={(event) => {
-            if (event.nativeEvent.userInteraction) setFollowing(false);
+            if (!event.nativeEvent.userInteraction) return;
+            setFollowing(false);
+            fittedView.current.moved = true;
           }}
           onRegionDidChange={(event) => {
             const { bounds, zoom } = event.nativeEvent;
-            setViewport({ bounds, zoom });
+            setViewport((current) => timelineArrowViewport(current, { bounds, zoom }));
           }}
           onDidFailLoadingMap={map.onMapLoadFailure}
           onDidFinishLoadingStyle={() => {
@@ -870,7 +919,7 @@ const TimelineView = ({
         style={{ bottom: insets.bottom + 8 }}
         onLayout={(event) => setPanelHeight(event.nativeEvent.layout.height + insets.bottom + 8)}
       >
-        {daysQuery.isError ? (
+        {daysQuery.isError && !days ? (
           <ProblemNote
             message={`Couldn’t load the Timeline for ${group.name}. Check your connection and try again.`}
             loading={daysQuery.isFetching}
@@ -879,12 +928,18 @@ const TimelineView = ({
         ) : !days ? (
           <ActivityIndicator className="py-6" />
         ) : !day ? (
-          <Text className="py-4 text-center text-tertiary">
-            {personId
-              ? "No location history for this person in this group yet."
-              : `No location history in ${group.name} yet.`}
-          </Text>
-        ) : dayQuery.isError ? (
+          <View className="gap-1 py-4">
+            {timelineEmptyLines({
+              groupName: group.name,
+              notes: shareNotes.map((item) => item.note),
+              personSelected: personId !== null,
+            }).map((line) => (
+              <Text key={line} className="text-center text-tertiary">
+                {line}
+              </Text>
+            ))}
+          </View>
+        ) : dayQuery.isError && !timeline ? (
           <ProblemNote
             message="Couldn’t load this day. Check your connection and try again."
             loading={dayQuery.isFetching}
@@ -894,6 +949,11 @@ const TimelineView = ({
           <ActivityIndicator className="py-6" />
         ) : (
           <View className="gap-3">
+            {daysQuery.isError || dayQuery.isError ? (
+              <Text className="text-sm text-secondary">
+                Couldn’t reach the server, so this may be out of date.
+              </Text>
+            ) : null}
             <View className="flex-row items-center gap-3">
               <Text className="text-3xl font-semibold text-foreground">{clockLabel}</Text>
               <View className="min-w-0 flex-1">
@@ -928,6 +988,7 @@ const TimelineView = ({
                 step={STEP_MS}
                 time={time}
                 to={timeline.to}
+                uses24HourClock={uses24HourClock}
                 valueLabel={status ? `${clockLabel}, ${status.title}` : clockLabel}
                 onScrub={scrubTo}
               />
@@ -994,7 +1055,16 @@ const TimelineView = ({
                       setPlaying(false);
                       return;
                     }
-                    if (time >= timeline.to) setTime(timeline.from);
+                    setTime(
+                      timelinePlayStart({
+                        from: timeline.from,
+                        located,
+                        scrubbed: timeState?.key === timeline.day.key,
+                        time,
+                        to: timeline.to,
+                        today: showingToday,
+                      }),
+                    );
                     setFollowing(true);
                     setPlaying(true);
                   }}
@@ -1051,8 +1121,8 @@ const TimelineView = ({
             {undecryptable > 0 ? (
               <Text className="text-xs text-secondary">
                 {undecryptable === 1
-                  ? "1 location couldn’t be decrypted on this phone, so it’s left out."
-                  : `${undecryptable.toLocaleString()} locations couldn’t be decrypted on this phone, so they’re left out.`}
+                  ? `1 location couldn’t be decrypted on this ${thisDeviceNoun()}, so it’s left out.`
+                  : `${undecryptable.toLocaleString()} locations couldn’t be decrypted on this ${thisDeviceNoun()}, so they’re left out.`}
               </Text>
             ) : null}
           </View>
@@ -1224,9 +1294,6 @@ const ProblemNote = ({
     </Button>
   </View>
 );
-
-const formatClock = (time: number) =>
-  new Date(time).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 
 const formatDate = (time: number) =>
   new Date(time).toLocaleDateString(undefined, {

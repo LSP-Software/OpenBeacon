@@ -1,5 +1,5 @@
 export const TRACKING_POINT_KIND = "trackingPoint" as const;
-export const TRACKING_POINT_VERSION = 2;
+const TRACKING_POINT_VERSION = 2;
 export const TRACKING_POINT_LENGTH = 23;
 export const ENCRYPTED_TRACKING_POINT_LENGTH = TRACKING_POINT_LENGTH + 16;
 

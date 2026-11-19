@@ -86,4 +86,25 @@ describe("groupColor", () => {
     setGroupColor("group-1", GROUP_COLOR_PALETTE[4] ?? preferredColor);
     expect(notifications).toBe(1);
   });
+
+  test("does not notify when the stored colour is unchanged", async () => {
+    const {
+      GROUP_COLOR_PALETTE,
+      getGroupColorRevision,
+      setGroupColor,
+      subscribeToGroupColorChanges,
+    } = await importGroupColorModule();
+    setGroupColor("group-1", GROUP_COLOR_PALETTE[2]);
+    const revision = getGroupColorRevision();
+    let notifications = 0;
+    const unsubscribe = subscribeToGroupColorChanges(() => {
+      notifications += 1;
+    });
+
+    setGroupColor("group-1", GROUP_COLOR_PALETTE[2]);
+    unsubscribe();
+
+    expect(notifications).toBe(0);
+    expect(getGroupColorRevision()).toBe(revision);
+  });
 });

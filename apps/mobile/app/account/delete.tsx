@@ -1,4 +1,5 @@
 import { Alert } from "../../lib/alert.ts";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
@@ -7,6 +8,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { z } from "zod";
 import { ScreenHeader } from "../../components/headers/ScreenHeader.tsx";
 import { Button } from "../../components/ui/Button.tsx";
 import { Input } from "../../components/ui/Input.tsx";
@@ -14,6 +16,7 @@ import { ChoiceList } from "../../components/ui/ChoiceList.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { trpc } from "../../lib/api.ts";
 import { endSession } from "../../lib/endSession.ts";
+import { userMessage } from "../../lib/userMessage.ts";
 
 const DeleteAccountScreen = () => {
   const requestDeletion = useMutation(trpc.account.requestDeletion.mutationOptions());
@@ -23,7 +26,12 @@ const DeleteAccountScreen = () => {
   const verificationMethods = useQuery(trpc.account.deletionVerificationMethods.queryOptions());
   const [isGoogleVerifying, setIsGoogleVerifying] = useState(false);
   const [immediate, setImmediate] = useState(false);
-  const deletionForm = useForm<{ password: string }>({ defaultValues: { password: "" } });
+  const deletionForm = useForm<{ password: string }>({
+    resolver: zodResolver(
+      z.object({ password: z.string().min(1, { message: "Password is required" }) }),
+    ),
+    defaultValues: { password: "" },
+  });
 
   const requestAccountDeletion = (
     verification: { password: string } | { google: { state: string; code: string } },
@@ -44,7 +52,7 @@ const DeleteAccountScreen = () => {
             );
             deletionForm.reset();
             if (result.error) {
-              Alert.alert("Unable to delete account", result.error.message);
+              Alert.alert("Couldn’t delete account", userMessage(result.error));
               return;
             }
             await tryCatch(endSession({ reason: immediate ? "accountDeleted" : "signedOut" }));
@@ -67,7 +75,7 @@ const DeleteAccountScreen = () => {
     const authorization = await tryCatch(beginGoogleVerification.mutateAsync());
     if (authorization.error) {
       setIsGoogleVerifying(false);
-      Alert.alert("Google verification failed", "Please try again.");
+      Alert.alert("Couldn’t verify with Google", "Please try again.");
       return;
     }
     const result = await tryCatch(
@@ -75,7 +83,7 @@ const DeleteAccountScreen = () => {
     );
     setIsGoogleVerifying(false);
     if (result.error) {
-      Alert.alert("Google verification failed", "Please try again.");
+      Alert.alert("Couldn’t verify with Google", "Please try again.");
       return;
     }
     if (result.data.type !== "success") return;
@@ -90,7 +98,7 @@ const DeleteAccountScreen = () => {
       state !== authorization.data.state ||
       !code
     ) {
-      Alert.alert("Google verification failed", "Please try again.");
+      Alert.alert("Couldn’t verify with Google", "Please try again.");
       return;
     }
     requestAccountDeletion({ google: { state, code } });

@@ -1,6 +1,5 @@
 import { afterEach, expect, jest, mock, test } from "bun:test";
-import type React from "react";
-import { act, useEffect } from "react";
+import React, { act, useEffect } from "react";
 import { createRoot, type Root } from "test-renderer";
 
 (
@@ -8,7 +7,8 @@ import { createRoot, type Root } from "test-renderer";
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 let focused = true;
-let session: { user: { id: string; name: string } } | null = null;
+let session: { user: { id: string; name: string }; session?: { token: string } } | null = null;
+const tokensToRevoke: string[] = [];
 let deviceActive: boolean | Error = true;
 let savedLink: { linkId: string; psk: Uint8Array } | null | Error = null;
 const replace = mock((_route: string) => {});
@@ -37,18 +37,36 @@ mock.module("react-native", () => ({
 }));
 mock.module("react-native-safe-area-context", () => ({ SafeAreaView: View }));
 mock.module("../components/BeaconIcon.tsx", () => ({ BeaconIcon: View }));
-mock.module("../components/ui/Button.tsx", () => ({ Button: View }));
+mock.module("../components/ui/Button.tsx", () => ({
+  Button: ({ children, onPress }: { children?: React.ReactNode; onPress?: () => void }) =>
+    React.createElement("mock-button", { onPress }, children),
+}));
 mock.module("../components/ui/Text.tsx", () => ({ Text: View }));
 mock.module("../lib/theme.ts", () => ({ useColors: () => ({ primary: "blue" }) }));
 mock.module("../lib/auth-client.ts", () => ({
   authClient: { useSession: () => ({ data: session, isPending: false }) },
+  saveSessionTokenToRevoke: async (token: string) => {
+    tokensToRevoke.push(token);
+  },
+}));
+mock.module("../lib/api.ts", () => ({ trpcClient: {} }));
+mock.module("../lib/locationSharing.ts", () => ({
+  abandonLocationSharingChanges: () => {},
+  syncLocationSharing: async () => {},
+}));
+mock.module("../lib/registeredDevice.ts", () => ({ readRegisteredDevice: async () => null }));
+mock.module("../lib/sessionLink.ts", () => ({ linkSessionToDevice: async () => {} }));
+mock.module("../lib/trackingEvents.ts", () => ({ requestTrackingSync: () => {} }));
+mock.module("../lib/tracking.ts", () => ({
+  prepareTrackingSignOut: async () => {},
+  resumeTracking: () => {},
 }));
 
 mock.module("../lib/currentServer.ts", () => ({
-  baseUrl: "https://beacon.example.com",
+  getBaseUrl: () => "https://beacon.example.com",
   hasCustomServerUrl: () => true,
 }));
-mock.module("../lib/endSession.ts", () => ({ endSession: async () => ({ signedOut: true }) }));
+mock.module("../lib/endSession.ts", () => ({ endSession: async () => ({ signedOut: false }) }));
 
 mock.module("../lib/deviceActivation.ts", () => ({
   isThisDeviceActive: async () => {
@@ -66,6 +84,7 @@ mock.module("../lib/deviceKeys.ts", () => ({
     if (registration instanceof Error) throw registration;
     return registration;
   },
+  getRegisteredDeviceKey: async () => null,
 }));
 mock.module("../lib/savedDeviceLink.ts", () => ({
   deleteSavedDeviceLink: async () => {},
@@ -98,6 +117,7 @@ afterEach(async () => {
   onboarding = null;
   registration = { deviceId: "device-1", userId: "registered-user" };
   readOnboardingFor.length = 0;
+  tokensToRevoke.length = 0;
   startedOnboarding.length = 0;
 });
 
@@ -255,4 +275,18 @@ test("refreshing a session while the home screen is unfocused does not navigate 
   session = { user: { id: "user-1", name: "After" } };
   await act(() => root?.render(<HomeScreen />));
   expect(replace).not.toHaveBeenCalled();
+});
+
+test("signing out while the server can't be reached keeps the session to revoke later", async () => {
+  registration = new Error("offline");
+  focused = true;
+  session = { user: { id: "user-1", name: "Signed in" }, session: { token: "session-token" } };
+  root = createRoot();
+  await act(() => root?.render(<HomeScreen />));
+  const signOut = root.container
+    .queryAll((item) => item.type === "mock-button")
+    .find((item) => JSON.stringify(item.children).includes("Sign out"));
+  if (!signOut) throw new Error("Missing Sign out");
+  await act(async () => (signOut.props as { onPress: () => Promise<void> }).onPress());
+  expect(tokensToRevoke).toEqual(["session-token"]);
 });

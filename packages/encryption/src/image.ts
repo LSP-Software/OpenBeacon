@@ -23,6 +23,7 @@ export const IMAGE_KEY_LENGTH = 32;
 const TAG_LENGTH = 16;
 const HEADER_LENGTH = 1 + XCHACHA20_NONCE_LENGTH;
 export const MIN_ENCRYPTED_IMAGE_LENGTH = HEADER_LENGTH + TAG_LENGTH;
+export const ENCRYPTED_IMAGE_KEY_LENGTH = IMAGE_KEY_LENGTH + TAG_LENGTH;
 
 const textEncoder = new TextEncoder();
 

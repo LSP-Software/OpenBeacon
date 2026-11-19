@@ -845,7 +845,6 @@ describe("secrets never reach the server", () => {
     await setUpRecoveryPhrase(phrase);
     await backfillHistoryWraps({ device, groupId: "group-1" });
 
-    const serialized = JSON.stringify(serverInputs);
     const historyPrivateKey = storedHistoryKeys.get(`${device.userId}.1`);
     const secrets = [
       deriveRecoveryKeyPair(phrase).privateKey.expose(),
@@ -853,7 +852,7 @@ describe("secrets never reach the server", () => {
       deviceKeyPair.privateKey.expose(),
       ...epochs.map(({ epochKey }) => epochKey.expose()),
     ];
-    expectNoSecretsIn(serialized, { secrets, phrases: [phrase] });
+    expectNoSecretsIn({ serverInputs, storage: storageValues }, { secrets, phrases: [phrase] });
     expect(addHistoryWrapsMock).toHaveBeenCalled();
   });
 });

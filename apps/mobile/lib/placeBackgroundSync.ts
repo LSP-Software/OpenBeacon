@@ -1,8 +1,10 @@
+import { sha256 } from "@noble/hashes/sha2.js";
+import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 import { alertsCursorSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import z from "zod";
 import { queryClient, type RouterOutputs, trpc, trpcClient } from "./api.ts";
-import { baseUrl } from "./currentServer.ts";
+import { getBaseUrl } from "./currentServer.ts";
 import { getRegisteredDeviceKey } from "./deviceKeys.ts";
 import { catchUpGroupImageKeys } from "./imageKeyCatchUp.ts";
 import { showNotices } from "./noticeBackgroundSync.ts";
@@ -13,6 +15,7 @@ import { catchUpGroupPlaces } from "./placeCatchUp.ts";
 import { groupPlacesQueryKey, loadGroupPlaces } from "./placeSync.ts";
 import { storage } from "./storage.ts";
 import { loadTrackingModule } from "./trackingModule.ts";
+import { thisDeviceNoun } from "./thisDeviceNoun.ts";
 
 type PlaceAlert = NonNullable<
   RouterOutputs["groupTracking"]["uploadBatch"]["placeAlerts"]
@@ -35,10 +38,10 @@ const imageKeyMissesSchema = z.record(
 
 const imageKeyCatchUps = new Set<Promise<void>>();
 
-const placeOwner = (userId: string) => JSON.stringify([baseUrl, userId]);
+const placeOwner = (userId: string) => JSON.stringify([getBaseUrl(), userId]);
 
 const storageKey = (userId: string, name: string, groupId?: string) =>
-  `places.${name}.${JSON.stringify([baseUrl, userId, ...(groupId ? [groupId] : [])])}`;
+  `places.${name}.${JSON.stringify([getBaseUrl(), userId, ...(groupId ? [groupId] : [])])}`;
 
 const placesTabLink = (groupId: string) => ({
   href: { pathname: "/(tabs)/groups/[groupId]", params: { groupId, tab: "places" } } as const,
@@ -82,7 +85,7 @@ export const describePlacesChanged = ({
     title: only
       ? `${groupName} ${verb} ${only.emoji} ${only.name}`
       : `${groupName} ${verb} ${changed.length} places`,
-    body: `This phone will tell ${groupName} when it arrives at or leaves ${only ? only.name : "them"}.`,
+    body: `This ${thisDeviceNoun()} will tell ${groupName} when it arrives at or leaves ${only ? only.name : "them"}.`,
   };
 };
 
@@ -91,8 +94,22 @@ const readStoredJson = (key: string) => {
   return raw === undefined ? undefined : parseJson(raw);
 };
 
-const readKnownPlaces = (userId: string, groupId: string) =>
-  knownPlacesSchema.catch({}).parse(readStoredJson(storageKey(userId, "known", groupId)));
+const geometryHash = (geometry: string) =>
+  geometry.includes(",") ? bytesToHex(sha256(utf8ToBytes(geometry))) : geometry;
+
+const readKnownPlaces = (key: string) =>
+  Object.fromEntries(
+    Object.entries(knownPlacesSchema.catch({}).parse(readStoredJson(key))).map(
+      ([placeId, geometry]) => [placeId, geometryHash(geometry)],
+    ),
+  );
+
+const hashStoredPlaceGeometry = () => {
+  for (const key of storage.getAllKeys()) {
+    if (!key.startsWith("places.known.") || !storage.getString(key)?.includes(",")) continue;
+    storage.set(key, JSON.stringify(readKnownPlaces(key)));
+  }
+};
 
 export const syncGroupPlaces = async ({
   groupId,
@@ -138,11 +155,11 @@ export const syncGroupPlaces = async ({
     );
     if (!applied) return false;
   }
-  const known = readKnownPlaces(userId, groupId);
+  const known = readKnownPlaces(storageKey(userId, "known", groupId));
   const next = Object.fromEntries(
     ready.map(({ geometry, id }) => [
       id,
-      `${geometry.latitude},${geometry.longitude},${geometry.radiusMeters}`,
+      geometryHash(`${geometry.latitude},${geometry.longitude},${geometry.radiusMeters}`),
     ]),
   );
   storage.set(storageKey(userId, "known", groupId), JSON.stringify(next));
@@ -282,6 +299,7 @@ export const applyPlaceUpdates = async ({
     groupList ??= trpcClient.groupMembership.list.query();
     return groupList;
   };
+  hashStoredPlaceGeometry();
   const nativeGroups = await readNativeGroups(userId);
   const detectedGroups = nativeGroups?.detected ?? null;
   for (const summary of updates.places ?? []) {

@@ -49,7 +49,10 @@ test("checking the key against a Resend that never answers fails at its timeout"
   requestedTimeouts.length = 0;
   const start = performance.now();
 
-  await expect(transport.verify()).rejects.toThrow("Resend rejected the API key");
+  await expect(transport.verify()).rejects.toMatchObject({
+    message: expect.stringContaining("Resend could not be reached"),
+    code: "EMAIL_UNREACHABLE",
+  });
   expect(performance.now() - start).toBeLessThan(2_000);
   expect(requestedTimeouts).toEqual([15_000]);
 });

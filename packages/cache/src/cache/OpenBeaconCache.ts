@@ -1,4 +1,4 @@
-import { RedisClient, type RedisOptions } from "bun";
+import { RedisClient } from "bun";
 import { createAlertsTurnedOff } from "../alertsTurnedOff/alertsTurnedOff.ts";
 import { createPmtilesSignedUrls } from "../pmtilesSignedUrls/pmtilesSignedUrls.ts";
 import type {
@@ -15,7 +15,7 @@ import type {
 } from "../rateLimits/schemas.ts";
 import { openBeaconCacheOptionsSchema } from "../rateLimits/schemas.ts";
 import type { RateLimitResult, WhenRedisUnavailable } from "../rateLimits/types.ts";
-import { type RedisLike, toRedisOptions } from "./redis.ts";
+import type { RedisLike } from "./redis.ts";
 import { findMissingRedisPermissions } from "./redisPermissions.ts";
 import { createSelfHealingRedis } from "./selfHealingRedis.ts";
 
@@ -48,10 +48,7 @@ export class OpenBeaconCache {
 
     this.now = parsedOptions.now ?? Date.now;
     this.keyPrefix = parsedOptions.keyPrefix ?? "openbeacon";
-    this.redis = this.createRedisClient(
-      parsedOptions.redisUrl,
-      toRedisOptions(parsedOptions.redisOptions),
-    );
+    this.redis = this.createRedisClient(parsedOptions.redisUrl);
     this.alertsTurnedOff = createAlertsTurnedOff({ redis: this.redis, keyPrefix: this.keyPrefix });
     this.pmtilesSignedUrls = createPmtilesSignedUrls({
       redis: this.redis,
@@ -66,11 +63,10 @@ export class OpenBeaconCache {
     });
   }
 
-  protected createRedisClient(redisUrl: string, redisOptions?: RedisOptions): RedisLike {
+  protected createRedisClient(redisUrl: string): RedisLike {
     return createSelfHealingRedis({
       client: new RedisClient(redisUrl, {
         connectionTimeout: 2_000,
-        ...redisOptions,
         autoReconnect: false,
         enableOfflineQueue: false,
       }),

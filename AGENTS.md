@@ -66,6 +66,7 @@ console.log(result.data);
     c. You change an encrypted format or what a field means: raise the minimum for whichever side can't cope.
     d. Any level change needs at least a minor version bump of both the app and the server. Anything else needs no level change. See `docs/development/api-compatibility.md`.
     e. Every PR body contains either `API compatibility: unchanged` or `API compatibility: raised because …`.
+15. Any timestamp that is compared with another row's timestamp, or used as a cursor, is stamped by the database clock: use `readDatabaseTime` from the database package, not `new Date()`, `Date.now()` or Prisma's `@default(now())`.
 
 # Testing
 

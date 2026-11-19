@@ -12,6 +12,7 @@ import {
   setMapCacheSizeMb,
   formatMapCacheSize,
 } from "../../lib/mapCache.ts";
+import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 
 const MapStorageScreen = () => {
   const [sizeMb, setSizeMb] = useState(getMapCacheSizeMb);
@@ -32,8 +33,9 @@ const MapStorageScreen = () => {
         showsVerticalScrollIndicator={false}
       >
         <Text className="text-secondary text-base">
-          Parts of the map you’ve looked at are saved on this phone, so the map opens faster and
-          still shows those areas without a connection. They are deleted when you sign out.
+          Parts of the map you’ve looked at are saved on this {thisDeviceNoun()}, so the map opens
+          faster and still shows those areas without a connection. They are deleted when you sign
+          out.
         </Text>
 
         <View className="gap-2">

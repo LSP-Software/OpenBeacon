@@ -106,84 +106,63 @@ class UploadWakeGateTest {
     val first = assertNotNull(gate.accept(push = false))
     val second = assertNotNull(gate.accept(push = false))
     assertNotEquals(first, second)
-    gate.started(4)
-    gate.started(5)
-    assertEquals(4, gate.taskFor(first))
-    assertEquals(5, gate.taskFor(second))
+    assertEquals(first, gate.started(4))
+    assertEquals(second, gate.started(5))
   }
 
   @Test
   fun replayedStartsDontTakeAnotherUploadsToken() {
     val first = assertNotNull(gate.accept(push = false))
-    gate.started(1)
+    assertEquals(first, gate.started(1))
     val second = assertNotNull(gate.accept(push = false))
-    gate.started(1)
-    gate.started(2)
-    assertEquals(1, gate.taskFor(first))
-    assertEquals(2, gate.taskFor(second))
+    assertNull(gate.started(1))
+    assertEquals(second, gate.started(2))
   }
 
   @Test
   fun uploadsCanFinishInAnyOrder() {
-    val first = assertNotNull(gate.accept(push = false))
-    val second = assertNotNull(gate.accept(push = false))
+    gate.accept(push = false)
+    gate.accept(push = false)
     gate.started(1)
     gate.started(2)
     gate.accept(push = true)
-    assertFalse(gate.finished(assertNotNull(gate.taskFor(second))))
-    assertNull(gate.taskFor(second))
-    assertEquals(1, gate.taskFor(first))
-    assertTrue(gate.finished(assertNotNull(gate.taskFor(first))))
-    assertNull(gate.taskFor(first))
+    assertFalse(gate.finished(2))
+    assertTrue(gate.finished(1))
   }
 
   @Test
   fun aHeldBackPushGetsNoTokenAndTakesNoTask() {
     val upload = assertNotNull(gate.accept(push = false))
     assertNull(gate.accept(push = true))
-    gate.started(1)
-    assertEquals(1, gate.taskFor(upload))
+    assertEquals(upload, gate.started(1))
     assertTrue(gate.finished(1))
     val followUp = assertNotNull(gate.accept(push = true))
-    gate.started(2)
-    assertEquals(2, gate.taskFor(followUp))
+    assertEquals(followUp, gate.started(2))
   }
 
   @Test
   fun anUploadThatNeverStartsDoesntShiftLaterTokens() {
-    val lost = assertNotNull(gate.accept(push = false))
+    assertNotNull(gate.accept(push = false))
     now += UploadWakeGate.START_TIMEOUT_MS
     val next = assertNotNull(gate.accept(push = false))
-    gate.started(1)
-    assertNull(gate.taskFor(lost))
-    assertEquals(1, gate.taskFor(next))
+    assertEquals(next, gate.started(1))
   }
 
   @Test
   fun aLateStartDoesntTakeANewerUploadsToken() {
     assertNotNull(gate.accept(push = false))
     now += UploadWakeGate.START_TIMEOUT_MS
-    gate.started(1)
+    assertNull(gate.started(1))
     val next = assertNotNull(gate.accept(push = false))
-    gate.started(2)
-    assertEquals(2, gate.taskFor(next))
-  }
-
-  @Test
-  fun unknownTokensMatchNoTask() {
-    assertNotNull(gate.accept(push = false))
-    gate.started(1)
-    assertNull(gate.taskFor("not-a-token"))
+    assertEquals(next, gate.started(2))
   }
 
   @Test
   fun stoppingTheServiceForgetsEveryToken() {
-    val running = assertNotNull(gate.accept(push = false))
+    gate.accept(push = false)
     gate.started(1)
-    val pending = assertNotNull(gate.accept(push = false))
+    gate.accept(push = false)
     gate.stopped()
-    assertNull(gate.taskFor(running))
-    gate.started(2)
-    assertNull(gate.taskFor(pending))
+    assertNull(gate.started(2))
   }
 }

@@ -20,6 +20,7 @@ mock.module("expo-secure-store", () => ({
 
 mock.module("react-native-mmkv", () => ({
   createMMKV: () => ({
+    getNumber: () => 1,
     getString: () => undefined,
     remove: () => {},
     set: (key: string, value: unknown) => {
@@ -50,7 +51,7 @@ test("keeps the link only in this-device-only SecureStore, scoped to the account
   expect(await readSavedDeviceLink({ ...phone, userId: "user-2" })).toBeNull();
   expect(await readSavedDeviceLink({ ...phone, deviceId: "device-other" })).toBeNull();
   expect(mmkvWrites).toEqual([]);
-  expectNoSecretsIn(JSON.stringify(mmkvWrites), { secrets: [psk], phrases: [] });
+  expectNoSecretsIn(mmkvWrites, { secrets: [psk], phrases: [] });
 });
 
 test("a new code replaces the saved one and deleting forgets it", async () => {

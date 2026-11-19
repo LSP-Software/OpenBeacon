@@ -24,9 +24,17 @@ const map: MapStatus = {
   resumableUploads: [],
 };
 
-const request = (path: string, { body, method = "GET" }: { body?: string; method?: string } = {}) =>
+const request = (
+  path: string,
+  {
+    body,
+    method = "GET",
+    headers = method === "POST" ? { "content-type": "application/json" } : {},
+  }: { body?: string; method?: string; headers?: Record<string, string> } = {},
+) =>
   new Request(`http://map-tiles${path}`, {
     method,
+    headers,
     ...(body === undefined ? {} : { body }),
   });
 
@@ -63,6 +71,41 @@ describe("map tiles service", () => {
     expect((await handler.fetch(request("/rollback"))).status).toBe(405);
     expect(runUpdate).not.toHaveBeenCalled();
     expect(rollback).not.toHaveBeenCalled();
+  });
+
+  test("refuses a POST a web page could send, so a visited site can't start or roll back an update", async () => {
+    let started = 0;
+    let rolledBack = 0;
+    const handler = createHandler({
+      runUpdate: async () => {
+        started += 1;
+        return { published: false, message: "" };
+      },
+      rollback: async () => {
+        rolledBack += 1;
+        return "Rolled back";
+      },
+    });
+    for (const path of ["/update", "/rollback"]) {
+      const crossSite = await handler.fetch(
+        request(path, {
+          method: "POST",
+          headers: { "content-type": "application/json", origin: "https://evil.example" },
+        }),
+      );
+      const plainText = await handler.fetch(
+        request(path, {
+          method: "POST",
+          body: '{"force":true}',
+          headers: { "content-type": "text/plain" },
+        }),
+      );
+      expect(crossSite.status).toBe(403);
+      expect(plainText.status).toBe(415);
+    }
+    await handler.idle();
+    expect(started).toBe(0);
+    expect(rolledBack).toBe(0);
   });
 
   test("starts one update at a time and reports how it finished", async () => {

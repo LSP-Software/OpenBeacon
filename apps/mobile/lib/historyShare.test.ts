@@ -2,9 +2,11 @@ import { describe, expect, test } from "bun:test";
 import {
   groupHistoryShare,
   historyShareAmount,
+  historyShareLabel,
   historyShareNote,
   senderHistoryStart,
   shortensHistory,
+  timelineEmptyLines,
 } from "./historyShare.ts";
 
 const setting = {
@@ -62,6 +64,18 @@ describe("shortensHistory", () => {
       shortensHistory({ groupIds, next: { groupId: "club", override: "LAST_LOCATION" }, setting }),
     ).toBe(true);
   });
+
+  test("moving off a setting this build doesn't know always asks before deleting", () => {
+    const unknown = {
+      account: "DAYS_3" as typeof setting.account,
+      groups: [{ groupId: "family", historyShare: null }],
+    };
+    for (const share of ["HOURS_6", "LAST_LOCATION", "MAXIMUM"] as const) {
+      expect(
+        shortensHistory({ groupIds: ["family"], next: { account: share }, setting: unknown }),
+      ).toBe(true);
+    }
+  });
 });
 
 describe("wording", () => {
@@ -76,6 +90,13 @@ describe("wording", () => {
     expect(historyShareAmount("WEEK_1")).toBe("1 week of history");
     expect(historyShareAmount("MAXIMUM")).toBe("up to 14 days of history");
   });
+
+  test("a setting this build doesn't know still has wording", () => {
+    const unknown = "DAYS_3" as typeof setting.account;
+    expect(historyShareLabel(unknown)).toBe("Custom");
+    expect(historyShareAmount(unknown)).toBe("some of your history");
+    expect(historyShareNote("Sam", unknown)).toBeNull();
+  });
 });
 
 test("senderHistoryStart turns a sender's first hour into a time and leaves the maximum open", () => {
@@ -86,4 +107,29 @@ test("senderHistoryStart turns a sender's first hour into a time and leaves the 
   expect(senderHistoryStart(senders, "sam")).toBe(500_000 * 3_600_000);
   expect(senderHistoryStart(senders, "bea")).toBeNull();
   expect(senderHistoryStart(senders, "gone")).toBeNull();
+});
+
+describe("timelineEmptyLines", () => {
+  test("a person who shares only their location now is explained instead of 'yet'", () => {
+    expect(
+      timelineEmptyLines({
+        groupName: "Family",
+        notes: [historyShareNote("Alice", "LAST_LOCATION") ?? ""],
+        personSelected: true,
+      }),
+    ).toEqual(["Alice shares only their location now"]);
+  });
+
+  test("the group view keeps its sentence and adds the notes", () => {
+    expect(
+      timelineEmptyLines({
+        groupName: "Family",
+        notes: ["Alice shares only their location now"],
+        personSelected: false,
+      }),
+    ).toEqual(["No location history in Family yet.", "Alice shares only their location now"]);
+    expect(timelineEmptyLines({ groupName: "Family", notes: [], personSelected: true })).toEqual([
+      "No location history for this person in this group yet.",
+    ]);
+  });
 });

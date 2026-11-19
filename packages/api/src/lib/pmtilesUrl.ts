@@ -9,7 +9,7 @@ type ArchiveDependencies = {
 
 type ResolvedArchive = Awaited<ReturnType<typeof resolvePmtilesArchive>>;
 
-export const PM_TILES_URL_REFRESH_WINDOW_MS = 60_000;
+const PM_TILES_URL_REFRESH_WINDOW_MS = 60_000;
 
 const buildPmtilesUrlPayload = ({
   archive,

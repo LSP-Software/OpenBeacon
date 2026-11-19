@@ -6,7 +6,6 @@ import { appRouter } from "../root.ts";
 const prefix = `feedback-test-${crypto.randomUUID()}`;
 const caller = appRouter.createCaller({
   cache: createIntegrationTestCache(() => 0),
-  clientIp: "127.0.0.1",
   db: prisma,
   serverVersion: "9.9.9",
   selfHosted: false,
@@ -35,7 +34,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("feedback with Po
     const records = await prisma.feedback.findMany({ where: { message: { startsWith: prefix } } });
     expect(records).toHaveLength(2);
     expect(records.find((record) => record.message === `${prefix}-private`)).toMatchObject({
-      userId: null,
       email: null,
       androidVersion: "17",
       appVersion: "1.0.0",
@@ -44,7 +42,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("feedback with Po
       serverVersion: "0.1.1",
     });
     expect(records.find((record) => record.message === `${prefix}-contact`)).toMatchObject({
-      userId: null,
       email: `${prefix}@example.test`,
       androidVersion: null,
       appVersion: null,

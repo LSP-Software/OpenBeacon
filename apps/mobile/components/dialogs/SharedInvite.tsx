@@ -70,7 +70,7 @@ export const SharedInvite = ({
   const create = async () => {
     const result = await tryCatch(invite.mutateAsync({ groupId }));
     if (result.error) {
-      Alert.alert("Unable to create invitation");
+      Alert.alert("Couldn’t create invitation");
       return;
     }
   };
@@ -96,7 +96,7 @@ export const SharedInvite = ({
                   onPress={async () => {
                     const result = await tryCatch(Clipboard.setStringAsync(invite.data.code));
                     if (result.error) {
-                      Alert.alert("Unable to copy code");
+                      Alert.alert("Couldn’t copy code");
                       return;
                     }
                     setCopied(true);
@@ -112,7 +112,7 @@ export const SharedInvite = ({
                         message: `Join my OpenBeacon group: openbeacon://join?code=${invite.data.code}`,
                       }),
                     );
-                    if (result.error) Alert.alert("Unable to share invitation");
+                    if (result.error) Alert.alert("Couldn’t share invitation");
                   }}
                 >
                   <Text>Share link</Text>

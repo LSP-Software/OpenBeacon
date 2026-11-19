@@ -1,10 +1,12 @@
 import { isSharingPaused, tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { PauseIcon } from "lucide-react-native";
+import { MapPinOffIcon, PauseIcon } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import { trpc } from "../../lib/api.ts";
+import { getLocationPermissionWarningTitle } from "../../lib/locationPermissions.ts";
 import { isDeviceOffline } from "../../lib/networkStatus.ts";
+import { useLocationPermissions } from "../../providers/LocationPermissionProvider.tsx";
 import {
   changeLocationSharing,
   getPendingSharingChanges,
@@ -27,6 +29,7 @@ export const LocationSharingPausedBanner = ({
   userId: string;
 }) => {
   const queryClient = useQueryClient();
+  const { openLocationPermissionSettings, permissionState } = useLocationPermissions();
   useLoadedSharingState();
   const sharing = useQuery({
     ...trpc.account.locationSharing.queryOptions(),
@@ -106,6 +109,25 @@ export const LocationSharingPausedBanner = ({
     userId.length > 0 &&
     (hasLocallyPausedSharing(userId) ||
       (!pending?.account && !pending?.device && sharing.data?.paused === true));
+  if (!paused && permissionState && !permissionState.isReadyForSharing) {
+    return (
+      <View
+        accessibilityLiveRegion="polite"
+        className="mb-2 flex-row items-center gap-3 rounded-2xl border border-warning-accent bg-card px-3 py-2"
+      >
+        <Icon as={MapPinOffIcon} size={16} className="text-warning-text" />
+        <View className="flex-1">
+          <Text className="text-sm font-medium">You’re not sharing your location</Text>
+          <Text className="text-sm text-secondary">
+            {getLocationPermissionWarningTitle(permissionState)}
+          </Text>
+        </View>
+        <Button size="sm" variant="secondary" onPress={() => void openLocationPermissionSettings()}>
+          <Text>Fix</Text>
+        </Button>
+      </View>
+    );
+  }
   if (!paused) return null;
 
   return (

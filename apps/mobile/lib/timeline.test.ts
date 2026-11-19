@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
+  timelinePauseDetail,
+  timelinePlayStart,
   buildTimeline,
   pickPersonDevices,
   timelineDayStats,
@@ -49,13 +51,19 @@ const device = (points: TimelinePoint[], deviceId = "phone"): TimelineDeviceData
 
 const segmentsOf = (
   points: TimelinePoint[],
-  options: { joinStart?: number | null; now?: number; windowStart?: number } = {},
+  options: {
+    joinStart?: number | null;
+    now?: number;
+    pausedDeviceIds?: ReadonlySet<string>;
+    windowStart?: number;
+  } = {},
 ) =>
   buildTimeline({
     day,
     devices: [device(points)],
     joinStart: options.joinStart ?? null,
     now: options.now ?? day.end + HOUR_MS,
+    ...(options.pausedDeviceIds ? { pausedDeviceIds: options.pausedDeviceIds } : {}),
     windowStart: options.windowStart ?? dayStart - 14 * 24 * HOUR_MS,
   }).devices[0]?.segments ?? [];
 
@@ -80,6 +88,45 @@ describe("buildTimeline", () => {
       ["pause", 602, 660],
       ["noLocation", 660, 1440],
     ]);
+  });
+
+  test("today's gap after the last point is a pause while the phone is paused now", () => {
+    const points = [point({ time: at(9) }), point({ latitude: 51.6, time: at(10) })];
+    const paused = new Set(["phone"]);
+
+    expect(kinds(points, { now: at(15) })).toEqual([
+      ["noLocation", 0, 540],
+      ["noLocation", 540, 600],
+      ["noLocation", 600, 900],
+    ]);
+    const segments = segmentsOf(points, { now: at(15), pausedDeviceIds: paused });
+    expect(segments.at(-1)).toEqual({
+      end: at(15),
+      from: { accuracy: 5, latitude: 51.6, longitude: -0.12 },
+      kind: "pause",
+      ongoing: true,
+      start: at(10),
+      to: { accuracy: 5, latitude: 51.6, longitude: -0.12 },
+    });
+    expect(timelinePositionAt(segments, at(14))).toEqual({
+      position: { accuracy: 5, latitude: 51.6, longitude: -0.12 },
+      state: "pause",
+    });
+  });
+
+  test("a phone paused since before today shows the whole day so far as paused", () => {
+    expect(
+      kinds([point({ time: at(-3) })], { now: at(8), pausedDeviceIds: new Set(["phone"]) }),
+    ).toEqual([["pause", 0, 480]]);
+  });
+
+  test("a past day's trailing gap stays no location even if the phone is paused now", () => {
+    expect(
+      kinds([point({ stayUntil: at(10), time: at(9) })], {
+        now: day.end + HOUR_MS,
+        pausedDeviceIds: new Set(["phone"]),
+      }).at(-1),
+    ).toEqual(["noLocation", 600, 1440]);
   });
 
   test("an epoch rotation keeps the revision, so it isn't a pause", () => {
@@ -449,5 +496,51 @@ describe("timelineDayStats", () => {
       point({ streamId: "stream-2", stayUntil: at(11), time: at(10, 30) }),
     ]);
     expect(timelineDayStats({ places: [], segments: apart }).stops).toHaveLength(2);
+  });
+});
+
+describe("timelinePlayStart", () => {
+  const base = { from: 0, located: [{ start: 7_000 }, { start: 9_000 }], to: 20_000 };
+
+  test("today plays from the first location until the user has scrubbed", () => {
+    expect(timelinePlayStart({ ...base, scrubbed: false, time: 19_000, today: true })).toBe(7_000);
+    expect(timelinePlayStart({ ...base, scrubbed: true, time: 19_000, today: true })).toBe(19_000);
+  });
+
+  test("a finished play rewinds to the start, and past days keep their time", () => {
+    expect(timelinePlayStart({ ...base, scrubbed: true, time: 20_000, today: false })).toBe(0);
+    expect(timelinePlayStart({ ...base, scrubbed: false, time: 7_000, today: false })).toBe(7_000);
+    expect(
+      timelinePlayStart({ ...base, located: [], scrubbed: false, time: 19_000, today: true }),
+    ).toBe(19_000);
+  });
+});
+
+describe("timelinePauseDetail", () => {
+  const clock = (time: number) => `t${time}`;
+  const pause = (start: number, end: number) =>
+    timelinePauseDetail({ clock, from: 0, name: "Alice", segment: { end, start }, to: 100 });
+
+  test("a pause that began before the day says only when it ended", () => {
+    expect(pause(0, 40)).toBe("Alice paused until t40");
+  });
+
+  test("a pause inside the day gives both times, and one running past the end gives its start", () => {
+    expect(pause(10, 40)).toBe("Alice paused from t10 to t40");
+    expect(pause(60, 100)).toBe("Alice paused from t60");
+    expect(pause(0, 100)).toBe("Alice paused");
+  });
+
+  test("a pause still running gives no start time it can't know", () => {
+    const ongoing = (start: number) =>
+      timelinePauseDetail({
+        clock,
+        from: 0,
+        name: "Alice",
+        segment: { end: 100, ongoing: true, start },
+        to: 100,
+      });
+    expect(ongoing(60)).toBe("Alice paused some time after t60");
+    expect(ongoing(0)).toBe("Alice paused");
   });
 });

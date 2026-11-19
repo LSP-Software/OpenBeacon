@@ -2,6 +2,7 @@ import { beforeEach, expect, mock, test } from "bun:test";
 import { deviceRemovedCause } from "@openbeacon/shared";
 import { TRPCClientError } from "@trpc/client";
 import React, { act } from "react";
+import { type Control, useController } from "react-hook-form";
 import { createRoot } from "test-renderer";
 
 (
@@ -20,10 +21,12 @@ const codeEntry: {
     notice: string | undefined;
   } | null;
 } = { props: null };
+let currentUserId = "user-1";
 const phone: { hasLock: boolean; result: "confirmed" | "noScreenLock" | "lockedOut" | "failed" } = {
   hasLock: true,
   result: "confirmed",
 };
+let methodsWaitingForNetwork = false;
 const View = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
 
 mock.module("react-native", () => ({
@@ -38,16 +41,20 @@ mock.module("@tanstack/react-query", () => ({
   useQuery: (options: { queryKey?: string[] }) =>
     options.queryKey?.[0] === "phoneScreenLock"
       ? { data: phone.hasLock }
-      : { data: { google: true, password: true }, isError: false, isLoading: false },
+      : methodsWaitingForNetwork
+        ? { data: undefined, isError: false, isLoading: false, isPending: true }
+        : { data: { google: true, password: true }, isError: false, isPending: false },
 }));
 mock.module("../lib/appLock.ts", () => ({
-  hasScreenLock: async () => phone.hasLock,
+  phoneScreenLockQueryOptions: { queryKey: ["phoneScreenLock"] },
   confirmWithPhoneLock: async () => {
     events.push("phoneLock");
     return phone.result;
   },
 }));
-mock.module("../components/LoadingIndicator.tsx", () => ({ LoadingIndicator: () => null }));
+mock.module("../components/LoadingIndicator.tsx", () => ({
+  LoadingIndicator: () => React.createElement("loading-indicator"),
+}));
 mock.module("../components/EmailCodeEntry.tsx", () => ({
   EmailCodeEntry: (props: NonNullable<typeof codeEntry.props>) => {
     codeEntry.props = props;
@@ -58,7 +65,13 @@ mock.module("../components/ui/Button.tsx", () => ({
   Button: ({ children, onPress }: { children?: React.ReactNode; onPress?: () => void }) =>
     React.createElement("mock-button", { onPress }, children),
 }));
-mock.module("../components/ui/Input.tsx", () => ({ Input: () => null }));
+let typedPassword = "secret";
+mock.module("../components/ui/Input.tsx", () => ({
+  Input: ({ control, name }: { control: Control<{ password: string }>; name: "password" }) => {
+    const { field } = useController({ control, name });
+    return React.createElement("mock-input", { onChangeText: field.onChange });
+  },
+}));
 mock.module("../components/ui/Text.tsx", () => ({ Text: View }));
 mock.module("../lib/alert.ts", () => ({
   Alert: { alert: (title: string, message: string) => alerts.push(`${title}|${message}`) },
@@ -79,7 +92,7 @@ mock.module("../lib/auth-client.ts", () => ({
   saveSessionTokenToRevoke: async () => {},
   authClient: {
     getSession: async () => ({
-      data: { session: { token: "token-2" }, user: { id: "user-1" } },
+      data: { session: { token: "token-2" }, user: { id: currentUserId } },
     }),
     revokeSession: async () => ({}),
     signIn: {
@@ -89,7 +102,10 @@ mock.module("../lib/auth-client.ts", () => ({
         return { data: response.error ? null : {}, error: response.error };
       },
     },
-    signOut: async () => ({}),
+    signOut: async () => {
+      events.push("authSignOut");
+      return {};
+    },
     useSession: () => ({
       data: { session: { token: "token-1" }, user: { email: "a@example.com", id: "user-1" } },
     }),
@@ -99,6 +115,12 @@ mock.module("../lib/deviceKeys.ts", () => ({
   ensureDeviceKeyRegistration: async () => {
     if (linkError) throw linkError;
     return {};
+  },
+}));
+mock.module("../lib/endSession.ts", () => ({
+  endSession: async ({ reason }: { reason: string }) => {
+    events.push(`endSession:${reason}`);
+    return { signedOut: true };
   },
 }));
 mock.module("../lib/signOut.ts", () => ({
@@ -125,6 +147,12 @@ const confirm = async (method: "password" | "google" = "password") => {
     method === "password" ? 0 : 1
   ];
   if (!button) throw new Error("Missing continue button");
+  const [input] = root.container.queryAll((item) => item.type === "mock-input");
+  if (method === "password" && input) {
+    await act(async () =>
+      (input.props as { onChangeText: (text: string) => void }).onChangeText(typedPassword),
+    );
+  }
   await act(async () => (button.props as { onPress: () => Promise<void> }).onPress());
   await act(async () => root.unmount());
 };
@@ -138,6 +166,34 @@ beforeEach(() => {
   codeEntry.props = null;
   phone.hasLock = true;
   phone.result = "confirmed";
+  methodsWaitingForNetwork = false;
+  currentUserId = "user-1";
+  typedPassword = "secret";
+});
+
+test("an empty password isn't sent, so it can't count towards the lockout", async () => {
+  typedPassword = "";
+
+  await confirm();
+
+  expect(signInHeaders).toEqual([]);
+  expect(alerts).toEqual([]);
+});
+
+test("picking a different Google account signs this phone out as a deliberate sign-out", async () => {
+  currentUserId = "user-2";
+
+  await confirm("google");
+
+  expect(events).toEqual(["phoneLock", "google", "endSession:signedOut", "navigate:/"]);
+});
+
+test("shows it is loading while the sign-in methods wait for a connection", async () => {
+  methodsWaitingForNetwork = true;
+  const root = createRoot();
+  await act(async () => root.render(<ConfirmIdentity onConfirmed={() => {}} />));
+  expect(root.container.queryAll((item) => item.type === "loading-indicator")).toHaveLength(1);
+  await act(async () => root.unmount());
 });
 
 test("a removed phone shows no alert of its own", async () => {
@@ -160,7 +216,7 @@ test("a link that can't reach the server asks to check the connection", async ()
     await confirm();
 
     expect(alerts).toEqual([
-      "Unable to confirm it’s you|This phone couldn’t confirm it’s yours. Check your connection and try again.",
+      "Couldn’t confirm it’s you|This phone couldn’t confirm it’s yours. Check your connection and try again.",
     ]);
     expect(events).toEqual([]);
   }
@@ -220,7 +276,7 @@ test("too many screen lock tries stops before Google and says to wait", async ()
 
   expect(events).toEqual(["phoneLock"]);
   expect(alerts).toEqual([
-    "Unable to confirm it’s you|Too many tries. Wait a moment, then try again.",
+    "Couldn’t confirm it’s you|Too many tries. Wait a moment, then try again.",
   ]);
 });
 
@@ -253,6 +309,10 @@ test("a password that needs a code signs in again with the code and reports wron
   );
   const [passwordButton] = root.container.queryAll((item) => item.type === "mock-button");
   if (!passwordButton) throw new Error("Missing password button");
+  const [passwordInput] = root.container.queryAll((item) => item.type === "mock-input");
+  await act(async () =>
+    (passwordInput!.props as { onChangeText: (text: string) => void }).onChangeText("secret"),
+  );
   await act(async () => (passwordButton.props as { onPress: () => Promise<void> }).onPress());
   const entry = () => {
     if (!codeEntry.props) throw new Error("Missing code entry");
@@ -302,6 +362,10 @@ test("a password changed elsewhere while entering a code goes back with an alert
   );
   const [passwordButton] = root.container.queryAll((item) => item.type === "mock-button");
   if (!passwordButton) throw new Error("Missing password button");
+  const [passwordInput] = root.container.queryAll((item) => item.type === "mock-input");
+  await act(async () =>
+    (passwordInput!.props as { onChangeText: (text: string) => void }).onChangeText("secret"),
+  );
   await act(async () => (passwordButton.props as { onPress: () => Promise<void> }).onPress());
   let error: string | undefined = "unset";
   await act(async () => {
@@ -309,7 +373,7 @@ test("a password changed elsewhere while entering a code goes back with an alert
   });
 
   expect(error).toBeUndefined();
-  expect(alerts).toEqual(["Unable to confirm it’s you|Invalid email or password"]);
+  expect(alerts).toEqual(["Couldn’t confirm it’s you|Invalid email or password"]);
   expect(root.container.queryAll((item) => item.type === "mock-button").length).toBe(2);
   expect(events).toEqual([]);
   await act(async () => root.unmount());

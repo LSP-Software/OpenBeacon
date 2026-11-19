@@ -10,6 +10,7 @@ import type { z } from "zod";
 import { EmailCodeEntry } from "../components/EmailCodeEntry.tsx";
 import { KeyboardFormScrollView } from "../components/KeyboardFormScrollView.tsx";
 import { LoadingIndicator } from "../components/LoadingIndicator.tsx";
+import { HeldKeysNotice } from "../components/HeldKeysNotice.tsx";
 import { ReturnToHomeHeader } from "../components/headers/ReturnToHomeHeader.tsx";
 import { Button } from "../components/ui/Button.tsx";
 import { Input } from "../components/ui/Input.tsx";
@@ -61,7 +62,7 @@ const SignUp = () => {
     const result = await emailCodes.requestSignUpCode(email);
     setEmailLoading(false);
     if (result.error && result.error.status !== 429) {
-      Alert.alert("Couldn't send a code", emailCodeErrorMessage(result.error));
+      Alert.alert("Couldn’t send a code", emailCodeErrorMessage(result.error));
       return;
     }
     setStep({
@@ -90,7 +91,7 @@ const SignUp = () => {
         );
         setStep({ name: "email" });
       } else {
-        Alert.alert("Sign up failed", result.error.message);
+        Alert.alert("Couldn’t create your account", result.error.message);
       }
       setEmailLoading(false);
       return;
@@ -119,7 +120,7 @@ const SignUp = () => {
   const handleGoogleSignUp = async () => {
     await performGoogleAuth({
       setLoading: setGoogleLoading,
-      failureTitle: "Google sign up failed",
+      failureTitle: "Couldn’t sign up with Google",
       onSuccess: finishSignUp,
       alert: Alert.alert,
     });
@@ -167,6 +168,7 @@ const SignUp = () => {
         {(formProps) => (
           <>
             <ReturnToHomeHeader />
+            <HeldKeysNotice />
 
             <View className="gap-2">
               <Text accessibilityRole="header" className="text-3xl font-bold">
@@ -266,7 +268,7 @@ const SignUp = () => {
             </View>
 
             <View className="items-center gap-4 pt-2">
-              <Link href={{ pathname: "/signIn", params: { joinCode } }} asChild>
+              <Link href={{ pathname: "/signIn", params: { joinCode } }} replace asChild>
                 <Pressable accessibilityRole="link">
                   <Text className="text-secondary">
                     Already have an account?{" "}

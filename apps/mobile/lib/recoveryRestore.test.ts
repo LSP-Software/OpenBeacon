@@ -669,7 +669,6 @@ describe("secrets never reach the server", () => {
     expect(addHistoryWrapsMock).toHaveBeenCalledTimes(1);
     for (const epoch of epochsForSecondPhone) await expectReadable(firstPhone, epoch);
 
-    const serialized = JSON.stringify(serverInputs);
     const secrets = [
       deriveRecoveryKeyPair(phrase).privateKey.expose(),
       (secondPhone.secureStore.get(`${userId}.1`) as HistoryPrivateKeyMaterial).expose(),
@@ -677,7 +676,7 @@ describe("secrets never reach the server", () => {
       secondPhone.device.privateKey.expose(),
       ...epochsForSecondPhone.map(({ epochKey }) => epochKey.expose()),
     ];
-    expectNoSecretsIn(serialized, { secrets, phrases: [phrase] });
+    expectNoSecretsIn({ serverInputs, storage: storageValues }, { secrets, phrases: [phrase] });
   });
 });
 

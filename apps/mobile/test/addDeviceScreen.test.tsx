@@ -128,7 +128,7 @@ test("an Add that fails for another reason stays on the confirm step with an ale
   await scanCode();
   await pressButton("Add");
 
-  expect(alerts.map(([title]) => title)).toEqual(["Unable to add New phone"]);
+  expect(alerts.map(([title]) => title)).toEqual(["Couldn’t add New phone"]);
   expect(rendered()).toContain("Not me");
 });
 
@@ -139,7 +139,7 @@ test("an Add refused for a bad request without a reason keeps the code and alert
   await scanCode();
   await pressButton("Add");
 
-  expect(alerts).toEqual([["Unable to add New phone", "Invalid input"]]);
+  expect(alerts).toEqual([["Couldn’t add New phone", "Invalid input"]]);
   expect(rendered()).toContain("Not me");
 });
 

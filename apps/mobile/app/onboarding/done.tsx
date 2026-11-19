@@ -83,7 +83,11 @@ const OnboardingDoneScreen = () => {
         </View>
       }
       title="You’re all set"
-      description={`This ${noun} is ready. Create a group or scan an invite from the Groups tab to start sharing.`}
+      description={
+        permissionState?.isReadyForSharing === false || notifications.enabled === false
+          ? `This ${noun} won’t share until location and notifications are on. Fix them below.`
+          : `This ${noun} is ready. Create a group or scan an invite from the Groups tab to start sharing.`
+      }
       primary={{ label: "Go to the map", onPress: finishOnboarding }}
     >
       <View className="rounded-2xl border border-border bg-card px-4">

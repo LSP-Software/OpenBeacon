@@ -28,6 +28,8 @@ import {
   verifyRecoveryResetCode,
 } from "../../lib/recovery.ts";
 import { requestTrackingSync } from "../../lib/trackingEvents.ts";
+import { userMessage } from "../../lib/userMessage.ts";
+import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 
 const RecoveryPhraseResetScreen = () => {
   const { setup } = useLocalSearchParams<{ setup?: string }>();
@@ -60,15 +62,15 @@ const RecoveryPhraseResetScreen = () => {
     }, [busy]),
   );
 
-  const reauthenticate = async () => {
+  const reauthenticate = async (message = "Nothing was reset. Confirm it’s you to carry on.") => {
     await gate.recheck();
     setStep("verify");
-    Alert.alert("Sign in again", "Nothing was reset. Confirm it’s you to carry on.");
+    Alert.alert("Sign in again", message);
   };
 
   const sendCode = async () => {
     const result = await tryCatch(requestRecoveryResetCode());
-    if (result.error) return result.error.message;
+    if (result.error) return userMessage(result.error);
     if (result.data.status === "reauthenticate") {
       await reauthenticate();
       return undefined;
@@ -84,7 +86,7 @@ const RecoveryPhraseResetScreen = () => {
     const error = await sendCode();
     if (!error) return true;
     setStep("warn");
-    Alert.alert("Unable to send a code", error);
+    Alert.alert("Couldn’t send a code", error);
     return false;
   };
 
@@ -98,7 +100,7 @@ const RecoveryPhraseResetScreen = () => {
 
   const verifyCode = async (code: string) => {
     const result = await tryCatch(verifyRecoveryResetCode(code));
-    if (result.error) return result.error.message;
+    if (result.error) return userMessage(result.error);
     if (result.data.status === "invalidCode") return invalidCodeMessage;
     if (result.data.status === "reauthenticate") {
       await reauthenticate();
@@ -127,11 +129,13 @@ const RecoveryPhraseResetScreen = () => {
     const result = await tryCatch(resetRecoveryPhrase(phrase, resetToken));
     if (result.error) {
       setStep("phrase");
-      Alert.alert("Unable to reset recovery phrase", result.error.message);
+      Alert.alert("Couldn’t reset recovery phrase", userMessage(result.error));
       return;
     }
     if (result.data.status === "reauthenticate") {
-      await reauthenticate();
+      await reauthenticate(
+        "Nothing was reset. Confirm it’s you, then write down the new phrase you’re shown.",
+      );
       return;
     }
     if (result.data.status === "confirmationExpired") {
@@ -199,15 +203,17 @@ const RecoveryPhraseResetScreen = () => {
         >
           {step === "warn" && setup && (
             <View className="gap-4">
-              <Text className="text-foreground text-2xl font-bold">Start fresh on this phone?</Text>
+              <Text className="text-foreground text-2xl font-bold">
+                Start fresh on this {thisDeviceNoun()}?
+              </Text>
               <View className="gap-2 rounded-lg border border-destructive bg-destructive/10 p-4">
                 <Text className="font-semibold">
                   Your location history from before today will be deleted for good.
                 </Text>
                 <Text className="text-tertiary leading-6">
-                  Your groups and members stay. You’ll get a new recovery phrase, and this phone is
-                  set up straight away. Your other phones keep working but will need the new phrase
-                  to read history.
+                  Your groups and members stay. You’ll get a new recovery phrase, and this{" "}
+                  {thisDeviceNoun()} is set up straight away. Your other phones keep working but
+                  will need the new phrase to read history.
                 </Text>
               </View>
             </View>
@@ -227,8 +233,8 @@ const RecoveryPhraseResetScreen = () => {
                 </Text>
                 <Text className="text-tertiary leading-6">
                   Your old phrase stops working, and the keys it protected are deleted from your
-                  account. This phone keeps only the history it can still read with its own keys.
-                  Other phones will need the new phrase.
+                  account. This {thisDeviceNoun()} keeps only the history it can still read with its
+                  own keys. Other phones will need the new phrase.
                 </Text>
               </View>
               <Text className="text-secondary text-base">
@@ -261,7 +267,7 @@ const RecoveryPhraseResetScreen = () => {
                   }
                   void refetchProviders();
                   Alert.alert(
-                    "Unable to continue",
+                    "Couldn’t continue",
                     "We couldn’t reach the server. Check your connection and try again.",
                   );
                 }}
@@ -321,8 +327,7 @@ const RecoveryPhraseResetScreen = () => {
             <View className="gap-4">
               <Text className="text-foreground text-2xl font-bold">Finish setting up</Text>
               <Text className="text-secondary text-base">
-                Your new phrase is set up, but we couldn’t finish setting up this phone. Check your
-                connection and try again.
+                {`Your new phrase is set up, but we couldn’t finish setting up this ${thisDeviceNoun()}. Check your connection and try again.`}
               </Text>
               <Button
                 onPress={() => {
@@ -338,8 +343,8 @@ const RecoveryPhraseResetScreen = () => {
             <View className="gap-4">
               <Text className="text-foreground text-2xl font-bold">Restore your new phrase</Text>
               <Text className="text-secondary text-base">
-                Your new phrase is set up, but this phone couldn’t save its key. Restore with the
-                phrase you just wrote down.
+                Your new phrase is set up, but this {thisDeviceNoun()} couldn’t save its key.
+                Restore with the phrase you just wrote down.
               </Text>
               <Link
                 href={
@@ -361,7 +366,8 @@ const RecoveryPhraseResetScreen = () => {
             <View className="gap-4">
               <Text className="text-foreground text-2xl font-bold">Your phrase is reset</Text>
               <Text className="text-secondary text-base">
-                Use it to get your location history back if you lose or replace your phone.
+                Use it to get your location history back if you lose or replace your{" "}
+                {thisDeviceNoun()}.
               </Text>
               {progress.failed > 0 && (
                 <Text className="text-secondary text-base">

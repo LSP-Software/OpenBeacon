@@ -41,7 +41,6 @@ const storedPoints = (stored: string[] = []) =>
 
 let originalBetterAuthUrl: string | undefined;
 let originalBetterAuthSecret: string | undefined;
-let originalNodeEnv: string | undefined;
 
 const createCaller = async ({
   insertPointsMock,
@@ -141,7 +140,6 @@ const createCaller = async ({
     cache,
     deviceId: "device-1",
     deviceActive: !pending,
-    clientIp: "203.0.113.10",
     db: {
       ...db,
       $transaction: async (callback: (tx: typeof db) => Promise<unknown>) => callback(db),
@@ -166,8 +164,6 @@ const createCaller = async ({
 
 describe("groupTrackingRouter", () => {
   beforeEach(() => {
-    originalNodeEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = "production";
     originalBetterAuthUrl = process.env.BETTER_AUTH_URL;
     originalBetterAuthSecret = process.env.BETTER_AUTH_SECRET;
     process.env.BETTER_AUTH_URL = "http://localhost:3000";
@@ -175,8 +171,6 @@ describe("groupTrackingRouter", () => {
   });
 
   afterEach(() => {
-    if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
-    else process.env.NODE_ENV = originalNodeEnv;
     if (originalBetterAuthUrl === undefined) {
       delete process.env.BETTER_AUTH_URL;
     } else {
@@ -314,7 +308,6 @@ describe("groupTrackingRouter", () => {
       memberFindUniqueMock: createMemberFindUniqueMock(true),
     });
     await cache.rateLimits.take({ ...allowance(), cost: 2_880 });
-    const take = spyOn(cache.rateLimits, "take");
     const live = trackingPoint("live", "LIVE");
 
     await expect(
@@ -324,7 +317,6 @@ describe("groupTrackingRouter", () => {
       discarded: [],
       duplicates: [duplicate.clientPointId],
     });
-    expect(take).not.toHaveBeenCalled();
 
     const newStay = trackingPoint("new-stay", "STAY");
     await expect(

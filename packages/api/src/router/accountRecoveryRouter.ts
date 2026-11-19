@@ -61,7 +61,7 @@ const createHistoryKey = async (
 const replaceEscrows = async (
   tx: Prisma.TransactionClient,
   userId: string,
-  escrows: z.infer<typeof changeRecoveryPhraseSchema>["escrows"],
+  escrows: z.infer<typeof setupAccountRecoverySchema>["escrows"],
 ) => {
   const historyKeys = await tx.accountHistoryKey.findMany({
     select: { version: true },
@@ -105,7 +105,7 @@ export const accountRecoveryRouter = createTRPCRouter({
         select: { id: true, publicKey: true, version: true },
         where: { userId },
       }),
-      sessionFreshForMs(ctx.session.session.createdAt),
+      sessionFreshForMs(ctx.db, ctx.session.session.createdAt),
     ]);
     return {
       currentHistoryKey: historyKeys.at(-1) ?? null,
@@ -174,15 +174,35 @@ export const accountRecoveryRouter = createTRPCRouter({
           userId,
         });
         if (!thisDevice.active) throw devicePendingError();
-        if (!(await tx.recoveryKey.findUnique({ where: { userId } }))) {
-          throw new TRPCError({
-            code: "NOT_FOUND",
-            message: "No recovery phrase is set up.",
-            cause: new ReasonError("RECOVERY_CHANGED"),
+        const changed = await tx.recoveryKey.updateMany({
+          data: input.recoveryKey,
+          where: {
+            userId,
+            ...(input.expectedRecoveryPublicKey === undefined
+              ? {}
+              : { publicKey: input.expectedRecoveryPublicKey }),
+          },
+        });
+        if (changed.count === 0) {
+          const exists = await tx.recoveryKey.findUnique({
+            select: { userId: true },
+            where: { userId },
           });
+          throw new TRPCError(
+            exists
+              ? {
+                  code: "CONFLICT",
+                  message: "The recovery phrase changed on another phone.",
+                  cause: new ReasonError("RECOVERY_CHANGED"),
+                }
+              : {
+                  code: "NOT_FOUND",
+                  message: "No recovery phrase is set up.",
+                  cause: new ReasonError("RECOVERY_CHANGED"),
+                },
+          );
         }
         await replaceEscrows(tx, userId, input.escrows);
-        await tx.recoveryKey.update({ data: input.recoveryKey, where: { userId } });
       });
       ctx.securityAlerts?.send(userId, { type: "recovery-phrase-changed" }, ctx.deviceId);
       return { historyKeyVersions: input.escrows.map(({ version }) => version) };

@@ -10,6 +10,7 @@ import { Icon } from "../ui/Icon.tsx";
 import { Switch } from "../ui/Switch.tsx";
 import { Text } from "../ui/Text.tsx";
 import { LiveMapBottomSheet } from "./LiveMapBottomSheet.tsx";
+import { LiveMapMarkerPin } from "./LiveMapMarkerPin.tsx";
 
 export const LiveMapPlaceSheet = ({
   here,
@@ -51,9 +52,15 @@ export const LiveMapPlaceSheet = ({
       <ScrollView style={{ maxHeight: 180 }} bounces={false} overScrollMode="never">
         {here.map((marker) => (
           <View key={marker.userId} className="flex-row items-center gap-3 py-2">
-            <View className="size-10 items-center justify-center rounded-full bg-primary">
-              <Text className="font-bold text-white">{marker.initials}</Text>
-            </View>
+            <LiveMapMarkerPin
+              hasUnreadableUpdate={marker.unreadableGroup !== undefined}
+              image={marker.image}
+              initials={marker.initials}
+              name={marker.name}
+              ringColor={marker.ringColor}
+              ringColors={marker.ringColors}
+              timestamp={marker.timestamp}
+            />
             <Text className="text-foreground text-base font-medium" numberOfLines={1}>
               {marker.isSelf ? `${marker.name} (you)` : marker.name}
             </Text>

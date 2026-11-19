@@ -1,12 +1,12 @@
+import { readDatabaseTime } from "@openbeacon/database";
 import { deleteAccountRecords } from "@openbeacon/api/account-deletion.ts";
 import { env } from "@openbeacon/api/env.ts";
 import { deleteImageKey, deleteUserImages } from "@openbeacon/api/storage.ts";
 import { errorCode, tryCatch } from "@openbeacon/shared";
-import { getDatabaseTime } from "../databaseTime.ts";
 import { services, waitForSecurityAlerts } from "../services.ts";
 
 export const runAccountDeletion = async () => {
-  const now = await getDatabaseTime();
+  const now = await readDatabaseTime(services.db);
   const due = await services.db.user.findMany({
     where: {
       pendingDeletion: true,
@@ -23,14 +23,15 @@ export const runAccountDeletion = async () => {
         db: services.db,
         userId: user.id,
         imageUrlPrefix: `${env.IMAGES_S3_CDN_URL}/${env.IMAGES_S3_BUCKET_NAME}`,
-        mode: "scheduled",
         securityAlerts: services.securityAlerts,
       }),
     );
     if (result.error) {
       await services.db.user.updateMany({
         where: { id: user.id, pendingDeletion: true },
-        data: { deletionRetryAt: new Date((await getDatabaseTime()).getTime() + 300_000) },
+        data: {
+          deletionRetryAt: new Date((await readDatabaseTime(services.db)).getTime() + 300_000),
+        },
       });
       const code = errorCode(result.error);
       console.error(`Scheduled account deletion failed${code ? ` (${code})` : ""}`);
@@ -54,7 +55,7 @@ export const runAccountDeletion = async () => {
     if (result.error) {
       await services.db.accountDeletionCleanup.updateMany({
         where: { userId: item.userId },
-        data: { retryAt: new Date((await getDatabaseTime()).getTime() + 300_000) },
+        data: { retryAt: new Date((await readDatabaseTime(services.db)).getTime() + 300_000) },
       });
       const code = errorCode(result.error);
       console.error(`Account image cleanup failed${code ? ` (${code})` : ""}`);

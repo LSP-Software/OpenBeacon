@@ -26,6 +26,8 @@ app.get("/api/thing", (c) => c.json({ ok: true }));
 app.get("/api/raw", () => new Response("raw"));
 app.get("/api/redirect", () => Response.redirect("https://example.com/", 302));
 app.get("/api/auth/google-deletion-callback", (c) => c.redirect("openbeacon://google-deletion"));
+app.on(["GET", "POST"], "/api/auth/get-session", (c) => c.json(null));
+app.on(["GET", "POST"], "/api/auth/sign-out", (c) => c.json({ success: true }));
 app.get("/health", (c) => c.json({ status: "ok" }));
 
 const request = (path: string, level?: string) =>
@@ -68,6 +70,32 @@ describe("apiCompatibility middleware", () => {
 
   test("still checks the level on other methods to the Google deletion callback", async () => {
     const response = await app.request("/api/auth/google-deletion-callback", { method: "POST" });
+    expect(response.status).toBe(426);
+  });
+
+  test.each([
+    ["GET", "/api/auth/get-session"],
+    ["POST", "/api/auth/sign-out"],
+  ])(
+    "lets an app that's too old %s %s, so it can keep its session and sign out",
+    async (method, path) => {
+      const response = await app.request(path, {
+        method,
+        headers: { [apiCompatibilityLevelHeader]: String(minClientApiCompatibilityLevel - 1) },
+      });
+      expect(response.status).toBe(200);
+      expect(response.headers.get(apiCompatibilityLevelHeader)).toBe(String(apiCompatibilityLevel));
+      expect(response.headers.get(minClientApiCompatibilityLevelHeader)).toBe(
+        String(minClientApiCompatibilityLevel),
+      );
+    },
+  );
+
+  test.each([
+    ["POST", "/api/auth/get-session"],
+    ["GET", "/api/auth/sign-out"],
+  ])("still turns away an app that's too old on %s %s", async (method, path) => {
+    const response = await app.request(path, { method });
     expect(response.status).toBe(426);
   });
 

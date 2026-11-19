@@ -17,7 +17,7 @@ import {
 } from "@openbeacon/map-tiles";
 import { tryCatch } from "@openbeacon/shared";
 import type { MapTilesEnv } from "./env.ts";
-import { readArchiveInfo } from "./pmtiles.ts";
+import { isSupportedSchemaVersion, readArchiveInfo } from "./pmtiles.ts";
 import { headObject, readObjectRange } from "./storage.ts";
 import {
   fetchSourceRange,
@@ -263,12 +263,27 @@ export const publish = async (
   { client, env, partClient }: Context,
   { manual }: { manual: boolean },
 ): Promise<PublishResult> => {
-  const build = pickProtomapsBuild({ builds: await listProtomapsBuilds(), date: undefined });
-  const buildDate = getBuildDate(build);
-  const url = getProtomapsBuildUrl(build);
+  const builds = await listProtomapsBuilds();
   const initialManifest = await readManifest({ bucket: env.MAP_S3_BUCKET_NAME, client });
   const now = Date.now();
   const current = initialManifest ? getCurrentArchive(initialManifest.manifest) : null;
+  const slot = initialManifest ? getOtherSlot(initialManifest.manifest.current) : "a";
+  const key = getSlotKey(slot);
+  const statePath = getUploadStatePath({
+    bucket: env.MAP_S3_BUCKET_NAME,
+    key,
+    stateDir: env.MAP_TILES_STATE_DIR,
+  });
+  const savedSourceUrl = (await readUploadState(statePath))?.sourceUrl;
+  const savedBuild = builds.find(
+    (candidate) =>
+      getProtomapsBuildUrl(candidate) === savedSourceUrl &&
+      isSupportedSchemaVersion(candidate.version) &&
+      (!current || getBuildDate(candidate) > current.archive.build),
+  );
+  const build = savedBuild ?? pickProtomapsBuild({ builds, date: undefined });
+  const buildDate = getBuildDate(build);
+  const url = getProtomapsBuildUrl(build);
 
   if (current?.archive.build === buildDate) {
     return { published: false, message: `Build ${buildDate} is already current` };
@@ -281,14 +296,7 @@ export const publish = async (
     };
   }
 
-  const slot = initialManifest ? getOtherSlot(initialManifest.manifest.current) : "a";
-  const key = getSlotKey(slot);
-  const statePath = getUploadStatePath({
-    bucket: env.MAP_S3_BUCKET_NAME,
-    key,
-    stateDir: env.MAP_TILES_STATE_DIR,
-  });
-  const resuming = (await readUploadState(statePath))?.sourceUrl === url;
+  const resuming = savedSourceUrl === url;
 
   const rejectedBuild = initialManifest?.manifest.rejectedBuild;
 

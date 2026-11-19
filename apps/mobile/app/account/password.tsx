@@ -17,9 +17,11 @@ import { authClient } from "../../lib/auth-client.ts";
 import { changePasswordFormSchema } from "../../lib/changePasswordSchema.ts";
 import { ensureDeviceKeyRegistration } from "../../lib/deviceKeys.ts";
 import { isSessionLinkRefused, signOutAfterRefusedSessionLink } from "../../lib/sessionLink.ts";
+import { useSingleFlight } from "../../lib/useSingleFlight.ts";
 
 const PasswordScreen = () => {
   const [saving, setSaving] = useState(false);
+  const submission = useSingleFlight<"change">();
   const accounts = useQuery({
     queryKey: ["auth", "accounts"],
     queryFn: async () => {
@@ -49,7 +51,7 @@ const PasswordScreen = () => {
     if (result.error) {
       setSaving(false);
       Alert.alert(
-        "Unable to change password",
+        "Couldn’t change password",
         passwordErrorMessage(result.error, "Please try again."),
       );
       return;
@@ -68,9 +70,13 @@ const PasswordScreen = () => {
     router.back();
   };
 
+  const submit = form.handleSubmit((values) =>
+    submission.run("change", () => changePassword(values)),
+  );
+
   return (
     <View className="flex-1 bg-background">
-      <ScreenHeader title="Password" />
+      <ScreenHeader title="Password and security" />
 
       <KeyboardAvoidingView
         className="flex-1"
@@ -125,9 +131,9 @@ const PasswordScreen = () => {
                 autoComplete="new-password"
                 textContentType="newPassword"
                 returnKeyType="done"
-                onSubmitEditing={form.handleSubmit(changePassword)}
+                onSubmitEditing={submit}
               />
-              <Button onPress={form.handleSubmit(changePassword)} disabled={saving}>
+              <Button onPress={submit} disabled={saving}>
                 <Text>{saving ? "Changing password…" : "Change password"}</Text>
               </Button>
             </View>
@@ -140,7 +146,7 @@ const PasswordScreen = () => {
             )}
             <Link href="/account/sign-out-others" replace asChild>
               <Button variant="secondary">
-                <Text>Sign out of all other sessions</Text>
+                <Text>Sign out other sessions</Text>
               </Button>
             </Link>
           </View>

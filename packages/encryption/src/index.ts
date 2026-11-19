@@ -373,9 +373,6 @@ export const decryptGroupPayload = ({
 export const decodeJsonPayload = <T>(payload: SensitivePayloadBytes) =>
   JSON.parse(textDecoder.decode(payload.expose())) as T;
 
-export const decodeUtf8Payload = (payload: SensitivePayloadBytes) =>
-  textDecoder.decode(payload.expose());
-
 export const createInitialGroupEpoch = ({
   creator,
   groupId,
@@ -436,8 +433,6 @@ export const createNextGroupEpoch = ({
   };
 };
 
-export const getRecordEpochId = <T extends { epochId: string }>(record: T) => record.epochId;
-
 export {
   decodeBase64,
   decodeTrackingPoint,
@@ -465,13 +460,10 @@ export {
   XCHACHA20_NONCE_LENGTH,
 };
 export type {
-  DecryptedGroupPayload,
-  DeviceKeyPair,
   EncryptedImageKey,
   EncryptedPayload,
   EpochCreator,
   GroupEpoch,
-  GroupEpochCreationResult,
   GroupPayloadKind,
   HistoryKeyEscrow,
   HistoryPublicKey,
@@ -520,6 +512,7 @@ export {
   decryptImageKey,
   encryptImage,
   encryptImageKey,
+  ENCRYPTED_IMAGE_KEY_LENGTH,
   generateImageKey,
   IMAGE_ENCRYPTION_CONTEXT,
   IMAGE_ENCRYPTION_VERSION,

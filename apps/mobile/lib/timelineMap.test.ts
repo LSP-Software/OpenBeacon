@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
+  timelineFitKeys,
+  timelineArrowViewport,
   timelineArrows,
   timelineLaneRuns,
   timelineRoute,
@@ -203,6 +205,29 @@ describe("timelineArrows", () => {
   });
 });
 
+describe("timelineArrowViewport", () => {
+  const view = { bounds: [0, 0, 1, 1] as [number, number, number, number], zoom: 10 };
+
+  test("keeps the last viewport while the camera stays inside its padded area", () => {
+    const followStep = {
+      bounds: [0.3, 0.2, 1.3, 1.2] as [number, number, number, number],
+      zoom: 10.05,
+    };
+    expect(timelineArrowViewport(view, followStep)).toBe(view);
+  });
+
+  test("moves on when the camera leaves the padded area or the zoom changes", () => {
+    const farPan = { bounds: [2, 0, 3, 1] as [number, number, number, number], zoom: 10 };
+    const zoomedIn = {
+      bounds: [0.2, 0.2, 0.8, 0.8] as [number, number, number, number],
+      zoom: 10.5,
+    };
+    expect(timelineArrowViewport(view, farPan)).toBe(farPan);
+    expect(timelineArrowViewport(view, zoomedIn)).toBe(zoomedIn);
+    expect(timelineArrowViewport(null, view)).toBe(view);
+  });
+});
+
 describe("timelineLaneRuns", () => {
   test("merges touching segments of the same kind", () => {
     expect(
@@ -217,5 +242,38 @@ describe("timelineLaneRuns", () => {
       { kind: "stay", start: 2, end: 5 },
       { kind: "noLocation", start: 5, end: 9 },
     ]);
+  });
+});
+
+describe("timelineFitKeys", () => {
+  const everyone = {
+    dayKey: "2026-11-18",
+    personId: null,
+    ready: true,
+    shownUserIds: ["alice", "bob", "carol"],
+  };
+
+  test("another person finishing decrypting doesn't refit the Everyone view", () => {
+    const first = timelineFitKeys({ ...everyone, loaded: false, routeIds: ["a1"] });
+    const second = timelineFitKeys({ ...everyone, loaded: false, routeIds: ["a1", "b1"] });
+    expect(second.key).toBe(first.key);
+  });
+
+  test("refits when the first route arrives and when the load completes", () => {
+    const none = timelineFitKeys({ ...everyone, loaded: false, routeIds: [] });
+    const first = timelineFitKeys({ ...everyone, loaded: false, routeIds: ["a1"] });
+    const done = timelineFitKeys({ ...everyone, loaded: true, routeIds: ["a1", "b1"] });
+    expect(new Set([none.key, first.key, done.key]).size).toBe(3);
+    expect(done.view).toBe(first.view);
+  });
+
+  test("a new person or device is a new view", () => {
+    const alice = { ...everyone, loaded: true, personId: "alice" };
+    expect(timelineFitKeys({ ...alice, routeIds: ["a1"] }).view).not.toBe(
+      timelineFitKeys({ ...alice, routeIds: ["a2"] }).view,
+    );
+    expect(timelineFitKeys({ ...alice, routeIds: ["a1"] }).view).not.toBe(
+      timelineFitKeys({ ...everyone, loaded: true, routeIds: ["a1"] }).view,
+    );
   });
 });

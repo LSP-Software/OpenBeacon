@@ -3,6 +3,7 @@ import { createSecurityAlerts } from "@openbeacon/auth/securityAlerts.ts";
 import { Prisma, prisma } from "@openbeacon/database";
 import type { SecurityAlert } from "@openbeacon/email";
 import { deleteAccountRecords } from "./account-deletion.ts";
+import { deleteDueAccount } from "./accountDeletion.testUtil.ts";
 import { holdRowLock } from "./databaseLocks.testUtil.ts";
 import {
   countTrackingPoints,
@@ -127,7 +128,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       });
       await prisma.feedback.createMany({
         data: [
-          { userId: deletedUser, message: `${prefix}-feedback`, email: null },
           { message: `${prefix}-feedback-anonymous`, email: `${deletedUser}@example.test` },
           {
             message: `${prefix}-feedback-mixed-case`,
@@ -237,11 +237,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const input = {
         db: prisma,
         userId: deletedUser,
-        mode: "immediate" as const,
         imageUrlPrefix: "https://cdn.example/bucket",
         securityAlerts,
       };
-      await expect(deleteAccountRecords(input)).rejects.toThrow("Transfer ownership");
+      await expect(deleteDueAccount(input)).rejects.toThrow("Transfer ownership");
       expect(await prisma.user.findUnique({ where: { id: deletedUser } })).not.toBeNull();
       expect(
         await countTrackingPoints(prisma, Prisma.sql`"stream"."senderUserId" = ${deletedUser}`),
@@ -344,7 +343,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           db: prisma,
           userId: id,
           imageUrlPrefix: "https://cdn.example/bucket",
-          mode: "scheduled" as const,
           securityAlerts,
         };
         expect(await deleteAccountRecords(input)).toBe(false);
@@ -388,10 +386,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       });
       try {
         expect(
-          await deleteAccountRecords({
+          await deleteDueAccount({
             db: prisma,
             userId: id,
-            mode: "immediate",
             imageUrlPrefix: "https://cdn.example/bucket",
             securityAlerts: null,
           }),
@@ -436,10 +433,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       try {
         const outcomes = await Promise.allSettled(
           [first, second].map((id) =>
-            deleteAccountRecords({
+            deleteDueAccount({
               db: prisma,
               userId: id,
-              mode: "immediate",
               imageUrlPrefix: "https://cdn.example/bucket",
               securityAlerts: null,
             }),
@@ -513,10 +509,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
               senderUserId: id,
             }),
         });
-        const deleting = deleteAccountRecords({
+        const deleting = deleteDueAccount({
           db: prisma,
           userId: id,
-          mode: "immediate",
           imageUrlPrefix: "https://cdn.example/bucket",
           securityAlerts: null,
         });
@@ -552,10 +547,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         beforeCommit: (tx) =>
           tx.group.update({ where: { id: imageGroup }, data: { image: replacement } }),
       });
-      const deleting = deleteAccountRecords({
+      const deleting = deleteDueAccount({
         db: prisma,
         userId: id,
-        mode: "immediate",
         imageUrlPrefix: "https://cdn.example/bucket",
         securityAlerts: null,
       });
@@ -598,7 +592,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           await deleteAccountRecords({
             db: prisma,
             userId: id,
-            mode: "scheduled",
             imageUrlPrefix: "https://cdn.example/bucket",
             securityAlerts,
           }),

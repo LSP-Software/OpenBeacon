@@ -18,7 +18,7 @@ const auth = createAuth({
   rateLimits: createIntegrationTestCache(Date.now).rateLimits,
 });
 
-const googleIdToken = (email: string) => {
+const googleIdToken = (email: string, claims: Record<string, unknown> = {}) => {
   const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
   const now = Math.floor(Date.now() / 1000);
   const message = `${encode({ alg: "RS256", kid: jwk.kid })}.${encode({
@@ -31,18 +31,22 @@ const googleIdToken = (email: string) => {
     picture: "https://lh3.googleusercontent.com/a/photo",
     iat: now,
     exp: now + 300,
+    ...claims,
   })}`;
   return `${message}.${sign("RSA-SHA256", Buffer.from(message), privateKey).toString("base64url")}`;
 };
 
-const signInWithGoogle = (email: string) =>
+const postSignInSocial = (body: unknown) =>
   auth.handler(
     new Request("http://localhost:3000/api/auth/sign-in/social", {
       method: "POST",
       headers: { "content-type": "application/json", [clientIpHeader]: "192.0.2.1" },
-      body: JSON.stringify({ provider: "google", idToken: { token: googleIdToken(email) } }),
+      body: JSON.stringify(body),
     }),
   );
+
+const signInWithGoogle = (email: string, claims: Record<string, unknown> = {}) =>
+  postSignInSocial({ provider: "google", idToken: { token: googleIdToken(email, claims) } });
 
 describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
   "Google sign-in with PostgreSQL",
@@ -63,6 +67,25 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await prisma.$disconnect();
     });
 
+    test("a Google account whose email isn't verified can't sign in or claim the address", async () => {
+      const email = `${prefix}-unverified@example.test`;
+      for (const emailVerified of [false, "true", undefined]) {
+        expect((await signInWithGoogle(email, { email_verified: emailVerified })).status).toBe(401);
+      }
+      expect(await prisma.user.count({ where: { email } })).toBe(0);
+    });
+
+    test("the redirect sign-in the app never uses is switched off and stores nothing", async () => {
+      const marker = `${prefix}-redirect-marker`;
+      const response = await postSignInSocial({
+        provider: "google",
+        disableRedirect: true,
+        additionalData: { marker },
+      });
+      expect(response.status).toBe(404);
+      expect(await prisma.verification.count({ where: { value: { contains: marker } } })).toBe(0);
+    });
+
     test("a new email can sign up with Google", async () => {
       const email = `${prefix}-new@example.test`;
       const response = await signInWithGoogle(email);
@@ -73,6 +96,18 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           select: { providerId: true },
         }),
       ).toEqual([{ providerId: "google" }]);
+    });
+
+    test("a Google display name names refuse still signs up, with the name cleaned or replaced", async () => {
+      for (const [suffix, name, stored] of [
+        ["bidi-only", "\u202E\u2066\u2069", "OpenBeacon user"],
+        ["override", "Ali\u202Ece", "Alice"],
+        ["long", "b".repeat(120), "b".repeat(100)],
+      ] as const) {
+        const email = `${prefix}-${suffix}@example.test`;
+        expect((await signInWithGoogle(email, { name })).status).toBe(200);
+        expect((await prisma.user.findUniqueOrThrow({ where: { email } })).name).toBe(stored);
+      }
     });
 
     test("Google sign-in never copies the Google photo and returns the sealed picture key", async () => {

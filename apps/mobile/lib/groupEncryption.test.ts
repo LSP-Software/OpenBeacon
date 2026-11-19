@@ -174,6 +174,18 @@ describe("group encryption helpers", () => {
     };
   });
 
+  test("leaving a group builds no key bundle, so it works when no one else has an active device", async () => {
+    const { buildRemoveGroupMemberInput } = await importGroupEncryptionModule();
+    expect(
+      await buildRemoveGroupMemberInput({
+        groupId: "group-a",
+        memberId: "member-a",
+        leaving: true,
+      }),
+    ).toEqual({ groupId: "group-a", memberId: "member-a" });
+    expect(ensureDeviceKeyRegistrationMock).not.toHaveBeenCalled();
+  });
+
   test("wraps the initial epoch for all of the creator's active devices", async () => {
     const { buildCreateGroupInput } = await importGroupEncryptionModule();
 

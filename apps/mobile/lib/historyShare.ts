@@ -12,7 +12,9 @@ type HistoryShareSetting = {
   groups: ReadonlyArray<{ groupId: string; historyShare: HistoryShare | null }>;
 };
 
-const choices: Record<HistoryShare, { label: string; amount: string; period: string | null }> = {
+const choices: Partial<
+  Record<HistoryShare, { label: string; amount: string; period: string | null }>
+> = {
   LAST_LOCATION: { label: "Last location only", amount: "only your location now", period: null },
   HOURS_6: { label: "6 hours", amount: "6 hours of history", period: "the last 6 hours" },
   DAY_1: { label: "1 day", amount: "1 day of history", period: "the last day" },
@@ -20,17 +22,20 @@ const choices: Record<HistoryShare, { label: string; amount: string; period: str
   MAXIMUM: { label: "Maximum (14 days)", amount: "up to 14 days of history", period: null },
 };
 
+const choice = (share: HistoryShare) =>
+  choices[share] ?? { label: "Custom", amount: "some of your history", period: null };
+
 export const historyShareChoices = HISTORY_SHARES.map((value) => ({
   value,
-  label: choices[value].label,
+  label: choice(value).label,
 }));
 
-export const historyShareLabel = (share: HistoryShare) => choices[share].label;
+export const historyShareLabel = (share: HistoryShare) => choice(share).label;
 
-export const historyShareAmount = (share: HistoryShare) => choices[share].amount;
+export const historyShareAmount = (share: HistoryShare) => choice(share).amount;
 
 export const historyShareNote = (name: string | null, share: HistoryShare) => {
-  const period = choices[share].period;
+  const period = choice(share).period;
   if (share === "LAST_LOCATION") {
     return name === null
       ? "You share only your location now"
@@ -38,6 +43,24 @@ export const historyShareNote = (name: string | null, share: HistoryShare) => {
   }
   if (period === null) return null;
   return name === null ? `You share ${period}` : `${name} shares ${period}`;
+};
+
+export const timelineEmptyLines = ({
+  groupName,
+  notes,
+  personSelected,
+}: {
+  groupName: string;
+  notes: readonly string[];
+  personSelected: boolean;
+}) => {
+  if (personSelected && notes.length > 0) return notes;
+  return [
+    personSelected
+      ? "No location history for this person in this group yet."
+      : `No location history in ${groupName} yet.`,
+    ...notes,
+  ];
 };
 
 export const groupHistoryShare = (setting: HistoryShareSetting, groupId: string) => {
@@ -62,7 +85,9 @@ export const shortensHistory = ({
         : next.groupId === groupId
           ? resolveHistoryShare({ account: setting.account, group: next.override })
           : share;
-    return isShorterHistoryShare(after, share);
+    return (
+      after !== share && (!HISTORY_SHARES.includes(share) || isShorterHistoryShare(after, share))
+    );
   });
 
 export const senderHistoryStart = (senders: readonly TimelineSender[], userId: string) => {

@@ -114,20 +114,20 @@ const BackgroundLocationStepScreen = () => {
   return (
     <OnboardingScreen
       step="background"
-      title="Keep sharing when the app is closed"
+      title="Allow location all the time"
       description={
         asksForLocationFirst
-          ? "OpenBeacon can’t use your location yet. Allow it first, then you can keep sharing when the app is closed."
+          ? "OpenBeacon can’t use your location yet. Allow it first, then allow it all the time."
           : needsForegroundFirst
-            ? "Location is off for OpenBeacon, so there’s nothing to share yet. Turn it on in Settings so your family can see where you are, even when the app is closed."
-            : "Without this, your family only sees you while OpenBeacon is open on your screen. The sharing notice stays on either way."
+            ? "Location is off for OpenBeacon, so nothing is shared. Turn it on in Settings and allow it all the time."
+            : "OpenBeacon shares nothing until it has precise location, location all the time and notifications, even while the app is open."
       }
       primary={{
         label: asksForLocationFirst
           ? "Allow location"
           : promptsInApp
             ? "Continue"
-            : "Open Settings",
+            : "Open settings",
         onPress: allow,
         loading: asking,
         disabled: state === null,

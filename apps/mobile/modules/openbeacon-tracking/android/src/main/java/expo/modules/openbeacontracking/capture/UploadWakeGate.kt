@@ -5,7 +5,7 @@ import java.util.UUID
 class UploadWakeGate(
   private val clock: () -> Long = { System.nanoTime() / 1_000_000 },
 ) {
-  private val running = mutableMapOf<Int, String?>()
+  private val running = mutableSetOf<Int>()
   private val starting = ArrayDeque<Pair<String, Long>>()
   private var followUp = false
 
@@ -22,13 +22,11 @@ class UploadWakeGate(
   }
 
   @Synchronized
-  fun started(taskId: Int) {
+  fun started(taskId: Int): String? {
     dropStaleStarts()
-    if (taskId !in running) running[taskId] = starting.removeFirstOrNull()?.first
+    if (!running.add(taskId)) return null
+    return starting.removeFirstOrNull()?.first
   }
-
-  @Synchronized
-  fun taskFor(token: String): Int? = running.entries.firstOrNull { it.value == token }?.key
 
   @Synchronized
   fun finished(taskId: Int): Boolean {

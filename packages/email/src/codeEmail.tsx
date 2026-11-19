@@ -7,41 +7,41 @@ const content = {
     subject: "Your OpenBeacon sign-up code",
     title: "Your sign-up code",
     action: "finish creating your OpenBeacon account",
-    ignore: "If you didn't try to create an account, you can ignore this email.",
+    ignore: "If you didn’t try to create an account, you can ignore this email.",
   },
   "email-verification": {
     subject: "Your OpenBeacon email verification code",
     title: "Verify your email",
     action: "verify your email address and finish signing in",
-    ignore: "If you didn't try to sign in, you can ignore this email.",
+    ignore: "If you didn’t try to sign in, you can ignore this email.",
   },
   "password-reset": {
     subject: "Your OpenBeacon password reset code",
     title: "Reset your password",
     action: "reset your OpenBeacon password",
     ignore:
-      "If you didn't ask to reset your password, you can ignore this email. Your password won't change.",
+      "If you didn’t ask to reset your password, you can ignore this email. Your password won’t change.",
   },
   "recovery-reset": {
     subject: "Your OpenBeacon recovery phrase reset code",
     title: "Reset your recovery phrase",
     action: "confirm resetting your recovery phrase",
     ignore:
-      "If you didn't ask to reset your recovery phrase, don't enter this code. Change your password in the app, because someone else may be signed in to your account.",
+      "If you didn’t ask to reset your recovery phrase, don’t enter this code. Change your password in the app, because someone else may be signed in to your account.",
   },
   "sign-in": {
     subject: "Your OpenBeacon sign-in code",
     title: "Your sign-in code",
     action: "finish signing in",
     ignore:
-      "If you didn't just try to sign in, don't enter this code. Someone knows your password. Change it in the app in Account → Password and Security, or use Forgot password on the app's sign-in screen.",
+      "If you didn’t just try to sign in, don’t enter this code. Someone knows your password. Change it in the app in Account → Password and security, or use Forgot password on the app’s sign-in screen.",
   },
   "turn-on-sign-in-codes": {
     subject: "Your OpenBeacon code to turn on sign-in codes",
     title: "Turn on sign-in codes",
     action: "turn on sign-in codes",
     ignore:
-      "If you didn't ask for this, don't enter this code. Change your password in the app, because someone else may be signed in to your account.",
+      "If you didn’t ask for this, don’t enter this code. Change your password in the app, because someone else may be signed in to your account.",
   },
 } satisfies Record<
   EmailCodePurpose,

@@ -38,12 +38,6 @@ describe("deviceIconSchema", () => {
     expect(deviceIconSchema.options).toEqual([
       "phone",
       "tablet",
-      "watch",
-      "car",
-      "laptop",
-      "bag",
-      "tag",
-      "home",
       "phoneClassic",
       "tabletPortrait",
       "star",
@@ -51,7 +45,9 @@ describe("deviceIconSchema", () => {
       "flower",
       "sun",
     ]);
-    expect(deviceIconSchema.safeParse("rocket").success).toBe(false);
+    for (const retired of ["rocket", "watch", "car", "laptop", "bag", "tag", "home"]) {
+      expect(deviceIconSchema.safeParse(retired).success).toBe(false);
+    }
   });
 });
 

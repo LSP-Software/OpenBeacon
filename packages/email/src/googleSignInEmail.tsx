@@ -19,10 +19,10 @@ export const renderGoogleSignInEmail = async ({
         </Text>
         <Text style={{ margin: "0 0 16px" }}>
           If this was you, open the OpenBeacon app and tap Continue with Google on the sign-in
-          screen. If you can't get into your Google account, recover it with Google first.
+          screen. If you can’t get into your Google account, recover it with Google first.
         </Text>
         <Text style={{ margin: 0 }}>
-          If this wasn't you, you can safely ignore this email. Nothing about your account has
+          If this wasn’t you, you can safely ignore this email. Nothing about your account has
           changed.
         </Text>
       </>

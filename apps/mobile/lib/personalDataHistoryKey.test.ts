@@ -75,18 +75,13 @@ const statusMock = mock(async () => {
 
 const updateColorMock = mock(
   async (
-    input: { groupId: string; ciphertext: string; expectedCiphertext?: string },
+    input: { groupId: string; ciphertext: string; expectedCiphertext: string | null },
     _options?: { signal: AbortSignal },
   ) => {
     serverInputs.push(input);
     beforeWrite?.(input);
     if (failWrite?.(input)) throw new Error("Network error");
-    if (
-      input.expectedCiphertext !== undefined &&
-      colors.get(input.groupId) !== input.expectedCiphertext
-    ) {
-      throw conflict();
-    }
+    if ((colors.get(input.groupId) ?? null) !== input.expectedCiphertext) throw conflict();
     colors.set(input.groupId, input.ciphertext);
   },
 );
@@ -238,7 +233,7 @@ const {
 const { encryptPersonalNickname, loadPersonalNicknames } = await import("./personalNicknames.ts");
 const { saveGroupColor, syncGroupColors } = await import("./groupColorSync.ts");
 const { resealPersonalData } = await import("./resealPersonalData.ts");
-const { getGroupColor, GROUP_COLOR_PALETTE } = await import("./groupColor.ts");
+const { clearGroupColors, getGroupColor, GROUP_COLOR_PALETTE } = await import("./groupColor.ts");
 const { resetRecoveryPhrase, restoreFromRecoveryPhrase, setUpRecoveryPhrase } =
   await import("./recovery.ts");
 const { createHistoryKeyIfMissing } = await import("./createHistoryKey.ts");
@@ -335,6 +330,7 @@ beforeEach(() => {
   serverInputs.length = 0;
   updateColorMock.mockClear();
   updateNicknameMock.mockClear();
+  clearGroupColors();
 });
 
 const writeV2Records = () => {
@@ -356,7 +352,7 @@ describe("sealing", () => {
     await saveNickname("household", "gran", "Grandma");
 
     expect(versionsOnServer()).toStrictEqual([2, 2]);
-    expect(updateColorMock.mock.calls[0]?.[0].expectedCiphertext).toBeUndefined();
+    expect(updateColorMock.mock.calls[0]?.[0].expectedCiphertext).toBeNull();
     const otherPhone = createPhone("handset-b");
     otherPhone.secureStore = new Map(setupPhone.secureStore);
     expect(await readAs(otherPhone, "household")).toStrictEqual({ gran: "Grandma" });
@@ -517,7 +513,7 @@ describe("migration", () => {
     expect(versionsOnServer()).toStrictEqual([1, 1, 1, 1, 1]);
     expect(writes() - before).toBe(5);
     for (const [input] of updateColorMock.mock.calls.slice(2)) {
-      expect(input.expectedCiphertext).toBeDefined();
+      expect(input.expectedCiphertext).toBeString();
     }
     const secondPhone = createPhone("handset-d");
     secondPhone.secureStore = new Map(setupPhone.secureStore);
@@ -696,6 +692,9 @@ describe("secrets", () => {
       freshPhone.device.privateKey.expose(),
       deriveRecoveryKeyPair(phrase).privateKey.expose(),
     ];
-    expectNoSecretsIn(serialized, { secrets, phrases: [phrase] });
+    expectNoSecretsIn(
+      { serverInputs, storage: [setupPhone.storage, freshPhone.storage] },
+      { secrets, phrases: [phrase] },
+    );
   });
 });

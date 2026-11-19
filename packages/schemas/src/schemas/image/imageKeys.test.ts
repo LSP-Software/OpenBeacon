@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { PAYLOAD_ENCRYPTION_ALGORITHM } from "@openbeacon/encryption";
+import {
+  encryptImageKey,
+  generateGroupEpochKey,
+  generateImageKey,
+  PAYLOAD_ENCRYPTION_ALGORITHM,
+} from "@openbeacon/encryption";
 import {
   confirmProfileImageUploadSchema,
   MAX_IMAGE_KEY_REENCRYPTS,
@@ -9,7 +14,16 @@ import {
 
 const key = {
   algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
-  ciphertext: Buffer.alloc(48, 1).toString("base64"),
+  ciphertext: encryptImageKey({
+    epochId: "epoch-1",
+    epochKey: generateGroupEpochKey(),
+    fileName: crypto.randomUUID(),
+    groupId: "g",
+    imageKey: generateImageKey(),
+    kind: "group",
+    ownerId: "g",
+    senderDeviceId: "device-1",
+  }).ciphertext,
   epochId: "epoch-1",
   nonce: Buffer.alloc(24, 2).toString("base64"),
   senderDeviceId: "device-1",
@@ -32,11 +46,14 @@ describe("picture key schemas", () => {
     }
   });
 
-  test("refuse keys with another algorithm or a malformed nonce", () => {
+  test("refuse keys with another algorithm, a malformed nonce or a ciphertext no phone makes", () => {
     for (const changed of [
       { ...key, algorithm: "AES-GCM" },
       { ...key, nonce: "short" },
       { ...key, ciphertext: "a".repeat(129) },
+      { ...key, ciphertext: "~".repeat(64) },
+      { ...key, ciphertext: "a" },
+      { ...key, ciphertext: key.ciphertext.slice(4) },
     ]) {
       expect(storeImageKeySchema.safeParse({ groupId: "g", fileName, key: changed }).success).toBe(
         false,

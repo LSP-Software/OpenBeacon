@@ -91,6 +91,8 @@ export const describeGroupEvent = ({
         : `${actor} edited ${place}`;
     case "PLACE_DELETED":
       return `${actor} deleted ${place}`;
+    default:
+      return null;
   }
 };
 

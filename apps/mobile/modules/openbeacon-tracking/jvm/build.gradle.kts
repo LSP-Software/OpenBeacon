@@ -25,6 +25,7 @@ sourceSets {
       exclude("**/TrackingRuntime.kt")
       exclude("**/TrackingCaptureService.kt")
       exclude("**/TrackingUploadService.kt")
+      exclude("**/UploadTasks.kt")
       exclude("**/OpenBeaconTrackingPackage.kt")
       exclude("**/PushRuntime.kt")
       exclude("**/PushWakeService.kt")

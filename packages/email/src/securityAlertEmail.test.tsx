@@ -80,7 +80,7 @@ describe("renderSecurityAlertEmail", () => {
   test("every alert except account deleted says what to do if it wasn't you", async () => {
     for (const alert of [...neverSwitchable, ...uncapped, ...capped]) {
       const email = await render(alert);
-      expect(email.text.includes("If this wasn't you\n\n")).toBe(alert.type !== "account-deleted");
+      expect(email.text.includes("If this wasn’t you\n\n")).toBe(alert.type !== "account-deleted");
     }
   });
 
@@ -138,11 +138,11 @@ describe("renderSecurityAlertEmail", () => {
   test("recovery phrase alerts point to the button the phone will show", async () => {
     const changed = await render({ type: "recovery-phrase-changed" });
     expect(changed.text).toContain(
-      "If this wasn't you\n\nSomeone else is signed in to your account. In the OpenBeacon app, change your password in Account → Password and Security. That signs out every other device. Then open Account → Recovery phrase and tap Change recovery phrase.",
+      "If this wasn’t you\n\nSomeone else is signed in to your account. In the OpenBeacon app, change your password in Account → Password and security. That signs out every other device. Then open Account → Recovery phrase and tap Change recovery phrase.",
     );
     const reset = await render({ type: "recovery-phrase-reset" });
     expect(reset.text).toContain(
-      'Then open Account → Recovery phrase and tap "I’ve lost my phrase" to set a new one.',
+      "Then open Account → Recovery phrase and tap I’ve lost my phrase to set a new one.",
     );
   });
 
@@ -154,7 +154,7 @@ describe("renderSecurityAlertEmail", () => {
         "Account deleted\n\nYour OpenBeacon account and its data were deleted.\n\nDeleted at\nThursday, 9 July 2026 at 14:32 BST (13:32 UTC)\n",
       );
       expect(email.text).not.toContain("this server");
-      expect(email.text).not.toMatch(/didn't ask|wasn't you|Google|password/);
+      expect(email.text).not.toMatch(/didn’t ask|wasn’t you|Google|password/);
     }
   });
 
@@ -178,7 +178,7 @@ describe("renderSecurityAlertEmail", () => {
         "Change your Google password, because someone may have used your Google account to sign in.",
       );
       expect(email.text).toContain(
-        'open Account → Password and Security and tap "Sign out of all other sessions".',
+        "open Account → Password and security and tap Sign out other sessions.",
       );
       expect(email.text).not.toContain("change your password");
       expect(email.text).not.toContain("In the OpenBeacon app, secure");
@@ -189,11 +189,11 @@ describe("renderSecurityAlertEmail", () => {
     const device = { model: "Pixel 8", platform: "android" } as const;
     const withPassword = await render({ type: "new-sign-in", device });
     expect(withPassword.text).toContain(
-      "If this wasn't you\n\nSomeone else is signed in to your account. In the OpenBeacon app, open Account → Devices, tap Pixel 8 and tap Remove device. In the OpenBeacon app, change your password in Account → Password and Security. That signs out every other device.",
+      "If this wasn’t you\n\nSomeone else is signed in to your account. In the OpenBeacon app, open Account → Devices, tap Pixel 8 and tap Remove device. In the OpenBeacon app, change your password in Account → Password and security. That signs out every other device.",
     );
     const google = await render({ type: "new-sign-in", device }, { hasPassword: false });
     expect(google.text).toContain(
-      `If this wasn't you\n\nSomeone else is signed in to your account. In the OpenBeacon app, open Account → Devices, tap Pixel 8 and tap Remove device. Change your Google password, because someone may have used your Google account to sign in. After that, in the OpenBeacon app, open Account → Password and Security and tap "Sign out of all other sessions".`,
+      `If this wasn’t you\n\nSomeone else is signed in to your account. In the OpenBeacon app, open Account → Devices, tap Pixel 8 and tap Remove device. Change your Google password, because someone may have used your Google account to sign in. After that, in the OpenBeacon app, open Account → Password and security and tap Sign out other sessions.`,
     );
   });
 
@@ -204,14 +204,14 @@ describe("renderSecurityAlertEmail", () => {
       "Other sessions signed out\n\nEvery other session on your OpenBeacon account was signed out. Only the phone or tablet that did this is still signed in.",
     );
     expect(withPassword.text).toContain(
-      "If this wasn't you\n\nSomeone else is signed in to your account and may have signed you out. Use \"Forgot password\" on the app's sign-in screen to choose a new password. That signs out every other device, including theirs.",
+      "If this wasn’t you\n\nSomeone else is signed in to your account and may have signed you out. Use Forgot password on the app’s sign-in screen to choose a new password. That signs out every other device, including theirs.",
     );
     const google = await render(
       { type: "other-sessions-signed-out", device: null },
       { hasPassword: false },
     );
     expect(google.text).toContain(
-      `After that, sign in to the OpenBeacon app, then open Account → Password and Security and tap "Sign out of all other sessions".`,
+      `After that, sign in to the OpenBeacon app, then open Account → Password and security and tap Sign out other sessions.`,
     );
   });
 
@@ -246,7 +246,7 @@ describe("renderSecurityAlertEmail", () => {
       { hasPassword: false },
     );
     expect(google.text).toContain(
-      "If this wasn't you\n\nSign in to the app now to cancel it. Change your Google password, because someone may have used your Google account to sign in.",
+      "If this wasn’t you\n\nSign in to the app now to cancel it. Change your Google password, because someone may have used your Google account to sign in.",
     );
   });
 });

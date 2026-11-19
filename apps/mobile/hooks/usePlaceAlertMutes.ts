@@ -5,6 +5,7 @@ import { trpc } from "../lib/api.ts";
 import { errorReason } from "../lib/errorReason.ts";
 import { applyMuteChange, type PlaceAlertMuteChange } from "../lib/placeAlertMutes.ts";
 import { groupPlacesQueryKey } from "../lib/placeSync.ts";
+import { userMessage } from "../lib/userMessage.ts";
 
 export const usePlaceAlertMutes = (groupId: string) => {
   const isFocused = useIsFocused();
@@ -30,7 +31,7 @@ export const usePlaceAlertMutes = (groupId: string) => {
         if (errorReason(error) === "PLACE_GONE") {
           void queryClient.invalidateQueries({ queryKey: groupPlacesQueryKey(groupId) });
         }
-        Alert.alert("Unable to change alerts", error.message);
+        Alert.alert("Couldn’t change alerts", userMessage(error));
       },
       onSettled: () =>
         isLastChange()

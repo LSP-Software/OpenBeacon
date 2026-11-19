@@ -35,7 +35,7 @@ const message = {
 describe("sendEmail", () => {
   test("sends nothing when email is off", async () => {
     const sendEmail = createSendEmail(null);
-    expect(await sendEmail({ ...message, userId: "user-1", optional: false })).toEqual({
+    expect(await sendEmail({ ...message, userId: "user-1", cap: null })).toEqual({
       sent: false,
       reason: "disabled",
     });
@@ -44,37 +44,50 @@ describe("sendEmail", () => {
   test("drops optional alerts once an account reaches its hourly cap", async () => {
     const { send, sendEmail } = setup();
     for (let index = 0; index < 20; index++) {
-      expect(await sendEmail({ ...message, userId: "user-1", optional: true })).toEqual({
+      expect(await sendEmail({ ...message, userId: "user-1", cap: "alerts" })).toEqual({
         sent: true,
       });
     }
-    expect(await sendEmail({ ...message, userId: "user-1", optional: true })).toEqual({
+    expect(await sendEmail({ ...message, userId: "user-1", cap: "alerts" })).toEqual({
       sent: false,
       reason: "capped",
     });
-    expect(await sendEmail({ ...message, userId: "user-2", optional: true })).toEqual({
+    expect(await sendEmail({ ...message, userId: "user-2", cap: "alerts" })).toEqual({
       sent: true,
     });
     expect(send).toHaveBeenCalledTimes(21);
   });
 
-  test("always sends required email over the cap", async () => {
+  test("required mail spends no allowance, so it can't use up an account's alert emails", async () => {
     const { send, sendEmail } = setup();
     for (let index = 0; index < 25; index++) {
-      expect(await sendEmail({ ...message, userId: "user-1", optional: false })).toEqual({
+      expect(await sendEmail({ ...message, userId: "user-1", cap: null })).toEqual({
         sent: true,
       });
     }
-    expect(await sendEmail({ ...message, userId: "user-1", optional: true })).toEqual({
+    expect(await sendEmail({ ...message, userId: "user-1", cap: "alerts" })).toEqual({
+      sent: true,
+    });
+    expect(send).toHaveBeenCalledTimes(26);
+  });
+
+  test("notices anyone can trigger have their own allowance, apart from alerts", async () => {
+    const { sendEmail } = setup();
+    for (let index = 0; index < 20; index++) {
+      await sendEmail({ ...message, userId: "user-1", cap: "notices" });
+    }
+    expect(await sendEmail({ ...message, userId: "user-1", cap: "notices" })).toEqual({
       sent: false,
       reason: "capped",
     });
-    expect(send).toHaveBeenCalledTimes(25);
+    expect(await sendEmail({ ...message, userId: "user-1", cap: "alerts" })).toEqual({
+      sent: true,
+    });
   });
 
   test("passes the message to the transport without the cap fields", async () => {
     const { send, sendEmail } = setup();
-    await sendEmail({ ...message, userId: "user-1", optional: true });
+    await sendEmail({ ...message, userId: "user-1", cap: "alerts" });
     expect(send).toHaveBeenCalledWith(message);
   });
 
@@ -85,11 +98,11 @@ describe("sendEmail", () => {
       transport: { send, verify: async () => {} },
       rateLimits: new UnavailableCache({ redisUrl: "redis://localhost:6379" }).rateLimits,
     });
-    expect(await sendEmail({ ...message, userId: "user-1", optional: true })).toEqual({
+    expect(await sendEmail({ ...message, userId: "user-1", cap: "alerts" })).toEqual({
       sent: false,
       reason: "unavailable",
     });
-    expect(await sendEmail({ ...message, userId: "user-1", optional: false })).toEqual({
+    expect(await sendEmail({ ...message, userId: "user-1", cap: null })).toEqual({
       sent: true,
     });
     expect(send).toHaveBeenCalledTimes(1);

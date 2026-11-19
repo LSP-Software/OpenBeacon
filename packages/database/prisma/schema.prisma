@@ -42,7 +42,6 @@ model User {
   trackingStreams            TrackingStream[]
   groupEventsActed           GroupEvent[] @relation("GroupEventActor")
   groupEventsAbout           GroupEvent[] @relation("GroupEventSubject")
-  feedback                   Feedback[]
   createdSharedInvites       GroupSharedInvite[]
   recoveryKey                RecoveryKey?
   historyKeys                AccountHistoryKey[]
@@ -335,8 +334,8 @@ model GroupMemberInvite {
 }
 
 model GroupSharedInvite {
-  creatorId String?
-  creator User? @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  creatorId String
+  creator User @relation(fields: [creatorId], references: [id], onDelete: Cascade)
   id        String   @id @default(uuid(7))
   codeHash  String   @unique
   groupId   String
@@ -518,12 +517,6 @@ model DeviceChallenge {
 enum DeviceIcon {
   phone
   tablet
-  watch
-  car
-  laptop
-  bag
-  tag
-  home
   phoneClassic
   tabletPortrait
   star
@@ -537,7 +530,6 @@ enum DeviceActivation {
   link
   phrase
   reset
-  existing
 }
 
 model GroupEpoch {
@@ -554,7 +546,6 @@ model GroupEpoch {
   trackingStreams        TrackingStream[]
 
   @@unique([groupId, epochNumber])
-  @@index([groupId, createdAt])
   @@index([createdAt, id])
   @@index([createdByDeviceId])
 }
@@ -674,8 +665,6 @@ enum GroupRole {
 }
 
 model Feedback {
-  userId    String?
-  user      User? @relation(fields: [userId], references: [id], onDelete: Cascade)
   id        String   @id @default(uuid(7))
   message   String
   email     String?
@@ -685,8 +674,6 @@ model Feedback {
   mapVersion String?
   serverVersion String?
   createdAt DateTime @default(now())
-
-  @@index([userId])
 }
 
 model AccountDeletionCleanup {

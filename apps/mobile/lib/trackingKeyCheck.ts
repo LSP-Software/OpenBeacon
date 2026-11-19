@@ -2,6 +2,7 @@ import { storage } from "./storage.ts";
 
 const KEY_CHECK_KEY = "tracking.keyCheck";
 const KEY_STATE_KEY = "tracking.keyState";
+const CURSOR_GROUP_KEY = "tracking.cursorGroup";
 const KEY_CHECK_INTERVAL_MS = 4 * 60 * 1000;
 const WATCHED_KEY_CHECK_INTERVAL_MS = 30 * 60 * 1000;
 const KEY_STATE_FRESH_MS = 10 * 60 * 1000;
@@ -82,7 +83,19 @@ export const clearTrackingKeyCheck = () => {
   staleGeneration += 1;
   storage.remove(KEY_CHECK_KEY);
   storage.remove(KEY_STATE_KEY);
+  storage.remove(CURSOR_GROUP_KEY);
   checkedMembership = null;
+};
+
+export const rememberCursorGroup = (owner: string, groups: { id: string }[]) => {
+  const groupId = groups.map(({ id }) => id).sort()[0];
+  if (groupId) storage.set(CURSOR_GROUP_KEY, `${owner}\n${groupId}`);
+  else storage.remove(CURSOR_GROUP_KEY);
+};
+
+export const readCursorGroup = (owner: string) => {
+  const [storedOwner, groupId] = storage.getString(CURSOR_GROUP_KEY)?.split("\n") ?? [];
+  return storedOwner === owner && groupId ? groupId : null;
 };
 
 export const noteGroupMembership = (groups: GroupMembers) => {

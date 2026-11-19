@@ -11,7 +11,6 @@ mock.module("./storage.ts", () => ({
   },
 }));
 mock.module("./currentServer.ts", () => ({
-  baseUrl: "https://example.test/openbeacon",
   getBaseUrl: () => "https://example.test/openbeacon",
   getFeedbackUrl: () => "https://hosted.example.test",
 }));

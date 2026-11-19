@@ -1,0 +1,190 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 5,
+    "identityHash": "b60ccd71a3960f981731173bdb552c5e",
+    "entities": [
+      {
+        "tableName": "ciphertext_queue",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `owner` TEXT, `clientPointId` TEXT NOT NULL, `captureId` TEXT NOT NULL, `groupId` TEXT NOT NULL, `epochId` TEXT NOT NULL, `senderDeviceId` TEXT NOT NULL, `kind` TEXT NOT NULL, `algorithm` TEXT NOT NULL, `nonce` TEXT NOT NULL, `ciphertext` TEXT NOT NULL, `queuedAt` INTEGER NOT NULL, `attemptCount` INTEGER NOT NULL, `lastAttemptAt` INTEGER, `lastError` TEXT, `status` TEXT NOT NULL, `role` TEXT NOT NULL, `capturedHour` INTEGER)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "owner",
+            "columnName": "owner",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "clientPointId",
+            "columnName": "clientPointId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "captureId",
+            "columnName": "captureId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "groupId",
+            "columnName": "groupId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "epochId",
+            "columnName": "epochId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "senderDeviceId",
+            "columnName": "senderDeviceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "algorithm",
+            "columnName": "algorithm",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nonce",
+            "columnName": "nonce",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ciphertext",
+            "columnName": "ciphertext",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "queuedAt",
+            "columnName": "queuedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "attemptCount",
+            "columnName": "attemptCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastAttemptAt",
+            "columnName": "lastAttemptAt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastError",
+            "columnName": "lastError",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "role",
+            "columnName": "role",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "capturedHour",
+            "columnName": "capturedHour",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": ["id"]
+        },
+        "indices": [
+          {
+            "name": "index_ciphertext_queue_clientPointId",
+            "unique": false,
+            "columnNames": ["clientPointId"],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_ciphertext_queue_clientPointId` ON `${TABLE_NAME}` (`clientPointId`)"
+          },
+          {
+            "name": "index_ciphertext_queue_status_id",
+            "unique": false,
+            "columnNames": ["status", "id"],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_ciphertext_queue_status_id` ON `${TABLE_NAME}` (`status`, `id`)"
+          },
+          {
+            "name": "index_ciphertext_queue_groupId_id",
+            "unique": false,
+            "columnNames": ["groupId", "id"],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_ciphertext_queue_groupId_id` ON `${TABLE_NAME}` (`groupId`, `id`)"
+          }
+        ]
+      },
+      {
+        "tableName": "ciphertext_queue_eviction",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`owner` TEXT NOT NULL, `pointCount` INTEGER NOT NULL, `oldestQueuedAt` INTEGER NOT NULL, `newestQueuedAt` INTEGER NOT NULL, `revision` INTEGER NOT NULL, PRIMARY KEY(`owner`))",
+        "fields": [
+          {
+            "fieldPath": "owner",
+            "columnName": "owner",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pointCount",
+            "columnName": "pointCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "oldestQueuedAt",
+            "columnName": "oldestQueuedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "newestQueuedAt",
+            "columnName": "newestQueuedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "revision",
+            "columnName": "revision",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": ["owner"]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'b60ccd71a3960f981731173bdb552c5e')"
+    ]
+  }
+}

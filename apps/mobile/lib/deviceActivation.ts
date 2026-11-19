@@ -9,9 +9,9 @@ import { readRegisteredDeviceNow } from "./registeredDevice.ts";
 import { deleteSavedDeviceLink } from "./savedDeviceLink.ts";
 import { linkSessionToDevice } from "./sessionLink.ts";
 import { storage } from "./storage.ts";
+import { thisDeviceNoun } from "./thisDeviceNoun.ts";
 
-export const ACTIVATION_KEY_MISSING_MESSAGE =
-  "This phone doesn't have your account's current history key, so it can't be set up this way.";
+const ACTIVATION_KEY_MISSING_MESSAGE = `This ${thisDeviceNoun()} doesn’t have your account’s current history key, so it can’t be set up this way.`;
 
 export const markThisDeviceActive = (deviceId: string) => {
   storage.set(getDeviceActiveKey(deviceId), true);

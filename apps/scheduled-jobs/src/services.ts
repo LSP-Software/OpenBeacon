@@ -2,6 +2,7 @@ import "./env.ts";
 import { checkImageStorage } from "@openbeacon/api/checkStorage.ts";
 import { s3Client } from "@openbeacon/api/s3client.ts";
 import { createSecurityAlerts } from "@openbeacon/auth/securityAlerts.ts";
+import { closeSharedCache } from "@openbeacon/cache";
 import { prisma } from "@openbeacon/database";
 import { checkEmail, emailEnabled, sendSecurityAlertEmail } from "@openbeacon/email";
 import { checkServices as checkConnections } from "@openbeacon/shared";
@@ -37,5 +38,6 @@ export const checkServices = async () => {
 export const closeServices = async () => {
   await waitForSecurityAlerts();
   services.s3.destroy();
+  closeSharedCache();
   await services.db.$disconnect();
 };

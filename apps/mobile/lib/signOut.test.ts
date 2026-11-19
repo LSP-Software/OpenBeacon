@@ -39,7 +39,11 @@ mock.module("expo-router", () => ({
     },
   },
 }));
-mock.module("expo-device", () => ({ modelName: "Pixel 8" }));
+mock.module("expo-device", () => ({
+  DeviceType: { PHONE: 1, TABLET: 2 },
+  deviceType: 1,
+  modelName: "Pixel 8",
+}));
 
 mock.module("expo-secure-store", () => ({
   WHEN_UNLOCKED_THIS_DEVICE_ONLY: "when-unlocked-this-device-only",
@@ -54,6 +58,7 @@ mock.module("expo-secure-store", () => ({
 
 mock.module("./storage.ts", () => ({
   storage: {
+    getAllKeys: () => [...storageValues.keys()],
     getBoolean: (key: string) => storageValues.get(key) === true,
     getString: (key: string) => {
       const value = storageValues.get(key);

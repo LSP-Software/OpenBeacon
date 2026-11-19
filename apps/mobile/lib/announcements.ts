@@ -1,7 +1,7 @@
 import { type Announcement, announcementSchema, compareAppVersions } from "@openbeacon/schemas";
 import { useSyncExternalStore } from "react";
 import { z } from "zod";
-import { baseUrl } from "./currentServer.ts";
+import { getBaseUrl } from "./currentServer.ts";
 import { storage } from "./storage.ts";
 
 export const healthAnnouncementsSchema = z
@@ -40,7 +40,7 @@ const loadSaved = () => {
     storage.remove(storageKey);
     return empty;
   }
-  if (saved.serverUrl !== baseUrl) {
+  if (saved.serverUrl !== getBaseUrl()) {
     storage.remove(storageKey);
     return empty;
   }
@@ -55,7 +55,7 @@ const listeners = new Set<() => void>();
 
 const setState = (next: typeof state) => {
   state = next;
-  storage.set(storageKey, JSON.stringify({ serverUrl: baseUrl, ...next }));
+  storage.set(storageKey, JSON.stringify({ serverUrl: getBaseUrl(), ...next }));
   for (const listener of listeners) listener();
 };
 

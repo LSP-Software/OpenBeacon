@@ -164,7 +164,7 @@ describe("signInCodeEntryError", () => {
 
   test("never treats a submitted code that needs replacing as a success", () => {
     expect(signInCodeEntryError({ kind: "codeRequired", notice: undefined }, true)).toBe(
-      "We've emailed you a new code. Enter the new one.",
+      "We’ve emailed you a new code. Enter the new one.",
     );
     expect(signInCodeEntryError({ kind: "codeRequired", notice: "Limit" }, true)).toBe("Limit");
   });

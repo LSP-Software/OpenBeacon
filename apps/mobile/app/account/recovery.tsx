@@ -9,6 +9,7 @@ import { Text } from "../../components/ui/Text.tsx";
 import { useHeldHistoryKeyVersions } from "../../hooks/useHeldHistoryKeyVersions.ts";
 import { trpc } from "../../lib/api.ts";
 import { authClient } from "../../lib/auth-client.ts";
+import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 
 const RecoveryScreen = () => {
   const { data: session } = authClient.useSession();
@@ -33,7 +34,7 @@ const RecoveryScreen = () => {
         contentContainerClassName="gap-6 px-4 pb-32 pt-2"
         showsVerticalScrollIndicator={false}
       >
-        {(status.isLoading || heldVersions.isLoading) && <LoadingIndicator />}
+        {(status.isPending || heldVersions.isLoading) && <LoadingIndicator />}
         {status.isError && (
           <View className="gap-4">
             <Text>Unable to load your recovery settings. Please try again.</Text>
@@ -83,8 +84,8 @@ const RecoveryScreen = () => {
             ) : (
               <View className="gap-2">
                 <Text className="text-tertiary text-sm leading-5">
-                  To change your phrase, this phone first needs your current recovery phrase.
-                  Restore it, then try again.
+                  To change your phrase, this {thisDeviceNoun()} first needs your current recovery
+                  phrase. Restore it, then try again.
                 </Text>
                 <Link href="/account/recovery-restore" asChild>
                   <Button variant="secondary">
@@ -101,7 +102,7 @@ const RecoveryScreen = () => {
             <Text className="text-secondary text-base">
               {heldVersions.data.length > 0
                 ? "Your recovery phrase was reset on another phone. Enter the new phrase to keep reading new history here."
-                : "Your account already has a recovery phrase, set up on another phone. Enter it on this phone to read your history here."}
+                : `Your account already has a recovery phrase, set up on another phone. Enter it on this ${thisDeviceNoun()} to read your history here.`}
             </Text>
             <Link href="/account/recovery-restore" asChild>
               <Button>
@@ -117,7 +118,10 @@ const RecoveryScreen = () => {
         )}
         {heldVersions.isError && (
           <View className="gap-4">
-            <Text>Unable to read this phone’s recovery keys. Unlock your phone and try again.</Text>
+            <Text>
+              Unable to read this {thisDeviceNoun()}’s recovery keys. Unlock your {thisDeviceNoun()}{" "}
+              and try again.
+            </Text>
             <Button variant="secondary" onPress={() => heldVersions.refetch()}>
               <Text>Try again</Text>
             </Button>

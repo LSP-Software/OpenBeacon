@@ -19,7 +19,7 @@ mock.module("./storage.ts", () => ({
     },
   },
 }));
-mock.module("./currentServer.ts", () => ({ baseUrl: "https://api.example.test" }));
+mock.module("./currentServer.ts", () => ({ getBaseUrl: () => "https://api.example.test" }));
 mock.module("./personalNicknames.ts", () => ({
   loadPersonalNicknames: async () => ({ "member-sam": { name: "Mum", ciphertext: "sealed" } }),
 }));
@@ -114,17 +114,17 @@ describe("account notices", () => {
       title: "New sign-in",
       body: `SM-S911B ${advice}`,
     });
-    expect(signIn({ name: "Sam’s phone", model: null, platform: "android" }).body).toBe(
+    expect(signIn({ name: "Sam’s phone", model: null, platform: "android" })?.body).toBe(
       `Sam’s phone ${advice}`,
     );
-    expect(signIn(null).body).toBe(`A new phone or tablet ${advice}`);
+    expect(signIn(null)?.body).toBe(`A new phone or tablet ${advice}`);
   });
 
   test("match the advice in the security emails", () => {
-    expect(describeAccountNotice(account("PASSWORD_CHANGED")).body).toBe(
+    expect(describeAccountNotice(account("PASSWORD_CHANGED"))?.body).toBe(
       "If this wasn’t you, use Forgot password on the sign-in screen to choose a new one.",
     );
-    expect(describeAccountNotice(account("DELETION_SCHEDULED")).body).toBe(
+    expect(describeAccountNotice(account("DELETION_SCHEDULED"))?.body).toBe(
       "Sign in within 7 days to cancel it.",
     );
   });
@@ -144,7 +144,7 @@ describe("account notices", () => {
         "SIGN_IN_CODES_TURNED_ON",
         "SIGN_IN_CODES_TURNED_OFF",
       ] as const
-    ).map((type) => describeAccountNotice(account(type)).link.url);
+    ).map((type) => describeAccountNotice(account(type))?.link.url);
     expect(urls).toEqual([
       "openbeacon:///account/devices",
       "openbeacon:///account/password",
@@ -177,19 +177,19 @@ describe("account notices", () => {
           turnedOff: [{ type: "DEVICE_REMOVED", channel: "email" }],
           device: { name: "Old tablet", model: "Tab S9", platform: "android" },
         }),
-      ).body,
+      )?.body,
     ).toBe("Device removed (email). Turned off on Old tablet.");
   });
 
   test("say which device was removed or did the signing out", () => {
     const device = { name: "Old tablet", model: "Tab S9", platform: "android" };
-    expect(describeAccountNotice(account("DEVICE_REMOVED", { device })).title).toBe(
+    expect(describeAccountNotice(account("DEVICE_REMOVED", { device }))?.title).toBe(
       "Old tablet was removed from your account",
     );
-    expect(describeAccountNotice(account("OTHER_SESSIONS_SIGNED_OUT", { device })).body).toBe(
+    expect(describeAccountNotice(account("OTHER_SESSIONS_SIGNED_OUT", { device }))?.body).toBe(
       "Old tablet signed out your other phones and tablets.",
     );
-    expect(describeAccountNotice(account("OTHER_SESSIONS_SIGNED_OUT")).body).toBeNull();
+    expect(describeAccountNotice(account("OTHER_SESSIONS_SIGNED_OUT"))?.body).toBeNull();
   });
 });
 
@@ -260,6 +260,60 @@ describe("showing notices", () => {
     ]);
     expect(getAccountNoticesCursor("user-1")).toBe("2026-11-17T11:00:00.000Z|notice-1");
     expect(getNoticesCursor("user-1")).toBeNull();
+  });
+
+  test("an account notice of a type this build doesn't know is skipped and the cursor still moves", async () => {
+    await showAccountNotices({
+      notices: {
+        cursor: "2026-11-17T11:00:00.000Z|notice-NEW_SIGN_IN",
+        notices: [
+          account("EMAIL_CHANGED" as Parameters<typeof account>[0]),
+          account("NEW_SIGN_IN"),
+        ],
+      },
+      userId: "user-1",
+    });
+    expect(shown.map(({ title }) => title)).toEqual(["New sign-in"]);
+    expect(getAccountNoticesCursor("user-1")).toBe("2026-11-17T11:00:00.000Z|notice-NEW_SIGN_IN");
+  });
+
+  test("an alerts-turned-off notice naming a setting this build doesn't know lists only the known ones", async () => {
+    await showAccountNotices({
+      notices: {
+        cursor: "2026-11-17T11:00:00.000Z|notice-ALERTS_TURNED_OFF",
+        notices: [
+          account("ALERTS_TURNED_OFF", {
+            turnedOff: [
+              { type: "SEAT_LIMIT_REACHED", channel: "email" },
+              { type: "NEW_SIGN_IN", channel: "phone" },
+            ] as Parameters<typeof describeAccountNotice>[0]["turnedOff"],
+          }),
+        ],
+      },
+      userId: "user-1",
+    });
+    expect(shown.map(({ title, body }) => ({ title, body }))).toEqual([
+      { title: "Security alerts turned off", body: "New sign-in (phone)." },
+    ]);
+    expect(getAccountNoticesCursor("user-1")).toBe(
+      "2026-11-17T11:00:00.000Z|notice-ALERTS_TURNED_OFF",
+    );
+  });
+
+  test("a group notice of a type this build doesn't know isn't shown untitled", async () => {
+    await showNotices({
+      notices: {
+        cursor: "2026-11-17T10:00:00.000Z|event-1",
+        notices: [
+          groupEvent({ type: "SEATS_CHANGED" as "MEMBER_JOINED" }),
+          groupEvent({ type: "MEMBER_LEFT" }),
+        ],
+      },
+      groups,
+      userId: "user-1",
+    });
+    expect(shown.map(({ title }) => title)).toEqual(["Mum left the group"]);
+    expect(getNoticesCursor("user-1")).toBe("2026-11-17T10:00:00.000Z|event-1");
   });
 
   test("keeps the old cursor when showing fails, so the notices come again", async () => {

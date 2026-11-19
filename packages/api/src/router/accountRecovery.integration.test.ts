@@ -55,6 +55,7 @@ const users = [
   "unescrowed",
   "partialSetup",
   "removedReset",
+  "changeRace",
 ].map((name) => `${prefix}-${name}`);
 const [
   setupUser,
@@ -80,7 +81,9 @@ const [
   unescrowedUser,
   partialSetupUser,
   removedResetUser,
+  changeRaceUser,
 ] = users as [
+  string,
   string,
   string,
   string,
@@ -126,7 +129,6 @@ const caller = (userId: string, sessionCreatedAt = new Date(), codes: EmailCodes
       cache,
       db: prisma,
       emailCodes: codes,
-      clientIp: `ip-${userId}`,
       deviceId: `${userId}-device`,
       session: {
         user: { id: userId },
@@ -602,6 +604,39 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       );
     }, 20_000);
 
+    test("changePhrase refuses a change made from a phrase that another phone already replaced", async () => {
+      const oldPhrase = generateRecoveryPhrase();
+      const historyKey = await setUpRecovery(changeRaceUser, oldPhrase);
+      const readByBothPhones = recoveryKeyInput(oldPhrase).publicKey;
+      const changeTo = (phrase: RecoveryPhrase) => ({
+        escrows: [
+          escrowFor({
+            phrase,
+            privateKey: historyKey.privateKey,
+            userId: changeRaceUser,
+            version: 1,
+          }),
+        ],
+        expectedRecoveryPublicKey: readByBothPhones,
+        recoveryKey: recoveryKeyInput(phrase),
+      });
+      const firstPhrase = generateRecoveryPhrase();
+      const secondPhrase = generateRecoveryPhrase();
+
+      await caller(changeRaceUser).accountRecovery.changePhrase(changeTo(firstPhrase));
+      await expect(
+        caller(changeRaceUser).accountRecovery.changePhrase(changeTo(secondPhrase)),
+      ).rejects.toMatchObject({ code: "CONFLICT", cause: { reason: "RECOVERY_CHANGED" } });
+
+      expect((await caller(changeRaceUser).accountRecovery.status()).recoveryKey?.publicKey).toBe(
+        recoveryKeyInput(firstPhrase).publicKey,
+      );
+      expect(await restoreHistoryKeys(changeRaceUser, firstPhrase)).toEqual(
+        exposeAll([historyKey.privateKey]),
+      );
+      await expect(restoreHistoryKeys(changeRaceUser, secondPhrase)).rejects.toThrow();
+    }, 20_000);
+
     test("reset needs a fresh session and confirmation, then replaces every key with v(N+1)", async () => {
       const oldPhrase = generateRecoveryPhrase();
       const newPhrase = generateRecoveryPhrase();
@@ -682,7 +717,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
                 cache,
                 db: prisma,
                 emailCodes: null,
-                clientIp: `ip-${resetUser}`,
                 ...device,
                 session: {
                   user: { id: resetUser },

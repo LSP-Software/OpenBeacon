@@ -53,5 +53,3 @@ const getDevelopmentUrl = () => {
 export const getBaseUrl = () => getDevelopmentUrl() || getServerUrl() || hostedApiUrl;
 
 export const getFeedbackUrl = () => getDevelopmentUrl() || hostedApiUrl;
-
-export const baseUrl = getBaseUrl();

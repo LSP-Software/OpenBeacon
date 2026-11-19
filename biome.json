@@ -94,7 +94,7 @@
         "**/*.test.ts",
         "**/*.test.tsx",
         "apps/mobile/test/**",
-        "apps/mobile/components/map/nativeMapTestHarness.tsx"
+        "apps/mobile/components/map/nativeMap.testUtil.tsx"
       ],
       "linter": {
         "rules": {

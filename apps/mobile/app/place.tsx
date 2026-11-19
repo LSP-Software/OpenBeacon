@@ -2,7 +2,7 @@ import { Camera, type CameraRef, Map as MapLibreMap } from "@maplibre/maplibre-r
 import { placeEmojiSchema, placeNameSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { LocateFixedIcon, XIcon } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -42,6 +42,8 @@ import {
   savePlace,
 } from "../lib/placeSync.ts";
 import { syncGroupPlaces } from "../lib/placeBackgroundSync.ts";
+import { userMessage } from "../lib/userMessage.ts";
+import { thisDeviceNoun } from "../lib/thisDeviceNoun.ts";
 
 const PIN_ABOVE_CENTER = 150;
 
@@ -50,7 +52,12 @@ const PlaceScreen = () => {
   const router = useRouter();
   const { data: session } = authClient.useSession();
   const userId = session?.user.id;
-  const { group, isPending: groupPending } = useCachedGroup(groupId);
+  const {
+    group,
+    isError: groupError,
+    isPending: groupPending,
+    refetch: refetchGroup,
+  } = useCachedGroup(groupId);
   const places = useQuery(groupPlacesQueryOptions(groupId, userId));
   const [revision, setRevision] = useState(0);
   const [closing, setClosing] = useState(false);
@@ -72,23 +79,34 @@ const PlaceScreen = () => {
     );
   }
 
-  const problem = !group
-    ? "This group isn’t available on this phone."
-    : role !== "OWNER" && role !== "ADMIN"
-      ? "Only owners and admins can add or change places."
-      : placeId && places.isError
-        ? "Couldn’t load this place. Check your connection and try again."
-        : placeId && !place
-          ? "This place has been deleted."
-          : place && !place.geometry
-            ? "This place is still syncing to this phone. Try again in a few minutes."
-            : null;
+  const placeError = !!placeId && places.isError && !places.data;
+  const problem = groupError
+    ? "Couldn’t load your groups. Check your connection and try again."
+    : !group
+      ? `This group isn’t available on this ${thisDeviceNoun()}.`
+      : role !== "OWNER" && role !== "ADMIN"
+        ? "Only owners and admins can add or change places."
+        : placeError
+          ? "Couldn’t load this place. Check your connection and try again."
+          : placeId && !place
+            ? "This place has been deleted."
+            : place && !place.geometry
+              ? `This place is still syncing to this ${thisDeviceNoun()}. Try again in a few minutes.`
+              : null;
 
   if ((problem && !closing) || !group) {
     return (
       <View className="flex-1 items-center justify-center gap-4 bg-background px-8">
         <Text className="text-center text-foreground">{problem}</Text>
-        <Button variant="secondary" onPress={close}>
+        {groupError || placeError ? (
+          <Button
+            variant="secondary"
+            onPress={() => void (groupError ? refetchGroup() : places.refetch())}
+          >
+            <Text>Try again</Text>
+          </Button>
+        ) : null}
+        <Button variant={groupError || placeError ? "ghost" : "secondary"} onPress={close}>
           <Text>Go back</Text>
         </Button>
       </View>
@@ -141,6 +159,7 @@ const PlaceEditor = ({
 }) => {
   const [place] = useState(initialPlace);
   const userId = authClient.useSession().data?.user.id;
+  const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const map = useNativeMapStyle();
@@ -169,9 +188,47 @@ const PlaceEditor = ({
   );
   const [busy, setBusy] = useState<"deleting" | "saving" | null>(null);
   const busyRef = useRef(false);
+  const [movedByUser, setMovedByUser] = useState(false);
+  const unsaved = place
+    ? center !== null &&
+      !isPlaceEditUnchanged({
+        before: place,
+        after: { name, emoji, geometry: { ...center, radiusMeters } },
+      })
+    : name !== "" ||
+      emoji !== PLACE_EMOJI_CHOICES[0] ||
+      radiusMeters !== PLACE_RADIUS_DEFAULT ||
+      movedByUser;
+  const unsavedRef = useRef(unsaved);
+  unsavedRef.current = unsaved;
+  const leavingRef = useRef(false);
+  const leave = () => {
+    leavingRef.current = true;
+    onClose();
+  };
   const mapStyleJson = useMemo(
     () => (map.mapStyle ? JSON.stringify(map.mapStyle) : null),
     [map.mapStyle],
+  );
+
+  useEffect(
+    () =>
+      navigation.addListener("beforeRemove", (event) => {
+        if (leavingRef.current || !unsavedRef.current) return;
+        event.preventDefault();
+        Alert.alert("Discard this place?", undefined, [
+          { text: "Keep editing", style: "cancel" },
+          {
+            text: "Discard",
+            style: "destructive",
+            onPress: () => {
+              leavingRef.current = true;
+              navigation.dispatch(event.data.action);
+            },
+          },
+        ]);
+      }),
+    [navigation],
   );
 
   useEffect(() => {
@@ -222,7 +279,7 @@ const PlaceEditor = ({
         after: { name: parsedName.data, emoji: parsedEmoji.data, geometry },
       })
     ) {
-      onClose();
+      leave();
       return;
     }
     busyRef.current = true;
@@ -251,14 +308,14 @@ const PlaceEditor = ({
       }
       busyRef.current = false;
       setBusy(null);
-      Alert.alert("Unable to save place", placeErrorMessage(reason, result.error.message));
+      Alert.alert("Couldn’t save place", placeErrorMessage(reason, userMessage(result.error)));
       if (reason === "PLACE_GONE") {
-        onClose();
+        leave();
         void refreshPlaces([]);
       }
       return;
     }
-    onClose();
+    leave();
     void refreshPlaces([result.data.place.id]);
   };
 
@@ -268,7 +325,7 @@ const PlaceEditor = ({
         {map.isMapNotReady ? (
           <>
             <Text className="text-center text-tertiary">
-              The server is still preparing the map. You can add places when it's ready.
+              The server is still preparing the map. You can add places when it’s ready.
             </Text>
             <Button variant="secondary" onPress={map.retryUrl}>
               <Text>Try again</Text>
@@ -309,9 +366,11 @@ const PlaceEditor = ({
         touchRotate={false}
         androidView="surface"
         onRegionIsChanging={(event) => {
+          if (event.nativeEvent.userInteraction && !movedByUser) setMovedByUser(true);
           if (center || place) updateCenter(event.nativeEvent.center, event.nativeEvent.zoom);
         }}
         onRegionDidChange={(event) => {
+          if (event.nativeEvent.userInteraction && !movedByUser) setMovedByUser(true);
           if (center || place || event.nativeEvent.userInteraction) {
             updateCenter(event.nativeEvent.center, event.nativeEvent.zoom);
           }
@@ -504,7 +563,7 @@ const PlaceEditor = ({
                           setBusy(deleting ? "deleting" : null);
                         },
                         onDeleted: () => {
-                          onClose();
+                          leave();
                           void refreshPlaces([]);
                         },
                       })

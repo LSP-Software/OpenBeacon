@@ -12,7 +12,6 @@ mock.module("./storage.ts", () => ({
   },
 }));
 mock.module("./currentServer.ts", () => ({
-  baseUrl: "https://api.example.test",
   getBaseUrl: () => "https://api.example.test",
   getFeedbackUrl: () => "https://hosted.example.test",
 }));
@@ -38,9 +37,9 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   return respond();
 }) as typeof fetch;
 
-const { feedbackClient, trpcClient } = await import("./api.ts");
+const { feedbackClient, queryClient, trpcClient } = await import("./api.ts");
 const { authClient } = await import("./auth-client.ts");
-const { getApiCompatibility } = await import("./apiCompatibility.ts");
+const { clearApiCompatibility, getApiCompatibility } = await import("./apiCompatibility.ts");
 
 const tooOld = () =>
   new Response(
@@ -85,4 +84,39 @@ test("auth requests carry the level", async () => {
   expect(authRequest?.headers.get("x-openbeacon-api-compatibility-level")).toBe(
     String(apiCompatibilityLevel),
   );
+});
+
+test("queries retry only network failures and server errors, never refusals", async () => {
+  const retry = queryClient.getDefaultOptions().queries?.retry;
+  if (typeof retry !== "function") throw new Error("Missing retry rule");
+  const failure = async (response: () => Response) => {
+    clearApiCompatibility();
+    respond = response;
+    const result = await trpcClient.account.version.query().then(
+      () => null,
+      (error: unknown) => error,
+    );
+    if (!(result instanceof Error)) throw new Error("Expected the query to fail");
+    return result;
+  };
+  const trpcError = (code: string, httpStatus: number) => () =>
+    new Response(
+      JSON.stringify([
+        { error: { json: { message: code, code: -32000, data: { code, httpStatus } } } },
+      ]),
+      { status: httpStatus, headers: { "content-type": "application/json" } },
+    );
+
+  const tooOldError = await failure(tooOld);
+  expect(retry(0, tooOldError)).toBe(false);
+  clearApiCompatibility();
+  expect(retry(0, tooOldError)).toBe(false);
+  expect(retry(0, await failure(trpcError("CONFLICT", 409)))).toBe(false);
+  expect(retry(0, await failure(trpcError("PRECONDITION_FAILED", 412)))).toBe(false);
+  expect(retry(0, await failure(trpcError("INTERNAL_SERVER_ERROR", 500)))).toBe(true);
+  const offline = await failure(() => {
+    throw new TypeError("Network request failed");
+  });
+  expect(retry(0, offline)).toBe(true);
+  expect(retry(3, offline)).toBe(false);
 });

@@ -20,7 +20,7 @@ import {
 } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
 import { env } from "../../env.ts";
-import { deleteAccountRecords } from "../../lib/account-deletion.ts";
+import { deleteDueAccount } from "../../lib/accountDeletion.testUtil.ts";
 import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
 import { buildGroupAvatarPath, buildUserAvatarPath } from "../../lib/image-upload.ts";
 import { imageKeyColumns, readImageKeysNeedCatchUp } from "../../lib/imageKeys.ts";
@@ -66,7 +66,6 @@ const caller = (userId: string, deviceId = deviceOf(userId)) =>
     withDeviceActive({
       cache,
       db: prisma,
-      clientIp: "127.0.0.1",
       deviceId,
       unverifiedDeviceId: null,
       session: { user: { id: userId } },
@@ -724,7 +723,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           {
             target: { kind: "member", memberId: adminMemberId },
             fileName: admins.fileName,
-            expectedCiphertext: "stale-ciphertext",
+            expectedCiphertext: "A".repeat(64),
             key: adminKey,
           },
           {
@@ -736,13 +735,13 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           {
             target: { kind: "member", memberId: uploaderMemberId },
             fileName: crypto.randomUUID(),
-            expectedCiphertext: "missing",
+            expectedCiphertext: "B".repeat(64),
             key: ownerKey,
           },
           {
             target: { kind: "member", memberId: secondGroupMemberId },
             fileName: crypto.randomUUID(),
-            expectedCiphertext: "elsewhere",
+            expectedCiphertext: "C".repeat(64),
             key: ownerKey,
           },
         ],
@@ -900,11 +899,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: { image: groupUrl(deletedUploader, groupId, fileName), ...imageKeyColumns(key) },
       });
 
-      await deleteAccountRecords({
+      await deleteDueAccount({
         db: prisma,
         userId: deletedUploader,
         imageUrlPrefix: `${env.IMAGES_S3_CDN_URL}/${env.IMAGES_S3_BUCKET_NAME}`,
-        mode: "immediate",
         securityAlerts: null,
       });
 

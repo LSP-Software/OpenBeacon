@@ -8,12 +8,13 @@ import { Text } from "../../components/ui/Text.tsx";
 import { Alert } from "../../lib/alert.ts";
 import {
   changeRelockAfter,
-  hasScreenLock,
+  phoneScreenLockQueryOptions,
   turnOffAppLock,
   turnOnAppLock,
   useAppLock,
 } from "../../lib/appLock.ts";
 import type { RelockAfter } from "../../lib/appLockTypes.ts";
+import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 
 const relockOptions = [
   { value: 0, title: "Immediately", description: "As soon as you leave OpenBeacon." },
@@ -28,11 +29,7 @@ const relockOptions = [
 const AppLockSettingsScreen = () => {
   const { enabled, relockAfter } = useAppLock();
   const [requested, setRequested] = useState<boolean | null>(null);
-  const screenLock = useQuery({
-    queryKey: ["phoneScreenLock"],
-    queryFn: hasScreenLock,
-    staleTime: 0,
-  });
+  const screenLock = useQuery(phoneScreenLockQueryOptions);
   const unavailable = !enabled && screenLock.data === false;
 
   const changeRelock = async (next: RelockAfter) => {
@@ -51,7 +48,7 @@ const AppLockSettingsScreen = () => {
       if (next) {
         Alert.alert(
           "Set a screen lock first",
-          "App lock uses your phone’s screen lock. Set one in your phone’s settings, then try again.",
+          `App lock uses your ${thisDeviceNoun()}’s screen lock. Set one in your ${thisDeviceNoun()}’s settings, then try again.`,
         );
       }
     }
@@ -72,8 +69,8 @@ const AppLockSettingsScreen = () => {
         <View>
           <Text className="text-secondary text-base">
             {Platform.OS === "ios"
-              ? "Ask for Face ID, Touch ID or your passcode before anyone can open OpenBeacon on this phone. Location sharing keeps running while the app is locked, and the location indicator stays on. OpenBeacon’s preview in the app switcher is hidden while app lock is on."
-              : "Ask for your face, fingerprint or screen lock before anyone can open OpenBeacon on this phone. Location sharing keeps running while the app is locked, and the sharing notification stays on. On Android 13 and later, OpenBeacon’s preview in recent apps is hidden while app lock is on."}
+              ? `Ask for Face ID, Touch ID or your passcode before anyone can open OpenBeacon on this ${thisDeviceNoun()}. Location sharing keeps running while the app is locked, and the location indicator stays on. OpenBeacon’s preview in the app switcher is hidden while app lock is on.`
+              : `Ask for your face, fingerprint or screen lock before anyone can open OpenBeacon on this ${thisDeviceNoun()}. Location sharing keeps running while the app is locked, and the sharing notification stays on. On Android 13 and later, OpenBeacon’s preview in recent apps is hidden while app lock is on.`}
           </Text>
         </View>
 
@@ -82,10 +79,10 @@ const AppLockSettingsScreen = () => {
             <Text className="text-foreground font-medium">App lock</Text>
             <Text className="text-tertiary text-sm">
               {unavailable
-                ? "This phone has no screen lock. Set one in your phone’s settings to use app lock."
+                ? `This ${thisDeviceNoun()} has no screen lock. Set one in your ${thisDeviceNoun()}’s settings to use app lock.`
                 : enabled
-                  ? "On for this phone."
-                  : "Off for this phone."}
+                  ? `On for this ${thisDeviceNoun()}.`
+                  : `Off for this ${thisDeviceNoun()}.`}
             </Text>
           </View>
           <Switch

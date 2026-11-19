@@ -11,6 +11,7 @@ import { Button } from "../ui/Button.tsx";
 import { Icon } from "../ui/Icon.tsx";
 import { Text } from "../ui/Text.tsx";
 import { LiveMapBottomSheet } from "./LiveMapBottomSheet.tsx";
+import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 
 type PersonDevice = {
   battery: { charging: boolean; level: number | null } | null;
@@ -139,8 +140,8 @@ export const LiveMapPersonSheet = ({
         <View className="mt-3 gap-2 rounded-xl bg-destructive-soft p-3">
           <Text className="text-sm">
             {isMultiDevice
-              ? `Some of ${name}’s newer locations were encrypted with a key this phone doesn’t have.`
-              : `${name}’s newer locations were encrypted with a key this phone doesn’t have, so this is the last location it can read.`}
+              ? `Some of ${name}’s newer locations were encrypted with a key this ${thisDeviceNoun()} doesn’t have.`
+              : `${name}’s newer locations were encrypted with a key this ${thisDeviceNoun()} doesn’t have, so this is the last location it can read.`}
           </Text>
           <Link
             href={{
@@ -166,13 +167,13 @@ const PersonDeviceRow = ({ device, onPress }: { device: PersonDevice; onPress: (
   const batteryVisual = device.battery
     ? getBatteryVisual({ batteryLevel: device.battery.level, charging: device.battery.charging })
     : null;
-  const label = device.isThisDevice ? `${device.name} (this phone)` : device.name;
+  const label = device.isThisDevice ? `${device.name} (this ${thisDeviceNoun()})` : device.name;
   const updated = device.paused
     ? "Location sharing paused"
     : device.unreadable
       ? "Newer location can’t be read"
       : updatedAge === null
-        ? "No location yet"
+        ? "No location sent yet"
         : `${device.isThisDevice ? "Location sent" : "Updated"} ${updatedAge}`;
   const batteryLevel = batteryVisual?.label ?? null;
 

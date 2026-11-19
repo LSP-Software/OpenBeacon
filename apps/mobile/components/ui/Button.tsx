@@ -1,5 +1,5 @@
 import { cva, type VariantProps } from "class-variance-authority";
-import { ActivityIndicator, Pressable } from "react-native";
+import { ActivityIndicator, Pressable, View } from "react-native";
 import { cn } from "../../lib/cn.ts";
 import { TextClassContext } from "./Text.tsx";
 
@@ -16,9 +16,8 @@ const buttonVariants = cva(
         link: "",
       },
       size: {
-        default: "h-[52px] px-6",
-        sm: "h-10 gap-1.5 px-4",
-        icon: "size-11",
+        default: "min-h-[52px] px-6 py-2",
+        sm: "min-h-10 gap-1.5 px-4 py-1",
       },
     },
     defaultVariants: {
@@ -41,7 +40,6 @@ const buttonTextVariants = cva("text-base font-semibold", {
     size: {
       default: "",
       sm: "text-sm",
-      icon: "",
     },
   },
   defaultVariants: {
@@ -76,10 +74,18 @@ function Button({ className, variant, size, loading, disabled, ...props }: Butto
         )}
         role="button"
         disabled={loading || disabled}
+        accessibilityState={{ disabled: !!(loading || disabled), busy: !!loading }}
         {...props}
       >
         {loading ? (
-          <ActivityIndicator size="small" className={spinnerColors[variant ?? "default"]} />
+          <>
+            <View className="flex-row items-center gap-2 opacity-0">
+              {typeof props.children === "function" ? null : props.children}
+            </View>
+            <View className="absolute inset-0 items-center justify-center">
+              <ActivityIndicator size="small" className={spinnerColors[variant ?? "default"]} />
+            </View>
+          </>
         ) : (
           props.children
         )}
@@ -88,5 +94,4 @@ function Button({ className, variant, size, loading, disabled, ...props }: Butto
   );
 }
 
-export { Button, buttonTextVariants, buttonVariants };
-export type { ButtonProps };
+export { Button };

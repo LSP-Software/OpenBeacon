@@ -34,6 +34,7 @@ const prefix = `departure-${crypto.randomUUID()}`;
 const groupId = `${prefix}-group`;
 const readsGroupId = `${prefix}-reads`;
 const emptiedGroupId = `${prefix}-emptied`;
+const aloneGroupId = `${prefix}-alone`;
 const ownerId = `${prefix}-owner`;
 const memberId = `${prefix}-member`;
 const ownerDevice = `${prefix}-owner-device`;
@@ -47,7 +48,6 @@ const caller = (userId: string, deviceId: string) =>
     withDeviceActive({
       cache,
       db: prisma,
-      clientIp: "127.0.0.1",
       deviceId,
       session: { user: { id: userId }, session: { id: `${userId}-session` } },
     }) as Parameters<typeof router.createCaller>[0],
@@ -111,7 +111,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
 
     afterAll(async () => {
       await prisma.group.deleteMany({
-        where: { id: { in: [groupId, readsGroupId, emptiedGroupId] } },
+        where: { id: { in: [groupId, readsGroupId, emptiedGroupId, aloneGroupId] } },
       });
       await prisma.user.deleteMany({ where: { id: { in: [ownerId, memberId] } } });
       await prisma.$disconnect();
@@ -265,11 +265,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         deviceId: memberDevice,
       });
       expect(rejoinedWraps.epochs.map((epoch) => epoch.epochId)).toEqual([rejoined.epoch.epochId]);
-      await expect(
-        member.groupTracking.uploadBatch({ groupId, points: [point] }),
-      ).rejects.toMatchObject({
-        code: "BAD_REQUEST",
-        message: "Epoch does not belong to this group.",
+      expect(await member.groupTracking.uploadBatch({ groupId, points: [point] })).toMatchObject({
+        accepted: [],
+        expired: [point.clientPointId],
       });
       const ownerContext = await owner.groupMembership.removalContext({
         groupId,
@@ -528,12 +526,40 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         name: "Emptied",
         initialEpoch: bundle(initial),
       });
+      const self = (await owner.groupMembership.members({ groupId: emptiedGroupId })).find(
+        (item) => item.user.id === ownerId,
+      )!;
+      await owner.groupMembership.remove({ groupId: emptiedGroupId, memberId: self.id });
+
+      expect(await prisma.group.count({ where: { id: emptiedGroupId } })).toBe(0);
+      expect(await prisma.groupEpoch.count({ where: { groupId: emptiedGroupId } })).toBe(0);
+    }, 45000);
+
+    test("a member leaves without new keys when no other member has an active device, but can't remove someone else that way", async () => {
+      const ownerDevices = await prisma.userDevice.findMany({ where: { id: ownerDevice } });
+      const initial = createInitialGroupEpoch({
+        creator: { deviceId: ownerDevice, privateKey: ownerKey.privateKey },
+        groupId: aloneGroupId,
+        recipients: ownerDevices.map((device) => ({
+          algorithm: "X25519",
+          createdAt: device.createdAt,
+          deviceId: device.id,
+          publicKey: device.publicKey,
+          revokedAt: device.revokedAt,
+          userId: device.userId,
+        })),
+      });
+      await owner.groupLifecycle.create({
+        groupId: aloneGroupId,
+        name: "Alone",
+        initialEpoch: bundle(initial),
+      });
       await owner.groupInvites.send({
-        groupId: emptiedGroupId,
+        groupId: aloneGroupId,
         invites: [{ email: memberEmail, role: "MEMBER" }],
       });
       const invite = (await member.groupInvites.list()).find(
-        (item) => item.group.id === emptiedGroupId,
+        (item) => item.group.id === aloneGroupId,
       )!;
       const joinContext = await member.groupInvites.acceptanceContext({ inviteId: invite.id });
       const joined = createNextGroupEpoch({
@@ -542,21 +568,47 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         recipients: joinContext.recipients,
       });
       await member.groupInvites.accept({ inviteId: invite.id, nextEpoch: bundle(joined) });
-      await prisma.groupMember.delete({
-        where: { userId_groupId: { userId: ownerId, groupId: emptiedGroupId } },
-      });
+      const memberships = await owner.groupMembership.members({ groupId: aloneGroupId });
+      const memberRow = memberships.find((item) => item.user.id === memberId)!;
 
-      const self = (await member.groupMembership.members({ groupId: emptiedGroupId })).find(
-        (item) => item.user.id === memberId,
-      )!;
-      await member.groupMembership.remove({
-        groupId: emptiedGroupId,
-        memberId: self.id,
-        nextEpoch: bundle(joined),
-      });
+      await expect(
+        owner.groupMembership.remove({ groupId: aloneGroupId, memberId: memberRow.id }),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      expect(await prisma.groupMember.count({ where: { groupId: aloneGroupId } })).toBe(2);
 
-      expect(await prisma.group.count({ where: { id: emptiedGroupId } })).toBe(0);
-      expect(await prisma.groupEpoch.count({ where: { groupId: emptiedGroupId } })).toBe(0);
+      await prisma.userDevice.update({
+        where: { id: ownerDevice },
+        data: { revokedAt: new Date() },
+      });
+      try {
+        expect(
+          (
+            await member.groupMembership.removalContext({
+              groupId: aloneGroupId,
+              memberId: memberRow.id,
+            })
+          ).recipients,
+        ).toEqual([]);
+        await member.groupMembership.remove({ groupId: aloneGroupId, memberId: memberRow.id });
+      } finally {
+        await prisma.userDevice.update({ where: { id: ownerDevice }, data: { revokedAt: null } });
+      }
+
+      expect(
+        await prisma.groupMember.findMany({
+          where: { groupId: aloneGroupId },
+          select: { userId: true },
+        }),
+      ).toEqual([{ userId: ownerId }]);
+      expect(
+        (await prisma.group.findUniqueOrThrow({ where: { id: aloneGroupId } }))
+          .epochRotationRequired,
+      ).toBe(true);
+      expect(
+        await prisma.groupEvent.count({
+          where: { groupId: aloneGroupId, type: "MEMBER_LEFT", subjectUserId: memberId },
+        }),
+      ).toBe(1);
     }, 45000);
   },
 );

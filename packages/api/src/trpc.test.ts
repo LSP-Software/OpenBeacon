@@ -35,6 +35,12 @@ const router = t.router({
       cause: new ReasonError("UPLOAD_LIMIT_REACHED"),
     });
   }),
+  codeLimit: t.procedure.query(() => {
+    throw new TRPCError({
+      code: "TOO_MANY_REQUESTS",
+      message: "Codes can't be sent right now. Try again in a minute.",
+    });
+  }),
   removed: t.procedure.query(() => {
     throw deviceRemovedError();
   }),
@@ -89,6 +95,18 @@ describe("tRPC error formatter", () => {
       code: "TOO_MANY_REQUESTS",
       reason: "UPLOAD_LIMIT_REACHED",
     });
+  });
+
+  test("a rate limit error keeps its own message and gets the generic one only when it has none", async () => {
+    const codeLimit = await call("codeLimit");
+    expect(codeLimit.status).toBe(429);
+    expect(JSON.parse(codeLimit.body).error.json.message).toBe(
+      "Codes can't be sent right now. Try again in a minute.",
+    );
+    const uploadLimit = await call("uploadLimit");
+    expect(JSON.parse(uploadLimit.body).error.json.message).toBe(
+      "Too many requests. Please try again later.",
+    );
   });
 
   test("a device cause keeps data.cause and also sends it as data.reason", async () => {

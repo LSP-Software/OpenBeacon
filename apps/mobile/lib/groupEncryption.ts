@@ -129,10 +129,13 @@ export const buildAcceptSharedInviteInput = async ({
 export const buildRemoveGroupMemberInput = async ({
   groupId,
   memberId,
+  leaving,
 }: {
   groupId: string;
   memberId: string;
+  leaving: boolean;
 }): Promise<RouterInputs["groupMembership"]["remove"]> => {
+  if (leaving) return { groupId, memberId };
   const deviceRegistration = await ensureDeviceKeyRegistration();
   const removalContext = await trpcClient.groupMembership.removalContext.query({
     groupId,

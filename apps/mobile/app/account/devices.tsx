@@ -24,6 +24,8 @@ import { cn } from "../../lib/cn.ts";
 import { serverNow } from "../../lib/locationSharing.ts";
 import { deviceIconFor, selectableDeviceIcons } from "../../lib/deviceIcons.ts";
 import { shortTimeSince } from "../../lib/timeSince.ts";
+import { userMessage } from "../../lib/userMessage.ts";
+import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 
 const schema = z.object({ name: deviceNameSchema, icon: deviceIconSchema });
 
@@ -48,7 +50,7 @@ const DevicesScreen = () => {
     if (!editing) return;
     const result = await tryCatch(updateDevice.mutateAsync({ deviceId: editing.id, name, icon }));
     if (result.error) {
-      Alert.alert("Unable to update device", result.error.message);
+      Alert.alert("Couldn’t update device", userMessage(result.error));
       return;
     }
     await queryClient.invalidateQueries({ queryKey: trpc.account.listDevices.queryKey() });
@@ -108,14 +110,15 @@ const DevicesScreen = () => {
             ) : null}
             {editing?.isCurrent ? (
               <Text className="text-tertiary text-sm leading-5">
-                To remove this phone, sign out on the Account tab and choose to remove it.
+                To remove this {thisDeviceNoun()}, sign out on the Account tab and choose to remove
+                it.
               </Text>
             ) : (
               editing && (
                 <Link
                   href={{
                     pathname: "/account/remove-device",
-                    params: { deviceId: editing.id, name: editing.name },
+                    params: { deviceId: editing.id },
                   }}
                   onPress={() => setEditing(null)}
                   asChild
@@ -132,7 +135,7 @@ const DevicesScreen = () => {
 
       {devices.isPending ? (
         <LoadingIndicator />
-      ) : devices.isError ? (
+      ) : devices.isError && !devices.data ? (
         <View className="flex-1 items-center justify-center gap-4 px-6">
           <Text className="text-tertiary text-center">
             We couldn’t load your devices. Check your connection and try again.
@@ -184,7 +187,9 @@ const DevicesScreen = () => {
                       <Text className="text-foreground text-base font-semibold">{device.name}</Text>
                       {device.isCurrent && (
                         <View className="rounded-full bg-primary-soft px-2 py-0.5">
-                          <Text className="text-primary-text text-xs font-medium">This phone</Text>
+                          <Text className="text-primary-text text-xs font-medium">
+                            This {thisDeviceNoun()}
+                          </Text>
                         </View>
                       )}
                       {!device.activatedAt && (

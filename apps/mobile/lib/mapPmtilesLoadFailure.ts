@@ -52,3 +52,5 @@ export const nextMapLoadFailureState = ({
       };
   }
 };
+
+export const automaticMapRetryDelayMs = (retries: number) => [5_000, 300_000][retries] ?? null;

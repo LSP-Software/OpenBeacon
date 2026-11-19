@@ -9,12 +9,12 @@ import { pickImage, processImage } from "../../lib/pickImage.ts";
 import { DecryptedAvatarImage } from "./DecryptedAvatarImage.tsx";
 import { Avatar, AvatarFallback } from "../ui/Avatar.tsx";
 import { Icon } from "../ui/Icon.tsx";
+import { userMessage } from "../../lib/userMessage.ts";
 
 interface EditableImageProps {
   accessibilityLabel: string;
   imageUrl?: string | null;
   onImageUploaded?: (imageUrl: string) => Promise<void> | void;
-  showEditButton?: boolean;
   size?: "sm" | "md" | "lg";
   uploadImage?: (uri: string) => Promise<ImageUploadResult>;
   alt: string;
@@ -32,7 +32,6 @@ export const EditableImage = ({
 }: EditableImageProps) => {
   const [isUploading, setIsUploading] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const isLoading = isUploading;
   const sizeClassNames = {
     sm: {
       avatar: "size-16",
@@ -55,7 +54,7 @@ export const EditableImage = ({
   } as const;
 
   const handleEditPress = async () => {
-    if (isLoading || pickerOpen || !uploadImage) return;
+    if (isUploading || pickerOpen || !uploadImage) return;
     setPickerOpen(true);
 
     try {
@@ -68,7 +67,7 @@ export const EditableImage = ({
 
       const uploadResult = await uploadImage(processedUri);
       if ("error" in uploadResult) {
-        Alert.alert("Upload failed", uploadResult.error);
+        Alert.alert("Couldn’t upload the picture", uploadResult.error);
         return;
       }
 
@@ -77,11 +76,11 @@ export const EditableImage = ({
           Promise.resolve(onImageUploaded(uploadResult.data)),
         );
         if (callbackError) {
-          Alert.alert("Unable to update the picture", callbackError.message);
+          Alert.alert("Couldn’t update the picture", userMessage(callbackError));
         }
       }
     } catch (error) {
-      Alert.alert("Upload failed", error instanceof Error ? error.message : String(error));
+      Alert.alert("Couldn’t upload the picture", userMessage(error));
     } finally {
       setIsUploading(false);
       setPickerOpen(false);
@@ -100,7 +99,7 @@ export const EditableImage = ({
         </AvatarFallback>
       </Avatar>
 
-      {isLoading && (
+      {isUploading && (
         <View
           pointerEvents="none"
           className="absolute inset-0 bg-black/30 items-center justify-center rounded-full"
@@ -112,10 +111,11 @@ export const EditableImage = ({
       {uploadImage !== undefined && (
         <Pressable
           onPress={handleEditPress}
-          disabled={isLoading}
+          disabled={isUploading}
+          hitSlop={8}
           accessibilityRole="button"
           accessibilityLabel={accessibilityLabel}
-          className={`absolute -bottom-1 -right-1 items-center justify-center rounded-full border-border bg-card ${sizeClassNames[size].editButton} ${isLoading ? "opacity-70" : ""}`}
+          className={`absolute -bottom-1 -right-1 items-center justify-center rounded-full border-border bg-card ${sizeClassNames[size].editButton} ${isUploading ? "opacity-70" : ""}`}
         >
           <Icon as={PencilIcon} className={`${sizeClassNames[size].editIcon} text-foreground`} />
         </Pressable>

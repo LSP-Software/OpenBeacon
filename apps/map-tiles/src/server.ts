@@ -82,6 +82,17 @@ export const createMapTilesHandler = ({
         return new Response("Not found", { status: 404 });
       }
 
+      if (request.method === "POST" && request.headers.has("origin")) {
+        return Response.json({ error: "Requests from web pages are refused" }, { status: 403 });
+      }
+
+      if (
+        request.method === "POST" &&
+        request.headers.get("content-type")?.split(";")[0]?.trim() !== "application/json"
+      ) {
+        return Response.json({ error: "Send application/json" }, { status: 415 });
+      }
+
       if (pathname === "/status" && request.method === "GET") {
         const map = await tryCatch(readMapStatus());
         if (map.error) {

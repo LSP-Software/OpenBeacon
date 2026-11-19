@@ -14,24 +14,31 @@ import { Text } from "../../components/ui/Text.tsx";
 import { useIdentityGate } from "../../hooks/useIdentityGate.ts";
 import { trpc } from "../../lib/api.ts";
 import { changeRecoveryPhrase } from "../../lib/recovery.ts";
+import { userMessage } from "../../lib/userMessage.ts";
 
 const RecoveryPhraseChangeScreen = () => {
   const queryClient = useQueryClient();
   const [step, setStep] = useState<"verify" | "phrase" | "saving" | "done">("verify");
+  const [expectedRecoveryPublicKey, setExpectedRecoveryPublicKey] = useState<string>();
   const gate = useIdentityGate();
 
+  const showPhrase = () => {
+    setExpectedRecoveryPublicKey(
+      queryClient.getQueryData(trpc.accountRecovery.status.queryKey())?.recoveryKey?.publicKey,
+    );
+    setStep("phrase");
+  };
+
   useEffect(() => {
-    if (step === "verify" && gate.decision === "ready") {
-      setStep("phrase");
-    }
-  }, [step, gate.decision]);
+    if (step === "verify" && gate.decision === "ready") showPhrase();
+  });
 
   const change = async (phrase: RecoveryPhrase) => {
     setStep("saving");
-    const result = await tryCatch(changeRecoveryPhrase(phrase));
+    const result = await tryCatch(changeRecoveryPhrase(phrase, expectedRecoveryPublicKey));
     if (result.error) {
       setStep("phrase");
-      Alert.alert("Unable to change recovery phrase", result.error.message);
+      Alert.alert("Couldn’t change recovery phrase", userMessage(result.error));
       return;
     }
     if (result.data.status === "reauthenticate") {
@@ -73,7 +80,7 @@ const RecoveryPhraseChangeScreen = () => {
             <ConfirmIdentity
               onConfirmed={() => {
                 void gate.refresh();
-                setStep("phrase");
+                showPhrase();
               }}
             />
           )}

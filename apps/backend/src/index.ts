@@ -3,7 +3,7 @@ import "./validateServices.ts";
 import { env as apiEnv } from "@openbeacon/api/env.ts";
 import { mapEnv } from "@openbeacon/api/mapEnv.ts";
 import { getMapTilesManifest } from "@openbeacon/api/mapStorage.ts";
-import { securityAlerts } from "@openbeacon/auth";
+import { backgroundWork, securityAlerts } from "@openbeacon/auth";
 import { tryCatch } from "@openbeacon/shared";
 import { refreshAnnouncements } from "./announcements.ts";
 import { app } from "./app.ts";
@@ -12,6 +12,7 @@ import { db } from "./db.ts";
 import { env } from "./env.ts";
 import { findHttpsWarnings } from "./findHttpsWarnings.ts";
 import { authenticateCloudflare, resolveClientIp } from "./helpers/clientIp.ts";
+import { shutDownGracefully } from "./shutdown.ts";
 
 for (const warning of findHttpsWarnings({
   BETTER_AUTH_URL: env.BETTER_AUTH_URL,
@@ -54,8 +55,12 @@ const watchForFirstMap = async (waiting: boolean) => {
 
 void watchForFirstMap(false);
 
-export default {
-  fetch(request: Request, server: Bun.Server<unknown>) {
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled promise rejection", reason);
+});
+
+const server = Bun.serve({
+  fetch(request, server) {
     if (
       env.TRUSTED_PROXY_PROVIDER === "cloudflare-authenticated" &&
       !(
@@ -87,4 +92,20 @@ export default {
   // then silently resends the request. Stay above the app's longest request timeout (30 seconds).
   idleTimeout: 60,
   maxRequestBodySize: 8 * 1024 * 1024,
+});
+
+let stopping = false;
+const stop = async (signal: string) => {
+  if (stopping) return;
+  stopping = true;
+  console.log(`${signal} received: finishing requests and queued emails and wakes`);
+  const result = await shutDownGracefully({ server, backgroundWork, deadlineMs: 8_000 });
+  if (!result.requestsFinished || result.unfinishedBackgroundWork > 0) {
+    console.warn(
+      `Stopped before everything finished: ${result.requestsFinished ? "requests finished" : "some requests were still running"}, ${result.unfinishedBackgroundWork} background tasks left`,
+    );
+  }
+  process.exit(0);
 };
+process.on("SIGTERM", () => void stop("SIGTERM"));
+process.on("SIGINT", () => void stop("SIGINT"));

@@ -16,11 +16,9 @@ import { DeviceRemovedError, deviceRemovedError } from "./lib/deviceRemoved.ts";
 import { DeviceUnverifiedError } from "./lib/deviceUnverified.ts";
 import { ReasonError } from "./lib/reasonError.ts";
 import { linkRequestDevice } from "./lib/requestDevice.ts";
-import { RateLimitContextError } from "./middlewares/rateLimit.ts";
 
 export const createTRPCContext = async (opts: {
   cache: OpenBeaconCache;
-  clientIp?: string;
   db: PrismaClient;
   headers: Headers;
   serverVersion: string;
@@ -30,6 +28,7 @@ export const createTRPCContext = async (opts: {
 }) => {
   const session = await auth.api.getSession({
     headers: opts.headers,
+    query: { disableRefresh: true },
   });
   const requestDeviceId = opts.headers.get(deviceIdHeader);
   const device = requestDeviceId
@@ -59,7 +58,6 @@ export const createTRPCContext = async (opts: {
     serverName: opts.serverName,
     selfHosted: opts.selfHosted,
     feedbackWebhookUrl: opts.feedbackWebhookUrl ?? null,
-    ...(opts.clientIp !== undefined ? { clientIp: opts.clientIp } : {}),
   };
 };
 export type TRPCContext = Awaited<ReturnType<typeof createTRPCContext>>;
@@ -78,20 +76,8 @@ export const createTRPCComponents = () => {
     .meta<TRPCMeta>()
     .create({
       transformer: superjson,
+      isDev: false,
       errorFormatter: ({ shape, error }) => {
-        if (error.cause instanceof RateLimitContextError) {
-          return {
-            ...shape,
-            message: "Unable to process request.",
-            data: {
-              code: shape.data.code,
-              httpStatus: shape.data.httpStatus,
-              zodError: null,
-              cause: null,
-              reason: null,
-            },
-          };
-        }
         if (error.code === "INTERNAL_SERVER_ERROR") {
           return {
             ...shape,
@@ -109,7 +95,12 @@ export const createTRPCComponents = () => {
         if (error.code === "TOO_MANY_REQUESTS") {
           return {
             ...shape,
-            message: "Too many requests. Please try again later.",
+            message:
+              error.message === "" ||
+              error.message === error.code ||
+              error.message === error.cause?.message
+                ? "Too many requests. Please try again later."
+                : error.message,
             data: {
               code: shape.data.code,
               httpStatus: shape.data.httpStatus,

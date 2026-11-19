@@ -20,13 +20,15 @@ import { authClient } from "../lib/auth-client.ts";
 import { initials } from "../lib/initials.ts";
 import { placeMuteState } from "../lib/placeAlertMutes.ts";
 import { groupPlacesQueryOptions } from "../lib/placeSync.ts";
+import { thisDeviceNoun } from "../lib/thisDeviceNoun.ts";
 
 const PlaceAlertsScreen = () => {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const isFocused = useIsFocused();
   const { data: session } = authClient.useSession();
   const userId = session?.user.id;
-  const { group } = useCachedGroup(groupId);
+  const cachedGroup = useCachedGroup(groupId);
+  const { group } = cachedGroup;
   const places = useQuery({ ...groupPlacesQueryOptions(groupId, userId), subscribed: isFocused });
   const memberName = useMemberNames(groupId);
   const { mutes, setMute } = usePlaceAlertMutes(groupId);
@@ -44,11 +46,19 @@ const PlaceAlertsScreen = () => {
         showsVerticalScrollIndicator={false}
       >
         <Text className="text-secondary text-base">
-          Choose whose arrivals and departures you hear about. This only changes your alerts.
-          Everyone else still gets theirs.
+          {`Choose whose arrivals and departures you hear about. This changes your alerts on all your ${thisDeviceNoun()}s. Everyone else still gets theirs.`}
         </Text>
 
-        {places.isError || mutes.isError ? (
+        {cachedGroup.isMissing ? (
+          <Text>{`This group isn’t available on this ${thisDeviceNoun()}.`}</Text>
+        ) : cachedGroup.isError ? (
+          <View className="gap-3">
+            <Text>Couldn’t load your groups. Check your connection and try again.</Text>
+            <Button variant="secondary" onPress={() => void cachedGroup.refetch()}>
+              <Text>Try again</Text>
+            </Button>
+          </View>
+        ) : (places.isError && !places.data) || (mutes.isError && !mutes.data) ? (
           <View className="gap-3">
             <Text>Couldn’t load your alerts. Check your connection and try again.</Text>
             <Button

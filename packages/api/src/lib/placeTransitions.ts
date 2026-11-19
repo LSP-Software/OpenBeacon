@@ -5,8 +5,7 @@ import { effectiveNotificationSetting } from "@openbeacon/schemas";
 import { resolveLocationSharing } from "@openbeacon/shared";
 import type z from "zod";
 import { assertActiveDevices } from "./groupWriteChecks.ts";
-
-export const HISTORY_RETENTION_MS = 14 * 24 * 60 * 60_000;
+import { HISTORY_RETENTION_MS } from "./historyShare.ts";
 
 export const placeTransitionSelect = {
   id: true,
@@ -48,7 +47,6 @@ export const uploadPlaceTransitions = async ({
   deviceId,
   groupId,
   memberSince,
-  now,
   transitions,
   userId,
 }: {
@@ -56,11 +54,11 @@ export const uploadPlaceTransitions = async ({
   deviceId: string;
   groupId: string;
   memberSince: Date;
-  now: Date;
   transitions: z.infer<typeof placeTransitionSchema>[];
   userId: string;
 }) => {
   await assertActiveDevices(db, { deviceIds: [deviceId], userId });
+  const now = await readDatabaseTime(db);
 
   const existing = await db.placeTransition.findMany({
     where: { deviceId, clientId: { in: transitions.map(({ clientId }) => clientId) } },
@@ -100,7 +98,6 @@ export const uploadPlaceTransitions = async ({
             occurredAt.getTime() >= earliest &&
             occurredAt.getTime() <= latest,
         );
-  const createdAt = toInsert.length > 0 ? await readDatabaseTime(db) : now;
   const inserted =
     toInsert.length > 0
       ? await db.placeTransition.createManyAndReturn({
@@ -112,7 +109,7 @@ export const uploadPlaceTransitions = async ({
             direction: transition.direction,
             occurredAt: transition.occurredAt,
             clientId: transition.clientId,
-            createdAt,
+            createdAt: now,
           })),
           skipDuplicates: true,
           select: { clientId: true },

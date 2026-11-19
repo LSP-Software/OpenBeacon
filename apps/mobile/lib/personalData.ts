@@ -8,15 +8,13 @@ import { tryCatch } from "@openbeacon/shared";
 import { getCurrentHistoryKeyState } from "./currentHistoryKey.ts";
 import { getStoredDeviceKeyContext } from "./deviceKeys.ts";
 import { createHistoryKeyReader } from "./epochKeys.ts";
+import { thisDeviceNoun } from "./thisDeviceNoun.ts";
 
-export const PERSONAL_DATA_LOCKED_MESSAGE =
-  "Restore your recovery phrase on this phone to change nicknames and colours.";
-export const PERSONAL_DATA_KEY_MISMATCH_MESSAGE =
-  "The server's history key doesn't match this phone, so nothing was saved.";
-export const PERSONAL_DATA_ON_OTHER_DEVICE_MESSAGE =
-  "This phone doesn't have your account's history key yet. Set up your recovery phrase on your other phone, then restore it here to change nicknames and colours.";
+export const PERSONAL_DATA_LOCKED_MESSAGE = `Restore your recovery phrase on this ${thisDeviceNoun()} to change nicknames and colours.`;
+export const PERSONAL_DATA_KEY_MISMATCH_MESSAGE = `The server’s history key doesn’t match this ${thisDeviceNoun()}, so nothing was saved.`;
+export const PERSONAL_DATA_ON_OTHER_DEVICE_MESSAGE = `This ${thisDeviceNoun()} doesn’t have your account’s history key yet. Set up your recovery phrase on your other phone, then restore it here to change nicknames and colours.`;
 export const PERSONAL_DATA_NO_HISTORY_KEY_MESSAGE =
-  "Your account's history key isn't set up yet, so nothing was saved. Try again in a minute.";
+  "Your account’s history key isn’t set up yet, so nothing was saved. Try again in a minute.";
 
 export const sealForSelf = async ({
   userId,

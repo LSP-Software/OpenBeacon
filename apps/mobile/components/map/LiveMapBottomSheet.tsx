@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useRef } from "react";
 import { Animated, PanResponder, type PanResponderGestureState, View } from "react-native";
+import { useReducedMotion } from "../../hooks/useReducedMotion.ts";
 
 const DISMISS_DISTANCE = 80;
 const DISMISS_VELOCITY = 0.9;
@@ -18,10 +19,17 @@ export const LiveMapBottomSheet = ({
   onDismiss?: (() => void) | undefined;
   onHeightChange?: ((height: number) => void) | undefined;
 }) => {
-  const translateY = useRef(new Animated.Value(HIDDEN_OFFSET)).current;
+  const reduceMotion = useReducedMotion();
+  const reduceMotionRef = useRef(reduceMotion);
+  reduceMotionRef.current = reduceMotion;
+  const translateY = useRef(new Animated.Value(reduceMotion ? 0 : HIDDEN_OFFSET)).current;
   const dragOriginY = useRef(0);
 
   useEffect(() => {
+    if (reduceMotionRef.current) {
+      translateY.setValue(0);
+      return;
+    }
     Animated.spring(translateY, {
       damping: 22,
       stiffness: 220,
@@ -30,7 +38,15 @@ export const LiveMapBottomSheet = ({
     }).start();
   }, [translateY]);
 
+  useEffect(() => {
+    if (reduceMotion) translateY.setValue(0);
+  }, [reduceMotion, translateY]);
+
   const dismiss = () => {
+    if (reduceMotionRef.current) {
+      onDismiss?.();
+      return;
+    }
     Animated.timing(translateY, {
       duration: 180,
       toValue: HIDDEN_OFFSET,
@@ -60,6 +76,10 @@ export const LiveMapBottomSheet = ({
           return;
         }
 
+        if (reduceMotionRef.current) {
+          translateY.setValue(0);
+          return;
+        }
         Animated.spring(translateY, {
           damping: 22,
           stiffness: 220,

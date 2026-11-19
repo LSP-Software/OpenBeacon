@@ -57,7 +57,7 @@ mock.module("../lib/imageCache.ts", () => ({
 }));
 
 const { SessionDataCleanup } = await import("./SessionDataCleanup.tsx");
-const { baseUrl } = await import("../lib/currentServer.ts");
+const baseUrl = (await import("../lib/currentServer.ts")).getBaseUrl();
 const { getGroupColor, setGroupColor } = await import("../lib/groupColor.ts");
 const { getTrackingUploadTime, recordTrackingUpload } =
   await import("../lib/trackingUploadTime.ts");

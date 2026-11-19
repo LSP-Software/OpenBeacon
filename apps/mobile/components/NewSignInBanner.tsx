@@ -36,7 +36,7 @@ export const NewSignInBanner = ({ subscribed }: { subscribed: boolean }) => {
         <Link
           href={{
             pathname: "/account/remove-device",
-            params: { deviceId: pending.id, name: pending.name },
+            params: { deviceId: pending.id },
           }}
           asChild
         >

@@ -1,6 +1,6 @@
 # Self-hosted object storage research
 
-Research date: 2026-11-14. Sources are the projects' own repositories, wikis, release pages, advisory lists and container registries. Where a point comes from reading source code, the commit is given. Versity Gateway v1.11.0 was then tested against OpenBeacon in `self-host/docker-compose.yml`; see [Test results](#test-results).
+Research date: 2026-11-14. This is a dated note: the file paths and setting names under [What OpenBeacon needs](#what-openbeacon-needs) are from that date and some no longer exist. Sources are the projects' own repositories, wikis, release pages, advisory lists and container registries. Where a point comes from reading source code, the commit is given. Versity Gateway v1.11.0 was then tested against OpenBeacon in `self-host/docker-compose.yml`; see [Test results](#test-results).
 
 ## Verdict
 

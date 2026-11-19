@@ -27,7 +27,7 @@ import {
   setNotificationSettingSchema,
 } from "./schemas/account/notificationSettings.ts";
 import { emailCodeSchema } from "./schemas/account/emailCode.ts";
-import { accountNameSchema } from "./schemas/account/fields.ts";
+import { accountNameFromProfile, accountNameSchema } from "./schemas/account/fields.ts";
 import { signInSchema } from "./schemas/account/signIn.ts";
 import { signUpSchema } from "./schemas/account/signUp.ts";
 import {
@@ -50,6 +50,7 @@ import {
 } from "./schemas/feedback/submitFeedback.ts";
 import { createGroupSchema, newGroupIdSchema } from "./schemas/group/create.ts";
 import { inviteMemberToGroupSchema } from "./schemas/group/inviteMember.ts";
+import { sealedPersonalDataSchema } from "./schemas/group/personalData.ts";
 import {
   createPlaceSchema,
   deletePlaceSchema,
@@ -114,6 +115,7 @@ export {
   notificationTypeSchema,
   notificationTypes,
   setNotificationSettingSchema,
+  accountNameFromProfile,
   accountNameSchema,
   addHistoryWrapsSchema,
   changePasswordSchema,
@@ -131,6 +133,7 @@ export {
   FEEDBACK_MESSAGE_MAX_LENGTH,
   HISTORY_RECIPIENT_MISMATCH_MESSAGE,
   newGroupIdSchema,
+  sealedPersonalDataSchema,
   groupEpochBundleSchema,
   groupTrackingGetLatestSchema,
   groupTrackingHistoryDaysSchema,

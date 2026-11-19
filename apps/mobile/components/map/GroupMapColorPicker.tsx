@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ActivityIndicator, Pressable, View } from "react-native";
 import { useGroupColorRevision } from "../../hooks/useGroupColorRevision.ts";
 import { Alert } from "../../lib/alert.ts";
@@ -7,15 +7,22 @@ import { GROUP_COLOR_NAMES, GROUP_COLOR_PALETTE, getGroupColor } from "../../lib
 import { groupColorSyncQueryOptions, saveGroupColor } from "../../lib/groupColorSync.ts";
 import { Button } from "../ui/Button.tsx";
 import { Text } from "../ui/Text.tsx";
+import { userMessage } from "../../lib/userMessage.ts";
 
 export const GroupMapColorPicker = ({ groupId }: { groupId: string }) => {
   const { data: session } = authClient.useSession();
   const userId = session?.user.id;
   useGroupColorRevision();
+  const queryClient = useQueryClient();
   const sync = useQuery(groupColorSyncQueryOptions(userId));
   const save = useMutation({
     mutationFn: saveGroupColor,
-    onError: (error) => Alert.alert("Unable to save colour", error.message),
+    onError: async (error) => {
+      await queryClient.invalidateQueries({
+        queryKey: groupColorSyncQueryOptions(userId).queryKey,
+      });
+      Alert.alert("Couldn’t save colour", userMessage(error));
+    },
   });
   const locked = !userId || !sync.isSuccess || sync.isFetching || save.isPending;
   const selectedColor = save.isPending ? save.variables.color : getGroupColor(groupId);
@@ -25,7 +32,7 @@ export const GroupMapColorPicker = ({ groupId }: { groupId: string }) => {
       <View className="gap-1">
         <Text className="text-foreground font-medium">Map marker colour</Text>
         <Text className="text-tertiary text-sm">
-          Used for this group's ring on the live map. Only you see this colour.
+          Used for this group’s ring on the live map. Only you see this colour.
         </Text>
       </View>
       {sync.isError ? (
@@ -48,6 +55,7 @@ export const GroupMapColorPicker = ({ groupId }: { groupId: string }) => {
                   accessibilityLabel={GROUP_COLOR_NAMES[color]}
                   accessibilityState={{ selected, disabled: locked }}
                   disabled={locked}
+                  hitSlop={6}
                   onPress={() => {
                     if (userId) save.mutate({ userId, groupId, color });
                   }}

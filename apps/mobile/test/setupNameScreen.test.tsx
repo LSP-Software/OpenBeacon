@@ -7,6 +7,7 @@ import { createRoot, type Root } from "test-renderer";
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 const events: string[] = [];
+let devicesFailedToRefresh = false;
 const updateDevice = mock(async (_input: { deviceId: string; name: string; icon: string }) => {
   events.push("save");
 });
@@ -20,7 +21,7 @@ mock.module("@tanstack/react-query", () => ({
   useMutation: () => ({ isPending: false, mutateAsync: updateDevice }),
   useQuery: () => ({
     data: [{ icon: "phone", id: "device-1", isCurrent: true, name: "Pixel 9" }],
-    isError: false,
+    isError: devicesFailedToRefresh,
     isPending: false,
   }),
   useQueryClient: () => ({ invalidateQueries: async () => {} }),
@@ -99,6 +100,7 @@ const press = async (label: string) => {
 
 beforeEach(async () => {
   events.length = 0;
+  devicesFailedToRefresh = false;
   updateDevice.mockClear();
   root = createRoot();
   await act(async () => root.render(<NameThisPhoneScreen />));
@@ -124,4 +126,13 @@ test("skipping moves on the same way without saving", async () => {
 
   expect(updateDevice).not.toHaveBeenCalled();
   expect(events).toEqual(["sync", "advance:name"]);
+});
+
+test("a failed background refresh keeps the loaded device and the Continue button", async () => {
+  devicesFailedToRefresh = true;
+  await act(async () => root.render(<NameThisPhoneScreen />));
+
+  expect(JSON.stringify(root.container.toJSON())).not.toContain("couldn’t load");
+  await press("Continue");
+  expect(updateDevice.mock.calls[0]?.[0]?.deviceId).toBe("device-1");
 });

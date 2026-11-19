@@ -4,7 +4,6 @@ import { renderAccountExistsEmail } from "./accountExistsEmail.tsx";
 import { renderCodeEmail } from "./codeEmail.tsx";
 import { loadEmailSettings } from "./config.ts";
 import { renderGoogleSignInEmail } from "./googleSignInEmail.tsx";
-import { renderEmailLayout } from "./layout.tsx";
 import { createSendSecurityAlertEmail } from "./securityAlertEmail.tsx";
 import { createSendEmail } from "./sender.ts";
 import { createEmailTransport } from "./transport.ts";
@@ -14,6 +13,8 @@ const { serverName, config } = loadEmailSettings();
 const transport = config.transport === "none" ? null : createEmailTransport(config);
 
 export const emailEnabled = transport !== null;
+
+export { emailUnreachableCode } from "./transport.ts";
 
 export const checkEmail = async () => {
   if (!transport) return;
@@ -31,9 +32,6 @@ export {
   securityAlertSettings,
   type TurnedOffNotification,
 } from "./types.ts";
-
-export const renderEmail = (email: Omit<Parameters<typeof renderEmailLayout>[0], "serverName">) =>
-  renderEmailLayout({ ...email, serverName });
 
 export const sendEmail = createSendEmail(
   transport
@@ -59,7 +57,7 @@ export const sendCodeEmail = async ({
     to,
     ...(await renderCodeEmail({ purpose, code, serverName })),
     ...(userId ? { userId } : {}),
-    optional: false,
+    cap: null,
   });
 
 export const sendAccountExistsEmail = async ({
@@ -75,7 +73,7 @@ export const sendAccountExistsEmail = async ({
     to,
     ...(await renderAccountExistsEmail({ hasPassword, serverName })),
     userId,
-    optional: true,
+    cap: "notices",
   });
 
 export const sendGoogleSignInEmail = async ({ to, userId }: { to: string; userId: string }) =>
@@ -83,7 +81,7 @@ export const sendGoogleSignInEmail = async ({ to, userId }: { to: string; userId
     to,
     ...(await renderGoogleSignInEmail({ serverName })),
     userId,
-    optional: true,
+    cap: "notices",
   });
 
 export const sendSecurityAlertEmail = createSendSecurityAlertEmail({ sendEmail, serverName });

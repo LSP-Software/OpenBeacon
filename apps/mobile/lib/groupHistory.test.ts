@@ -50,6 +50,10 @@ describe("group event wording", () => {
     );
   });
 
+  test("an event type this build doesn't know has no wording", () => {
+    expect(describe_({ type: "SEATS_CHANGED" as GroupEvent["type"], actor: sam })).toBeNull();
+  });
+
   test("describes role changes, including demotions and people changing their own role", () => {
     expect(describe_({ type: "ROLE_CHANGED", actor: sam, subject: alex, role: "OWNER" })).toBe(
       "Dad made Alex an owner",

@@ -38,6 +38,10 @@ export const removeGroupMemberWithOwnerGuard = async ({
         AND (
           target_member.role <> ${GroupRole.OWNER}
           OR (SELECT COUNT(*) FROM owner_rows WHERE id <> target_member.id) > 0
+          OR NOT EXISTS (
+            SELECT 1 FROM "GroupMember" AS other
+            WHERE other."groupId" = ${groupId} AND other.id <> target_member.id
+          )
         )
       RETURNING member.id, member."userId"
     ),

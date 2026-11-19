@@ -6,6 +6,7 @@ import { startAppLock, unlockApp, useAppLock } from "../lib/appLock.ts";
 import { BeaconIcon } from "./BeaconIcon.tsx";
 import { Button } from "./ui/Button.tsx";
 import { Text } from "./ui/Text.tsx";
+import { thisDeviceNoun } from "../lib/thisDeviceNoun.ts";
 
 export const AppLockScreen = () => {
   const { locked, away, promptRequest } = useAppLock();
@@ -32,7 +33,7 @@ export const AppLockScreen = () => {
     if (result === "noScreenLock") {
       Alert.alert(
         "App lock is off",
-        "This phone no longer has a screen lock, so OpenBeacon can’t lock. Set a screen lock in your phone’s settings, then turn on app lock again.",
+        `This ${thisDeviceNoun()} no longer has a screen lock, so OpenBeacon can’t lock. Set a screen lock in your ${thisDeviceNoun()}’s settings, then turn on app lock again.`,
       );
     }
   };

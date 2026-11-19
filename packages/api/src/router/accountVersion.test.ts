@@ -16,7 +16,6 @@ test("reports the server version and name", async () => {
       hashSecret: testRedisHashSecret,
       now: () => 0,
     }),
-    clientIp: "203.0.113.10",
     serverVersion: "0.1.1",
     serverName: "Family server",
     db: {},

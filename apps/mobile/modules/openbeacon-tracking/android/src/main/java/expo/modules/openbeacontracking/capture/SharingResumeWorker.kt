@@ -15,7 +15,7 @@ import com.facebook.react.ReactApplication
 import com.facebook.react.ReactInstanceEventListener
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.ReactContext
-import com.facebook.react.jstasks.HeadlessJsTaskConfig
+import com.facebook.react.bridge.WritableMap
 import com.facebook.react.jstasks.HeadlessJsTaskContext
 import com.facebook.react.jstasks.HeadlessJsTaskEventListener
 import expo.modules.openbeacontracking.Notice
@@ -55,29 +55,7 @@ class SharingResumeWorker(
             continuation.invokeOnCancellation { host.removeReactInstanceEventListener(listener) }
             host.start()
           }
-        val tasks = HeadlessJsTaskContext.getInstance(reactContext)
-        suspendCancellableCoroutine { continuation ->
-          var taskId: Int? = null
-          val listener =
-            object : HeadlessJsTaskEventListener {
-              override fun onHeadlessJsTaskStart(taskId: Int) = Unit
-
-              override fun onHeadlessJsTaskFinish(finishedTaskId: Int) {
-                if (finishedTaskId != taskId) return
-                tasks.removeTaskEventListener(this)
-                continuation.resume(Unit)
-              }
-            }
-          tasks.addTaskEventListener(listener)
-          continuation.invokeOnCancellation { tasks.removeTaskEventListener(listener) }
-          try {
-            taskId = tasks.startTask(HeadlessJsTaskConfig(TASK_NAME, Arguments.createMap().apply { putString("reason", "parked") }, TASK_TIMEOUT_MS, true))
-          } catch (error: RuntimeException) {
-            Log.e(TAG, "Failed to check location sharing preferences.", error)
-            tasks.removeTaskEventListener(listener)
-            continuation.resume(Unit)
-          }
-        }
+        runParkedTask(HeadlessJsTaskContext.getInstance(reactContext), Arguments.createMap())
       }
     }
   }
@@ -85,9 +63,32 @@ class SharingResumeWorker(
   companion object {
     private const val TAG = "SharingResumeWorker"
     const val WORK_NAME = "openbeacon_sharing_resume_check"
-    private const val TASK_NAME = "OpenBeaconTrackingUpload"
-    private const val TASK_TIMEOUT_MS = 60_000L
     private const val SYNC_TIMEOUT_MS = 90_000L
+
+    suspend fun runParkedTask(tasks: HeadlessJsTaskContext, data: WritableMap) {
+      suspendCancellableCoroutine { continuation ->
+        var taskId: Int? = null
+        val listener =
+          object : HeadlessJsTaskEventListener {
+            override fun onHeadlessJsTaskStart(taskId: Int) = Unit
+
+            override fun onHeadlessJsTaskFinish(finishedTaskId: Int) {
+              if (finishedTaskId != taskId) return
+              tasks.removeTaskEventListener(this)
+              continuation.resume(Unit)
+            }
+          }
+        tasks.addTaskEventListener(listener)
+        continuation.invokeOnCancellation { tasks.removeTaskEventListener(listener) }
+        try {
+          taskId = UploadTasks.start(tasks, data.apply { putString("reason", "parked") })
+        } catch (error: RuntimeException) {
+          Log.e(TAG, "Failed to check location sharing preferences.", error)
+          tasks.removeTaskEventListener(listener)
+          continuation.resume(Unit)
+        }
+      }
+    }
 
     fun schedule(context: Context) {
       try {

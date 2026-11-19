@@ -10,6 +10,10 @@ const createFakeClient = () => {
     onclose: null as ((error: Error) => void) | null,
     connect: async () => {
       client.connectAttempts += 1;
+      if (client.hang) {
+        await Bun.sleep(5);
+        throw Object.assign(new Error("timed out"), { code: "ERR_REDIS_CONNECTION_CLOSED" });
+      }
       if (!client.up) {
         client.onclose?.(new Error("closed"));
         throw Object.assign(new Error("closed"), { code: "ERR_REDIS_CONNECTION_CLOSED" });
@@ -85,6 +89,25 @@ test("a command that gets no answer fails after the timeout", async () => {
   await redis.send("PING", []);
   client.hang = true;
   expect(await codeOf(redis.send("GET", ["key"]))).toBe(redisTimeoutCode);
+  redis.close();
+});
+
+test("a connection that stops answering is replaced, so later commands fail fast until Redis answers again", async () => {
+  const client = createFakeClient();
+  const redis = createSelfHealingRedis({ client, commandTimeoutMs: 200, sleep: async () => {} });
+  await redis.send("PING", []);
+  const attempts = client.connectAttempts;
+  client.hang = true;
+  expect(await codeOf(redis.send("GET", ["key"]))).toBe(redisTimeoutCode);
+
+  const started = performance.now();
+  expect(await codeOf(redis.send("GET", ["key"]))).toBe("ERR_REDIS_CONNECTION_CLOSED");
+  expect(performance.now() - started).toBeLessThan(100);
+  expect(client.connectAttempts).toBeGreaterThan(attempts);
+
+  client.hang = false;
+  while (!client.connected) await Bun.sleep(1);
+  expect(await redis.send("GET", ["key"])).toBe("OK");
   redis.close();
 });
 

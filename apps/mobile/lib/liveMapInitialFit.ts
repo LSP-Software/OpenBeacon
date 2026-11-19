@@ -16,13 +16,6 @@ export const reduceLiveMapInitialFit = (
   state: LiveMapInitialFitState,
   event: LiveMapInitialFitEvent,
 ): { shouldFit: boolean; state: LiveMapInitialFitState } => {
-  if (event.type === "reset") {
-    return {
-      shouldFit: false,
-      state: createLiveMapInitialFitState(),
-    };
-  }
-
   if (event.type === "user_camera_control" || event.type === "show_everyone") {
     return {
       shouldFit: false,
@@ -105,5 +98,4 @@ type LiveMapInitialFitEvent =
   | { type: "markers"; markerIds: readonly string[]; nowMs: number }
   | { type: "coalesce_elapsed"; nowMs: number }
   | { type: "user_camera_control" }
-  | { type: "show_everyone" }
-  | { type: "reset" };
+  | { type: "show_everyone" };

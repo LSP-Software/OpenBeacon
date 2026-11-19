@@ -11,3 +11,8 @@ export const sharedCache = () => {
   });
   return cache;
 };
+
+export const closeSharedCache = () => {
+  cache?.close();
+  cache = null;
+};

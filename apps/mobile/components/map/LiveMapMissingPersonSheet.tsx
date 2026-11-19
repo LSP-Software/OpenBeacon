@@ -16,6 +16,7 @@ import { Button } from "../ui/Button.tsx";
 import { Icon } from "../ui/Icon.tsx";
 import { Text } from "../ui/Text.tsx";
 import { LiveMapBottomSheet } from "./LiveMapBottomSheet.tsx";
+import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 
 export const LiveMapMissingPersonSheet = ({
   devices,
@@ -63,7 +64,7 @@ export const LiveMapMissingPersonSheet = ({
                 : waitingForLocation
                   ? "Waiting for location"
                   : hidden
-                    ? "Hidden on this phone"
+                    ? `Hidden on this ${thisDeviceNoun()}`
                     : unreadable
                       ? "Can’t read their location"
                       : "Location unknown"}
@@ -162,8 +163,8 @@ export const LiveMapMissingPersonSheet = ({
         <View className="mt-3 rounded-xl border border-destructive px-3 pt-3 pb-1">
           <Text className="text-sm">
             {unreadable.reason === "groupKey"
-              ? `This phone doesn’t have the encryption key for ${unreadable.groupName}, so it can’t read locations shared there.`
-              : `${person.name}’s latest location was encrypted with a key this phone doesn’t have.`}
+              ? `This ${thisDeviceNoun()} doesn’t have the encryption key for ${unreadable.groupName}, so it can’t read locations shared there.`
+              : `${person.name}’s latest location was encrypted with a key this ${thisDeviceNoun()} doesn’t have.`}
           </Text>
           <Link
             href={{
@@ -183,8 +184,8 @@ export const LiveMapMissingPersonSheet = ({
         <View className="mt-3 rounded-xl bg-secondary p-3">
           <Text className="text-sm">
             {person.isSelf
-              ? "Your location hasn’t been shared from this phone yet. Check OpenBeacon has location permission and background location turned on."
-              : `This phone hasn’t received a recent location from ${person.name}. They might have location sharing turned off, or not have opened OpenBeacon for a while.`}
+              ? `Your location hasn’t been shared from this ${thisDeviceNoun()} yet. Check OpenBeacon has location permission and background location turned on.`
+              : `This ${thisDeviceNoun()} hasn’t received a recent location from ${person.name}. They might have location sharing turned off, or not have opened OpenBeacon for a while.`}
           </Text>
         </View>
       )}

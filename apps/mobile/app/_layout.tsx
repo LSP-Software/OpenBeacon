@@ -2,7 +2,7 @@ import { View } from "react-native";
 import "../global.css";
 import { PortalHost } from "@rn-primitives/portal";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { type ErrorBoundaryProps, Stack } from "expo-router";
 import {
   ApiCompatibilityGate,
   useApiCompatibilityGateShown,
@@ -10,6 +10,8 @@ import {
 import { AppLockScreen } from "../components/AppLockScreen.tsx";
 import { InAppNoticeBanner } from "../components/InAppNoticeBanner.tsx";
 import { AlertHost } from "../components/ui/Alert.tsx";
+import { Button } from "../components/ui/Button.tsx";
+import { Text } from "../components/ui/Text.tsx";
 import { OfflineBanner } from "../components/OfflineBanner.tsx";
 import { queryClient } from "../lib/api.ts";
 import { useAppLock } from "../lib/appLock.ts";
@@ -119,5 +121,16 @@ const RootLayout = () => {
     </QueryClientProvider>
   );
 };
+
+export const ErrorBoundary = ({ retry }: ErrorBoundaryProps) => (
+  <View className="flex-1 justify-center gap-4 bg-background px-6">
+    <Text variant="h3" accessibilityLiveRegion="polite">
+      Something went wrong
+    </Text>
+    <Button onPress={() => void retry()}>
+      <Text>Try again</Text>
+    </Button>
+  </View>
+);
 
 export default RootLayout;

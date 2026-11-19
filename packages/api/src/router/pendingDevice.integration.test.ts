@@ -23,7 +23,6 @@ const caller = (userId: string, deviceId: string | null) =>
     withDeviceActive({
       cache,
       db: prisma,
-      clientIp: `ip-${userId}`,
       deviceId,
       emailCodes: null,
       securityAlerts: null,
@@ -155,6 +154,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
 
     test("can cancel by removing itself", async () => {
       const account = await createAccount("cancel");
+      const group = await prisma.group.create({
+        data: {
+          name: "Family",
+          groupMembers: { create: { userId: account.userId, role: "OWNER", joinedEpochNumber: 1 } },
+        },
+      });
       await prisma.session.create({
         data: {
           deviceId: account.pendingDeviceId,
@@ -172,6 +177,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           .revokedAt,
       ).toEqual(expect.any(Date));
       expect(await prisma.session.count({ where: { userId: account.userId } })).toBe(0);
+      expect(
+        (await prisma.group.findUniqueOrThrow({ where: { id: group.id } })).epochRotationRequired,
+      ).toBe(false);
+      await prisma.group.delete({ where: { id: group.id } });
     });
 
     test("can't see or change anything else on the account", async () => {

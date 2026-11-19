@@ -50,6 +50,7 @@ import { authClient } from "../../../lib/auth-client.ts";
 import { getStoredDeviceId } from "../../../lib/deviceKeys.ts";
 import { historyLossRisk } from "../../../lib/historyLossRisk.ts";
 import { historyShareLabel } from "../../../lib/historyShare.ts";
+import { removePhoneRecoveryPrompt } from "../../../lib/keyRemovalWarnings.ts";
 import {
   getLocationPermissionWarningDescription,
   getLocationPermissionWarningTitle,
@@ -58,9 +59,11 @@ import { formatMapCacheSize, getMapCacheSizeMb } from "../../../lib/mapCache.ts"
 import { useNotificationSettings } from "../../../lib/notifications.ts";
 import { dismissRestoreCard, isRestoreCardDismissed } from "../../../lib/restoreReminders.ts";
 import { storage } from "../../../lib/storage.ts";
+import { thisDeviceNoun } from "../../../lib/thisDeviceNoun.ts";
 import { appVersion } from "../../../lib/versions.ts";
 import { useLocationPermissions } from "../../../providers/LocationPermissionProvider.tsx";
 import { useTheme } from "../../../providers/ThemeProvider.tsx";
+import { userMessage } from "../../../lib/userMessage.ts";
 
 const schema = z.object({ name: accountNameSchema });
 
@@ -110,7 +113,7 @@ const AccountScreen = () => {
   const saveName = async ({ name }: z.infer<typeof schema>) => {
     const result = await tryCatch(updateName.mutateAsync({ name }));
     if (result.error) {
-      Alert.alert("Unable to update name", result.error.message);
+      Alert.alert("Couldn’t update name", userMessage(result.error));
       return;
     }
     await Promise.all([
@@ -118,7 +121,6 @@ const AccountScreen = () => {
       queryClient.invalidateQueries({ queryKey: trpc.groupMembership.list.queryKey() }),
     ]);
     setNameOpen(false);
-    Alert.alert("Profile updated", "Your name has been saved.");
   };
 
   const signOut = async ({ removeThisPhone }: { removeThisPhone: boolean }) => {
@@ -126,17 +128,20 @@ const AccountScreen = () => {
     signingOut.current = true;
     setSignOutPhase("uploading");
     const { signOutOfThisPhone } = await import("../../../lib/signOut.ts");
-    const { status } = await signOutOfThisPhone({
-      onSigningOut: () => setSignOutPhase("signingOut"),
-      removeThisPhone,
-      sessionTokenToRevoke: session?.session?.token ?? null,
-    });
+    const result = await tryCatch(
+      signOutOfThisPhone({
+        onSigningOut: () => setSignOutPhase("signingOut"),
+        removeThisPhone,
+        sessionTokenToRevoke: session?.session?.token ?? null,
+      }),
+    );
+    const status = result.data?.status;
     signingOut.current = false;
     setSignOutPhase(null);
     if (status === "serverUnreachable") {
       Alert.alert(
         "Couldn’t reach the server",
-        "This phone may not have been removed. Try again, or sign out without removing this phone.",
+        `This ${thisDeviceNoun()} may not have been removed. Try again, or sign out without removing this ${thisDeviceNoun()}.`,
         [
           { text: "Cancel", style: "cancel" },
           { text: "Sign out without removing", onPress: () => signOut({ removeThisPhone: false }) },
@@ -147,8 +152,8 @@ const AccountScreen = () => {
     }
     if (removeThisPhone && status === "signedOut") {
       Alert.alert(
-        "This phone is still in Devices",
-        "You’ve been signed out, but we couldn’t remove this phone. Remove it from another device in Account → Devices.",
+        `This ${thisDeviceNoun()} is still in Devices`,
+        `You’ve been signed out, but we couldn’t remove this ${thisDeviceNoun()}. Remove it from another device in Account → Devices.`,
       );
     }
     router.replace("/");
@@ -162,7 +167,23 @@ const AccountScreen = () => {
       thisDeviceId: session?.user.id ? getStoredDeviceId(session.user.id) : undefined,
     });
     if (risk === "none") {
-      void signOut({ removeThisPhone: true });
+      const prompt = removePhoneRecoveryPrompt({
+        noun: thisDeviceNoun(),
+        recoveryStatus: recoveryStatus.data,
+      });
+      if (!prompt) {
+        void signOut({ removeThisPhone: true });
+        return;
+      }
+      Alert.alert(prompt.title, prompt.message, [
+        { text: "Cancel", style: "cancel" },
+        { text: "Set up recovery phrase", onPress: () => router.push("/account/recovery-setup") },
+        {
+          text: "Remove anyway",
+          style: "destructive",
+          onPress: () => signOut({ removeThisPhone: true }),
+        },
+      ]);
       return;
     }
     Alert.alert(
@@ -194,15 +215,15 @@ const AccountScreen = () => {
   const confirmSignOut = () =>
     Alert.alert(
       "Sign out?",
-      "This phone stays in Account → Devices, so you can sign in on it again. If you’re giving it away or won’t use it again, remove it too.",
+      `Signing out keeps this ${thisDeviceNoun()} in Account → Devices and keeps your keys on it, so you can sign in again and carry on. If you’re giving it away or won’t use it again, remove it too. That deletes your keys from it.`,
       [
         { text: "Cancel", style: "cancel" },
-        { text: "Sign out", onPress: () => signOut({ removeThisPhone: false }) },
         {
-          text: "Also remove this phone from your account",
+          text: `Also remove this ${thisDeviceNoun()} from your account`,
           style: "destructive",
           onPress: confirmRemoveThisPhone,
         },
+        { text: "Sign out", onPress: () => signOut({ removeThisPhone: false }) },
       ],
     );
 
@@ -285,7 +306,7 @@ const AccountScreen = () => {
             icon={BellOffIcon}
             tone="warning"
             title="Notifications are off"
-            description="This phone can’t show that it’s sharing your location, or tell you if sharing stops."
+            description={`This ${thisDeviceNoun()} can’t show that it’s sharing your location, or tell you if sharing stops.`}
           >
             <Button size="sm" onPress={notifications.turnOn} loading={notifications.turningOn}>
               <Text>Turn on notifications</Text>
@@ -326,7 +347,7 @@ const AccountScreen = () => {
             description={
               heldHistoryKeyVersions.data?.length
                 ? "Your recovery phrase was reset on another phone. Enter the new phrase to keep reading new history here."
-                : "Enter your recovery phrase to read your location history on this phone."
+                : `Enter your recovery phrase to read your location history on this ${thisDeviceNoun()}.`
             }
           >
             <Link href="/account/recovery-restore" asChild>
@@ -405,7 +426,7 @@ const AccountScreen = () => {
                     label: "Theme",
                     icon: SunIcon,
                     href: "/account/theme",
-                    value: { system: "Match phone", light: "Light", dark: "Dark" }[
+                    value: { system: `Match ${thisDeviceNoun()}`, light: "Light", dark: "Dark" }[
                       appThemePreference
                     ],
                   },

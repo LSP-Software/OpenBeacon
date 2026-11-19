@@ -42,12 +42,4 @@ describe("deviceIconFor", () => {
     }
     expect(new Set(Object.values(deviceIcons).map(({ icon }) => icon)).size).toBe(8);
   });
-
-  test("shows a phone for retired icons without offering them in the picker", () => {
-    for (const icon of ["watch", "car", "laptop", "bag", "tag", "home"] as const) {
-      for (const platform of ["ios", "android", null]) {
-        expect(deviceIconFor(icon, platform)).toEqual(deviceIconFor("phone", platform));
-      }
-    }
-  });
 });

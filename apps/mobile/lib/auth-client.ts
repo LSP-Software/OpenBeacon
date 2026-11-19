@@ -6,7 +6,7 @@ import { inferAdditionalFields } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 import * as SecureStore from "expo-secure-store";
 import { apiCompatibilityFetch } from "./apiCompatibility.ts";
-import { baseUrl } from "./currentServer.ts";
+import { getBaseUrl } from "./currentServer.ts";
 import { parseJson } from "./parseJson.ts";
 import { getSecureStoreOptions } from "./secureStoreOptions.ts";
 import { SERVER_UNREACHABLE_MESSAGE } from "./serverUnreachable.ts";
@@ -20,7 +20,7 @@ export const getServerKey = (server: string) =>
 export const saveSessionTokenToRevoke = (token: string) =>
   SecureStore.setItemAsync(
     SESSION_TOKEN_TO_REVOKE_KEY,
-    JSON.stringify([baseUrl, token]),
+    JSON.stringify([getBaseUrl(), token]),
     getSecureStoreOptions(),
   );
 
@@ -34,13 +34,34 @@ export const readSessionTokenToRevoke = async () => {
   );
   if (!stored) return null;
   const parsed = z.tuple([z.string(), z.string()]).safeParse(parseJson(stored));
-  if (parsed.success && parsed.data[0] === baseUrl) return parsed.data[1];
+  if (parsed.success && parsed.data[0] === getBaseUrl()) return parsed.data[1];
   await forgetSessionTokenToRevoke();
   return null;
 };
 
+const authBaseUrl = `${getBaseUrl()}/api/auth`;
+
+const toCurrentServer = (input: RequestInfo | URL) => {
+  const url = input instanceof Request ? input.url : String(input);
+  return url.startsWith(authBaseUrl)
+    ? `${getBaseUrl()}/api/auth${url.slice(authBaseUrl.length)}`
+    : url;
+};
+
+const toCurrentServerKey = (key: string) =>
+  key.replace(/^openbeacon_/, `openbeacon_${getServerKey(getBaseUrl())}_`);
+
+const unreachable = () =>
+  new Response(
+    JSON.stringify({
+      code: "SERVER_UNREACHABLE",
+      message: SERVER_UNREACHABLE_MESSAGE,
+    }),
+    { status: 503, headers: { "Content-Type": "application/json" } },
+  );
+
 export const authClient = createAuthClient({
-  baseURL: `${baseUrl}/api/auth`,
+  baseURL: authBaseUrl,
   sessionOptions: { refetchOnWindowFocus: false },
   fetchOptions: {
     timeout: 30_000,
@@ -59,42 +80,46 @@ export const authClient = createAuthClient({
       if (callerSignal?.aborted) abort();
       const timer = setTimeout(abort, timeout);
       const response = await tryCatch(
-        apiCompatibilityFetch(input, { ...init, signal: controller.signal }).then(
-          async (received) => {
-            const body = await received.text();
-            return new Response(body || null, {
-              status: received.status,
-              statusText: received.statusText,
-              headers: received.headers,
-            });
-          },
-        ),
+        apiCompatibilityFetch(toCurrentServer(input), {
+          ...init,
+          signal: controller.signal,
+        }).then(async (received) => {
+          const body = await received.text();
+          if (received.ok && body) {
+            const parsed = await tryCatch(Promise.resolve().then(() => JSON.parse(body)));
+            if (parsed.error) return unreachable();
+          }
+          return new Response(body || null, {
+            status: received.status,
+            statusText: received.statusText,
+            headers: received.headers,
+          });
+        }),
       );
       clearTimeout(timer);
       callerSignal?.removeEventListener("abort", abort);
       if (!response.error) return response.data;
       if (callerSignal?.aborted) throw response.error;
-      return new Response(
-        JSON.stringify({
-          code: "SERVER_UNREACHABLE",
-          message: SERVER_UNREACHABLE_MESSAGE,
-        }),
-        { status: 503, headers: { "Content-Type": "application/json" } },
-      );
+      return unreachable();
     },
   },
   plugins: [
     inferAdditionalFields({
-      user: { imageKeySealed: { type: "string", required: false, input: false } },
+      user: {
+        imageKeySealed: { type: "string", required: false, input: false },
+      },
     }),
     expoClient({
       scheme: "openbeacon",
-      storagePrefix: `openbeacon_${getServerKey(baseUrl)}`,
+      storagePrefix: "openbeacon",
       storage: {
-        getItem: (key) => SecureStore.getItem(key, getSecureStoreOptions()),
-        getItemAsync: (key) => SecureStore.getItemAsync(key, getSecureStoreOptions()),
-        setItem: (key, value) => SecureStore.setItem(key, value, getSecureStoreOptions()),
-        setItemAsync: (key, value) => SecureStore.setItemAsync(key, value, getSecureStoreOptions()),
+        getItem: (key) => SecureStore.getItem(toCurrentServerKey(key), getSecureStoreOptions()),
+        getItemAsync: (key) =>
+          SecureStore.getItemAsync(toCurrentServerKey(key), getSecureStoreOptions()),
+        setItem: (key, value) =>
+          SecureStore.setItem(toCurrentServerKey(key), value, getSecureStoreOptions()),
+        setItemAsync: (key, value) =>
+          SecureStore.setItemAsync(toCurrentServerKey(key), value, getSecureStoreOptions()),
       },
     }),
   ],

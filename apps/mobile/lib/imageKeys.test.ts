@@ -14,6 +14,7 @@ import {
   type PersonalDataPurpose,
   sealProfileImageKey,
 } from "@openbeacon/encryption";
+import { expectNoSecretsIn } from "../test/secretLeaks.testUtil.ts";
 
 const history = createHistoryKeyPair();
 const historyKey = { publicKey: history.publicKey, version: 2 };
@@ -267,6 +268,14 @@ describe("confirmProfileImage", () => {
 
     await confirmProfileImage({ fileName, imageKey, userId: "user-a" });
 
+    expectNoSecretsIn(profileConfirms, {
+      secrets: [
+        imageKey.expose(),
+        history.privateKey.expose(),
+        ...[...epochKeys.values()].map((key) => key.expose()),
+      ],
+      phrases: [],
+    });
     const sealed = profileConfirms[0]!.sealed!;
     expect(
       openProfileImageKey({
@@ -327,6 +336,10 @@ describe("confirmGroupImage", () => {
 
     const [{ key }] = groupConfirms as [(typeof groupConfirms)[number]];
     expect(key.epochId).toBe("epoch-2");
+    expectNoSecretsIn(groupConfirms, {
+      secrets: [imageKey.expose(), ...[...epochKeys.values()].map((epochKey) => epochKey.expose())],
+      phrases: [],
+    });
     expect(
       openWrap({
         fileName,

@@ -23,6 +23,7 @@ import {
   requestForegroundLocationPermissions,
 } from "../lib/locationPermissions.ts";
 import { dismissNotice } from "../lib/notifications.ts";
+import { thisDeviceNoun } from "../lib/thisDeviceNoun.ts";
 
 const LocationPermissionContext = createContext<{
   permissionState: LocationPermissionState | null;
@@ -141,11 +142,11 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
                 : "Allow background location"}
             </DialogTitle>
             <DialogDescription>
-              OpenBeacon needs precise and background location so your family and friends can see
-              where you are even when you are not actively using the app.{" "}
+              OpenBeacon only shares your location once it has precise location all the time. Until
+              then, nothing is shared.{" "}
               {canAskInApp
                 ? "The app will ask for that access next."
-                : "You can update location access in your device settings."}
+                : `You can update location access in your ${thisDeviceNoun()} settings.`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

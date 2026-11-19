@@ -38,7 +38,7 @@ import {
   setNativeMapSelfHeadingDegrees,
   setNativeMapProjectedPoint,
   setNativeMapProjectionWait,
-} from "./nativeMapTestHarness.tsx";
+} from "./nativeMap.testUtil.tsx";
 
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -69,6 +69,7 @@ const savedMapSources: MapSource[] = [];
 let cachedTileClears = 0;
 let forceRefreshMutationCalls = 0;
 let forceRefreshMutationPending = false;
+let forceRefreshMutationPaused = false;
 let forceRefreshMutationSucceeds = true;
 let deferForceRefresh = false;
 let completeForceRefresh: (() => void) | null = null;
@@ -81,6 +82,7 @@ const testPlatform = { OS: "ios" as "ios" | "android" };
 let mapAssetUrls: { glyphs: string; sprites: string } | null = null;
 const backPressListeners = new Set<() => boolean>();
 const accessibilityAnnouncements: string[] = [];
+let reduceMotionEnabled = false;
 
 mock.module("react-native", () => {
   const reactNative = createReactNativeTestModule({ platformOS: "android" });
@@ -91,6 +93,7 @@ mock.module("react-native", () => {
       announceForAccessibility: (message: string) => {
         accessibilityAnnouncements.push(message);
       },
+      isReduceMotionEnabled: async () => reduceMotionEnabled,
       isScreenReaderEnabled: async () => false,
     },
     BackHandler: {
@@ -123,6 +126,8 @@ mock.module("react-native", () => {
     Pressable: (props: {
       accessibilityLabel?: string;
       children?: React.ReactNode;
+      className?: string;
+      hitSlop?: unknown;
       onPress?: () => void;
       style?: unknown;
     }) => {
@@ -136,6 +141,8 @@ mock.module("react-native", () => {
         "pressable",
         {
           accessibilityLabel: props.accessibilityLabel,
+          className: props.className,
+          hitSlop: props.hitSlop,
           onClick: props.onPress,
           onPress: props.onPress,
           style: props.style,
@@ -179,6 +186,7 @@ mock.module("@tanstack/react-query", () => ({
     onError?: (error: Error) => void;
     onSuccess?: (data: unknown) => void;
   }) => ({
+    isPaused: forceRefreshMutationPaused,
     isPending: forceRefreshMutationPending,
     mutate: () => {
       forceRefreshMutationCalls += 1;
@@ -204,6 +212,11 @@ mock.module("@tanstack/react-query", () => ({
 }));
 
 mock.module("@maplibre/maplibre-react-native", createMapLibreMockModule);
+
+let screenFocused = true;
+mock.module("@react-navigation/native", () => ({
+  useIsFocused: () => screenFocused,
+}));
 
 mock.module("expo-file-system", () => ({
   Paths: { bundle: { uri: "file:///app" } },
@@ -423,6 +436,33 @@ const failMapLoad = async () => {
   });
 };
 
+const mapErrorText = "We couldn’t load the map";
+
+const pressMapTryAgain = async () => {
+  expect(getRenderedOutput()).toContain("Try again");
+  const button = root?.container.queryAll((node) => node.type === "mock-button")[0];
+  const onPress = button?.props["onPress"];
+  if (typeof onPress !== "function") throw new Error("Missing Try again button");
+  await act(async () => onPress());
+};
+
+const captureTimers = () => {
+  const originalSetTimeout = globalThis.setTimeout;
+  const timers = new Map<number, () => void>();
+  globalThis.setTimeout = ((callback: TimerHandler, delay?: number) => {
+    if (delay === 5_000 || delay === 300_000) {
+      timers.set(delay, callback as () => void);
+    }
+    return originalSetTimeout(callback, delay);
+  }) as typeof setTimeout;
+  return {
+    timers,
+    restore: () => {
+      globalThis.setTimeout = originalSetTimeout;
+    },
+  };
+};
+
 const finishLoadingStyle = async () => {
   await act(async () => {
     emitNativeMapDidFinishLoadingStyle();
@@ -469,12 +509,13 @@ const defaultSignedUrl = {
   url: "https://cached.example/pmtiles-1",
 };
 
-describe("NativeMap integration harness", () => {
+describe("NativeMap over a fake MapLibre", () => {
   beforeEach(() => {
     testPlatform.OS = "ios";
     mapAssetUrls = null;
     backPressListeners.clear();
     accessibilityAnnouncements.length = 0;
+    reduceMotionEnabled = false;
     resetNativeMapHarness();
     currentSignedPmtilesUrlQuery = {
       data: defaultSignedUrl,
@@ -486,7 +527,9 @@ describe("NativeMap integration harness", () => {
     };
     forceRefreshMutationCalls = 0;
     forceRefreshMutationPending = false;
+    forceRefreshMutationPaused = false;
     forceRefreshMutationSucceeds = true;
+    screenFocused = true;
     deferForceRefresh = false;
     completeForceRefresh = null;
     forceRefreshUrl = "https://forced.example/pmtiles";
@@ -1043,12 +1086,7 @@ describe("NativeMap integration harness", () => {
   });
 
   test("keeps the source retry scheduled if the style loads after a PMTiles error", async () => {
-    const originalSetTimeout = globalThis.setTimeout;
-    let retry: (() => void) | undefined;
-    globalThis.setTimeout = ((callback: TimerHandler, delay?: number) => {
-      if (delay === 5_000) retry = callback as () => void;
-      return originalSetTimeout(callback, delay);
-    }) as typeof setTimeout;
+    const { restore, timers } = captureTimers();
     try {
       await renderNativeMap();
       await act(async () => {
@@ -1059,19 +1097,19 @@ describe("NativeMap integration harness", () => {
             "[Style]: Failed to load source protomaps: Error fetching PMTiles header: timeout",
         });
       });
-      expect(getRenderedOutput()).toContain("activity-indicator");
+      expect(getRenderedOutput()).toContain(mapErrorText);
       await finishLoadingStyle();
-      expect(getRenderedOutput()).toContain("activity-indicator");
-      expect(retry).toBeDefined();
+      expect(getRenderedOutput()).toContain(mapErrorText);
+      expect(timers.get(5_000)).toBeDefined();
       await act(async () => {
-        retry?.();
+        timers.get(5_000)?.();
       });
       expect(forceRefreshMutationCalls).toBe(1);
       expect(getNativeMapViewMountCount()).toBe(2);
       await finishLoadingStyle();
-      expect(getRenderedOutput()).not.toContain("activity-indicator");
+      expect(getRenderedOutput()).not.toContain(mapErrorText);
     } finally {
-      globalThis.setTimeout = originalSetTimeout;
+      restore();
     }
   });
 
@@ -1090,12 +1128,7 @@ describe("NativeMap integration harness", () => {
   });
 
   test("recovers from PMTiles header errors reported through the native logger", async () => {
-    const originalSetTimeout = globalThis.setTimeout;
-    let retry: (() => void) | undefined;
-    globalThis.setTimeout = ((callback: TimerHandler, delay?: number) => {
-      if (delay === 5_000) retry = callback as () => void;
-      return originalSetTimeout(callback, delay);
-    }) as typeof setTimeout;
+    const { restore, timers } = captureTimers();
     try {
       await renderNativeMap();
       expect(emitNativeMapLog({ level: "error", tag: "Mbgl", message: "unrelated error" })).toBe(
@@ -1111,24 +1144,19 @@ describe("NativeMap integration harness", () => {
           }),
         ).toBe(true);
       });
-      expect(retry).toBeDefined();
+      expect(timers.get(5_000)).toBeDefined();
       await act(async () => {
-        retry?.();
+        timers.get(5_000)?.();
       });
       expect(forceRefreshMutationCalls).toBe(1);
       expect(getNativeMapViewMountCount()).toBe(2);
     } finally {
-      globalThis.setTimeout = originalSetTimeout;
+      restore();
     }
   });
 
-  test("keeps retrying a PMTiles source failure when the first credential refresh fails", async () => {
-    const originalSetTimeout = globalThis.setTimeout;
-    let retry: (() => void) | undefined;
-    globalThis.setTimeout = ((callback: TimerHandler, delay?: number) => {
-      if (delay === 5_000) retry = callback as () => void;
-      return originalSetTimeout(callback, delay);
-    }) as typeof setTimeout;
+  test("retries a PMTiles source failure again later when the first credential refresh fails", async () => {
+    const { restore, timers } = captureTimers();
     try {
       await renderNativeMap();
       forceRefreshMutationSucceeds = false;
@@ -1141,19 +1169,19 @@ describe("NativeMap integration harness", () => {
         });
       });
       await act(async () => {
-        retry?.();
+        timers.get(5_000)?.();
       });
       expect(forceRefreshMutationCalls).toBe(1);
       expect(getNativeMapViewMountCount()).toBe(1);
-      expect(getRenderedOutput()).toContain("activity-indicator");
+      expect(getRenderedOutput()).toContain(mapErrorText);
       forceRefreshMutationSucceeds = true;
       await act(async () => {
-        retry?.();
+        timers.get(300_000)?.();
       });
       expect(forceRefreshMutationCalls).toBe(2);
       expect(getNativeMapViewMountCount()).toBe(2);
     } finally {
-      globalThis.setTimeout = originalSetTimeout;
+      restore();
     }
   });
 
@@ -1215,7 +1243,7 @@ describe("NativeMap integration harness", () => {
     await failMapLoad();
 
     expect(forceRefreshMutationCalls).toBe(1);
-    expect(getRenderedOutput()).toContain("activity-indicator");
+    expect(getRenderedOutput()).toContain(mapErrorText);
   });
 
   test("retries a map failure that occurs during a scheduled URL refresh", async () => {
@@ -1239,31 +1267,90 @@ describe("NativeMap integration harness", () => {
     expect(forceRefreshMutationCalls).toBe(0);
   });
 
-  test("automatically retries a failed refresh while showing a loading indicator", async () => {
-    const originalSetTimeout = globalThis.setTimeout;
-    let retry: (() => void) | undefined;
-    globalThis.setTimeout = ((callback: TimerHandler, delay?: number) => {
-      if (delay === 5_000) retry = callback as () => void;
-      return originalSetTimeout(callback, delay);
-    }) as typeof setTimeout;
-
+  test("shows the map error after a failed refresh and retries it shortly after", async () => {
+    const { restore, timers } = captureTimers();
     try {
       forceRefreshMutationSucceeds = false;
       await renderNativeMap();
       await failMapLoad();
       expect(forceRefreshMutationCalls).toBe(1);
-      expect(getRenderedOutput()).toContain("activity-indicator");
-      expect(retry).toBeDefined();
+      expect(getRenderedOutput()).toContain(mapErrorText);
+      expect(getRenderedOutput()).not.toContain("activity-indicator");
+      expect(timers.get(5_000)).toBeDefined();
 
       forceRefreshMutationSucceeds = true;
       await act(async () => {
-        retry?.();
+        timers.get(5_000)?.();
       });
       expect(forceRefreshMutationCalls).toBe(2);
       expect(setQueryData).toHaveBeenCalled();
     } finally {
-      globalThis.setTimeout = originalSetTimeout;
+      restore();
     }
+  });
+
+  test("stops retrying a failing map source on its own after two more attempts", async () => {
+    const { restore, timers } = captureTimers();
+    try {
+      forceRefreshMutationSucceeds = false;
+      await renderNativeMap();
+      await failMapLoad();
+      for (const delay of [5_000, 300_000]) {
+        const retry = timers.get(delay);
+        timers.clear();
+        expect(retry).toBeDefined();
+        await act(async () => {
+          retry?.();
+        });
+      }
+      await flushEffects();
+
+      expect(forceRefreshMutationCalls).toBe(3);
+      expect(timers.size).toBe(0);
+      expect(getRenderedOutput()).toContain(mapErrorText);
+    } finally {
+      restore();
+    }
+  });
+
+  test("Try again on the map error retries the map source", async () => {
+    forceRefreshMutationSucceeds = false;
+    await renderNativeMap();
+    await failMapLoad();
+    expect(forceRefreshMutationCalls).toBe(1);
+
+    forceRefreshMutationSucceeds = true;
+    await pressMapTryAgain();
+
+    expect(forceRefreshMutationCalls).toBe(2);
+    expect(getNativeMapViewMountCount()).toBe(2);
+    expect(getRenderedOutput()).not.toContain(mapErrorText);
+  });
+
+  test("does not retry the map source while the map screen is in the background", async () => {
+    const { restore, timers } = captureTimers();
+    try {
+      screenFocused = false;
+      forceRefreshMutationSucceeds = false;
+      await renderNativeMap();
+      await failMapLoad();
+
+      expect(timers.size).toBe(0);
+    } finally {
+      restore();
+    }
+  });
+
+  test("shows the map error instead of a spinner while the refresh waits for a connection", async () => {
+    deferForceRefresh = true;
+    await renderNativeMap();
+    await failMapLoad();
+    forceRefreshMutationPending = true;
+    forceRefreshMutationPaused = true;
+    await renderNativeMap();
+
+    expect(getRenderedOutput()).toContain(mapErrorText);
+    expect(getRenderedOutput()).not.toContain("activity-indicator");
   });
 
   test("resets the failure retry gate after the style finishes loading", async () => {
@@ -1436,7 +1523,7 @@ describe("NativeMap integration harness", () => {
     });
   });
 
-  test("repeated map-load failures show recoverable UI instead of looping", async () => {
+  test("repeated map-load failures show the map error instead of looping", async () => {
     await renderNativeMap();
 
     await failMapLoad();
@@ -1454,7 +1541,7 @@ describe("NativeMap integration harness", () => {
     await failMapLoad();
 
     expect(forceRefreshMutationCalls).toBe(1);
-    expect(getRenderedOutput()).toContain("activity-indicator");
+    expect(getRenderedOutput()).toContain(mapErrorText);
 
     await failMapLoad();
     await failMapLoad();
@@ -1492,6 +1579,76 @@ describe("NativeMap integration harness", () => {
     expect(
       getNativeMapCameraCommands().filter((command) => command.type === "fitBounds"),
     ).toHaveLength(1);
+  });
+
+  test("moves the camera without animation when Reduce motion is on", async () => {
+    reduceMotionEnabled = true;
+    const alice = createLiveMapMarkerFixture({
+      initials: "AL",
+      latitude: 51.5,
+      longitude: -0.12,
+      name: "Alice",
+      userId: "alice",
+    });
+
+    await renderNativeMap({ markers: [alice] });
+    await finishLoadingStyle();
+    await flushEffects();
+    await renderNativeMap({ markers: [alice], selectedDeviceId: "alice" });
+    await flushEffects();
+
+    const moves = getNativeMapCameraCommands().filter((command) => command.type === "setCamera");
+    expect(moves.length).toBeGreaterThan(1);
+    for (const move of moves) {
+      expect(move).toEqual({
+        type: "setCamera",
+        stop: expect.objectContaining({ animationDuration: 0 }),
+      });
+      expect(move).toEqual({
+        type: "setCamera",
+        stop: expect.not.objectContaining({ animationMode: expect.anything() }),
+      });
+    }
+    expect(moves.at(-1)).toEqual({
+      type: "setCamera",
+      stop: expect.objectContaining({ centerCoordinate: [-0.12, 51.5], zoomLevel: 15 }),
+    });
+  });
+
+  test("gives every map control a touch target of at least 48 dp", async () => {
+    const self = createLiveMapMarkerFixture({ isSelf: true, userId: "self" });
+    await renderNativeMap({
+      groupOptions: [
+        { color: "#FF1464", hidden: false, id: "family", memberCount: 1, name: "Family" },
+        { color: "#2A9D8F", hidden: false, id: "club", memberCount: 1, name: "Club" },
+      ],
+      markers: [self],
+      people: null,
+      timelineGroupId: "family",
+    });
+    const sizes: Record<string, number> = { "h-10": 40, "size-11": 44, "size-12": 48 };
+    const controls = (root?.container.queryAll((node) => node.type === "pressable") ?? []).filter(
+      (node) =>
+        [
+          "Groups on the map",
+          "Show map names and symbols",
+          "Timeline",
+          "People",
+          "Show everyone",
+          "Go to current location",
+        ].includes(String(node.props["accessibilityLabel"])),
+    );
+    expect(controls).toHaveLength(6);
+    for (const control of controls) {
+      const height = Object.entries(sizes).find(([name]) =>
+        String(control.props["className"]).split(" ").includes(name),
+      )?.[1];
+      const slop = control.props["hitSlop"] as { top?: number; bottom?: number } | undefined;
+      expect({
+        label: control.props["accessibilityLabel"],
+        height: (height ?? 0) + (slop?.top ?? 0) + (slop?.bottom ?? 0),
+      }).toEqual({ label: control.props["accessibilityLabel"], height: 48 });
+    }
   });
 
   test("focuses selection once with zoom, then follows without resetting zoom", async () => {
@@ -2136,7 +2293,8 @@ describe("NativeMap integration harness", () => {
     const pressMarker = async (name: string) => {
       const marker = root?.container.queryAll(
         (instance) =>
-          instance.type === "pressable" && instance.props["accessibilityLabel"] === name,
+          instance.type === "pressable" &&
+          String(instance.props["accessibilityLabel"]).split(", ")[0] === name,
       )[0];
       if (!marker) throw new Error(`Missing marker ${name}`);
       await act(async () =>
@@ -2802,7 +2960,6 @@ describe("NativeMap integration harness", () => {
     const emptyPeople: MapPeople = {
       cantLocate: [],
       cantRead: [],
-      connectionLost: false,
       finding: [],
       hidden: [],
       outOfDate: [],
@@ -2997,7 +3154,6 @@ describe("NativeMap integration harness", () => {
     const createPeople = (overrides: Partial<MapPeople> = {}): MapPeople => ({
       cantLocate: [],
       cantRead: [],
-      connectionLost: false,
       finding: [],
       hidden: [],
       outOfDate: [],

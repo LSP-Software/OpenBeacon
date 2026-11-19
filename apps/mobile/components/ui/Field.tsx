@@ -18,21 +18,6 @@ function useFieldContext() {
   return React.useContext(FieldContext) ?? { orientation: "vertical" as const };
 }
 
-function FieldSet({ className, ...props }: React.ComponentProps<typeof View>) {
-  return <View className={cn("flex flex-col gap-3", className)} {...props} />;
-}
-
-function FieldLegend({
-  className,
-  ...props
-}: React.ComponentProps<typeof Text> & { variant?: "legend" | "label" }) {
-  return <Text className={cn("font-sans-medium", className)} {...props} />;
-}
-
-function FieldGroup({ className, ...props }: React.ComponentProps<typeof View>) {
-  return <View className={cn("flex w-full flex-col gap-3", className)} {...props} />;
-}
-
 function Field({
   className,
   orientation = "vertical",
@@ -62,10 +47,6 @@ function Field({
   );
 }
 
-function FieldContent({ className, ...props }: React.ComponentProps<typeof View>) {
-  return <View className={cn("flex flex-1 flex-col gap-1", className)} {...props} />;
-}
-
 function FieldLabel({ className, ...props }: React.ComponentProps<typeof Label>) {
   const field = useFieldContext();
 
@@ -83,40 +64,8 @@ function FieldLabel({ className, ...props }: React.ComponentProps<typeof Label>)
   );
 }
 
-function FieldTitle({ className, ...props }: React.ComponentProps<typeof Text>) {
-  const { disabled } = useFieldContext();
-
-  return (
-    <Text
-      className={cn(
-        "font-sans-medium flex flex-row items-center gap-2 text-sm",
-        disabled && "opacity-50",
-        className,
-      )}
-      {...props}
-    />
-  );
-}
-
 function FieldDescription({ className, ...props }: React.ComponentProps<typeof Text>) {
   return <Text className={cn("text-tertiary text-sm", className)} {...props} />;
-}
-
-function FieldSeparator({
-  children,
-  className,
-  ...props
-}: React.ComponentProps<typeof View> & {
-  children?: React.ReactNode;
-}) {
-  return (
-    <View className={cn("relative h-5 justify-center", className)} {...props}>
-      <View className="border-border absolute inset-0 top-1/2 border-t" />
-      {!!children && (
-        <Text className="bg-background text-tertiary mx-auto px-2 text-sm">{children}</Text>
-      )}
-    </View>
-  );
 }
 
 function FieldError({
@@ -174,15 +123,4 @@ function FieldError({
   );
 }
 
-export {
-  Field,
-  FieldLabel,
-  FieldDescription,
-  FieldError,
-  FieldGroup,
-  FieldLegend,
-  FieldSeparator,
-  FieldSet,
-  FieldContent,
-  FieldTitle,
-};
+export { Field, FieldLabel, FieldDescription, FieldError };

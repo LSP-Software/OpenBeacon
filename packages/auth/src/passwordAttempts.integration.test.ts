@@ -69,7 +69,11 @@ const signInOnActivePhone = async (email: string) => {
 };
 
 const changePassword = (cookie: string, currentPassword: string) =>
-  post("/change-password", { currentPassword, newPassword: "a brand new passphrase" }, cookie);
+  post(
+    "/change-password",
+    { currentPassword, newPassword: "a brand new passphrase", revokeOtherSessions: true },
+    cookie,
+  );
 
 describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
   "password failure limit with PostgreSQL and Redis",

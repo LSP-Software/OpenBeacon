@@ -30,6 +30,7 @@ import { buildLiveMapMarkers, labelDeviceIcons } from "../../../lib/buildLiveMap
 import { classifyMapPeople, flagUnreadableMarkers } from "../../../lib/classifyMapPeople.ts";
 import { loadPersonalNicknames } from "../../../lib/personalNicknames.ts";
 import { Alert } from "../../../lib/alert.ts";
+import { useOfflineStatus } from "../../../lib/networkStatus.ts";
 import { buildPlacePins, hiddenGroupWithPlace } from "../../../lib/places.ts";
 import {
   confirmDeletePlace,
@@ -48,11 +49,12 @@ import {
 } from "../../../lib/mapGroupVisibility.ts";
 import { nextMapMarkerSelection } from "../../../lib/mapMarkerSelection.ts";
 import type { MapMemberDevice } from "../../../lib/mapPeopleTypes.ts";
-import { readRegisteredDevice } from "../../../lib/registeredDevice.ts";
+import { registeredDeviceQueryOptions } from "../../../lib/registeredDevice.ts";
 import { resolveSelfDeviceLocationFallback } from "../../../lib/resolveSelfDeviceLocationFallback.ts";
 import { storage } from "../../../lib/storage.ts";
 import { TAB_BAR_CONTENT_HEIGHT } from "../../../lib/tabBarLayout.ts";
 import { dismissTrackingQueueEviction, getTrackingQueueEviction } from "../../../lib/tracking.ts";
+import { thisDeviceNoun } from "../../../lib/thisDeviceNoun.ts";
 
 const keyBannerDismissedKey = (userId: string, groupId: string) =>
   `map.keyBannerDismissed.${userId}.${groupId}`;
@@ -67,6 +69,7 @@ const MapScreen = () => {
   const { data: session } = authClient.useSession();
   const userId = session?.user.id;
   const isFocused = useIsFocused();
+  const offline = useOfflineStatus();
   const { data: groupsQueryData } = useQuery({
     ...trpc.groupMembership.list.queryOptions(),
     enabled: false,
@@ -118,12 +121,7 @@ const MapScreen = () => {
   }, [groups, keyAccessSignature]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
   const selfUserId = session?.user.id ?? "";
-  const { data: registeredDevice } = useQuery({
-    queryKey: ["registeredDevice", selfUserId],
-    enabled: selfUserId.length > 0,
-    staleTime: Number.POSITIVE_INFINITY,
-    queryFn: readRegisteredDevice,
-  });
+  const { data: registeredDevice } = useQuery(registeredDeviceQueryOptions(selfUserId));
   const selfDeviceId = registeredDevice?.userId === selfUserId ? registeredDevice.deviceId : "";
   const memberDeviceLists = useQueries({
     queries: (groups ?? []).map((group) => ({
@@ -447,14 +445,25 @@ const MapScreen = () => {
           subscribed={isFocused}
           userId={selfUserId}
         />
+        {!offline &&
+          (trackingStatus.connection === "failing" || trackingStatus.membership === "failed") && (
+            <View
+              accessibilityRole="alert"
+              className="mb-2 rounded-2xl border border-warning-accent bg-card p-4"
+            >
+              <Text className="text-warning-text">
+                Can’t reach the server. Locations shown may be out of date.
+              </Text>
+            </View>
+          )}
         {queueEviction && (
           <View className="mb-2 gap-2 rounded-2xl border border-warning-accent bg-card p-4">
             <Text className="font-semibold text-warning-text">
               Some location history was removed
             </Text>
             <Text>
-              This phone was offline long enough to fill its 10 MB upload queue. To keep sharing
-              your latest location, history queued between{" "}
+              This {thisDeviceNoun()} was offline long enough to fill its 10 MB upload queue. To
+              keep sharing your latest location, history queued between{" "}
               {new Date(queueEviction.oldestQueuedAt).toLocaleString(undefined, {
                 dateStyle: "medium",
                 timeStyle: "short",
@@ -487,8 +496,8 @@ const MapScreen = () => {
                 Can’t show locations for {group.name}
               </Text>
               <Text>
-                This phone can’t access the group’s encryption key. Group locations may be
-                unavailable.
+                This {thisDeviceNoun()} can’t access the group’s encryption key. Group locations may
+                be unavailable.
               </Text>
               <View className="flex-row flex-wrap items-center gap-3">
                 <Link
@@ -511,7 +520,7 @@ const MapScreen = () => {
               Multiple groups require attention
             </Text>
             <View className="flex-row flex-wrap items-center gap-3">
-              <Link href="/(tabs)/groups" asChild>
+              <Link href="/(tabs)/groups/list" asChild>
                 <Button size="sm">
                   <Text>Open groups</Text>
                 </Button>

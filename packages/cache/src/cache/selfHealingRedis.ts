@@ -45,17 +45,20 @@ export const createSelfHealingRedis = ({
   client.onclose = () => {
     if (!closed) void connect();
   };
+  const replaceStalledConnection = () => {
+    if (closed || !client.connected) return;
+    unreachable = true;
+    client.close();
+    void connect();
+  };
 
   const run = async <T>(command: () => Promise<T>) => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(
-        () =>
-          reject(
-            Object.assign(new Error("Redis didn't answer in time"), { code: redisTimeoutCode }),
-          ),
-        commandTimeoutMs,
-      );
+      timer = setTimeout(() => {
+        reject(Object.assign(new Error("Redis didn't answer in time"), { code: redisTimeoutCode }));
+        replaceStalledConnection();
+      }, commandTimeoutMs);
     });
     return Promise.race([
       (async () => {

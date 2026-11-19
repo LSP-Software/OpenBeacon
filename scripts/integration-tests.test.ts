@@ -2,7 +2,17 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildIntegrationTestCommand, readEnvFile } from "./integration-tests.ts";
+import {
+  buildIntegrationTestCommand,
+  checkSkippedTests,
+  findIntegrationTestFiles,
+  findSkippedTests,
+  findUnmatchedIntegrationFiles,
+  listFilesUsingIntegrationFlag,
+  readEnvFile,
+  redisRestartTestFile,
+  repoRoot,
+} from "./integration-tests.ts";
 
 const files = [
   "apps/backend/src/routes/trpcFeedback.integration.test.ts",
@@ -79,6 +89,82 @@ describe("readEnvFile", () => {
   test("fails when the env file is missing", async () => {
     await expect(readEnvFile("/nonexistent/.env.test")).rejects.toThrow(
       "Env file /nonexistent/.env.test not found.",
+    );
+  });
+});
+
+describe("findUnmatchedIntegrationFiles", () => {
+  test("names test files that read the integration flag but miss the glob", () => {
+    expect(
+      findUnmatchedIntegrationFiles({
+        filesUsingIntegrationFlag: [
+          ...files,
+          "apps/backend/src/routes/feedback.integration.test.tsx",
+          "packages/api/src/groupsIntegration.test.ts",
+          "scripts/database.integration.test.ts",
+          "scripts/run-integration-tests.ts",
+          "turbo.json",
+        ],
+        files,
+      }),
+    ).toEqual([
+      "apps/backend/src/routes/feedback.integration.test.tsx",
+      "packages/api/src/groupsIntegration.test.ts",
+      "scripts/database.integration.test.ts",
+    ]);
+  });
+
+  test("every test file in the repo that reads the integration flag is picked up by the runner", async () => {
+    const usingFlag = await listFilesUsingIntegrationFlag(repoRoot);
+    expect(usingFlag).toContain(redisRestartTestFile);
+    expect(
+      findUnmatchedIntegrationFiles({
+        filesUsingIntegrationFlag: usingFlag,
+        files: await findIntegrationTestFiles(repoRoot),
+      }),
+    ).toEqual([]);
+  });
+});
+
+describe("skipped integration tests", () => {
+  const report = `<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="bun test" tests="3" skipped="2">
+  <testsuite name="${redisRestartTestFile}" file="${redisRestartTestFile}" tests="1" skipped="1">
+    <testcase name="the shared client recovers" classname="" time="0" file="${redisRestartTestFile}" line="21" assertions="0">
+      <skipped />
+    </testcase>
+  </testsuite>
+  <testsuite name="packages/auth/src/a.integration.test.ts" file="packages/auth/src/a.integration.test.ts" tests="2" skipped="1">
+    <testcase name="runs" classname="" time="0.1" file="packages/auth/src/a.integration.test.ts" line="3" assertions="1" />
+    <testsuite name="sign in" file="packages/auth/src/a.integration.test.ts" line="4" tests="1" skipped="1">
+      <testcase name="checks the password" classname="sign in" time="0" file="packages/auth/src/a.integration.test.ts" line="5" assertions="0">
+        <skipped />
+      </testcase>
+    </testsuite>
+  </testsuite>
+</testsuites>`;
+
+  test("reads skipped test cases from bun's junit report", () => {
+    expect(findSkippedTests(report)).toEqual([
+      { name: "the shared client recovers", file: redisRestartTestFile },
+      { name: "checks the password", file: "packages/auth/src/a.integration.test.ts" },
+    ]);
+  });
+
+  test("allows only the Redis restart test to skip, and only when no container is given", () => {
+    const skipped = findSkippedTests(report);
+    expect(checkSkippedTests({ skipped, redisRestartContainer: undefined })).toEqual({
+      unexpected: [
+        { name: "checks the password", file: "packages/auth/src/a.integration.test.ts" },
+      ],
+      redisRestartSkipped: true,
+    });
+    expect(checkSkippedTests({ skipped, redisRestartContainer: "redis-ci" })).toEqual({
+      unexpected: skipped,
+      redisRestartSkipped: true,
+    });
+    expect(checkSkippedTests({ skipped: [], redisRestartContainer: undefined }).unexpected).toEqual(
+      [],
     );
   });
 });

@@ -1,6 +1,6 @@
 export { OpenBeaconCache } from "./cache/OpenBeaconCache.ts";
 export { pingRedis } from "./cache/redisPermissions.ts";
-export { sharedCache } from "./cache/sharedCache.ts";
+export { closeSharedCache, sharedCache } from "./cache/sharedCache.ts";
 export type {
   PmtilesSignedUrlInput,
   PmtilesSignedUrlValue,

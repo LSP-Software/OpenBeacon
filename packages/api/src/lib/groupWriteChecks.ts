@@ -6,10 +6,12 @@ import { ReasonError } from "./reasonError.ts";
 export type GroupWriteChecksDb = {
   $queryRaw: <T>(query: Prisma.Sql) => Promise<T>;
   groupEpoch: {
-    count: (args: { where: { id: { in: string[] } } }) => Promise<number>;
+    count: (args: {
+      where: { id: { in: string[] }; groupId?: { not: string } };
+    }) => Promise<number>;
     findMany: (args: {
       select: { id: true };
-      where: { groupId: string; id: { in: string[] }; createdAt?: { gte: Date } };
+      where: { groupId: string; id: { in: string[] }; epochNumber: { gte: number } };
     }) => Promise<Array<{ id: string }>>;
   };
   userDevice: {
@@ -57,9 +59,9 @@ export const lockGroupMemberForWrite = async (
     });
   }
   const members = await db.$queryRaw<
-    Array<{ id: string; createdAt: Date; role: GroupRole }>
+    Array<{ id: string; createdAt: Date; joinedEpochNumber: number; role: GroupRole }>
   >(Prisma.sql`
-    SELECT id, "createdAt", role FROM "GroupMember"
+    SELECT id, "createdAt", "joinedEpochNumber", role FROM "GroupMember"
     WHERE "groupId" = ${groupId} AND "userId" = ${userId}
     FOR SHARE
   `);
@@ -107,19 +109,22 @@ export const assertActiveDevices = async (
 
 export const findGroupEpochs = async (
   db: Pick<GroupWriteChecksDb, "groupEpoch">,
-  { epochIds, groupId, memberSince }: { epochIds: string[]; groupId: string; memberSince?: Date },
+  {
+    epochIds,
+    groupId,
+    joinedEpochNumber,
+  }: { epochIds: string[]; groupId: string; joinedEpochNumber: number },
 ) => {
   const epochs = await db.groupEpoch.findMany({
     select: { id: true },
-    where: {
-      groupId,
-      id: { in: epochIds },
-      ...(memberSince ? { createdAt: { gte: memberSince } } : {}),
-    },
+    where: { groupId, id: { in: epochIds }, epochNumber: { gte: joinedEpochNumber } },
   });
   const found = new Set(epochs.map((epoch) => epoch.id));
   const missing = epochIds.filter((epochId) => !found.has(epochId));
-  if (missing.length > 0 && (await db.groupEpoch.count({ where: { id: { in: missing } } })) > 0) {
+  if (
+    missing.length > 0 &&
+    (await db.groupEpoch.count({ where: { id: { in: missing }, groupId: { not: groupId } } })) > 0
+  ) {
     throw epochNotInGroup();
   }
   return found;

@@ -12,6 +12,7 @@ import type { z } from "zod";
 import { AnnouncementBanner } from "../components/AnnouncementBanner.tsx";
 import { EmailCodeEntry } from "../components/EmailCodeEntry.tsx";
 import { KeyboardFormScrollView } from "../components/KeyboardFormScrollView.tsx";
+import { HeldKeysNotice } from "../components/HeldKeysNotice.tsx";
 import { ReturnToHomeHeader } from "../components/headers/ReturnToHomeHeader.tsx";
 import { Button } from "../components/ui/Button.tsx";
 import { Input } from "../components/ui/Input.tsx";
@@ -81,7 +82,7 @@ const SignIn = () => {
       return outcome;
     }
     if (sessionSetupResult.error) {
-      Alert.alert("Unable to finish sign in", sessionSetupResult.error.message);
+      Alert.alert("Couldn’t finish sign in", sessionSetupResult.error.message);
       setEmailLoading(false);
       return outcome;
     }
@@ -95,7 +96,7 @@ const SignIn = () => {
     const requested = await emailCodes.requestEmailVerification(email, password);
     setEmailLoading(false);
     if (requested.error && requested.error.status !== 429) {
-      Alert.alert("Couldn't send a code", emailCodeErrorMessage(requested.error));
+      Alert.alert("Couldn’t send a code", emailCodeErrorMessage(requested.error));
       return;
     }
     setSignInCode(null);
@@ -113,7 +114,7 @@ const SignIn = () => {
       return;
     }
     if (outcome.kind === "wrongPassword" || outcome.kind === "failed") {
-      Alert.alert("Sign in failed", outcome.message);
+      Alert.alert("Couldn’t sign in", outcome.message);
     }
   };
 
@@ -122,7 +123,7 @@ const SignIn = () => {
     if (outcome.kind === "wrongPassword") {
       setSignInCode(null);
       form.setValue("password", "");
-      Alert.alert("Sign in failed", outcome.message);
+      Alert.alert("Couldn’t sign in", outcome.message);
       return undefined;
     }
     if (outcome.kind === "failed" && outcome.code === "EMAIL_NOT_VERIFIED") {
@@ -135,7 +136,7 @@ const SignIn = () => {
   const handleGoogleSignIn = async () => {
     await performGoogleAuth({
       setLoading: setGoogleLoading,
-      failureTitle: "Google sign in failed",
+      failureTitle: "Couldn’t sign in with Google",
       onSuccess: finishSignIn,
       alert: Alert.alert,
     });
@@ -148,6 +149,7 @@ const SignIn = () => {
           <>
             <ReturnToHomeHeader />
             <AnnouncementBanner />
+            <HeldKeysNotice />
             <View className="gap-2">
               <Text accessibilityRole="header" className="text-3xl font-bold">
                 {unverified
@@ -262,6 +264,7 @@ const SignIn = () => {
                       pathname: "/forgotPassword",
                       params: { joinCode, email: enteredEmail },
                     }}
+                    replace
                     asChild
                   >
                     <Pressable className="self-end py-1" accessibilityRole="link">
@@ -275,10 +278,10 @@ const SignIn = () => {
               </View>
             )}
             <View className="items-center gap-4 pt-2">
-              <Link href={{ pathname: "/signUp", params: { joinCode } }} asChild>
+              <Link href={{ pathname: "/signUp", params: { joinCode } }} replace asChild>
                 <Pressable accessibilityRole="link">
                   <Text className="text-secondary">
-                    Don't have an account?{" "}
+                    Don’t have an account?{" "}
                     <Text className="font-semibold text-primary-text">Create one</Text>
                   </Text>
                 </Pressable>

@@ -44,7 +44,6 @@ const caller = (userId: string, deviceId: string, callerCache = cache) =>
     withDeviceActive({
       cache: callerCache,
       db: prisma,
-      clientIp: "127.0.0.1",
       deviceId,
       unverifiedDeviceId: null,
       session: { user: { id: userId }, session: { id: `${userId}-session` } },

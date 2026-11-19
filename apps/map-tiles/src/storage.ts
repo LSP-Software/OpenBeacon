@@ -18,6 +18,7 @@ export const createStorageClients = (
     | "MAP_S3_ACCESS_KEY"
     | "MAP_S3_FORCE_PATH_STYLE"
   >,
+  { requestTimeoutMs = 120_000 }: { requestTimeoutMs?: number } = {},
 ) => {
   const config = {
     region: env.MAP_S3_REGION,
@@ -31,7 +32,7 @@ export const createStorageClients = (
     responseChecksumValidation: "WHEN_REQUIRED",
     requestHandler: {
       connectionTimeout: 30_000,
-      requestTimeout: 120_000,
+      requestTimeout: requestTimeoutMs,
       throwOnRequestTimeout: true,
     },
   } as const;
@@ -39,7 +40,11 @@ export const createStorageClients = (
   return {
     client: new S3Client(config),
     // A streamed part body cannot be replayed, so SDK retries are disabled and the uploader retries whole parts.
-    partClient: new S3Client({ ...config, maxAttempts: 1 }),
+    partClient: new S3Client({
+      ...config,
+      maxAttempts: 1,
+      requestHandler: { connectionTimeout: 30_000 },
+    }),
   };
 };
 
