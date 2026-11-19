@@ -57,6 +57,7 @@ export const NativeMap = ({
   onFocusPlaceHandled,
   onPeopleTrayOpenChange,
   onDeletePlace,
+  onRequestUpdate,
   onSetGroupHidden,
   onSelectDeviceId,
   people = null,
@@ -73,6 +74,7 @@ export const NativeMap = ({
   onFocusPlaceHandled?: () => void;
   onPeopleTrayOpenChange?: (open: boolean) => void;
   onDeletePlace?: (place: MapPlace, onDeleted: () => void) => void;
+  onRequestUpdate?: ((userId: string) => Promise<void>) | undefined;
   onSetGroupHidden?: (groupId: string, hidden: boolean) => void;
   onSelectDeviceId?: (deviceId: string | null) => void;
   people?: MapPeople | null;
@@ -125,6 +127,7 @@ export const NativeMap = ({
       ...(people?.cantRead ?? []),
       ...(people?.hidden ?? []),
     ].find((person) => person.userId === missingUserId) ?? null;
+  const missingPersonDevices = devices.filter((device) => device.userId === missingUserId);
   const isTrayOpen =
     peopleTrayOpen &&
     selectedMarker === null &&
@@ -851,6 +854,16 @@ export const NativeMap = ({
             edge.onSheetHeightChange(height);
           }}
           onDismiss={clearSelectionFromReact}
+          onRequestUpdate={
+            onRequestUpdate &&
+            (selectedPersonDevices.length === 0 ||
+              selectedPersonDevices.some(
+                (device) => !device.paused && device.platform !== "ios",
+              )) &&
+            !(selectedPersonDevices.length === 1 && selectedMarker.unreadableGroup)
+              ? () => onRequestUpdate(selectedMarker.userId)
+              : undefined
+          }
           onSelectDevice={(deviceId) => {
             if (markers.some((marker) => marker.deviceId === deviceId)) {
               goToDevice(deviceId);
@@ -874,11 +887,25 @@ export const NativeMap = ({
       ) : missingPerson ? (
         <LiveMapMissingPersonSheet
           key={missingPerson.userId}
-          devices={devices.filter((device) => device.userId === missingPerson.userId)}
+          devices={missingPersonDevices}
           person={missingPerson}
           onDismiss={() => {
             setMissingUserId(null);
           }}
+          onRequestUpdate={
+            onRequestUpdate &&
+            !missingPerson.isSelf &&
+            !("sharingPaused" in missingPerson) &&
+            !("hiddenGroups" in missingPerson) &&
+            (missingPersonDevices.length === 0 ||
+              missingPersonDevices.some((device) => !device.paused && device.platform !== "ios")) &&
+            !(
+              "reason" in missingPerson &&
+              (missingPerson.reason === "groupKey" || missingPersonDevices.length === 1)
+            )
+              ? () => onRequestUpdate(missingPerson.userId)
+              : undefined
+          }
           onShowGroup={(groupId) => {
             setGroupHidden(groupId, false);
           }}

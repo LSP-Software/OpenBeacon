@@ -28,7 +28,10 @@ mock.module("@maplibre/maplibre-react-native", () => ({
   ViewAnnotation: Passthrough,
 }));
 mock.module("expo-router", () => ({ Link: Passthrough }));
-mock.module("lucide-react-native", () => ({ HistoryIcon: () => null }));
+mock.module("lucide-react-native", () => ({
+  HistoryIcon: () => null,
+  RefreshCwIcon: () => null,
+}));
 mock.module("../components/ui/Button.tsx", () => ({ Button: Passthrough }));
 mock.module("../hooks/useSelfDeviceHeading.ts", () => ({ useSelfDeviceHeading: () => null }));
 mock.module("../hooks/useTimeSince.ts", () => ({

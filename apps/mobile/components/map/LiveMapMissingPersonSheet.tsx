@@ -16,18 +16,21 @@ import { Button } from "../ui/Button.tsx";
 import { Icon } from "../ui/Icon.tsx";
 import { Text } from "../ui/Text.tsx";
 import { LiveMapBottomSheet } from "./LiveMapBottomSheet.tsx";
+import { RequestUpdateButton } from "./RequestUpdateButton.tsx";
 import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 
 export const LiveMapMissingPersonSheet = ({
   devices,
   onDismiss,
   onHeightChange,
+  onRequestUpdate,
   onShowGroup,
   person,
 }: {
   devices: readonly (MapMemberDevice & { paused: boolean })[];
   onDismiss: () => void;
   onHeightChange: (height: number) => void;
+  onRequestUpdate?: (() => Promise<void>) | undefined;
   onShowGroup: (groupId: string) => void;
   person:
     | MapPerson
@@ -42,6 +45,15 @@ export const LiveMapMissingPersonSheet = ({
   const hidden = "hiddenGroups" in person ? person : null;
   const hiddenGroupNames = hidden?.hiddenGroups.map((group) => group.name) ?? [];
   const name = person.isSelf ? "You" : person.name;
+  const status = paused
+    ? "Location sharing paused"
+    : waitingForLocation
+      ? "Waiting for location"
+      : hidden
+        ? `Hidden on this ${thisDeviceNoun()}`
+        : unreadable
+          ? "Can’t read their location"
+          : "Location unknown";
 
   return (
     <LiveMapBottomSheet
@@ -58,17 +70,7 @@ export const LiveMapMissingPersonSheet = ({
           </Avatar>
           <View className="min-w-0 flex-1 gap-1">
             <Text className="text-foreground text-xl font-bold">{name}</Text>
-            <Text className="text-secondary text-sm">
-              {paused
-                ? "Location sharing paused"
-                : waitingForLocation
-                  ? "Waiting for location"
-                  : hidden
-                    ? `Hidden on this ${thisDeviceNoun()}`
-                    : unreadable
-                      ? "Can’t read their location"
-                      : "Location unknown"}
-            </Text>
+            <Text className="text-secondary text-sm">{status}</Text>
           </View>
         </View>
       }
@@ -189,6 +191,15 @@ export const LiveMapMissingPersonSheet = ({
           </Text>
         </View>
       )}
+      {onRequestUpdate && !person.isSelf && !paused && !hidden ? (
+        <RequestUpdateButton
+          hasLocation={false}
+          locationsKey={[status, unreadable?.reason, unreadable?.groupId].join()}
+          name={person.name}
+          onRequestUpdate={onRequestUpdate}
+          phones={devices.length >= 2 ? "devices" : "phone"}
+        />
+      ) : null}
       {hidden ? null : (
         <Text className="text-secondary mt-2 text-sm">In {person.groupNames.join(", ")}</Text>
       )}

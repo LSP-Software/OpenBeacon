@@ -358,6 +358,36 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       ]);
     });
 
+    test("update requests are listed with members but never light the unread dot", async () => {
+      await prisma.groupEvent.create({
+        data: {
+          id: `${prefix}-askedForMember`,
+          groupId,
+          type: "LOCATION_UPDATE_REQUESTED",
+          actorUserId: owner,
+          subjectUserId: member,
+          createdAt: ago(minute),
+        },
+      });
+      const { items } = await caller(member).groupHistory.list({
+        groupId,
+        categories: ["members"],
+      });
+      expect(items).toMatchObject([
+        {
+          kind: "group",
+          type: "LOCATION_UPDATE_REQUESTED",
+          actor: { userId: owner, name: "owner" },
+          subject: { userId: member, name: "member" },
+        },
+      ]);
+      expect(
+        (await caller(member).groupHistory.list({ groupId, categories: ["group", "roles"] })).items,
+      ).toEqual([]);
+      expect(await caller(member).groupHistory.latest()).toEqual([{ groupId, latestAt: null }]);
+      expect(await caller(owner).groupHistory.latest()).toEqual([{ groupId, latestAt: null }]);
+    });
+
     test("role changes and renames are recorded once, and unchanged saves record nothing", async () => {
       const memberRow = await prisma.groupMember.findUniqueOrThrow({
         where: { userId_groupId: { userId: member, groupId } },

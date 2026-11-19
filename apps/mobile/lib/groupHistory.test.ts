@@ -75,6 +75,24 @@ describe("group event wording", () => {
     );
   });
 
+  test("describes asking for someone’s location", () => {
+    expect(describe_({ type: "LOCATION_UPDATE_REQUESTED", actor: sam, subject: alex })).toBe(
+      "Dad asked for Alex’s location",
+    );
+    expect(describe_({ type: "LOCATION_UPDATE_REQUESTED", actor: me, subject: sam })).toBe(
+      "You asked for Dad’s location",
+    );
+    expect(describe_({ type: "LOCATION_UPDATE_REQUESTED", actor: alex, subject: me })).toBe(
+      "Alex asked for your location",
+    );
+    expect(describe_({ type: "LOCATION_UPDATE_REQUESTED", actor: null, subject: alex })).toBe(
+      "A deleted account asked for Alex’s location",
+    );
+    expect(describe_({ type: "LOCATION_UPDATE_REQUESTED", actor: sam, subject: null })).toBe(
+      "Dad asked for a deleted account’s location",
+    );
+  });
+
   test("names a deleted account without its old name", () => {
     expect(describe_({ type: "MEMBER_REMOVED", actor: null, subject: alex })).toBe(
       "A deleted account removed Alex",

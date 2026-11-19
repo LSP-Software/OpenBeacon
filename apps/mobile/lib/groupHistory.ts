@@ -55,6 +55,7 @@ export const describeGroupEvent = ({
   };
   const actor = person(event.actor, true);
   const subject = person(event.subject, false);
+  const subjects = subject === "you" ? "your" : `${subject}’s`;
   const place = `${event.emoji ?? ""} ${event.name ?? ""}`.trim();
   const role =
     event.role === "OWNER" ? "an owner" : event.role === "ADMIN" ? "an admin" : "a member";
@@ -74,8 +75,10 @@ export const describeGroupEvent = ({
         return `${actor} became ${role}`;
       }
       return event.role === "MEMBER"
-        ? `${actor} changed ${subject === "you" ? "your" : `${subject}’s`} role to member`
+        ? `${actor} changed ${subjects} role to member`
         : `${actor} made ${subject} ${role}`;
+    case "LOCATION_UPDATE_REQUESTED":
+      return `${actor} asked for ${subjects} location`;
     case "GROUP_RENAMED":
       if (!event.name) return `${actor} renamed the group`;
       return event.previousName

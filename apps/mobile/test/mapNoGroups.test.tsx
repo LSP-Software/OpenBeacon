@@ -84,10 +84,12 @@ mock.module("../hooks/useSelfDeviceLocation.ts", () => ({
 }));
 mock.module("../lib/api.ts", () => ({
   trpc: {
+    auth: { providers: { queryOptions: () => ({}) } },
     groupMembership: {
       list: { queryOptions: () => ({}) },
       listMemberDevices: { queryOptions: () => ({}) },
     },
+    groupTracking: { requestUpdate: { mutationOptions: () => ({}) } },
   },
 }));
 mock.module("../lib/auth-client.ts", () => ({

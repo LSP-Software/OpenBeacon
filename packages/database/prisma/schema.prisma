@@ -360,6 +360,7 @@ enum GroupEventType {
   PLACE_ADDED
   PLACE_UPDATED
   PLACE_DELETED
+  LOCATION_UPDATE_REQUESTED
 }
 
 model GroupEvent {

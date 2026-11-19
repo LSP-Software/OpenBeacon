@@ -25,6 +25,8 @@ export const resolveFcmSettings = (source: Record<string, string | undefined>) =
   return { settings: values, error: null };
 };
 
+export type WakeKind = "sync" | "locate";
+
 export type FcmSendResult =
   | { outcome: "sent" }
   | { outcome: "unregistered" }
@@ -98,7 +100,11 @@ export const createFcmClient = ({
     return pending;
   };
 
-  const send = async (token: string, refreshed = false): Promise<FcmSendResult> => {
+  const send = async (
+    token: string,
+    kind: WakeKind = "sync",
+    refreshed = false,
+  ): Promise<FcmSendResult> => {
     const accessToken = await tryCatch(getAccessToken());
     if (accessToken.error) return { outcome: "retry", afterMs: 5_000 };
     const response = await tryCatch(
@@ -113,8 +119,12 @@ export const createFcmClient = ({
           body: JSON.stringify({
             message: {
               token,
-              data: { t: "sync" },
-              android: { priority: "high", collapse_key: "sync", ttl: "300s" },
+              data: { t: kind },
+              android: {
+                priority: "high",
+                collapse_key: kind,
+                ttl: kind === "locate" ? "60s" : "300s",
+              },
             },
           }),
           signal: AbortSignal.timeout(10_000),
@@ -126,7 +136,7 @@ export const createFcmClient = ({
     const { status } = response.data;
     if (status === 401 && !refreshed) {
       cached = null;
-      return send(token, true);
+      return send(token, kind, true);
     }
     if (status === 429 || status >= 500) {
       const retryAfter = Number(response.data.headers.get("retry-after"));

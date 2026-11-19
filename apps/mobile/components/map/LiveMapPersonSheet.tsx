@@ -13,6 +13,7 @@ import { Button } from "../ui/Button.tsx";
 import { Icon } from "../ui/Icon.tsx";
 import { Text } from "../ui/Text.tsx";
 import { LiveMapBottomSheet } from "./LiveMapBottomSheet.tsx";
+import { RequestUpdateButton } from "./RequestUpdateButton.tsx";
 import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 
 type PersonDevice = {
@@ -36,6 +37,7 @@ export const LiveMapPersonSheet = ({
   name,
   onDismiss,
   onHeightChange,
+  onRequestUpdate,
   onSelectDevice,
   otherSharedGroupNames,
   timeline,
@@ -50,6 +52,7 @@ export const LiveMapPersonSheet = ({
   name: string;
   onDismiss: () => void;
   onHeightChange?: (height: number) => void;
+  onRequestUpdate?: (() => Promise<void>) | undefined;
   onSelectDevice?: (deviceId: string) => void;
   otherSharedGroupNames: readonly string[];
   timeline?: { groupId: string; userId: string } | undefined;
@@ -128,6 +131,18 @@ export const LiveMapPersonSheet = ({
             <Text className="text-tertiary mt-2 text-sm">
               Also in {otherSharedGroupNames.join(", ")}
             </Text>
+          ) : null}
+          {onRequestUpdate && !isSelf ? (
+            <RequestUpdateButton
+              locationsKey={[
+                timestamp,
+                ...(devices ?? []).map((device) => device.timestamp),
+              ].join()}
+              hasLocation
+              name={name}
+              onRequestUpdate={onRequestUpdate}
+              phones={isMultiDevice ? "devices" : "phone"}
+            />
           ) : null}
           {timeline ? (
             <Link href={{ pathname: "/timeline", params: timeline }} asChild>
