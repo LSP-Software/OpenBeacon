@@ -390,6 +390,20 @@ test("a check that finishes after the user left is ignored", async () => {
   expect(serverChanges).toEqual([]);
 });
 
+test("a check for one invite is dropped when a different invite opens meanwhile", async () => {
+  session = null;
+  holdChecks = true;
+  const root = await openInviteFrom(selfHosted);
+
+  await pressButton(root, "Change server");
+  params = { code: "B".repeat(32), server: "https://other.example.com" };
+  await act(async () => root.render(<Join />));
+  await act(async () => pendingChecks[0]?.());
+
+  expect(serverChanges).toEqual([]);
+  expect(savedInviteCode()).toBeNull();
+});
+
 const savedInviteCode = () => {
   const saved = stored.get("inviteForSignIn");
   return saved ? (JSON.parse(saved) as { code: string }).code : null;

@@ -32,7 +32,7 @@ export const normaliseServerUrl = (
   if (parsed.search || parsed.hash || /[?#]/.test(trimmed)) {
     return { url: null, error: "Remove everything from the ? or # onwards" };
   }
-  const plainHost = /^([a-z0-9.-]+|\[[0-9a-f:.]+\])(:\d*)?$/i;
+  const plainHost = /^([a-z0-9._-]+|\[[0-9a-f:.]+\])(:\d*)?$/i;
   const typedHost = /^[a-z][a-z0-9+.-]*:[\\/]*([^\\/?#]*)/i.exec(trimmed)?.[1] ?? "";
   if (!plainHost.test(typedHost) || !plainHost.test(parsed.host)) {
     return {
@@ -42,7 +42,8 @@ export const normaliseServerUrl = (
     };
   }
   const path = parsed.pathname.replace(/\/+$/, "");
-  return { url: `${parsed.origin}${path}`, error: null };
+  const url = `${parsed.origin}${path}`;
+  return url.length > 200 ? { url: null, error: "That address is too long" } : { url, error: null };
 };
 
 export const getServerUrl = () => {

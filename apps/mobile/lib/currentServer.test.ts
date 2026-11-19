@@ -92,6 +92,7 @@ describe("refusing addresses that only look like another", () => {
     ["https://192.168.1.10:8443/", "https://192.168.1.10:8443"],
     ["https://[fd00::1]:3000/", "https://[fd00::1]:3000"],
     ["https://beacon-1.example.com:8443/api", "https://beacon-1.example.com:8443/api"],
+    ["https://family_server.home.lan", "https://family_server.home.lan"],
   ])("still accepts %p", (input, expected) => {
     expect(normaliseServerUrl(input)).toEqual({ url: expected, error: null });
     withPhoneUrl(() => {
@@ -105,6 +106,13 @@ describe("refusing addresses that only look like another", () => {
       error: "That address is too long",
     });
     expect(normaliseServerUrl(`https://${"a".repeat(180)}.example.com`).url).not.toBeNull();
+  });
+
+  test("rejects an address that only grows past 200 characters once encoded", () => {
+    expect(normaliseServerUrl(`https://beacon.example.com/${" ".repeat(60)}x`)).toEqual({
+      url: null,
+      error: "That address is too long",
+    });
   });
 });
 

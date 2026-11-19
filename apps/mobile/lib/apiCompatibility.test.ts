@@ -623,6 +623,35 @@ describe("changing server mid-request", () => {
     expect(getApiCompatibility()).toBeNull();
   });
 
+  test("ignores an old server's verdict when the change happens while its body is read", async () => {
+    let finishBody: () => void = () => {};
+    respond = () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(
+              new TextEncoder().encode(
+                JSON.stringify({
+                  code: "CLIENT_TOO_OLD",
+                  minClientApiCompatibilityLevel: apiCompatibilityLevel + 1,
+                }),
+              ),
+            );
+            finishBody = () => {
+              baseUrl = "https://family.example.test";
+              controller.close();
+            };
+          },
+        }),
+        { status: 426, headers: { "content-type": "application/json" } },
+      );
+    const pending = apiCompatibilityFetch("https://api.example.test/api/trpc/a");
+    await Promise.resolve();
+    finishBody();
+    await pending;
+    expect(getApiCompatibility()).toBeNull();
+  });
+
   test("ignores a /health result from the old server that answers after the change", async () => {
     let answer: (response: Response) => void = () => {};
     respond = () => new Promise<Response>((resolve) => (answer = resolve));

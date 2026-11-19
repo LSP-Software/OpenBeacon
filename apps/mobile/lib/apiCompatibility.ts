@@ -327,6 +327,7 @@ export const apiCompatibilityFetch = async (input: RequestInfo | URL, init?: Req
   const response = await fetch(input, withApiCompatibilityHeader({ ...init, credentials: "omit" }));
   if (getBaseUrl() !== server) return response;
   const { verdict, message, sticky } = await readApiCompatibilityResponse(response);
+  if (getBaseUrl() !== server) return response;
   if (verdict !== null && verdict !== "ok") revision += 1;
   applyVerdict({ verdict, serverVersion: null, message, sticky, userRequested: false });
   if (sticky && state?.serverVersion === null) {

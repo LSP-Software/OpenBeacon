@@ -53,6 +53,7 @@ const Join = () => {
   const [switching, setSwitching] = useState(false);
   const busy = useRef(false);
   const onScreen = useRef(true);
+  const shownInvite = useRef(0);
   const [scanning, setScanning] = useState(false);
   const scanned = useRef(false);
   const [permission, requestPermission] = useCameraPermissions();
@@ -68,6 +69,7 @@ const Join = () => {
   useEffect(() => {
     if (codeParam === undefined) return;
     setCode(codeParam ?? "");
+    shownInvite.current += 1;
     setOpened(inviteFromParams(codeParam, serverParam));
     setScanning(false);
   }, [codeParam, serverParam]);
@@ -84,6 +86,7 @@ const Join = () => {
       );
       return;
     }
+    shownInvite.current += 1;
     setCode(read.invite.code);
     setOpened(read);
   };
@@ -92,10 +95,11 @@ const Join = () => {
     if (busy.current) return;
     busy.current = true;
     setSwitching(true);
+    const invite = shownInvite.current;
     const changed = await tryCatch(
       changeServerForInvite(
         server,
-        () => onScreen.current,
+        () => onScreen.current && shownInvite.current === invite,
         () => saveInviteForSignIn(inviteCode),
       ),
     );

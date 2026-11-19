@@ -77,6 +77,22 @@ describe("invite links", () => {
     expect(joinInviteFromLink(link)).toBeNull();
   });
 
+  test("a server address carrying its own query is unusable, not cut short", () => {
+    expect(
+      joinInviteFromLink(
+        `openbeacon://join?code=${code}&server=https://beacon.example.com?tenant=1`,
+      )?.invite,
+    ).toBeNull();
+  });
+
+  test("a repeated parameter is caught even when its name is encoded", () => {
+    expect(
+      joinInviteFromLink(
+        `openbeacon://join?code=${code}&server=https://first.example.com&%73erver=https://second.example.com`,
+      ),
+    ).toBeNull();
+  });
+
   test("a link built for an invite reads back as the same invite", () => {
     expect(joinInviteFromLink(inviteLink({ code, server }))).toEqual(found({ code, server }));
     const awkward = "https://[fd00::1]:8443/apps/open%20beacon";

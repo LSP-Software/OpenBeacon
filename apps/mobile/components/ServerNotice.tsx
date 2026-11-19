@@ -7,7 +7,8 @@ import { Text } from "./ui/Text.tsx";
 export const ServerNotice = () => {
   useIsFocused();
   if (!hasCustomServerUrl()) return null;
-  const host = new URL(getBaseUrl()).host;
+  const base = getBaseUrl();
+  const host = URL.canParse(base) ? new URL(base).host : base;
   return (
     <View className="flex-row items-center gap-3 rounded-xl border border-border bg-card px-4 py-3">
       <Text accessible accessibilityLabel={`Server: ${host}`} className="flex-1 text-secondary">

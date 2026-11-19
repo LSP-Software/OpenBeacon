@@ -12,14 +12,23 @@ const decodeQueryValue = (value: string) => {
 };
 
 export const joinInviteFromLink = (link: string): ReadInvite | null => {
-  const [location = "", query = ""] = link.split("#")[0]?.split("?") ?? [];
+  const withoutFragment = link.split("#")[0] ?? "";
+  const queryStart = withoutFragment.indexOf("?");
+  const location = queryStart === -1 ? withoutFragment : withoutFragment.slice(0, queryStart);
+  const query = queryStart === -1 ? "" : withoutFragment.slice(queryStart + 1);
   const route = location.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").replace(/\/+$/, "");
   if (route !== "join" && !route.endsWith("/join")) return null;
+  const pairs = query.split("&").map((item) => {
+    const equals = item.indexOf("=");
+    return equals === -1
+      ? { name: decodeQueryValue(item), value: null }
+      : {
+          name: decodeQueryValue(item.slice(0, equals)),
+          value: decodeQueryValue(item.slice(equals + 1)),
+        };
+  });
   const values = (name: string) =>
-    query
-      .split("&")
-      .filter((item) => item.startsWith(`${name}=`))
-      .map((pair) => decodeQueryValue(pair.slice(name.length + 1)));
+    pairs.filter((pair) => pair.name === name).map((pair) => pair.value);
   const [code, ...otherCodes] = values("code");
   const [server, ...otherServers] = values("server");
   if (!code || !JOIN_CODE.test(code) || otherCodes.length > 0 || otherServers.length > 0) {

@@ -4,7 +4,7 @@ import { signInSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import { useQuery } from "@tanstack/react-query";
 import { Link, router, useLocalSearchParams } from "expo-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Pressable, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -26,6 +26,7 @@ import {
   signInCodeEntryError,
   signInWithPassword,
 } from "../lib/emailCodes.ts";
+import { getBaseUrl } from "../lib/currentServer.ts";
 import { finishAuthentication } from "../lib/finishAuthentication.ts";
 
 const resetFormSchema = signInSchema
@@ -44,6 +45,7 @@ const ForgotPassword = () => {
     | { name: "signInCode"; email: string; password: string; notice: string | undefined }
   >({ name: "email" });
   const [loading, setLoading] = useState(false);
+  const resetServer = useRef(getBaseUrl());
   const { data: providers } = useQuery(trpc.auth.providers.queryOptions());
   const isGoogleEnabled = providers?.google === true && isNativeGoogleSignInConfigured;
   const form = useForm<z.infer<typeof resetFormSchema>>({
@@ -73,6 +75,7 @@ const ForgotPassword = () => {
   const resetPassword = async ({ password }: z.infer<typeof resetFormSchema>) => {
     if (step.name !== "password") return;
     setLoading(true);
+    resetServer.current = getBaseUrl();
     const reset = await authClient.resetPassword({
       token: step.resetToken,
       newPassword: password,
@@ -91,6 +94,11 @@ const ForgotPassword = () => {
       return;
     }
 
+    if (getBaseUrl() !== resetServer.current) {
+      setLoading(false);
+      backToSignIn(step.email);
+      return;
+    }
     const outcome = await signInWithNewPassword({
       email: step.email,
       password,
@@ -143,6 +151,10 @@ const ForgotPassword = () => {
     signInCode: { email: string; password: string },
     code?: string,
   ) => {
+    if (getBaseUrl() !== resetServer.current) {
+      backToSignIn(signInCode.email);
+      return undefined;
+    }
     const outcome = await signInWithNewPassword({ ...signInCode, code });
     if (outcome.kind === "wrongPassword") {
       backToSignIn(signInCode.email);
