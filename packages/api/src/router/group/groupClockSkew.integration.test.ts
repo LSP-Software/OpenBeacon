@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createIntegrationTestCache } from "@openbeacon/cache/integration";
-import { prisma } from "@openbeacon/database";
+import { prisma, readDatabaseTime } from "@openbeacon/database";
 import {
   createDeviceKeyPair,
   createInitialGroupEpoch,
@@ -9,12 +9,15 @@ import {
 } from "@openbeacon/encryption";
 import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
 import { encryptedTrackingPoint, testClientPointId } from "../../lib/trackingPoints.testUtil.ts";
+import { sessionFreshForMs } from "../../procedures/auth/runtime.ts";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
+import { groupHistoryRouter } from "./groupHistoryRouter.ts";
 import { groupInvitesRouter } from "./groupInvitesRouter.ts";
 import { groupLifecycleRouter } from "./groupLifecycleRouter.ts";
 import { groupTrackingRouter } from "./groupTrackingRouter.ts";
 
 const router = createTRPCRouter({
+  groupHistory: groupHistoryRouter,
   groupInvites: groupInvitesRouter,
   groupLifecycle: groupLifecycleRouter,
   groupTracking: groupTrackingRouter,
@@ -114,7 +117,7 @@ const upload = (userId: string, groupId: string, epochId: string) => {
 };
 
 describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
-  "uploads when the API clock is behind the database clock",
+  "uploads and reads when the API clock and the database clock disagree",
   () => {
     beforeAll(async () => {
       for (const userId of users) {
@@ -150,14 +153,14 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await prisma.$disconnect();
     });
 
-    test("a creator's first epoch is accepted although it is stamped before their membership", async () => {
+    test("a creator's first epoch is stamped by the database clock and accepted", async () => {
       const groupId = `${prefix}-created`;
       const epochId = await withApiClockOffset(-3_600_000, () => createGroup(groupId));
       const member = await prisma.groupMember.findUniqueOrThrow({
         where: { userId_groupId: { userId: ownerId, groupId } },
       });
       const epoch = await prisma.groupEpoch.findUniqueOrThrow({ where: { id: epochId } });
-      expect(epoch.createdAt.getTime()).toBeLessThan(member.createdAt.getTime());
+      expect(Math.abs(epoch.createdAt.getTime() - member.createdAt.getTime())).toBeLessThan(60_000);
 
       const result = await upload(ownerId, groupId, epochId);
 
@@ -181,6 +184,80 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         code: "BAD_REQUEST",
         message: "Epoch does not belong to this group.",
       });
+    });
+
+    test("an arrival recorded now is kept while the API clock is an hour behind", async () => {
+      const groupId = `${prefix}-arrival`;
+      const epochId = await createGroup(groupId);
+      const place = await prisma.place.create({
+        data: {
+          groupId,
+          name: "Home",
+          emoji: "🏠",
+          epochId,
+          senderDeviceId: `${ownerId}-device`,
+          algorithm: "test",
+          nonce: "nonce",
+          ciphertext: "ciphertext",
+          createdByUserId: ownerId,
+        },
+      });
+      const clientId = crypto.randomUUID();
+
+      const result = await withApiClockOffset(-3_600_000, () =>
+        caller(ownerId).groupTracking.uploadBatch({
+          groupId,
+          points: [],
+          placeTransitions: [
+            {
+              clientId,
+              placeId: place.id,
+              direction: "ARRIVE",
+              occurredAt: new RealDate(),
+              senderDeviceId: `${ownerId}-device`,
+            },
+          ],
+        }),
+      );
+
+      expect(result.placeTransitions?.accepted).toEqual([clientId]);
+      const stored = await prisma.placeTransition.findFirstOrThrow({ where: { clientId } });
+      expect(
+        Math.abs(stored.createdAt.getTime() - (await readDatabaseTime(prisma)).getTime()),
+      ).toBeLessThan(60_000);
+    });
+
+    test("group history shows a new event while the API clock is past the history window", async () => {
+      const groupId = `${prefix}-history`;
+      await createGroup(groupId);
+      const event = await prisma.groupEvent.create({
+        data: {
+          groupId,
+          type: "GROUP_CREATED",
+          actorUserId: joinerId,
+          createdAt: await readDatabaseTime(prisma),
+        },
+      });
+
+      const [history, latest] = await withApiClockOffset(15 * 86_400_000, () =>
+        Promise.all([
+          caller(ownerId).groupHistory.list({ groupId }),
+          caller(ownerId).groupHistory.latest(),
+        ]),
+      );
+
+      expect(history.items.map(({ id }) => id)).toContain(event.id);
+      expect(latest.find((group) => group.groupId === groupId)?.latestAt).toEqual(event.createdAt);
+    });
+
+    test("a session signed in now stays fresh while the API clock is ahead", async () => {
+      const signedInAt = await readDatabaseTime(prisma);
+
+      const freshForMs = await withApiClockOffset(40 * 60_000, () =>
+        sessionFreshForMs(prisma, signedInAt),
+      );
+
+      expect(freshForMs).toBeGreaterThan(29 * 60_000);
     });
   },
 );

@@ -69,7 +69,17 @@ export const setGroupColor = (groupId: string, color: GroupColor) => {
   notifyListeners();
 };
 
+let readCiphertexts: { userId: string; byGroup: Map<string, string> } | null = null;
+
+export const getReadGroupColorCiphertexts = (userId: string) =>
+  readCiphertexts?.userId === userId ? readCiphertexts.byGroup : null;
+
+export const setReadGroupColorCiphertexts = (userId: string, byGroup: Map<string, string>) => {
+  readCiphertexts = { userId, byGroup };
+};
+
 export const clearGroupColors = () => {
+  readCiphertexts = null;
   for (const key of storage.getAllKeys()) {
     if (key.startsWith(STORAGE_PREFIX)) storage.remove(key);
   }

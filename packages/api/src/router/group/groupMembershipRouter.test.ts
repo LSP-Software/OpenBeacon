@@ -96,7 +96,7 @@ test("nicknames are scoped to the caller's membership and targets in the same gr
 
 test("group colors are scoped to the caller's own memberships", async () => {
   const findMany = mock(async () => [{ ciphertext: "opaque", owner: { groupId: "group" } }]);
-  const upsert = mock(async () => ({}));
+  const createMany = mock(async () => ({ count: 1 }));
   const updateMany = mock(async () => ({ count: 1 }));
   const router = createTRPCRouter({ groupMembership: groupMembershipRouter });
   const caller = router.createCaller({
@@ -112,7 +112,7 @@ test("group colors are scoped to the caller's own memberships", async () => {
       groupMember: {
         findUnique: async () => ({ id: "owner", userId: "user", role: "MEMBER" }),
       },
-      personalGroupColor: { findMany, upsert, updateMany },
+      personalGroupColor: { findMany, createMany, updateMany },
     },
   } as unknown as Parameters<typeof router.createCaller>[0]);
   expect(await caller.groupMembership.colors()).toEqual([
@@ -122,11 +122,14 @@ test("group colors are scoped to the caller's own memberships", async () => {
     where: { owner: { userId: "user" } },
     select: { ciphertext: true, owner: { select: { groupId: true } } },
   });
-  await caller.groupMembership.updateColor({ groupId: "group", ciphertext: "next" });
-  expect(upsert).toHaveBeenCalledWith({
-    where: { ownerId: "owner" },
-    create: { ownerId: "owner", ciphertext: "next" },
-    update: { ciphertext: "next" },
+  await caller.groupMembership.updateColor({
+    groupId: "group",
+    ciphertext: "next",
+    expectedCiphertext: null,
+  });
+  expect(createMany).toHaveBeenCalledWith({
+    data: { ownerId: "owner", ciphertext: "next" },
+    skipDuplicates: true,
   });
   await caller.groupMembership.updateColor({
     groupId: "group",
@@ -137,7 +140,6 @@ test("group colors are scoped to the caller's own memberships", async () => {
     where: { ownerId: "owner", ciphertext: "next" },
     data: { ciphertext: "resealed" },
   });
-  expect(upsert).toHaveBeenCalledTimes(1);
   updateMany.mockImplementationOnce(async () => ({ count: 0 }));
   await expect(
     caller.groupMembership.updateColor({

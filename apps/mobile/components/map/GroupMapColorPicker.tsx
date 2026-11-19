@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ActivityIndicator, Pressable, View } from "react-native";
 import { useGroupColorRevision } from "../../hooks/useGroupColorRevision.ts";
 import { Alert } from "../../lib/alert.ts";
@@ -13,10 +13,16 @@ export const GroupMapColorPicker = ({ groupId }: { groupId: string }) => {
   const { data: session } = authClient.useSession();
   const userId = session?.user.id;
   useGroupColorRevision();
+  const queryClient = useQueryClient();
   const sync = useQuery(groupColorSyncQueryOptions(userId));
   const save = useMutation({
     mutationFn: saveGroupColor,
-    onError: (error) => Alert.alert("Couldn’t save colour", userMessage(error)),
+    onError: async (error) => {
+      await queryClient.invalidateQueries({
+        queryKey: groupColorSyncQueryOptions(userId).queryKey,
+      });
+      Alert.alert("Couldn’t save colour", userMessage(error));
+    },
   });
   const locked = !userId || !sync.isSuccess || sync.isFetching || save.isPending;
   const selectedColor = save.isPending ? save.variables.color : getGroupColor(groupId);

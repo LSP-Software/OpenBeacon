@@ -1,5 +1,5 @@
 import { expo } from "@better-auth/expo";
-import { Prisma, prisma as db } from "@openbeacon/database";
+import { Prisma, prisma as db, readDatabaseTime } from "@openbeacon/database";
 import { accountNameFromProfile, accountNameSchema } from "@openbeacon/schemas";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
@@ -143,15 +143,17 @@ export const createAuth = ({
       session: {
         create: {
           before: async (session, context) => {
-            if (context?.path !== "/sign-in/email") return;
-            await checkSignInCode({
-              db,
-              emailCodes,
-              userId: session.userId,
-              context,
-              runInBackground: (task) =>
-                runInBackground ? runInBackground(task) : context.context.runInBackground(task),
-            });
+            if (context?.path === "/sign-in/email") {
+              await checkSignInCode({
+                db,
+                emailCodes,
+                userId: session.userId,
+                context,
+                runInBackground: (task) =>
+                  runInBackground ? runInBackground(task) : context.context.runInBackground(task),
+              });
+            }
+            return { data: { ...session, createdAt: await readDatabaseTime(db) } };
           },
           after: async (session) => {
             const expired = await db.$transaction(async (tx) => {

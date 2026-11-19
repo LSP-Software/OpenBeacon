@@ -200,27 +200,25 @@ export const groupMembershipRouter = {
       z.object({
         groupId: z.string().min(1),
         ciphertext: sealedPersonalDataSchema,
-        expectedCiphertext: sealedPersonalDataSchema.optional(),
+        expectedCiphertext: sealedPersonalDataSchema.nullable(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      if (input.expectedCiphertext !== undefined) {
-        const result = await ctx.db.personalGroupColor.updateMany({
-          where: { ownerId: ctx.groupMember.id, ciphertext: input.expectedCiphertext },
-          data: { ciphertext: input.ciphertext },
+      const result =
+        input.expectedCiphertext === null
+          ? await ctx.db.personalGroupColor.createMany({
+              data: { ownerId: ctx.groupMember.id, ciphertext: input.ciphertext },
+              skipDuplicates: true,
+            })
+          : await ctx.db.personalGroupColor.updateMany({
+              where: { ownerId: ctx.groupMember.id, ciphertext: input.expectedCiphertext },
+              data: { ciphertext: input.ciphertext },
+            });
+      if (result.count === 0)
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "Group colour changed. Reload and try again.",
         });
-        if (result.count === 0)
-          throw new TRPCError({
-            code: "CONFLICT",
-            message: "Group colour changed. Reload and try again.",
-          });
-        return;
-      }
-      await ctx.db.personalGroupColor.upsert({
-        where: { ownerId: ctx.groupMember.id },
-        create: { ownerId: ctx.groupMember.id, ciphertext: input.ciphertext },
-        update: { ciphertext: input.ciphertext },
-      });
     }),
   remove: groupMemberProcedure
     .meta({

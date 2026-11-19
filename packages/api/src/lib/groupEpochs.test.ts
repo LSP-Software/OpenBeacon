@@ -468,11 +468,15 @@ describe("group epoch helpers", () => {
       devices.filter((device) => device.revokedAt === where.revokedAt),
     );
     const wrappedKeyCreatedAt = new Date("2026-03-26T12:00:00.000Z");
+    const databaseNow = new Date("2026-03-26T12:30:00.000Z");
 
     await persistGroupEpoch({
       deviceId: "device-a",
       db: {
-        $queryRaw: async () => [],
+        $queryRaw: async (query: unknown) =>
+          Array.isArray(query) && query.join("").includes("clock_timestamp()")
+            ? [{ now: databaseNow }]
+            : [],
         group: { updateMany: async () => ({ count: 1 }) },
         groupEpoch: {
           create,
@@ -568,6 +572,7 @@ describe("group epoch helpers", () => {
     });
     expect(create).toHaveBeenCalledWith({
       data: {
+        createdAt: databaseNow,
         createdByDeviceId: "device-a",
         senderPublicKey: "public-a",
         epochNumber: 2,

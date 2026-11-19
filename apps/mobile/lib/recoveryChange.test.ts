@@ -128,7 +128,11 @@ const changePhraseMock = mock(async (input: unknown) => {
   beforeRecoveryWrite?.();
   if (!recoveryKey) throw trpcError("NOT_FOUND", -32004, "RECOVERY_CHANGED");
   const escrowVersions = parsed.escrows.map(({ version }) => version).sort((a, b) => a - b);
-  if (escrowVersions.join() !== historyKeys.map(({ version }) => version).join()) {
+  if (
+    escrowVersions.join() !== historyKeys.map(({ version }) => version).join() ||
+    (parsed.expectedRecoveryPublicKey !== undefined &&
+      parsed.expectedRecoveryPublicKey !== recoveryKey.publicKey)
+  ) {
     throw trpcError("CONFLICT", -32009, "RECOVERY_CHANGED");
   }
   recoveryKey = parsed.recoveryKey;
@@ -446,7 +450,10 @@ describe("changeRecoveryPhrase", () => {
     const escrowsBefore = historyKeys.map((row) => escrowOf(row).enc);
     const newPhrase = generateRecoveryPhrase();
 
-    expect(await changeRecoveryPhrase(newPhrase)).toEqual({ status: "changed", versions: [1, 2] });
+    expect(await changeRecoveryPhrase(newPhrase, recoveryKey?.publicKey)).toEqual({
+      status: "changed",
+      versions: [1, 2],
+    });
 
     expect(recoveryKey?.publicKey).toBe(deriveRecoveryKeyPair(newPhrase).publicKey);
     expect(historyKeys.map(({ id, publicKey, version }) => ({ id, publicKey, version }))).toEqual(
@@ -478,7 +485,7 @@ describe("changeRecoveryPhrase", () => {
   test("the new phrase restores every version on a fresh phone and the old phrase no longer matches", async () => {
     const { epochs: readable, phrase: oldPhrase } = await setUpTwoVersions();
     const newPhrase = generateRecoveryPhrase();
-    await changeRecoveryPhrase(newPhrase);
+    await changeRecoveryPhrase(newPhrase, recoveryKey?.publicKey);
     const freshPhone = createPhone("device-2");
     phone = freshPhone;
 
@@ -499,9 +506,9 @@ describe("changeRecoveryPhrase", () => {
     enrolledPhone.secureStore.delete(`${userId}.1`);
     const before = snapshotRecovery();
 
-    await expect(changeRecoveryPhrase(generateRecoveryPhrase())).rejects.toThrow(
-      MISSING_HISTORY_KEYS_MESSAGE,
-    );
+    await expect(
+      changeRecoveryPhrase(generateRecoveryPhrase(), recoveryKey?.publicKey),
+    ).rejects.toThrow(MISSING_HISTORY_KEYS_MESSAGE);
 
     expect(changePhraseMock).not.toHaveBeenCalled();
     expect(snapshotRecovery()).toBe(before);
@@ -512,9 +519,9 @@ describe("changeRecoveryPhrase", () => {
     failingReadVersion = 2;
     const before = snapshotRecovery();
 
-    await expect(changeRecoveryPhrase(generateRecoveryPhrase())).rejects.toThrow(
-      "SecureStore unavailable",
-    );
+    await expect(
+      changeRecoveryPhrase(generateRecoveryPhrase(), recoveryKey?.publicKey),
+    ).rejects.toThrow("SecureStore unavailable");
 
     expect(changePhraseMock).not.toHaveBeenCalled();
     expect(snapshotRecovery()).toBe(before);
@@ -525,9 +532,9 @@ describe("changeRecoveryPhrase", () => {
     enrolledPhone.secureStore.set(`${userId}.1`, createHistoryKeyPair().privateKey);
     const before = snapshotRecovery();
 
-    await expect(changeRecoveryPhrase(generateRecoveryPhrase())).rejects.toThrow(
-      HISTORY_KEYS_MISMATCH_MESSAGE,
-    );
+    await expect(
+      changeRecoveryPhrase(generateRecoveryPhrase(), recoveryKey?.publicKey),
+    ).rejects.toThrow(HISTORY_KEYS_MISMATCH_MESSAGE);
 
     expect(changePhraseMock).not.toHaveBeenCalled();
     expect(snapshotRecovery()).toBe(before);
@@ -543,19 +550,33 @@ describe("changeRecoveryPhrase", () => {
     const before = () => JSON.stringify({ escrows: historyKeys.slice(0, 2), recoveryKey });
     const recoveryBefore = before();
 
-    await expect(changeRecoveryPhrase(generateRecoveryPhrase())).rejects.toThrow(
-      RECOVERY_CHANGED_MESSAGE,
-    );
+    await expect(
+      changeRecoveryPhrase(generateRecoveryPhrase(), recoveryKey?.publicKey),
+    ).rejects.toThrow(RECOVERY_CHANGED_MESSAGE);
 
     expect(changePhraseMock).toHaveBeenCalledTimes(1);
     expect(before()).toBe(recoveryBefore);
     expect([...enrolledPhone.secureStore.keys()]).toEqual(storedBefore);
   });
 
-  test("an account without a phrase sends no change", async () => {
-    await expect(changeRecoveryPhrase(generateRecoveryPhrase())).rejects.toThrow(
+  test("a phone whose phrase was changed by another phone since it started is refused", async () => {
+    await setUpTwoVersions();
+    const readByBothPhones = recoveryKey?.publicKey;
+    const firstPhrase = generateRecoveryPhrase();
+    await changeRecoveryPhrase(firstPhrase, readByBothPhones);
+
+    await expect(changeRecoveryPhrase(generateRecoveryPhrase(), readByBothPhones)).rejects.toThrow(
       RECOVERY_CHANGED_MESSAGE,
     );
+
+    expect(changePhraseMock).toHaveBeenCalledTimes(2);
+    expect(recoveryKey?.publicKey).toBe(deriveRecoveryKeyPair(firstPhrase).publicKey);
+  });
+
+  test("an account without a phrase sends no change", async () => {
+    await expect(
+      changeRecoveryPhrase(generateRecoveryPhrase(), recoveryKey?.publicKey),
+    ).rejects.toThrow(RECOVERY_CHANGED_MESSAGE);
     expect(changePhraseMock).not.toHaveBeenCalled();
   });
 
@@ -565,12 +586,14 @@ describe("changeRecoveryPhrase", () => {
     const before = snapshotRecovery();
     const newPhrase = generateRecoveryPhrase();
 
-    expect(await changeRecoveryPhrase(newPhrase)).toEqual({ status: "reauthenticate" });
+    expect(await changeRecoveryPhrase(newPhrase, recoveryKey?.publicKey)).toEqual({
+      status: "reauthenticate",
+    });
     expect(snapshotRecovery()).toBe(before);
     expect(recoveryKey?.publicKey).toBe(deriveRecoveryKeyPair(oldPhrase).publicKey);
 
     sessionFresh = true;
-    expect((await changeRecoveryPhrase(newPhrase)).status).toBe("changed");
+    expect((await changeRecoveryPhrase(newPhrase, recoveryKey?.publicKey)).status).toBe("changed");
     expect(recoveryKey?.publicKey).toBe(deriveRecoveryKeyPair(newPhrase).publicKey);
   });
 });
@@ -759,7 +782,7 @@ describe("secrets never reach the server", () => {
     );
     serverInputs.length = 0;
 
-    await changeRecoveryPhrase(changedPhrase);
+    await changeRecoveryPhrase(changedPhrase, recoveryKey?.publicKey);
     phone = resettingPhone;
     const resetPhrase = generateRecoveryPhrase();
     const result = await resetRecoveryPhrase(resetPhrase);

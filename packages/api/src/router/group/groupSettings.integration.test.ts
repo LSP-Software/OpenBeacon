@@ -681,7 +681,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
                 ciphertext: "nickname",
                 expectedCiphertext: null,
               }),
-            () => api.groupMembership.updateColor({ groupId: lockedGroupId, ciphertext: "color" }),
+            () =>
+              api.groupMembership.updateColor({
+                groupId: lockedGroupId,
+                ciphertext: "color",
+                expectedCiphertext: null,
+              }),
             () =>
               api.groupMembership.remove({
                 groupId: lockedGroupId,

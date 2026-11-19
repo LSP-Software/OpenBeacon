@@ -80,7 +80,6 @@ export const groupTrackingRouter = {
           limit: "place transitions per hour",
         });
       }
-      const now = new Date();
       const historyAllowance = (deviceId: string, cost: number) => ({
         namespace: "groupTracking.historyAllowance",
         identifier: { type: "deviceGroup" as const, deviceId, groupId: input.groupId },
@@ -156,7 +155,6 @@ export const groupTrackingRouter = {
                   deviceId: ctx.deviceId,
                   groupId: input.groupId,
                   memberSince: member.createdAt,
-                  now,
                   transitions: placeTransitions,
                   userId,
                 })

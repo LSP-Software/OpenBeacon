@@ -72,8 +72,16 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       ).rejects.toMatchObject({ code: "CONFLICT" });
       expect(await storedColor(owner)).toBeNull();
 
-      await caller(owner).groupMembership.updateColor({ groupId, ciphertext: "first" });
-      await caller(other).groupMembership.updateColor({ groupId, ciphertext: "first" });
+      await caller(owner).groupMembership.updateColor({
+        groupId,
+        ciphertext: "first",
+        expectedCiphertext: null,
+      });
+      await caller(other).groupMembership.updateColor({
+        groupId,
+        ciphertext: "first",
+        expectedCiphertext: null,
+      });
       await caller(owner).groupMembership.updateColor({
         groupId,
         ciphertext: "resealed",
@@ -82,7 +90,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(await storedColor(owner)).toBe("resealed");
       expect(await storedColor(other)).toBe("first");
 
-      await caller(owner).groupMembership.updateColor({ groupId, ciphertext: "newer" });
+      await caller(owner).groupMembership.updateColor({
+        groupId,
+        ciphertext: "newer",
+        expectedCiphertext: "resealed",
+      });
       await expect(
         caller(owner).groupMembership.updateColor({
           groupId,
@@ -93,14 +105,58 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(await storedColor(owner)).toBe("newer");
     });
 
+    test("a phone that read no color can't overwrite one another phone saved", async () => {
+      await prisma.personalGroupColor.deleteMany({ where: { owner: { userId: other } } });
+      await caller(other).groupMembership.updateColor({
+        groupId,
+        ciphertext: "phone-a",
+        expectedCiphertext: null,
+      });
+
+      await expect(
+        caller(other).groupMembership.updateColor({
+          groupId,
+          ciphertext: "phone-b",
+          expectedCiphertext: null,
+        }),
+      ).rejects.toMatchObject({ code: "CONFLICT" });
+      expect(await storedColor(other)).toBe("phone-a");
+    });
+
+    test("a color change without an expected ciphertext is refused", async () => {
+      await expect(
+        caller(owner).groupMembership.updateColor({ groupId, ciphertext: "blind" } as never),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      expect(await storedColor(owner)).toBe("newer");
+    });
+
     test("concurrent swaps from the same expected color let exactly one win", async () => {
-      await caller(owner).groupMembership.updateColor({ groupId, ciphertext: "shared" });
+      await caller(owner).groupMembership.updateColor({
+        groupId,
+        ciphertext: "shared",
+        expectedCiphertext: "newer",
+      });
       const results = await Promise.allSettled(
         ["phone-a", "phone-b"].map((ciphertext) =>
           caller(owner).groupMembership.updateColor({
             groupId,
             ciphertext,
             expectedCiphertext: "shared",
+          }),
+        ),
+      );
+      expect(results.filter(({ status }) => status === "fulfilled")).toHaveLength(1);
+      expect(["phone-a", "phone-b"]).toContain((await storedColor(owner)) ?? "");
+    });
+
+    test("concurrent first saves let exactly one win", async () => {
+      await prisma.personalGroupColor.deleteMany({ where: { owner: { userId: owner } } });
+      const results = await Promise.allSettled(
+        ["phone-a", "phone-b"].map((ciphertext) =>
+          caller(owner).groupMembership.updateColor({
+            groupId,
+            ciphertext,
+            expectedCiphertext: null,
           }),
         ),
       );

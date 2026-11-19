@@ -43,7 +43,7 @@ export const createAccountHistoryKeySchema = z.strictObject({
   publicKey: x25519PublicKeySchema,
 });
 
-export const changeRecoveryPhraseSchema = z.strictObject({
+export const setupAccountRecoverySchema = z.strictObject({
   escrows: z
     .array(z.strictObject({ ...historyKeyEscrowFields, version: historyKeyVersionSchema }))
     .min(1)
@@ -51,7 +51,9 @@ export const changeRecoveryPhraseSchema = z.strictObject({
   recoveryKey: recoveryKeySchema,
 });
 
-export const setupAccountRecoverySchema = changeRecoveryPhraseSchema;
+export const changeRecoveryPhraseSchema = setupAccountRecoverySchema.extend({
+  expectedRecoveryPublicKey: x25519PublicKeySchema.optional(),
+});
 
 export const resetAccountRecoverySchema = z.strictObject({
   confirmReset: z.literal(true),

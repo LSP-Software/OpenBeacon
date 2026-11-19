@@ -407,20 +407,16 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("email codes", ()
     });
   });
 
-  test("a wrong guess counts against the code and fails when the cap can't be recorded", async () => {
+  test("a check that can't reserve a wrong guess is refused without using the code", async () => {
     const subject = nextAddress("capped-redis-down");
     const flakyCodes = createEmailCodes({
       db: prisma,
       secret: "integration-email-code-secret-000000000000",
       rateLimits: {
-        peek: async ({ limit }) => ({
-          allowed: true,
-          limit,
-          remaining: limit,
-          retryAfterMs: 0,
-          resetAfterMs: 0,
-        }),
         consume: async () => {
+          throw new Error("Redis is down");
+        },
+        refund: async () => {
           throw new Error("Redis is down");
         },
       },
@@ -433,15 +429,90 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("email codes", ()
     const errors: unknown[][] = [];
     const originalError = console.error;
     console.error = (...args: unknown[]) => errors.push(args);
-    const wrong = await flakyCodes
-      .check({ purpose: "sign-up", subject, code: wrongCodeFor(code) })
-      .finally(() => {
-        console.error = originalError;
-      });
-    expect(wrong).toEqual({ valid: false, reason: "invalid" });
-    expect(errors).toEqual([["[email-code] could not record a sign-up wrong guess"]]);
+    const results = await Promise.all([
+      flakyCodes.check({ purpose: "sign-up", subject, code: wrongCodeFor(code) }),
+      flakyCodes.check({ purpose: "sign-up", subject, code }),
+    ]).finally(() => {
+      console.error = originalError;
+    });
+    expect(results).toEqual([
+      { valid: false, reason: "invalid" },
+      { valid: false, reason: "invalid" },
+    ]);
+    expect(errors).toEqual([
+      ["[email-code] could not reserve a sign-up wrong guess"],
+      ["[email-code] could not reserve a sign-up wrong guess"],
+    ]);
     const [row] = await codeRows("sign-up", subject);
-    expect(row?.attempts).toBe(1);
+    expect(row?.attempts).toBe(0);
+  });
+
+  test("the guess allowance is never read or written while the code is locked", async () => {
+    const subject = nextAddress("redis-outside-lock");
+    const identifier = `email-code:sign-up:${subject}`;
+    const cache = createIntegrationTestCache(() => clockMs).rateLimits;
+    const lockFree: boolean[] = [];
+    const probe = async () => {
+      const [lock] = await prisma.$transaction(
+        (tx) =>
+          tx.$queryRaw<{ acquired: boolean }[]>`
+          SELECT pg_try_advisory_xact_lock(hashtext(${identifier})) AS acquired
+        `,
+      );
+      lockFree.push(lock?.acquired === true);
+    };
+    const probedCodes = createEmailCodes({
+      db: prisma,
+      secret: "integration-email-code-secret-000000000000",
+      rateLimits: {
+        consume: async (input) => {
+          await probe();
+          return cache.consume(input);
+        },
+        refund: async (input) => {
+          await probe();
+          return cache.refund(input);
+        },
+      },
+      sendCodeEmail: async () => {},
+      sendAccountExistsEmail: async () => {},
+      sendGoogleSignInEmail: async () => {},
+      now: () => new Date(clockMs),
+    });
+    const code = await issueCode("sign-up", subject);
+
+    expect(
+      await probedCodes.check({ purpose: "sign-up", subject, code: wrongCodeFor(code) }),
+    ).toEqual({ valid: false, reason: "invalid" });
+    expect(await probedCodes.check({ purpose: "sign-up", subject, code })).toEqual({
+      valid: true,
+    });
+
+    expect(lockFree).toEqual([true, true, true]);
+  });
+
+  test("right codes checked in parallel on the last guess sign in once and give the guess back", async () => {
+    const subject = nextAddress("capped-right-parallel");
+    await spendWrongGuesses("sign-up", subject, emailCodeWrongGuessLimit.limit - 1);
+    const code = sent.at(-1)?.code ?? "";
+    const [lastGuessRow] = await codeRows("sign-up", subject);
+    expect(lastGuessRow?.attempts).toBe(emailCodeMaxAttempts - 1);
+
+    const results = await Promise.all([
+      codes.check({ purpose: "sign-up", subject, code }),
+      codes.check({ purpose: "sign-up", subject, code }),
+    ]);
+
+    expect(results.filter((result) => result.valid)).toHaveLength(1);
+    const next = await issueCode("sign-up", subject);
+    expect(await codes.check({ purpose: "sign-up", subject, code: wrongCodeFor(next) })).toEqual({
+      valid: false,
+      reason: "invalid",
+    });
+    expect(await codes.check({ purpose: "sign-up", subject, code: next })).toEqual({
+      valid: false,
+      reason: "locked",
+    });
   });
 
   test("the cap only applies to its own purpose and subject", async () => {

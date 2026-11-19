@@ -1,13 +1,22 @@
 import { tryCatch } from "@openbeacon/shared";
 import { trpcClient } from "./api.ts";
-import { type GroupColor, isGroupColor, setGroupColor } from "./groupColor.ts";
+import {
+  type GroupColor,
+  getReadGroupColorCiphertexts,
+  isGroupColor,
+  setGroupColor,
+  setReadGroupColorCiphertexts,
+} from "./groupColor.ts";
 import { createPersonalDataOpener, resealForSelf, sealForSelf } from "./personalData.ts";
 
 export const groupColorSyncQueryOptions = (userId: string | undefined) => ({
   queryKey: ["personalGroupColors", userId],
   enabled: !!userId,
   staleTime: 5 * 60_000,
-  queryFn: () => (userId ? syncGroupColors(userId) : null),
+  queryFn: async () => {
+    if (userId) await syncGroupColors(userId);
+    return null;
+  },
 });
 
 export const saveGroupColor = async ({
@@ -19,6 +28,8 @@ export const saveGroupColor = async ({
   groupId: string;
   color: GroupColor;
 }) => {
+  const read = getReadGroupColorCiphertexts(userId) ?? (await syncGroupColors(userId, false));
+  const expectedCiphertext = read.get(groupId) ?? null;
   const ciphertext = await sealForSelf({
     userId,
     purpose: "group-color",
@@ -29,7 +40,7 @@ export const saveGroupColor = async ({
   const timeout = setTimeout(() => controller.abort(), 5_000);
   const result = await tryCatch(
     trpcClient.groupMembership.updateColor.mutate(
-      { groupId, ciphertext },
+      { groupId, ciphertext, expectedCiphertext },
       { signal: controller.signal },
     ),
   );
@@ -39,11 +50,14 @@ export const saveGroupColor = async ({
       ? new Error("Couldn’t reach the server. Try again.")
       : result.error;
   }
+  getReadGroupColorCiphertexts(userId)?.set(groupId, ciphertext);
   setGroupColor(groupId, color);
 };
 
 export const syncGroupColors = async (userId: string, reseal = true) => {
   const records = await trpcClient.groupMembership.colors.query();
+  const ciphertexts = new Map(records.map((record) => [record.groupId, record.ciphertext]));
+  setReadGroupColorCiphertexts(userId, ciphertexts);
   const open = createPersonalDataOpener(userId);
   const colors: Parameters<typeof resealForSelf>[0]["records"] = [];
   let resealRejected = false;
@@ -71,11 +85,12 @@ export const syncGroupColors = async (userId: string, reseal = true) => {
           resealRejected = true;
           throw uploaded.error;
         }
+        ciphertexts.set(record.groupId, ciphertext);
       },
     });
   }
-  if (!reseal) return null;
+  if (!reseal) return ciphertexts;
   await tryCatch(resealForSelf({ userId, records: colors }));
   if (resealRejected) await tryCatch(syncGroupColors(userId, false));
-  return null;
+  return ciphertexts;
 };

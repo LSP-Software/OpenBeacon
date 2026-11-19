@@ -262,7 +262,10 @@ export const HISTORY_KEYS_MISMATCH_MESSAGE = `This ${thisDeviceNoun()}’s saved
 export const RECOVERY_CHANGED_MESSAGE =
   "Your recovery phrase changed on another phone, so nothing was changed here. Go back and try again.";
 
-export const changeRecoveryPhrase = async (phrase: RecoveryPhrase) => {
+export const changeRecoveryPhrase = async (
+  phrase: RecoveryPhrase,
+  expectedRecoveryPublicKey: string | undefined,
+) => {
   const device = await ensureDeviceKeyRegistration();
   const currentEscrows = await trpcClient.accountRecovery.escrows.query();
   if (currentEscrows.length === 0) throw new Error(RECOVERY_CHANGED_MESSAGE);
@@ -276,6 +279,7 @@ export const changeRecoveryPhrase = async (phrase: RecoveryPhrase) => {
   const result = await tryCatch(
     trpcClient.accountRecovery.changePhrase.mutate({
       escrows,
+      expectedRecoveryPublicKey,
       recoveryKey: recoveryKeyInput(recoveryKey),
     }),
   );
