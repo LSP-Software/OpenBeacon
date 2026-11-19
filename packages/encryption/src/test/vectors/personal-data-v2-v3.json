@@ -1,0 +1,43 @@
+{
+  "description": "Personal data envelopes sealed by OpenBeacon on 2026-11-19. v2 is sealed to the device key, v3 to a History key. HPKE Base mode, X25519/HKDF-SHA256/ChaCha20-Poly1305, empty aad.",
+  "devicePrivateKeyHex": "5df34a3ee600753d85ea9b4e452ab1124a8d80e99b478908a42ea929f4bf80c3",
+  "historyKeyVersion": 3,
+  "historyPrivateKeyHex": "ec1aa1dc9fd100794f5aed1e6ea9794b22a3b7860e3fac3e914736e1aed8ba5a",
+  "vectors": [
+    {
+      "name": "v2 nickname",
+      "purpose": "nickname",
+      "binding": ["user_alice", "group_1", "member_bob"],
+      "plaintext": "Bobby 🚲",
+      "sealed": "{\"version\":2,\"enc\":\"rxsrriMwVYWMZwVi8PQyJr1MKhOMWQCTsUaaFj+V+S8=\",\"ciphertext\":\"nSBY4QhUbo+UFZc9AJ73OPUcDgdM5hQXmXw=\"}"
+    },
+    {
+      "name": "v2 group colour",
+      "purpose": "group-color",
+      "binding": ["user_alice", "group_1"],
+      "plaintext": "#3b82f6",
+      "sealed": "{\"version\":2,\"enc\":\"K87iPZASNdujc+hbSKQdn5O0nSNsabZCNCPToTt9k1c=\",\"ciphertext\":\"ujFdJs6WGJw7p/bR3odc9j4Ty+P0E5s=\"}"
+    },
+    {
+      "name": "v3 nickname",
+      "purpose": "nickname",
+      "binding": ["user_alice", "group_1", "member_bob"],
+      "plaintext": "Bobby 🚲",
+      "sealed": "{\"version\":3,\"historyKeyVersion\":3,\"enc\":\"fGaIhr4mzHaOXBNLrG4wh4s2rveTht/bM3x+Z7u9X2c=\",\"ciphertext\":\"BoULkmnE557BNVOk5tfqaxC0zAUZLpHMUWA=\"}"
+    },
+    {
+      "name": "v3 group colour",
+      "purpose": "group-color",
+      "binding": ["user_alice", "group_1"],
+      "plaintext": "#3b82f6",
+      "sealed": "{\"version\":3,\"historyKeyVersion\":3,\"enc\":\"25LMWZOWrXqS12GwXzxznb3QcOdB0F/ZmXTSLyu67RI=\",\"ciphertext\":\"X5t97Bv4yrTaUsHF2H0gwWCXUhwN4K0=\"}"
+    },
+    {
+      "name": "v3 profile picture key",
+      "purpose": "profile-image",
+      "binding": ["user_alice", "3f1c9a2e-7b4d-4e8a-9c1f-2a6b8d0e4f13"],
+      "imageKeyHex": "00070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9",
+      "sealed": "{\"version\":3,\"historyKeyVersion\":3,\"enc\":\"Eu87us9vhKvpcqseZKWMePsDLSp7Vm6EH9VjfJPuP04=\",\"ciphertext\":\"kTC/nnkOw1k834SExh565/f2mvf5W9HtILvl8HHklW8v4nMIAnYM3r2/ktBvHDSN/YSHB/Hjkn8YRt53\"}"
+    }
+  ]
+}
