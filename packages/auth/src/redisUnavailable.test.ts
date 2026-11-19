@@ -31,6 +31,7 @@ const tx = {
   },
 };
 const codes = createEmailCodes({
+  minCheckMs: 0,
   db: {
     verification: { findFirst: async () => ({ id: verification.id }) },
     $transaction: async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx),

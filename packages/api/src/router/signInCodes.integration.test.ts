@@ -13,6 +13,7 @@ const codesSent: { to: string; purpose: EmailCodePurpose; code: string }[] = [];
 const alertsSent: { userId: string; alert: SecurityAlert }[] = [];
 const tasks: Promise<unknown>[] = [];
 const emailCodes = createEmailCodes({
+  minCheckMs: 0,
   db: prisma,
   secret: "integration-sign-in-codes-router-secret-000",
   rateLimits: cache.rateLimits,
