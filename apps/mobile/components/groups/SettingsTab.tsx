@@ -77,7 +77,13 @@ const SettingsTab = ({ groupId }: { groupId: string }) => {
             accountShare={historyShare.setting.account}
             value={groupHistoryShare(historyShare.setting, groupId).override}
             disabled={historyShare.saving}
-            onChange={(override) => void historyShare.change({ groupId, override }, group?.name)}
+            onChange={(override) =>
+              void historyShare.change({
+                groupId,
+                groupName: group?.name ?? "this group",
+                override,
+              })
+            }
           />
         </View>
       ) : null}

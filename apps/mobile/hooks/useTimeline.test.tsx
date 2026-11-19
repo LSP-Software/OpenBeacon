@@ -11,10 +11,17 @@ import type { TimelineDay } from "../lib/timelineTypes.ts";
 let downloads = 0;
 let sharingReads = 0;
 let builtWithPaused: string[][] = [];
+let daysSenders = [{ firstHour: null, historyShare: "DAY_1", userId: "user-2" }];
 
 mock.module("../lib/api.ts", () => ({
   trpc: {
     groupTracking: {
+      historyDays: {
+        queryOptions: ({ groupId }: { groupId: string }) => ({
+          queryKey: ["groupTracking.historyDays", groupId],
+          queryFn: async () => ({ devices: [], senders: daysSenders, windowStart: new Date() }),
+        }),
+      },
       getLatest: {
         queryOptions: ({ groupId }: { groupId: string }) => ({
           queryKey: ["groupTracking.getLatest", groupId],
@@ -57,7 +64,7 @@ mock.module("../lib/timeline.ts", () => ({
   },
 }));
 
-const { useTimelineDay } = await import("./useTimeline.ts");
+const { useTimelineDay, useTimelineDays } = await import("./useTimeline.ts");
 
 const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 20)));
 
@@ -134,4 +141,43 @@ test("a past day doesn't ask who is paused now", async () => {
   });
   expect(sharingReads).toBe(0);
   expect(builtWithPaused.at(-1)).toEqual([]);
+});
+
+const cachedDaysAfterRefresh = async (nextShare: string) => {
+  daysSenders = [{ firstHour: null, historyShare: "DAY_1", userId: "user-2" }];
+  const client = new QueryClient();
+  const loaded = { devices: [], joinStart: null };
+  client.setQueryData(["timelineDay", "group-1", "past", ["user-2"]], loaded);
+  client.setQueryData(["timelineDay", "group-2", "past", ["user-2"]], loaded);
+  const Probe = () => {
+    useTimelineDays("group-1");
+    return null;
+  };
+  const root = createRoot();
+  await act(async () =>
+    root.render(
+      <QueryClientProvider client={client}>
+        <Probe />
+      </QueryClientProvider>,
+    ),
+  );
+  await settle();
+  daysSenders = [{ firstHour: null, historyShare: nextShare, userId: "user-2" }];
+  await act(() => client.refetchQueries({ queryKey: ["groupTracking.historyDays"] }));
+  await settle();
+  await act(async () => root.unmount());
+  return {
+    thisGroup: client.getQueryData(["timelineDay", "group-1", "past", ["user-2"]]),
+    otherGroup: client.getQueryData(["timelineDay", "group-2", "past", ["user-2"]]),
+  };
+};
+
+test("a member's new history-sharing choice drops this group's downloaded days", async () => {
+  const cached = await cachedDaysAfterRefresh("LAST_LOCATION");
+  expect(cached.thisGroup).toBeUndefined();
+  expect(cached.otherGroup).toBeDefined();
+});
+
+test("refreshing with the same history-sharing choices keeps the downloaded days", async () => {
+  expect((await cachedDaysAfterRefresh("DAY_1")).thisGroup).toBeDefined();
 });

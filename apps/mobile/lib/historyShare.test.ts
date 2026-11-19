@@ -41,7 +41,11 @@ describe("shortensHistory", () => {
   test("lengthening never asks to delete", () => {
     expect(shortensHistory({ groupIds, next: { account: "MAXIMUM" }, setting })).toBe(false);
     expect(
-      shortensHistory({ groupIds, next: { groupId: "club", override: "DAY_1" }, setting }),
+      shortensHistory({
+        groupIds,
+        next: { groupId: "club", groupName: "Club", override: "DAY_1" },
+        setting,
+      }),
     ).toBe(false);
   });
 
@@ -53,7 +57,7 @@ describe("shortensHistory", () => {
     expect(
       shortensHistory({
         groupIds: ["club"],
-        next: { groupId: "club", override: null },
+        next: { groupId: "club", groupName: "Club", override: null },
         setting: longGroup,
       }),
     ).toBe(true);
@@ -61,7 +65,11 @@ describe("shortensHistory", () => {
 
   test("last location only shortens any window", () => {
     expect(
-      shortensHistory({ groupIds, next: { groupId: "club", override: "LAST_LOCATION" }, setting }),
+      shortensHistory({
+        groupIds,
+        next: { groupId: "club", groupName: "Club", override: "LAST_LOCATION" },
+        setting,
+      }),
     ).toBe(true);
   });
 

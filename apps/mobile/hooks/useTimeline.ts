@@ -1,5 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { trpc, trpcClient } from "../lib/api.ts";
 import { ensureDeviceKeyRegistration } from "../lib/deviceKeys.ts";
 import { createHistoryKeyReader, unwrapEpochKeyFromWraps } from "../lib/epochKeys.ts";
@@ -19,6 +19,18 @@ export const useTimelineDays = (groupId: string, userId?: string) => {
     refetchInterval: 60_000,
   });
   const { data, dataUpdatedAt } = query;
+  const queryClient = useQueryClient();
+  const shares = data
+    ? JSON.stringify(data.senders.map((sender) => [sender.userId, sender.historyShare]))
+    : null;
+  const seenShares = useRef(shares);
+  useEffect(() => {
+    if (shares === null) return;
+    if (seenShares.current !== null && seenShares.current !== shares) {
+      void queryClient.resetQueries({ queryKey: ["timelineDay", groupId] });
+    }
+    seenShares.current = shares;
+  }, [groupId, queryClient, shares]);
   const windowStart = useMemo(() => (data ? timelineWindowStart(data) : null), [data]);
   const days = useMemo(
     () =>
