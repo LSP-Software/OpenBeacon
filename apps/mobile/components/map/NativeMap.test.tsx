@@ -320,8 +320,11 @@ mock.module("../../providers/ThemeProvider.tsx", () => ({
 }));
 
 mock.module("./LiveMapPersonSheet.tsx", () => ({
-  LiveMapPersonSheet: ({ name }: { name: string }) =>
-    React.createElement("live-map-person-sheet", { name }),
+  LiveMapPersonSheet: ({ name, onRequestUpdate }: { name: string; onRequestUpdate?: unknown }) =>
+    React.createElement("live-map-person-sheet", {
+      canRequestUpdate: onRequestUpdate !== undefined,
+      name,
+    }),
 }));
 
 mock.module("./LiveMapPeopleTray.tsx", () => ({
@@ -331,12 +334,20 @@ mock.module("./LiveMapPeopleTray.tsx", () => ({
 
 mock.module("./LiveMapMissingPersonSheet.tsx", () => ({
   LiveMapMissingPersonSheet: ({
+    onRequestUpdate,
     onShowGroup,
     person,
   }: {
+    onRequestUpdate?: () => Promise<void>;
     onShowGroup: (groupId: string) => void;
     person: { name: string };
-  }) => React.createElement("live-map-missing-person-sheet", { name: person.name, onShowGroup }),
+  }) =>
+    React.createElement("live-map-missing-person-sheet", {
+      canRequestUpdate: onRequestUpdate !== undefined,
+      name: person.name,
+      onRequestUpdate,
+      onShowGroup,
+    }),
 }));
 
 mock.module("./LiveMapGroupVisibility.tsx", () => ({
@@ -3287,6 +3298,233 @@ describe("NativeMap over a fake MapLibre", () => {
               bobMarker.longitude,
         ),
       ).toBe(true);
+    });
+  });
+
+  describe("asking for an update", () => {
+    const device = (
+      overrides: Partial<{
+        paused: boolean;
+        platform: "android" | "ios" | null;
+        userId: string;
+      }> & {
+        deviceId: string;
+      },
+    ) => ({
+      icon: "phone" as const,
+      name: "Phone",
+      paused: false,
+      platform: "android" as const,
+      unreadable: false,
+      userId: "alice",
+      ...overrides,
+    });
+
+    test.each([
+      ["has an Android phone", [device({ deviceId: "a1" })], undefined, true],
+      ["joined after this phone last loaded the group's devices", [], undefined, true],
+      [
+        "has an iPhone and an Android phone",
+        [device({ deviceId: "a1", platform: "ios" }), device({ deviceId: "a2" })],
+        undefined,
+        true,
+      ],
+      [
+        "has paused one of two phones",
+        [device({ deviceId: "a1", paused: true }), device({ deviceId: "a2" })],
+        undefined,
+        true,
+      ],
+      [
+        "has only paused phones",
+        [device({ deviceId: "a1", paused: true }), device({ deviceId: "a2", paused: true })],
+        undefined,
+        false,
+      ],
+      [
+        "has only an iPhone and iPad",
+        [device({ deviceId: "a1", platform: "ios" }), device({ deviceId: "a2", platform: "ios" })],
+        undefined,
+        false,
+      ],
+      [
+        "has paused their Android phone and only their iPhone is sharing",
+        [device({ deviceId: "a1", paused: true }), device({ deviceId: "a2", platform: "ios" })],
+        undefined,
+        false,
+      ],
+      [
+        "has one phone whose newer locations can't be read",
+        [device({ deviceId: "a1" })],
+        { id: "group-1", name: "Family" },
+        false,
+      ],
+      [
+        "has two phones and one can't be read",
+        [device({ deviceId: "a1" }), device({ deviceId: "a2" })],
+        { id: "group-1", name: "Family" },
+        true,
+      ],
+    ] as const)("someone who %s can be asked: %p", async (_, devices, unreadableGroup, shown) => {
+      const alice = createLiveMapMarkerFixture({
+        deviceId: "a1",
+        userId: "alice",
+        ...(unreadableGroup ? { unreadableGroup } : {}),
+      });
+      await renderNativeMap({
+        devices,
+        markers: [alice],
+        onRequestUpdate: async () => {},
+        selectedDeviceId: "a1",
+      });
+      const [sheet] =
+        root?.container.queryAll((instance) => instance.type === "live-map-person-sheet") ?? [];
+      expect(sheet?.props["canRequestUpdate"]).toBe(shown);
+    });
+
+    test("nobody can be asked when the server can't wake phones", async () => {
+      const alice = createLiveMapMarkerFixture({ deviceId: "a1", userId: "alice" });
+      await renderNativeMap({
+        devices: [device({ deviceId: "a1" })],
+        markers: [alice],
+        selectedDeviceId: "a1",
+      });
+      const [sheet] =
+        root?.container.queryAll((instance) => instance.type === "live-map-person-sheet") ?? [];
+      expect(sheet?.props["canRequestUpdate"]).toBe(false);
+    });
+
+    describe("someone with no location on the map", () => {
+      const alice = {
+        groupNames: ["Family"],
+        image: null,
+        initials: "Al",
+        isSelf: false,
+        name: "Alice",
+        userId: "alice",
+      };
+      const noPeople: MapPeople = {
+        cantLocate: [],
+        cantRead: [],
+        finding: [],
+        hidden: [],
+        outOfDate: [],
+        paused: [],
+        upToDate: [],
+        waiting: [],
+        waitingForLocation: [],
+      };
+      const unreadable = {
+        ...alice,
+        groupId: "group-1",
+        groupName: "Family",
+        reason: "point" as const,
+      };
+
+      const openMissingSheet = async ({
+        devices,
+        onRequestUpdate = async () => {},
+        people,
+      }: {
+        devices: readonly ReturnType<typeof device>[];
+        onRequestUpdate?: (userId: string) => Promise<void>;
+        people: Partial<MapPeople>;
+      }) => {
+        await renderNativeMap({
+          devices,
+          onRequestUpdate,
+          people: { ...noPeople, ...people },
+          peopleTrayOpen: true,
+        });
+        const [tray] =
+          root?.container.queryAll((instance) => instance.type === "live-map-people-tray") ?? [];
+        await act(async () =>
+          (tray?.props["onSelectPerson"] as ((userId: string) => void) | undefined)?.("alice"),
+        );
+        const [sheet] =
+          root?.container.queryAll(
+            (instance) => instance.type === "live-map-missing-person-sheet",
+          ) ?? [];
+        if (!sheet) throw new Error("Missing-person sheet didn't open");
+        return sheet;
+      };
+
+      test.each<[string, Partial<MapPeople>, ReturnType<typeof device>[], boolean]>([
+        ["whose location is unknown", { cantLocate: [alice] }, [device({ deviceId: "a1" })], true],
+        ["whose devices haven't loaded yet", { cantLocate: [alice] }, [], true],
+        [
+          "who has just turned sharing back on",
+          { waitingForLocation: [{ ...alice, waitingForLocation: true as const }] },
+          [device({ deviceId: "a1" })],
+          true,
+        ],
+        [
+          "whose location is unknown and who only has an iPhone",
+          { cantLocate: [alice] },
+          [device({ deviceId: "a1", platform: "ios" })],
+          false,
+        ],
+        [
+          "whose location is unknown and whose phones are all paused",
+          { cantLocate: [alice] },
+          [device({ deviceId: "a1", paused: true }), device({ deviceId: "a2", paused: true })],
+          false,
+        ],
+        [
+          "who has paused sharing",
+          { paused: [{ ...alice, sharingPaused: true as const, timelineGroupId: "group-1" }] },
+          [device({ deviceId: "a1" })],
+          false,
+        ],
+        [
+          "who is only in a hidden group",
+          { hidden: [{ ...alice, hiddenGroups: [{ id: "group-1", name: "Family" }] }] },
+          [device({ deviceId: "a1" })],
+          false,
+        ],
+        [
+          "whose one phone's location can't be read",
+          { cantRead: [unreadable] },
+          [device({ deviceId: "a1" })],
+          false,
+        ],
+        [
+          "who has two phones and whose location can't be read",
+          { cantRead: [unreadable] },
+          [device({ deviceId: "a1" }), device({ deviceId: "a2" })],
+          true,
+        ],
+        [
+          "who has two phones in a group whose key this phone lacks",
+          { cantRead: [{ ...unreadable, reason: "groupKey" as const }] },
+          [device({ deviceId: "a1" }), device({ deviceId: "a2" })],
+          false,
+        ],
+        [
+          "who is this account",
+          { cantLocate: [{ ...alice, isSelf: true }] },
+          [device({ deviceId: "a1" })],
+          false,
+        ],
+      ])("someone %s can be asked: %p", async (_, people, devices, shown) => {
+        const sheet = await openMissingSheet({ devices, people });
+        expect(sheet.props["canRequestUpdate"]).toBe(shown);
+      });
+
+      test("asks for that person's location", async () => {
+        const asked: string[] = [];
+        const sheet = await openMissingSheet({
+          devices: [device({ deviceId: "a1" }), device({ deviceId: "b1", userId: "bob" })],
+          onRequestUpdate: async (userId) => {
+            asked.push(userId);
+          },
+          people: { cantLocate: [alice] },
+        });
+        await act(async () =>
+          (sheet.props["onRequestUpdate"] as (() => Promise<void>) | undefined)?.(),
+        );
+        expect(asked).toEqual(["alice"]);
+      });
     });
   });
 });

@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, spyOn, test } from "bun:test";
-import { createFcmClient, type FcmSendResult } from "@openbeacon/auth/fcm.ts";
+import { createFcmClient, type FcmSendResult, type WakeKind } from "@openbeacon/auth/fcm.ts";
 import { createPushSender } from "@openbeacon/auth/push.ts";
 import { createSecurityAlerts } from "@openbeacon/auth/securityAlerts.ts";
 import { createIntegrationTestCache } from "@openbeacon/cache/integration";
@@ -28,10 +28,12 @@ const createdGroups: string[] = [];
 const timers: { ms: number; run: () => void }[] = [];
 const tasks: Promise<unknown>[] = [];
 const sent: string[] = [];
+const kinds: string[] = [];
 const replies = new Map<string, (FcmSendResult | (() => Promise<FcmSendResult>))[]>();
 const fakeFcm = {
-  send: async (token: string): Promise<FcmSendResult> => {
+  send: async (token: string, kind: WakeKind = "sync"): Promise<FcmSendResult> => {
     sent.push(token);
+    kinds.push(`${token}:${kind}`);
     const reply = replies.get(token)?.shift();
     if (!reply) return { outcome: "sent" };
     return typeof reply === "function" ? reply() : reply;
@@ -235,6 +237,12 @@ const setup = async () => {
     await deliver();
     return woken();
   };
+  const updateRequests = () =>
+    prisma.groupEvent.findMany({
+      where: { type: "LOCATION_UPDATE_REQUESTED", actorUserId: { in: [alice, bob, carol, dave] } },
+      orderBy: { groupId: "asc" },
+      select: { id: true, groupId: true, actorUserId: true, subjectUserId: true },
+    });
   const setting = (
     userId: string,
     type: Parameters<typeof prisma.notificationSetting.create>[0]["data"]["type"],
@@ -270,6 +278,7 @@ const setup = async () => {
     wakesForArrival,
     wakesForEvent,
     wakesForNotice,
+    updateRequests,
     setting,
     caller,
   };
@@ -280,6 +289,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("push wake-ups", 
     timers.length = 0;
     tasks.length = 0;
     sent.length = 0;
+    kinds.length = 0;
     replies.clear();
   });
 
@@ -668,6 +678,247 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("push wake-ups", 
           },
         });
       }
+    });
+  });
+
+  describe("update requests", () => {
+    test("wake the person's sharing devices straight away to send a location", async () => {
+      const f = await setup();
+      await prisma.userDevice.update({
+        where: { id: `${f.bob}-tablet` },
+        data: { sharingPaused: true },
+      });
+      await f.caller(`${f.alice}-phone`, f.alice).groupTracking.requestUpdate({ userId: f.bob });
+      expect(timers.map(({ ms }) => ms)).toEqual([1_000]);
+      await runTimers(1_000);
+      expect(kinds).toEqual([`${f.bob}-phone-token:locate`]);
+    });
+
+    test("record one quiet history line in every group the two share", async () => {
+      const f = await setup();
+      const tripId = `${f.groupId}-trip`;
+      const clubId = `${f.groupId}-club`;
+      createdGroups.push(tripId, clubId);
+      for (const [id, userIds] of [
+        [tripId, [f.alice, f.bob]],
+        [clubId, [f.alice, f.carol]],
+      ] as const) {
+        await prisma.group.create({
+          data: {
+            id,
+            name: id,
+            groupMembers: {
+              create: userIds.map((userId) => ({
+                userId,
+                role: "MEMBER" as const,
+                joinedEpochNumber: 1,
+                createdAt: longAgo,
+              })),
+            },
+          },
+        });
+      }
+      await f.caller(`${f.alice}-phone`, f.alice).groupTracking.requestUpdate({ userId: f.bob });
+      await runTimers(1_000);
+      const requests = await f.updateRequests();
+      expect(requests.map(({ id: _id, ...request }) => request)).toEqual(
+        [f.groupId, tripId].sort().map((groupId) => ({
+          groupId,
+          actorUserId: f.alice,
+          subjectUserId: f.bob,
+        })),
+      );
+
+      await prisma.groupEvent.updateMany({
+        where: { id: { in: requests.map(({ id }) => id) } },
+        data: { createdAt: ago(20_000) },
+      });
+      sent.length = 0;
+      kinds.length = 0;
+      for (const { id } of requests) {
+        expect(await f.readersFor({ kind: "event", id })).toEqual([]);
+        expect(await f.wakesForEvent(id)).toEqual([]);
+      }
+    });
+
+    test("reach nobody outside the requester's groups, and never the requester", async () => {
+      const f = await setup();
+      const stranger = await setup();
+      const alice = f.caller(`${f.alice}-phone`, f.alice);
+      await alice.groupTracking.requestUpdate({ userId: stranger.bob });
+      await alice.groupTracking.requestUpdate({ userId: f.alice });
+      await alice.groupTracking.requestUpdate({ userId: "nobody" });
+      expect(timers).toEqual([]);
+      expect(sent).toEqual([]);
+      expect(await f.updateRequests()).toEqual([]);
+    });
+
+    test("skip a person whose account is paused", async () => {
+      const f = await setup();
+      await prisma.user.update({ where: { id: f.bob }, data: { sharingPaused: true } });
+      await f.caller(`${f.alice}-phone`, f.alice).groupTracking.requestUpdate({ userId: f.bob });
+      expect(timers).toEqual([]);
+      expect(sent).toEqual([]);
+      expect(await f.updateRequests()).toEqual([]);
+    });
+
+    test("reach nobody who has left or been removed from the only shared group", async () => {
+      const f = await setup();
+      await prisma.groupMember.deleteMany({ where: { groupId: f.groupId, userId: f.bob } });
+      await f.caller(`${f.alice}-phone`, f.alice).groupTracking.requestUpdate({ userId: f.bob });
+      await f.caller(`${f.bob}-phone`, f.bob).groupTracking.requestUpdate({ userId: f.alice });
+      expect(timers).toEqual([]);
+      expect(sent).toEqual([]);
+      expect(await f.updateRequests()).toEqual([]);
+    });
+
+    test("skip revoked, pending and signed-out devices, without using up the person's minute", async () => {
+      const f = await setup();
+      await prisma.userDevice.update({
+        where: { id: `${f.bob}-tablet` },
+        data: { revokedAt: new Date() },
+      });
+      await prisma.session.update({
+        where: { id: `${f.bob}-phone-session` },
+        data: { expiresAt: ago(minute) },
+      });
+      const alice = f.caller(`${f.alice}-phone`, f.alice);
+      await alice.groupTracking.requestUpdate({ userId: f.bob });
+      expect(timers).toEqual([]);
+      expect(await f.updateRequests()).toEqual([]);
+      await prisma.session.update({
+        where: { id: `${f.bob}-phone-session` },
+        data: { expiresAt: new Date(Date.now() + hour) },
+      });
+      await alice.groupTracking.requestUpdate({ userId: f.bob });
+      await runTimers(1_000);
+      expect(kinds).toEqual([`${f.bob}-phone-token:locate`]);
+    });
+
+    test("wake a person once a minute across servers, whoever asks", async () => {
+      const f = await setup();
+      await f.caller(`${f.alice}-phone`, f.alice).groupTracking.requestUpdate({ userId: f.dave });
+      await f
+        .caller(`${f.bob}-phone`, f.bob, testPush())
+        .groupTracking.requestUpdate({ userId: f.dave });
+      await runTimers(1_000);
+      expect(kinds).toEqual([`${f.dave}-phone-token:locate`]);
+      expect(await f.updateRequests()).toMatchObject([
+        { actorUserId: f.alice, subjectUserId: f.dave },
+      ]);
+    });
+
+    test("go out straight after a sync wake, and a later sync still gets its follow-up", async () => {
+      const f = await setup();
+      let clock = 1_000_000;
+      const throttled = testPush(fakeFcm, () => clock);
+      const syncBobPhone = async () => {
+        throttled.accountNotice(
+          await f.notice(f.bob, "RECOVERY_PHRASE_CHANGED", `${f.bob}-tablet`),
+        );
+        await settle();
+        await runTimers(16_000);
+        await runTimers(1_000);
+      };
+      const phone = `${f.bob}-phone-token`;
+
+      await syncBobPhone();
+      expect(kinds).toEqual([`${phone}:sync`]);
+      clock += 20_000;
+      await f
+        .caller(`${f.alice}-phone`, f.alice, throttled)
+        .groupTracking.requestUpdate({ userId: f.bob });
+      await runTimers(1_000);
+      expect(kinds.filter((kind) => kind.startsWith(phone))).toEqual([
+        `${phone}:sync`,
+        `${phone}:locate`,
+      ]);
+      clock += 5_000;
+      await syncBobPhone();
+      expect(timers.map(({ ms }) => ms)).toEqual([55_000]);
+      clock += 55_000;
+      await runTimers(55_000);
+      await runTimers(1_000);
+      expect(kinds.filter((kind) => kind.startsWith(phone))).toEqual([
+        `${phone}:sync`,
+        `${phone}:locate`,
+        `${phone}:sync`,
+      ]);
+    });
+
+    test("a device gets at most one locate wake a minute from each server", async () => {
+      const f = await setup();
+      let clock = 1_000_000;
+      const throttled = testPush(fakeFcm, () => clock);
+      const phone = `${f.dave}-phone`;
+
+      throttled.requestLocation([phone]);
+      await runTimers(1_000);
+      clock += 30_000;
+      throttled.requestLocation([phone]);
+      await runTimers(1_000);
+      expect(kinds).toEqual([`${phone}-token:locate`]);
+      expect(timers.map(({ ms }) => ms)).toEqual([30_000]);
+      clock += 30_000;
+      await runTimers(30_000);
+      await runTimers(1_000);
+      expect(kinds).toEqual([`${phone}-token:locate`, `${phone}-token:sync`]);
+      throttled.requestLocation([phone]);
+      await runTimers(1_000);
+      expect(kinds.at(-1)).toBe(`${phone}-token:locate`);
+    });
+
+    test("a queued sync wake goes out as an update request, which also syncs", async () => {
+      const f = await setup();
+      push.accountNotice(await f.notice(f.bob, "RECOVERY_PHRASE_CHANGED", `${f.bob}-tablet`));
+      await settle();
+      await runTimers(16_000);
+      await f.caller(`${f.alice}-phone`, f.alice).groupTracking.requestUpdate({ userId: f.bob });
+      await runTimers(1_000);
+      expect(kinds.sort()).toEqual([`${f.bob}-phone-token:locate`, `${f.bob}-tablet-token:locate`]);
+    });
+
+    test("retry as update requests, unless FCM asks to wait past their minute", async () => {
+      const f = await setup();
+      const errors = spyOn(console, "error").mockImplementation(() => {});
+      replies.set(`${f.bob}-phone-token`, [{ outcome: "retry", afterMs: 5_000 }]);
+      replies.set(`${f.bob}-tablet-token`, [{ outcome: "retry", afterMs: 31_000 }]);
+      await f.caller(`${f.alice}-phone`, f.alice).groupTracking.requestUpdate({ userId: f.bob });
+      await runTimers(1_000);
+      expect(timers.map(({ ms }) => ms)).toEqual([5_000]);
+      await runTimers(5_000);
+      expect(kinds.sort()).toEqual([
+        `${f.bob}-phone-token:locate`,
+        `${f.bob}-phone-token:locate`,
+        `${f.bob}-tablet-token:locate`,
+      ]);
+      expect(errors.mock.calls.map(([message]) => String(message).replace(/^\S+ /, ""))).toEqual([
+        "[push] FCM asked to wait past an update request's lifetime, so a wake was dropped",
+      ]);
+      errors.mockRestore();
+    });
+
+    test("are limited per requester", async () => {
+      const f = await setup();
+      const alice = f.caller(`${f.alice}-phone`, f.alice);
+      for (let count = 0; count < 10; count += 1) {
+        await alice.groupTracking.requestUpdate({ userId: f.bob });
+      }
+      await expect(alice.groupTracking.requestUpdate({ userId: f.bob })).rejects.toMatchObject({
+        code: "TOO_MANY_REQUESTS",
+      });
+      await f.caller(`${f.carol}-phone`, f.carol).groupTracking.requestUpdate({ userId: f.bob });
+    });
+
+    test("are refused when the server can't push", async () => {
+      const f = await setup();
+      await expect(
+        f
+          .caller(`${f.alice}-phone`, f.alice, testPush(null))
+          .groupTracking.requestUpdate({ userId: f.bob }),
+      ).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+      expect(sent).toEqual([]);
+      expect(await f.updateRequests()).toEqual([]);
     });
   });
 

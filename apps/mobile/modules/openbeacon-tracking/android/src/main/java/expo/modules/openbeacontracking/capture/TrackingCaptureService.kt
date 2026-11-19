@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.Service
 import android.app.AlarmManager
 import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.location.Location
@@ -23,11 +24,13 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
+import com.google.android.gms.location.CurrentLocationRequest
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
 import expo.modules.openbeacontracking.Notice
 import expo.modules.openbeacontracking.NoticeSlot
 import expo.modules.openbeacontracking.Notices
@@ -57,6 +60,7 @@ class TrackingCaptureService : Service() {
   private val refreshState = CaptureRefreshState()
 
   private var locationCallback: LocationCallback? = null
+  private var locateCancellation: CancellationTokenSource? = null
   private var networkCallback: ConnectivityManager.NetworkCallback? = null
   @Volatile
   private var minimumFixElapsedRealtimeNanos = 0L
@@ -121,18 +125,23 @@ class TrackingCaptureService : Service() {
           refreshState.request()
           TrackingRuntime.captureCommands.current()
         }
-        try {
-          fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
-            .addOnSuccessListener { location ->
-              if (location != null) captureScope.launch { enqueueEncryptedFix(location, generation) }
-            }
-        } catch (error: SecurityException) {
-          Log.e(TAG, "Failed to refresh location.", error)
+        if (intent?.getBooleanExtra(EXTRA_LOCATE, false) == true) {
+          locate(generation)
+        } else {
+          try {
+            fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+              .addOnSuccessListener { location ->
+                if (location != null) captureScope.launch { enqueueEncryptedFix(location, generation) }
+              }
+          } catch (error: SecurityException) {
+            Log.e(TAG, "Failed to refresh location.", error)
+          }
         }
       }
       else -> {
         synchronized(captureStateLock) {
           if (intent?.action != ACTION_START && !TrackingRuntime.shouldRestoreCapture(this)) {
+            if (intent != null) return promoteAndStop()
             stopAfterFailedStart()
             return START_NOT_STICKY
           }
@@ -143,6 +152,9 @@ class TrackingCaptureService : Service() {
           // Android crashes the app if a startForegroundService start stops before startForeground, so only sticky restarts park without promoting.
           if (intent == null && TrackingRuntime.isCaptureParked(this)) return parkCapture()
           startCapture(resolveStartIntervalMs(intent), intent?.getBooleanExtra(EXTRA_RESUMING_SHARING, false) == true)
+        }
+        if (intent?.getBooleanExtra(EXTRA_LOCATE, false) == true && TrackingRuntime.isCaptureRunning && !TrackingRuntime.sharingState(this).isPaused(System.currentTimeMillis())) {
+          locate(TrackingRuntime.captureCommands.current())
         }
       }
     }
@@ -216,6 +228,18 @@ class TrackingCaptureService : Service() {
     }
   }
 
+  private fun promoteAndStop(): Int {
+    ensureNotificationChannel()
+    try {
+      ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+    } catch (error: RuntimeException) {
+      Log.w(TAG, "Failed to promote a capture start that can no longer restore sharing.", error)
+    }
+    stopForeground(STOP_FOREGROUND_REMOVE)
+    stopAfterFailedStart()
+    return START_NOT_STICKY
+  }
+
   private fun parkCapture(): Int {
     SharingResumeWorker.schedule(this)
     stopSelf()
@@ -245,6 +269,50 @@ class TrackingCaptureService : Service() {
     fusedLocationClient.requestLocationUpdates(request, callback, Looper.getMainLooper())
     synchronized(captureStateLock) {
       currentIntervalMs = intervalMs
+    }
+  }
+
+  private fun locate(generation: Long) {
+    val cancellation = CancellationTokenSource()
+    synchronized(captureStateLock) {
+      locateCancellation?.cancel()
+      locateCancellation = cancellation
+    }
+    val request =
+      CurrentLocationRequest
+        .Builder()
+        .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
+        .setMaxUpdateAgeMillis(0)
+        .setDurationMillis(LOCATE_TIMEOUT_MS)
+        .build()
+    try {
+      fusedLocationClient.getCurrentLocation(request, cancellation.token)
+        .addOnSuccessListener { location ->
+          if (location == null) uploadAfterLocate(generation)
+          else captureScope.launch { if (!enqueueEncryptedFix(location, generation)) uploadAfterLocate(generation) }
+        }
+        .addOnFailureListener { error ->
+          Log.w(TAG, "Failed to locate the phone.", error)
+          uploadAfterLocate(generation)
+        }
+    } catch (error: SecurityException) {
+      Log.e(TAG, "Failed to locate the phone.", error)
+      uploadAfterLocate(generation)
+    }
+  }
+
+  private fun uploadAfterLocate(generation: Long) {
+    val nowMs = System.currentTimeMillis()
+    if (TrackingRuntime.sharingState(this).isPaused(nowMs)) return
+    synchronized(captureStateLock) {
+      if (!TrackingRuntime.isCaptureRunning || !TrackingRuntime.captureCommands.isCurrent(generation)) return
+      try {
+        startService(Intent(this, TrackingUploadService::class.java).putExtra(TrackingUploadService.EXTRA_REASON, TrackingUploadService.REASON_UPLOAD))
+        lastUploadRequestMs = nowMs
+        placeUploadWaiting = false
+      } catch (error: Exception) {
+        Log.e(TAG, "Failed to start background tracking sync.", error)
+      }
     }
   }
 
@@ -305,6 +373,8 @@ class TrackingCaptureService : Service() {
       TrackingRuntime.isCaptureRunning = false
       lastQueued = null
       refreshState.clear()
+      locateCancellation?.cancel()
+      locateCancellation = null
     }
     stopForeground(STOP_FOREGROUND_REMOVE)
   }
@@ -364,8 +434,8 @@ class TrackingCaptureService : Service() {
     }
   }
 
-  private fun enqueueEncryptedFix(location: Location, generation: Long) {
-    if (location.elapsedRealtimeNanos <= minimumFixElapsedRealtimeNanos) return
+  private fun enqueueEncryptedFix(location: Location, generation: Long): Boolean {
+    if (location.elapsedRealtimeNanos <= minimumFixElapsedRealtimeNanos) return false
     val battery = BatteryReader.read(this)
     val speed =
       if (location.hasSpeed()) {
@@ -380,7 +450,7 @@ class TrackingCaptureService : Service() {
       }
 
     if (!captureRunning || !TrackingRuntime.captureCommands.isCurrent(generation)) {
-      return
+      return false
     }
 
     val placeTransitionQueued = detectPlaces(location, nowMs, generation)
@@ -445,7 +515,7 @@ class TrackingCaptureService : Service() {
 
     val online = isOnline()
     val paused = TrackingRuntime.sharingState(this).isPaused(nowMs)
-    try {
+    return try {
       synchronized(captureStateLock) {
         if (placeTransitionQueued) placeUploadWaiting = true
         val startUpload =
@@ -464,9 +534,11 @@ class TrackingCaptureService : Service() {
           lastUploadRequestMs = nowMs
           placeUploadWaiting = false
         }
+        startUpload
       }
     } catch (error: Exception) {
       Log.e(TAG, "Failed to start background tracking sync.", error)
+      false
     }
   }
 
@@ -598,10 +670,49 @@ class TrackingCaptureService : Service() {
     const val EXTRA_INTERVAL_MS = "intervalMs"
     const val EXTRA_COMMAND_GENERATION = "captureCommandGeneration"
     const val EXTRA_RESUMING_SHARING = "resumingSharing"
+    const val EXTRA_LOCATE = "locate"
     const val DEFAULT_INTERVAL_MS = CaptureSamplingPolicy.DEFAULT_INTERVAL_MS
     const val MIN_INTERVAL_MS = 5_000L
     private const val TAG = "TrackingCapture"
     const val CHANNEL_ID = "openbeacon_tracking_capture"
     private const val NOTIFICATION_ID = 7260
+    private const val LOCATE_TIMEOUT_MS = 20_000L
+    private var locateWakes = LocateWakePolicy { SystemClock.elapsedRealtime() }
+
+    fun locateNow(context: Context) {
+      TrackingUploadService.start(context, TrackingUploadService.REASON_PUSH)
+      val decision =
+        locateWakes.decide(
+          captureRunning = TrackingRuntime.isCaptureRunning,
+          captureRestorable = TrackingRuntime.shouldRestoreCapture(context),
+          parked = TrackingRuntime.isCaptureParked(context),
+          paused = TrackingRuntime.sharingState(context).isPaused(System.currentTimeMillis()),
+        )
+      when (decision) {
+        LocateWakePolicy.Action.SYNC -> Unit
+        LocateWakePolicy.Action.RESTART ->
+          try {
+            ContextCompat.startForegroundService(context, Intent(context, TrackingCaptureService::class.java).putExtra(EXTRA_LOCATE, true))
+          } catch (error: IllegalStateException) {
+            Log.w(TAG, "Android didn't allow location capture to restart in the background.", error)
+            TrackingUploadService.start(context, TrackingUploadService.REASON_UPLOAD)
+          } catch (error: SecurityException) {
+            Log.e(TAG, "Failed to restart location capture.", error)
+            TrackingUploadService.start(context, TrackingUploadService.REASON_UPLOAD)
+          }
+        LocateWakePolicy.Action.REFRESH ->
+          try {
+            context.startService(
+              Intent(context, TrackingCaptureService::class.java).apply {
+                action = ACTION_REFRESH
+                putExtra(EXTRA_LOCATE, true)
+              },
+            )
+          } catch (error: IllegalStateException) {
+            Log.w(TAG, "Android didn't allow a location update in the background.", error)
+            TrackingUploadService.start(context, TrackingUploadService.REASON_UPLOAD)
+          }
+      }
+    }
   }
 }

@@ -3,9 +3,11 @@ import {
   groupTrackingHistoryDaysSchema,
   groupTrackingHistoryRangeSchema,
   groupTrackingPollSchema,
+  groupTrackingRequestUpdateSchema,
   groupTrackingUploadBatchSchema,
 } from "@openbeacon/schemas";
 import type { TRPCRouterRecord } from "@trpc/server";
+import { GroupEventType, readDatabaseTime } from "@openbeacon/database";
 import { errorCode, tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import {
@@ -24,9 +26,11 @@ import {
   readPlacesSummary,
   uploadPlaceTransitions,
 } from "../../lib/placeTransitions.ts";
+import { getWakeableSharingDeviceIds } from "../../lib/locationSharing.ts";
 import { getTrackingKeyState } from "../../lib/trackingKeyState.ts";
 import { ReasonError } from "../../lib/reasonError.ts";
 import { groupMemberProcedure } from "../../procedures/auth/group.ts";
+import { protectedProcedure } from "../../procedures/auth/runtime.ts";
 
 const DEFAULT_POLL_LIMIT = 100;
 
@@ -270,5 +274,49 @@ export const groupTrackingRouter = {
         limit: input.limit ?? 1_000,
         toHour: input.toHour,
       });
+    }),
+  requestUpdate: protectedProcedure
+    .meta({ rateLimit: { limit: 10, windowMs: 10 * 60_000 } })
+    .input(groupTrackingRequestUpdateSchema)
+    .mutation(async ({ ctx, input }) => {
+      const push = ctx.push;
+      if (!push?.enabled) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "This server can't wake phones.",
+        });
+      }
+      if (input.userId === ctx.session.user.id) return;
+      const sharedGroups = await ctx.db.groupMember.findMany({
+        where: {
+          userId: input.userId,
+          group: { groupMembers: { some: { userId: ctx.session.user.id } } },
+        },
+        select: { groupId: true },
+      });
+      if (sharedGroups.length === 0) return;
+      const deviceIds = await getWakeableSharingDeviceIds(ctx.db, input.userId);
+      if (deviceIds.length === 0) return;
+      const perTarget = await ctx.cache.rateLimits.consume(
+        {
+          namespace: "groupTracking.requestUpdate.target",
+          identifier: { type: "userId", value: input.userId },
+          limit: 1,
+          windowMs: 60_000,
+        },
+        { whenUnavailable: "allow" },
+      );
+      if (!perTarget.allowed) return;
+      const requestedAt = await readDatabaseTime(ctx.db);
+      await ctx.db.groupEvent.createMany({
+        data: sharedGroups.map(({ groupId }) => ({
+          groupId,
+          type: GroupEventType.LOCATION_UPDATE_REQUESTED,
+          actorUserId: ctx.session.user.id,
+          subjectUserId: input.userId,
+          createdAt: requestedAt,
+        })),
+      });
+      push.requestLocation(deviceIds);
     }),
 } satisfies TRPCRouterRecord;

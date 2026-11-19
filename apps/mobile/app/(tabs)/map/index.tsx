@@ -123,6 +123,11 @@ const MapScreen = () => {
   const selfUserId = session?.user.id ?? "";
   const { data: registeredDevice } = useQuery(registeredDeviceQueryOptions(selfUserId));
   const selfDeviceId = registeredDevice?.userId === selfUserId ? registeredDevice.deviceId : "";
+  const { data: providers } = useQuery(trpc.auth.providers.queryOptions());
+  const { mutateAsync: requestUpdate } = useMutation({
+    ...trpc.groupTracking.requestUpdate.mutationOptions(),
+    networkMode: "always",
+  });
   const memberDeviceLists = useQueries({
     queries: (groups ?? []).map((group) => ({
       ...trpc.groupMembership.listMemberDevices.queryOptions({ groupId: group.id }),
@@ -407,6 +412,7 @@ const MapScreen = () => {
           })
         }
         groupOptions={groupOptions}
+        onRequestUpdate={providers?.push ? (userId) => requestUpdate({ userId }) : undefined}
         onSetGroupHidden={(groupId, hidden) => {
           if (!selfUserId) return;
           setMapGroupHidden({ groupId, hidden, userId: selfUserId });

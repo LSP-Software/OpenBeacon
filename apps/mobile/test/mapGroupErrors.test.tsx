@@ -113,10 +113,12 @@ mock.module("../hooks/useTrackingUploadTime.ts", () => ({ useTrackingUploadTime:
 mock.module("../hooks/useSelfDeviceLocation.ts", () => ({ useSelfDeviceLocation: () => null }));
 mock.module("../lib/api.ts", () => ({
   trpc: {
+    auth: { providers: { queryOptions: () => ({}) } },
     groupMembership: {
       list: { queryOptions: () => ({}) },
       listMemberDevices: { queryOptions: () => ({}) },
     },
+    groupTracking: { requestUpdate: { mutationOptions: () => ({}) } },
   },
 }));
 mock.module("../lib/auth-client.ts", () => ({

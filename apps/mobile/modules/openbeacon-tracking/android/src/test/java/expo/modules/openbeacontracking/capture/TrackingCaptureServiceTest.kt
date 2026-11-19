@@ -4,11 +4,14 @@ import android.Manifest
 import android.app.Application
 import android.app.NotificationManager
 import android.app.Service
+import android.content.ComponentName
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.location.Location
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.os.Looper
 import android.os.SystemClock
 import android.text.format.DateFormat
 import android.text.format.DateUtils
@@ -17,7 +20,11 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.work.Configuration
 import androidx.work.testing.SynchronousExecutor
 import androidx.work.testing.WorkManagerTestInitHelper
+import com.google.android.gms.location.CurrentLocationRequest
 import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.Task
+import com.google.android.gms.tasks.Tasks
 import expo.modules.openbeacontracking.Notice
 import expo.modules.openbeacontracking.Notices
 import expo.modules.openbeacontracking.TrackingRuntime
@@ -55,6 +62,8 @@ class TrackingCaptureServiceTest {
   private val keysField = TrackingRuntime::class.java.getDeclaredField("epochKeyStore").apply { isAccessible = true }
   private val queueField = TrackingRuntime::class.java.getDeclaredField("ciphertextQueue").apply { isAccessible = true }
   private val placeDetectionField = TrackingRuntime::class.java.getDeclaredField("placeDetection").apply { isAccessible = true }
+  private val locateWakesField = TrackingCaptureService::class.java.getDeclaredField("locateWakes").apply { isAccessible = true }
+  private var locateClockMs = 0L
 
   @Before
   fun setUp() {
@@ -68,6 +77,7 @@ class TrackingCaptureServiceTest {
     keys.replaceAll(listOf(ProvisionedEpochKey("group", "epoch", ByteArray(32), "tablet", "trackingPoint")))
     keysField.set(null, keys)
     shadowOf(application).grantPermissions(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_BACKGROUND_LOCATION, Manifest.permission.POST_NOTIFICATIONS)
+    locateWakesField.set(null, LocateWakePolicy { locateClockMs })
   }
 
   @After
@@ -215,6 +225,234 @@ class TrackingCaptureServiceTest {
 
     assertEquals(Service.START_NOT_STICKY, result)
     assertFalse(TrackingRuntime.isCaptureRunning)
+  }
+
+  @Test
+  fun anUpdateRequestWhilePausedOnlySyncs() {
+    TrackingRuntime.isCaptureRunning = true
+    TrackingCaptureService.locateNow(application)
+
+    assertEquals(listOf(TrackingUploadService.REASON_PUSH), drainStartedServices().map { it.getStringExtra(TrackingUploadService.EXTRA_REASON) })
+  }
+
+  @Test
+  fun anUpdateRequestThatArrivesAfterAPauseTakesNoFix() {
+    val requests = mutableListOf<CurrentLocationRequest>()
+    val service = startLocatingService(requests) { Tasks.forResult(null) }
+    TrackingCaptureService.locateNow(application)
+    val refresh = drainStartedServices().single { it.action == TrackingCaptureService.ACTION_REFRESH }
+    TrackingRuntime.setSharingState(application, SharingCaptureState(revisionPrefix = "s0.3:", paused = true, pausedUntil = System.currentTimeMillis() + 3_600_000L))
+
+    service.onStartCommand(refresh, 0, 2)
+    shadowOf(Looper.getMainLooper()).idle()
+
+    assertTrue(requests.isEmpty())
+    assertTrue(drainStartedServices().isEmpty())
+  }
+
+  @Test
+  fun anUpdateRequestWhileCapturingSyncsAndUploadsAFreshFix() {
+    val requests = mutableListOf<CurrentLocationRequest>()
+    val service = startLocatingService(requests) { Tasks.forResult(freshFix()) }
+    TrackingCaptureService.locateNow(application)
+    val started = drainStartedServices()
+
+    assertEquals(TrackingUploadService.REASON_PUSH, started[0].getStringExtra(TrackingUploadService.EXTRA_REASON))
+    assertEquals(ComponentName(application, TrackingCaptureService::class.java), started[1].component)
+    assertEquals(TrackingCaptureService.ACTION_REFRESH, started[1].action)
+    assertEquals(2, started.size)
+
+    service.onStartCommand(started[1], 0, 2)
+    shadowOf(Looper.getMainLooper()).idle()
+
+    val request = requests.single()
+    assertEquals(0L, request.maxUpdateAgeMillis)
+    assertEquals(Priority.PRIORITY_HIGH_ACCURACY, request.priority)
+    assertEquals(20_000L, request.durationMillis)
+    assertEquals(listOf(TrackingUploadService.REASON_UPLOAD), awaitStartedServices().map { it.getStringExtra(TrackingUploadService.EXTRA_REASON) })
+  }
+
+  @Test
+  fun anUpdateRequestOfflineStillAsksForAnUploadAfterTheFix() {
+    val service = startLocatingService(mutableListOf(), online = false) { Tasks.forResult(freshFix()) }
+    TrackingCaptureService.locateNow(application)
+    val refresh = drainStartedServices().single { it.action == TrackingCaptureService.ACTION_REFRESH }
+
+    service.onStartCommand(refresh, 0, 2)
+    shadowOf(Looper.getMainLooper()).idle()
+
+    assertEquals(listOf(TrackingUploadService.REASON_UPLOAD), awaitStartedServices().map { it.getStringExtra(TrackingUploadService.EXTRA_REASON) })
+  }
+
+  @Test
+  fun anUpdateRequestWithoutAFixStillUploadsQueuedPoints() {
+    var outcome: () -> Task<Location?> = { Tasks.forResult(null) }
+    val service = startLocatingService(mutableListOf()) { outcome() }
+    TrackingCaptureService.locateNow(application)
+    val refresh = drainStartedServices().single { it.action == TrackingCaptureService.ACTION_REFRESH }
+    val outcomes = listOf<() -> Task<Location?>>(
+      { Tasks.forResult(null) },
+      { Tasks.forException(RuntimeException("No fix.")) },
+      { throw SecurityException("Location access was removed.") },
+    )
+
+    outcomes.forEachIndexed { index, next ->
+      outcome = next
+      service.onStartCommand(refresh, 0, index + 2)
+      shadowOf(Looper.getMainLooper()).idle()
+      assertEquals(listOf(TrackingUploadService.REASON_UPLOAD), drainStartedServices().map { it.getStringExtra(TrackingUploadService.EXTRA_REASON) })
+    }
+  }
+
+  @Test
+  fun anUpdateRequestAfterTheAppWasClosedRestartsCaptureInTheForeground() {
+    TrackingRuntime.setSharingState(application, SharingCaptureState(revisionPrefix = "s0.2:"))
+    TrackingCaptureService.locateNow(application)
+    val started = drainStartedServices()
+
+    assertEquals(TrackingUploadService.REASON_PUSH, started[0].getStringExtra(TrackingUploadService.EXTRA_REASON))
+    assertEquals(ComponentName(application, TrackingCaptureService::class.java), started[1].component)
+    assertEquals(null, started[1].action)
+    assertTrue(started[1].getBooleanExtra(TrackingCaptureService.EXTRA_LOCATE, false))
+    assertEquals(2, started.size)
+  }
+
+  @Test
+  fun aRestartedCaptureShowsItsNoticeAndUploadsAFreshFix() {
+    val requests = mutableListOf<CurrentLocationRequest>()
+    val service = locatingService(requests) { Tasks.forResult(freshFix()) }
+    TrackingCaptureService.locateNow(application)
+    val restart = drainStartedServices().single { it.component == ComponentName(application, TrackingCaptureService::class.java) }
+
+    assertEquals(Service.START_STICKY, service.onStartCommand(restart, 0, 1))
+    shadowOf(Looper.getMainLooper()).idle()
+
+    assertTrue(TrackingRuntime.isCaptureRunning)
+    assertEquals(
+      application.getString(expo.modules.openbeacontracking.R.string.openbeacon_tracking_notification_title),
+      shadowOf(service).lastForegroundNotification.extras.getCharSequence(android.app.Notification.EXTRA_TITLE).toString(),
+    )
+    val request = requests.single()
+    assertEquals(0L, request.maxUpdateAgeMillis)
+    assertEquals(Priority.PRIORITY_HIGH_ACCURACY, request.priority)
+    assertEquals(listOf(TrackingUploadService.REASON_UPLOAD), awaitStartedServices().map { it.getStringExtra(TrackingUploadService.EXTRA_REASON) })
+  }
+
+  @Test
+  fun aRestartThatArrivesAfterATimedPauseShowsThePauseAndTakesNoFix() {
+    val requests = mutableListOf<CurrentLocationRequest>()
+    val service = locatingService(requests) { Tasks.forResult(freshFix()) }
+    TrackingRuntime.setSharingState(application, SharingCaptureState(revisionPrefix = "s0.3:", paused = true, pausedUntil = System.currentTimeMillis() + 3_600_000L))
+
+    service.onStartCommand(locateRestartIntent(), 0, 1)
+    shadowOf(Looper.getMainLooper()).idle()
+
+    assertTrue(TrackingRuntime.isCaptureRunning)
+    assertEquals(
+      application.getString(expo.modules.openbeacontracking.R.string.openbeacon_tracking_notification_paused_title),
+      shadowOf(service).lastForegroundNotification.extras.getCharSequence(android.app.Notification.EXTRA_TITLE).toString(),
+    )
+    assertTrue(requests.isEmpty())
+    assertTrue(drainStartedServices().isEmpty())
+  }
+
+  @Test
+  fun aRestartThatArrivesAfterAnIndefinitePausePromotesThenParks() {
+    val requests = mutableListOf<CurrentLocationRequest>()
+    val service = locatingService(requests) { Tasks.forResult(freshFix()) }
+    TrackingRuntime.setSharingState(application, SharingCaptureState(revisionPrefix = "s0.3:", paused = true))
+
+    assertEquals(Service.START_NOT_STICKY, service.onStartCommand(locateRestartIntent(), 0, 1))
+    shadowOf(Looper.getMainLooper()).idle()
+
+    assertTrue(shadowOf(service).lastForegroundNotificationId != 0)
+    assertTrue(shadowOf(service).notificationShouldRemoved)
+    assertFalse(TrackingRuntime.isCaptureRunning)
+    assertTrue(shadowOf(service).isStoppedBySelf)
+    assertTrue(requests.isEmpty())
+  }
+
+  @Test
+  fun aRestartThatArrivesAfterSharingStoppedPromotesThenStops() {
+    val cases = listOf<(TrackingCaptureService) -> Unit>(
+      { TrackingRuntime.setCaptureEnabled(application, false) },
+      { shadowOf(application).denyPermissions(Manifest.permission.ACCESS_BACKGROUND_LOCATION) },
+      { service ->
+        shadowOf(application).denyPermissions(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+        shadowOf(service).setThrowInStartForeground(SecurityException("Location access was removed."))
+      },
+    )
+
+    cases.forEach { stopSharing ->
+      setUp()
+      val requests = mutableListOf<CurrentLocationRequest>()
+      val service = locatingService(requests) { Tasks.forResult(freshFix()) }
+      stopSharing(service)
+
+      assertEquals(Service.START_NOT_STICKY, service.onStartCommand(locateRestartIntent(), 0, 1))
+      shadowOf(Looper.getMainLooper()).idle()
+
+      assertTrue(shadowOf(service).isForegroundStopped)
+      assertTrue(shadowOf(service).isStoppedBySelf)
+      assertFalse(TrackingRuntime.isCaptureRunning)
+      assertTrue(requests.isEmpty())
+      controller?.destroy()
+    }
+    assertTrue(hasNotice(expo.modules.openbeacontracking.R.string.openbeacon_notice_location_permission_body))
+  }
+
+  @Test
+  fun aRefusedRestartFallsBackToUploadingQueuedPoints() {
+    TrackingRuntime.setSharingState(application, SharingCaptureState(revisionPrefix = "s0.2:"))
+    listOf(IllegalStateException("Not allowed in the background."), SecurityException("Location access was removed.")).forEach { refusal ->
+      val refusing =
+        object : ContextWrapper(application) {
+          override fun startForegroundService(service: Intent): ComponentName = throw refusal
+        }
+      locateClockMs += LocateWakePolicy.COOLDOWN_MS
+
+      TrackingCaptureService.locateNow(refusing)
+
+      assertEquals(listOf(TrackingUploadService.REASON_PUSH, TrackingUploadService.REASON_UPLOAD), drainStartedServices().map { it.getStringExtra(TrackingUploadService.EXTRA_REASON) })
+      assertFalse(TrackingRuntime.isCaptureRunning)
+    }
+  }
+
+  @Test
+  fun restartRequestsWithinThirtySecondsStartCaptureOnce() {
+    TrackingRuntime.setSharingState(application, SharingCaptureState(revisionPrefix = "s0.2:"))
+    TrackingCaptureService.locateNow(application)
+    locateClockMs += 29_999L
+    TrackingCaptureService.locateNow(application)
+
+    assertEquals(1, drainStartedServices().count { it.component == ComponentName(application, TrackingCaptureService::class.java) })
+  }
+
+  @Test
+  fun anUpdateRequestAfterSharingWasTurnedOffOnlySyncs() {
+    TrackingRuntime.setSharingState(application, SharingCaptureState(revisionPrefix = "s0.2:"))
+    TrackingRuntime.setCaptureEnabled(application, false)
+    TrackingCaptureService.locateNow(application)
+
+    assertEquals(listOf(TrackingUploadService.REASON_PUSH), drainStartedServices().map { it.getStringExtra(TrackingUploadService.EXTRA_REASON) })
+  }
+
+  @Test
+  fun updateRequestsWithinThirtySecondsShareOneFix() {
+    TrackingRuntime.setSharingState(application, SharingCaptureState(revisionPrefix = "s0.2:"))
+    TrackingRuntime.isCaptureRunning = true
+    TrackingCaptureService.locateNow(application)
+    locateClockMs += 29_999L
+    TrackingCaptureService.locateNow(application)
+
+    assertEquals(
+      listOf(TrackingUploadService.REASON_PUSH, null, TrackingUploadService.REASON_PUSH),
+      drainStartedServices().map { it.getStringExtra(TrackingUploadService.EXTRA_REASON) },
+    )
+
+    locateClockMs += 1L
+    TrackingCaptureService.locateNow(application)
+    assertEquals(TrackingCaptureService.ACTION_REFRESH, drainStartedServices().last().action)
   }
 
   @Test
@@ -468,6 +706,65 @@ class TrackingCaptureServiceTest {
     assertFalse(TrackingRuntime.isCaptureRunning)
     assertTrue(shadowOf(service).isStoppedBySelf)
     assertTrue(shadowOf(application.getSystemService(NotificationManager::class.java)).allNotifications.isEmpty())
+  }
+
+  private fun startLocatingService(
+    requests: MutableList<CurrentLocationRequest>,
+    online: Boolean = true,
+    fix: () -> Task<Location?>,
+  ): TrackingCaptureService {
+    val service = locatingService(requests, online, fix)
+    service.onStartCommand(startIntent(TrackingRuntime.captureCommands.start()), 0, 1)
+    assertTrue(TrackingRuntime.isCaptureRunning)
+    drainStartedServices()
+    return service
+  }
+
+  private fun locatingService(
+    requests: MutableList<CurrentLocationRequest>,
+    online: Boolean = true,
+    fix: () -> Task<Location?>,
+  ): TrackingCaptureService {
+    queueField.set(null, RoomCiphertextQueue(Room.inMemoryDatabaseBuilder(application, CiphertextQueueDatabase::class.java).allowMainThreadQueries().build()))
+    TrackingRuntime.setSharingState(application, SharingCaptureState(revisionPrefix = "s0.2:"))
+    val connectivity = application.getSystemService(ConnectivityManager::class.java)
+    shadowOf(connectivity).setNetworkCapabilities(
+      connectivity.activeNetwork,
+      ShadowNetworkCapabilities.newInstance().apply { if (online) shadowOf(this).addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) },
+    )
+    val client =
+      Proxy.newProxyInstance(FusedLocationProviderClient::class.java.classLoader, arrayOf(FusedLocationProviderClient::class.java)) { _, method, args ->
+        val request = args?.firstOrNull()
+        if (method.name == "getCurrentLocation" && request is CurrentLocationRequest) {
+          requests.add(request)
+          fix()
+        } else {
+          null
+        }
+      } as FusedLocationProviderClient
+    val service = createService()
+    TrackingCaptureService::class.java.getDeclaredField("fusedLocationClient\$delegate").apply { isAccessible = true }.set(service, lazyOf(client))
+    return service
+  }
+
+  private fun locateRestartIntent() = Intent(application, TrackingCaptureService::class.java).putExtra(TrackingCaptureService.EXTRA_LOCATE, true)
+
+  private fun freshFix() =
+    Location("test").apply {
+      latitude = 51.5
+      longitude = -0.1
+      accuracy = 10f
+      time = System.currentTimeMillis()
+      elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos() + 1
+    }
+
+  private fun drainStartedServices(): List<Intent> = generateSequence { shadowOf(application).nextStartedService }.toList()
+
+  private fun awaitStartedServices(): List<Intent> {
+    val deadline = System.currentTimeMillis() + 5_000L
+    while (shadowOf(application).peekNextStartedService() == null && System.currentTimeMillis() < deadline) Thread.sleep(10)
+    Thread.sleep(200)
+    return drainStartedServices()
   }
 
   private fun hasNotice(body: Int) =

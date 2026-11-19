@@ -63,6 +63,7 @@ mock.module("lucide-react-native", () => ({
   MapPinPenIcon: () => null,
   MapPinPlusIcon: () => null,
   PencilIcon: () => null,
+  RefreshCwIcon: () => null,
   ShieldIcon: () => null,
   SparklesIcon: () => null,
   UserMinusIcon: () => null,

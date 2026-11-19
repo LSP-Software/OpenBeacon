@@ -31,6 +31,7 @@ mock.module("lucide-react-native", () => ({
   MapPinPenIcon: icon("MapPinPen"),
   MapPinPlusIcon: icon("MapPinPlus"),
   PencilIcon: icon("Pencil"),
+  RefreshCwIcon: icon("RefreshCw"),
   ShieldIcon: icon("Shield"),
   SparklesIcon: icon("Sparkles"),
   UserMinusIcon: icon("UserMinus"),
