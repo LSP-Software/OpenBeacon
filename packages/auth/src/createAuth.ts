@@ -1,6 +1,7 @@
 import { expo } from "@better-auth/expo";
 import { Prisma, prisma as db, readDatabaseTime } from "@openbeacon/database";
 import { accountNameFromProfile, accountNameSchema } from "@openbeacon/schemas";
+import { googleSignInNonce } from "@openbeacon/shared";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import {
@@ -13,6 +14,10 @@ import { type EmailCodes, normalizeEmail } from "./emailCode.ts";
 import { emailCodePlugin } from "./emailCodePlugin.ts";
 import { env } from "./env.ts";
 import { verifyGoogleIdToken } from "./googleIdToken.ts";
+import {
+  createGoogleSignInChallenges,
+  googleSignInChallengePlugin,
+} from "./googleSignInChallenge.ts";
 import {
   type PasswordAttemptLimits,
   reservePasswordAttempt,
@@ -36,8 +41,20 @@ export const createAuth = ({
   runInBackground?: (task: Promise<unknown>) => void;
 }) => {
   const passwordChangeDevices = new Map<string, string>();
+  const google =
+    env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
+      ? {
+          clientId: env.GOOGLE_CLIENT_ID,
+          clientSecret: env.GOOGLE_CLIENT_SECRET,
+          challenges: createGoogleSignInChallenges({ db, secret: env.BETTER_AUTH_SECRET }),
+        }
+      : null;
   return betterAuth({
-    plugins: [expo(), emailCodePlugin(emailCodes)],
+    plugins: [
+      expo(),
+      emailCodePlugin(emailCodes),
+      googleSignInChallengePlugin(google?.challenges ?? null),
+    ],
     disabledPaths: [
       "/send-verification-email",
       "/verify-email",
@@ -257,25 +274,33 @@ export const createAuth = ({
         securityAlerts?.send(user.id, { type: "password-reset" });
       },
     },
-    socialProviders:
-      env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
-        ? {
-            google: {
-              clientId: env.GOOGLE_CLIENT_ID,
-              clientSecret: env.GOOGLE_CLIENT_SECRET,
-              scope: ["email", "profile"],
-              mapProfileToUser: () => ({ image: undefined }),
-              verifyIdToken: async (token, nonce) =>
-                (
-                  await verifyGoogleIdToken({
-                    token,
-                    audience: env.GOOGLE_CLIENT_ID ?? "",
-                    nonce,
-                  })
-                )?.["email_verified"] === true,
+    socialProviders: google
+      ? {
+          google: {
+            clientId: google.clientId,
+            clientSecret: google.clientSecret,
+            scope: ["email", "profile"],
+            mapProfileToUser: () => ({ image: undefined }),
+            verifyIdToken: async (token, challenge) => {
+              if (!challenge || !google.challenges.isGenuine(challenge)) return false;
+              const payload = await verifyGoogleIdToken({
+                token,
+                audience: google.clientId,
+                nonce: googleSignInNonce({ serverUrl: env.BETTER_AUTH_URL, challenge }),
+              });
+              if (payload === "wrong-nonce") {
+                console.warn(
+                  `[google-sign-in] refused a Google sign-in because the phone asked Google for it on behalf of a different server address. If phones can't sign in with Google, set BETTER_AUTH_URL to the exact address phones use, with the same scheme, host and port. It is ${new URL(env.BETTER_AUTH_URL).origin} now.`,
+                );
+                return false;
+              }
+              return (
+                payload?.["email_verified"] === true && (await google.challenges.use(challenge))
+              );
             },
-          }
-        : undefined,
+          },
+        }
+      : undefined,
     trustedOrigins: [
       "openbeacon://",
       ...(process.env["NODE_ENV"] === "development" ? ["exp://", "exp://**"] : []),

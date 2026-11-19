@@ -10,5 +10,8 @@
   "scripts": {
     "typecheck": "bun check",
     "test": "bun test --pass-with-no-tests --isolate"
+  },
+  "dependencies": {
+    "@noble/hashes": "^2.4.0"
   }
 }

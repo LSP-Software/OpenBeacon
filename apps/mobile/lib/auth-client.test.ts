@@ -103,3 +103,62 @@ test("a proxy page answered with 200 is treated as an unreachable server, never 
   expect(result.data).toBeNull();
   expect(result.error?.status).toBe(503);
 });
+
+const recordingRequests = async <Result>(send: () => Promise<Result>) => {
+  const requests: Array<{ url: string; headers: Headers }> = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    requests.push({ url: String(input), headers: new Headers(init?.headers) });
+    return new Response(JSON.stringify({ code: "INVALID_TOKEN", message: "Invalid token" }), {
+      status: 401,
+      headers: { "content-type": "application/json" },
+    });
+  }) as unknown as typeof fetch;
+  const result = await send().finally(() => {
+    globalThis.fetch = realFetch;
+  });
+  return { requests, result };
+};
+
+const signInWithGoogleTokenBoundTo = (boundServer: string) =>
+  recordingRequests(() =>
+    authClientModule.authClient.signIn.social({
+      provider: "google",
+      idToken: { token: "google-id-token", nonce: "challenge" },
+      fetchOptions: authClientModule.bindToServer(boundServer),
+    }),
+  );
+
+test("a Google token bound to one server is never sent to another", async () => {
+  await loadAuthClient("https://self-hosted.example.test");
+
+  const { requests, result } = await signInWithGoogleTokenBoundTo("https://hosted.example.test");
+
+  expect(requests).toEqual([]);
+  expect(result.error).toMatchObject({ status: 409, code: "SERVER_CHANGED" });
+});
+
+test("a Google token bound to the current server goes there without the binding header", async () => {
+  await loadAuthClient("https://hosted.example.test");
+
+  const { requests } = await signInWithGoogleTokenBoundTo("https://hosted.example.test");
+
+  expect(requests.map(({ url }) => url)).toEqual([
+    "https://hosted.example.test/api/auth/sign-in/social",
+  ]);
+  expect(requests[0]?.headers.has("x-openbeacon-bound-server")).toBe(false);
+});
+
+test("a Google challenge request bound to one server is never sent to another", async () => {
+  await loadAuthClient("https://self-hosted.example.test");
+
+  const { requests, result } = await recordingRequests(() =>
+    authClientModule.authClient.$fetch("/google-sign-in/challenge", {
+      method: "POST",
+      ...authClientModule.bindToServer("https://hosted.example.test"),
+    }),
+  );
+
+  expect(requests).toEqual([]);
+  expect(result.error).toMatchObject({ status: 409 });
+});

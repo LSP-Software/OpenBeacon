@@ -59,5 +59,7 @@ export const verifyGoogleDeletionCode = async ({
     audience: env.GOOGLE_CLIENT_ID,
     nonce,
   });
-  return typeof claims?.sub === "string" && claims.sub ? claims.sub : null;
+  return claims !== "wrong-nonce" && typeof claims?.sub === "string" && claims.sub
+    ? claims.sub
+    : null;
 };

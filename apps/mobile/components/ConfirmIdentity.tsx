@@ -121,7 +121,7 @@ export const ConfirmIdentity = ({ onConfirmed }: { onConfirmed: () => void }) =>
       return;
     }
     const result = await tryCatch(signInWithGoogle());
-    if (result.data && !("error" in result.data) && !("data" in result.data)) {
+    if (result.data && "cancelled" in result.data) {
       setPending(false);
       return;
     }

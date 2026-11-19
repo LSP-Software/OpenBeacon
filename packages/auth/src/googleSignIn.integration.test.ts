@@ -1,5 +1,6 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { generateKeyPairSync, sign } from "node:crypto";
+import { z } from "zod";
 
 process.env.GOOGLE_CLIENT_ID = "google-sign-in-test-client";
 process.env.GOOGLE_CLIENT_SECRET = "google-sign-in-test-secret";
@@ -7,6 +8,9 @@ process.env.GOOGLE_CLIENT_SECRET = "google-sign-in-test-secret";
 const { prisma } = await import("@openbeacon/database");
 const { createIntegrationTestCache } = await import("@openbeacon/cache/integration");
 const { clientIpHeader, createAuth } = await import("./createAuth.ts");
+const { createGoogleSignInChallenges } = await import("./googleSignInChallenge.ts");
+const { env } = await import("./env.ts");
+const { googleSignInNonce } = await import("@openbeacon/shared");
 
 const prefix = `google-sign-in-${crypto.randomUUID()}`;
 const originalFetch = globalThis.fetch;
@@ -45,8 +49,40 @@ const postSignInSocial = (body: unknown) =>
     }),
   );
 
-const signInWithGoogle = (email: string, claims: Record<string, unknown> = {}) =>
-  postSignInSocial({ provider: "google", idToken: { token: googleIdToken(email, claims) } });
+const requestChallenge = async () => {
+  const response = await auth.handler(
+    new Request("http://localhost:3000/api/auth/google-sign-in/challenge", {
+      method: "POST",
+      headers: { [clientIpHeader]: "192.0.2.1" },
+    }),
+  );
+  expect(response.status).toBe(200);
+  return z.object({ challenge: z.string() }).parse(await response.json()).challenge;
+};
+
+const serverUrl = env.BETTER_AUTH_URL;
+
+const signInWithChallenge = (
+  email: string,
+  challenge: string,
+  {
+    claims = {},
+    nonceServerUrl = serverUrl,
+  }: { claims?: Record<string, unknown>; nonceServerUrl?: string } = {},
+) =>
+  postSignInSocial({
+    provider: "google",
+    idToken: {
+      token: googleIdToken(email, {
+        nonce: googleSignInNonce({ serverUrl: nonceServerUrl, challenge }),
+        ...claims,
+      }),
+      nonce: challenge,
+    },
+  });
+
+const signInWithGoogle = async (email: string, claims: Record<string, unknown> = {}) =>
+  signInWithChallenge(email, await requestChallenge(), { claims });
 
 describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
   "Google sign-in with PostgreSQL",
@@ -129,6 +165,96 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         imageKeySealed: "sealed-copy",
       });
       expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).image).toBe(picture);
+    });
+
+    test("a token with no challenge, or a challenge but no nonce in the token, can't sign in", async () => {
+      const email = `${prefix}-no-nonce@example.test`;
+      const challenge = await requestChallenge();
+      const tokens = [
+        { token: googleIdToken(email) },
+        { token: googleIdToken(email, { nonce: challenge }) },
+        { token: googleIdToken(email), nonce: challenge },
+        {
+          token: googleIdToken(email, { nonce: googleSignInNonce({ serverUrl, challenge }) }),
+        },
+      ];
+      for (const idToken of tokens) {
+        expect((await postSignInSocial({ provider: "google", idToken })).status).toBe(401);
+      }
+      expect(await prisma.user.count({ where: { email } })).toBe(0);
+    });
+
+    test("a token another server asked Google for can't sign in here", async () => {
+      const email = `${prefix}-replay@example.test`;
+      const warn = spyOn(console, "warn").mockImplementation(() => {});
+      const relayed = await signInWithChallenge(email, await requestChallenge(), {
+        nonceServerUrl: "https://hostile.example",
+      });
+      const warnings = warn.mock.calls
+        .map((call) => String(call[0]))
+        .filter((message) => message.startsWith("[google-sign-in]"));
+      warn.mockRestore();
+      expect(relayed.status).toBe(401);
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain("BETTER_AUTH_URL");
+      expect(warnings[0]).not.toContain(email);
+
+      const otherServer = createGoogleSignInChallenges({ db: prisma, secret: "x".repeat(32) });
+      const foreign = await signInWithChallenge(email, await otherServer.issue());
+      expect(foreign.status).toBe(401);
+      expect(await prisma.user.count({ where: { email } })).toBe(0);
+    });
+
+    test("a challenge signs in once only", async () => {
+      const email = `${prefix}-reuse@example.test`;
+      const challenge = await requestChallenge();
+      const first = await signInWithChallenge(email, challenge);
+      expect(first.status).toBe(200);
+      const sessions = await prisma.session.count({ where: { user: { email } } });
+
+      expect((await signInWithChallenge(email, challenge)).status).toBe(401);
+      expect(
+        (await signInWithChallenge(email, challenge, { claims: { name: "Another Token" } })).status,
+      ).toBe(401);
+      expect(await prisma.session.count({ where: { user: { email } } })).toBe(sessions);
+    });
+
+    test("a token that fails verification leaves its challenge usable", async () => {
+      const email = `${prefix}-retry@example.test`;
+      const challenge = await requestChallenge();
+      expect(
+        (await signInWithChallenge(email, challenge, { claims: { aud: "other" } })).status,
+      ).toBe(401);
+      expect((await signInWithChallenge(email, challenge)).status).toBe(200);
+    });
+
+    test("an expired challenge can't sign in", async () => {
+      const email = `${prefix}-expired@example.test`;
+      const withLifetime = (lifetimeMs: number) =>
+        createGoogleSignInChallenges({ db: prisma, secret: env.BETTER_AUTH_SECRET, lifetimeMs });
+      const expired = await withLifetime(-1_000).issue();
+      const current = await withLifetime(60_000).issue();
+
+      expect((await signInWithChallenge(email, expired)).status).toBe(401);
+      expect(await prisma.user.count({ where: { email } })).toBe(0);
+      expect((await signInWithChallenge(email, current)).status).toBe(200);
+    });
+
+    test("a challenge with a changed expiry or signature can't be used", async () => {
+      const challenges = createGoogleSignInChallenges({
+        db: prisma,
+        secret: env.BETTER_AUTH_SECRET,
+      });
+      const [expiry, random, mac] = (await challenges.issue()).split(".");
+      const otherMac = mac?.startsWith("A") ? `B${mac.slice(1)}` : `A${mac?.slice(1) ?? ""}`;
+      for (const tampered of [
+        `${String(Number(expiry) + 60_000)}.${random}.${mac}`,
+        `${expiry}.${random}.${otherMac}`,
+        `${expiry}.${random}`,
+      ]) {
+        expect(await challenges.use(tampered)).toBe(false);
+      }
+      expect(await challenges.use(`${expiry}.${random}.${mac}`)).toBe(true);
     });
 
     test("Google can't be added to an account that signs in with a password", async () => {

@@ -1,6 +1,6 @@
-export const apiCompatibilityLevel = 14;
-export const minClientApiCompatibilityLevel = 14;
-export const minServerApiCompatibilityLevel = 14;
+export const apiCompatibilityLevel = 15;
+export const minClientApiCompatibilityLevel = 15;
+export const minServerApiCompatibilityLevel = 15;
 
 export const apiCompatibilityLevelHeader = "x-openbeacon-api-compatibility-level";
 export const minClientApiCompatibilityLevelHeader =
