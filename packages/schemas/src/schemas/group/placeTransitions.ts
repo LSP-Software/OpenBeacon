@@ -1,10 +1,11 @@
 import z from "zod";
+import { storableDateSchema } from "../storableDate.ts";
 
 export const placeTransitionSchema = z.object({
   clientId: z.uuid(),
   placeId: z.string().min(1).max(128),
   direction: z.enum(["ARRIVE", "LEAVE"]),
-  occurredAt: z.date(),
+  occurredAt: storableDateSchema,
   senderDeviceId: z.string().min(1).max(128),
 });
 
@@ -20,7 +21,7 @@ export const alertsCursorSchema = z
 
 export const recentPlaceTransitionsSchema = z.object({
   groupId: z.string().min(1),
-  before: z.object({ occurredAt: z.date(), id: z.string().min(1).max(128) }).optional(),
+  before: z.object({ occurredAt: storableDateSchema, id: z.string().min(1).max(128) }).optional(),
 });
 
 export const groupHistoryCategorySchema = z.enum([
@@ -33,7 +34,7 @@ export const groupHistoryCategorySchema = z.enum([
 
 export const groupHistorySchema = z.object({
   groupId: z.string().min(1),
-  before: z.object({ at: z.date(), id: z.string().min(1).max(128) }).optional(),
+  before: z.object({ at: storableDateSchema, id: z.string().min(1).max(128) }).optional(),
   categories: z.array(groupHistoryCategorySchema).min(1).max(5).optional(),
 });
 

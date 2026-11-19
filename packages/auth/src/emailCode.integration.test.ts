@@ -28,6 +28,7 @@ const alerts: { to: string; userId: string; alert: SecurityAlert }[] = [];
 let alertFailure: Error | null = null;
 
 const codes = createEmailCodes({
+  minCheckMs: 0,
   db: prisma,
   secret: "integration-email-code-secret-000000000000",
   rateLimits: createIntegrationTestCache(() => clockMs).rateLimits,
@@ -227,6 +228,28 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("email codes", ()
     });
   });
 
+  test("a wrong code takes the minimum check time whether or not a code is on file", async () => {
+    const timedCodes = createEmailCodes({
+      minCheckMs: 100,
+      db: prisma,
+      secret: "integration-email-code-secret-000000000000",
+      rateLimits: createIntegrationTestCache(() => clockMs).rateLimits,
+      sendCodeEmail: async () => {},
+      sendAccountExistsEmail: async () => {},
+      sendGoogleSignInEmail: async () => {},
+      now: () => new Date(clockMs),
+    });
+    const withCode = nextAddress("timed-with-code");
+    const code = await issueCode("password-reset", withCode);
+    for (const subject of [withCode, nextAddress("timed-without-code")]) {
+      const startedAt = performance.now();
+      expect(
+        await timedCodes.check({ purpose: "password-reset", subject, code: wrongCodeFor(code) }),
+      ).toEqual({ valid: false, reason: "invalid" });
+      expect(performance.now() - startedAt).toBeGreaterThanOrEqual(99);
+    }
+  });
+
   test("an expired code is rejected and removed", async () => {
     const subject = nextAddress("expired");
     const code = await issueCode("sign-up", subject);
@@ -410,6 +433,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("email codes", ()
   test("a check that can't reserve a wrong guess is refused without using the code", async () => {
     const subject = nextAddress("capped-redis-down");
     const flakyCodes = createEmailCodes({
+      minCheckMs: 0,
       db: prisma,
       secret: "integration-email-code-secret-000000000000",
       rateLimits: {
@@ -462,6 +486,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("email codes", ()
       lockFree.push(lock?.acquired === true);
     };
     const probedCodes = createEmailCodes({
+      minCheckMs: 0,
       db: prisma,
       secret: "integration-email-code-secret-000000000000",
       rateLimits: {

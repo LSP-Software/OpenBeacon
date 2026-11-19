@@ -21,6 +21,7 @@ const tasks: Promise<unknown>[] = [];
 
 const rateLimits = createIntegrationTestCache(() => clockMs).rateLimits;
 const codes = createEmailCodes({
+  minCheckMs: 0,
   db: prisma,
   secret: "integration-sign-in-code-secret-0000000000",
   rateLimits,

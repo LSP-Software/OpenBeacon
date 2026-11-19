@@ -113,6 +113,7 @@ const staleSessionCreatedAt = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
 
 const sent: { to: string; purpose: string; code: string; userId?: string }[] = [];
 const emailCodes = createEmailCodes({
+  minCheckMs: 0,
   db: prisma,
   secret: "integration-email-code-secret-000000000000",
   rateLimits: createIntegrationTestCache(() => 0).rateLimits,

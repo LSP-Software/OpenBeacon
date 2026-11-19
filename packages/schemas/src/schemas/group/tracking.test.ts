@@ -160,6 +160,17 @@ describe("groupTrackingPollSchema", () => {
     });
   });
 
+  test("refuses a cursor date the database can't store", () => {
+    const pollFrom = (updatedAt: Date) =>
+      groupTrackingPollSchema.safeParse({
+        groupId: "group-1",
+        cursor: { senderDeviceId: "device-1", updatedAt },
+      }).success;
+    expect(pollFrom(new Date(-8.64e15))).toBe(false);
+    expect(pollFrom(new Date(8.64e15))).toBe(false);
+    expect(pollFrom(new Date("2026-11-19T02:00:00.000Z"))).toBe(true);
+  });
+
   test("rejects limit above 500", () => {
     expect(() =>
       groupTrackingPollSchema.parse({
