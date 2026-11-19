@@ -19,6 +19,7 @@ import { forgetHiddenMapGroup, setMapGroupHidden } from "../../lib/hiddenMapGrou
 import { canHideMapGroups } from "../../lib/mapGroupVisibility.ts";
 import { requestTrackingSync } from "../../lib/trackingEvents.ts";
 import { userMessage } from "../../lib/userMessage.ts";
+import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 
 const SettingsTab = ({ groupId }: { groupId: string }) => {
   const { data: session } = authClient.useSession();
@@ -52,7 +53,7 @@ const SettingsTab = ({ groupId }: { groupId: string }) => {
             onPress={async () => {
               const result = await tryCatch(rename.mutateAsync({ groupId, name }));
               if (result.error) {
-                Alert.alert("Unable to rename group", userMessage(result.error));
+                Alert.alert("Couldn’t rename group", userMessage(result.error));
                 return;
               }
               await queryClient.invalidateQueries({
@@ -87,8 +88,8 @@ const SettingsTab = ({ groupId }: { groupId: string }) => {
           <View className="flex-1 gap-1">
             <Text className="text-foreground font-medium">Show on map</Text>
             <Text className="text-tertiary text-sm">
-              Only changes this phone. Members can still see you, and you keep sharing your location
-              with them.
+              Only changes this {thisDeviceNoun()}. Members can still see you, and you keep sharing
+              your location with them.
             </Text>
           </View>
           <Switch
@@ -116,7 +117,7 @@ const SettingsTab = ({ groupId }: { groupId: string }) => {
                   onPress: async () => {
                     const result = await tryCatch(deleteGroup.mutateAsync({ groupId }));
                     if (result.error) {
-                      Alert.alert("Unable to delete group", userMessage(result.error));
+                      Alert.alert("Couldn’t delete group", userMessage(result.error));
                       return;
                     }
                     if (session) forgetHiddenMapGroup({ groupId, userId: session.user.id });

@@ -39,7 +39,7 @@ export const processImage = async (uri: string) => {
   );
   cleanupTempFile(uri);
   if (result.error) {
-    Alert.alert("Unable to process that picture", result.error.message);
+    Alert.alert("Couldn’t process that picture", result.error.message);
     return null;
   }
   return result.data;

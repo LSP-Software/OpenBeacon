@@ -41,6 +41,7 @@ import { timeSince } from "../../lib/timeSince.ts";
 import { requestTrackingSync } from "../../lib/trackingEvents.ts";
 import { useSingleFlight } from "../../lib/useSingleFlight.ts";
 import { userMessage } from "../../lib/userMessage.ts";
+import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 
 const MembersTab = ({
   groupId,
@@ -188,7 +189,7 @@ const MembersTab = ({
               }),
             );
             if (result.error) {
-              Alert.alert("Unable to update group", userMessage(result.error));
+              Alert.alert("Couldn’t update group", userMessage(result.error));
             }
           },
         },
@@ -219,8 +220,8 @@ const MembersTab = ({
             <DialogTitle>Set nickname for {nicknameMember?.name}</DialogTitle>
           </DialogHeader>
           <Text>
-            Only you can see this nickname. It’s encrypted before it leaves this phone, and your
-            other phones can read it too. Leave it blank to use their profile name.
+            Only you can see this nickname. It’s encrypted before it leaves this {thisDeviceNoun()},
+            and your other phones can read it too. Leave it blank to use their profile name.
           </Text>
           {nicknameQuery.isError && (
             <Text>Unable to load nicknames. Try again before making changes.</Text>
@@ -270,7 +271,7 @@ const MembersTab = ({
                   await queryClient.invalidateQueries({
                     queryKey: ["personalNicknames", groupId, session?.user.id],
                   });
-                  Alert.alert("Unable to save nickname", userMessage(result.error));
+                  Alert.alert("Couldn’t save nickname", userMessage(result.error));
                   return;
                 }
                 await queryClient.invalidateQueries({
@@ -445,7 +446,7 @@ const MembersTab = ({
                             );
                             if (result.error) {
                               setChangingRole(null);
-                              Alert.alert("Unable to change role", userMessage(result.error));
+                              Alert.alert("Couldn’t change role", userMessage(result.error));
                               return;
                             }
                             await queryClient.invalidateQueries({

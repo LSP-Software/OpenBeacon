@@ -349,7 +349,7 @@ test("any other join failure says it couldn't join", async () => {
   acceptError = refusal("INTERNAL_SERVER_ERROR", "Something broke");
   const root = await render(email);
   await press(root, "Join group");
-  expect(alerts).toEqual(["Unable to join"]);
+  expect(alerts).toEqual(["Couldn’t join"]);
   expect(dismissals).toEqual([]);
 });
 
@@ -368,7 +368,7 @@ test("No on an email invite declines it", async () => {
 test("a failed decline stays on the invite", async () => {
   declineError = new Error("offline");
   await press(await render(email), "No");
-  expect(alerts).toEqual(["Unable to decline invite"]);
+  expect(alerts).toEqual(["Couldn’t decline invite"]);
   expect(dismissals).toEqual([]);
 });
 

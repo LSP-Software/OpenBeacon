@@ -28,6 +28,7 @@ import { type RouterOutputs, trpc } from "../../../lib/api.ts";
 import { cn } from "../../../lib/cn.ts";
 import { getGroupColor } from "../../../lib/groupColor.ts";
 import { initials } from "../../../lib/initials.ts";
+import { thisDeviceNoun } from "../../../lib/thisDeviceNoun.ts";
 
 export default function GroupsScreen() {
   const [createGroupDialogOpen, setCreateGroupDialogOpen] = useState(false);
@@ -180,8 +181,8 @@ export const GroupList = ({
         <View className="flex-row items-center gap-3 rounded-2xl border border-border bg-card p-4">
           <Icon as={LockIcon} className="text-secondary size-5" />
           <Text className="text-secondary flex-1 text-sm">
-            Your location is encrypted on this phone before it’s sent, and only your groups can
-            decrypt it.
+            Your location is encrypted on this {thisDeviceNoun()} before it’s sent, and only your
+            groups can decrypt it.
           </Text>
         </View>
       </View>

@@ -53,6 +53,7 @@ import { resolveSelfDeviceLocationFallback } from "../../../lib/resolveSelfDevic
 import { storage } from "../../../lib/storage.ts";
 import { TAB_BAR_CONTENT_HEIGHT } from "../../../lib/tabBarLayout.ts";
 import { dismissTrackingQueueEviction, getTrackingQueueEviction } from "../../../lib/tracking.ts";
+import { thisDeviceNoun } from "../../../lib/thisDeviceNoun.ts";
 
 const keyBannerDismissedKey = (userId: string, groupId: string) =>
   `map.keyBannerDismissed.${userId}.${groupId}`;
@@ -448,8 +449,8 @@ const MapScreen = () => {
               Some location history was removed
             </Text>
             <Text>
-              This phone was offline long enough to fill its 10 MB upload queue. To keep sharing
-              your latest location, history queued between{" "}
+              This {thisDeviceNoun()} was offline long enough to fill its 10 MB upload queue. To
+              keep sharing your latest location, history queued between{" "}
               {new Date(queueEviction.oldestQueuedAt).toLocaleString(undefined, {
                 dateStyle: "medium",
                 timeStyle: "short",
@@ -482,8 +483,8 @@ const MapScreen = () => {
                 Can’t show locations for {group.name}
               </Text>
               <Text>
-                This phone can’t access the group’s encryption key. Group locations may be
-                unavailable.
+                This {thisDeviceNoun()} can’t access the group’s encryption key. Group locations may
+                be unavailable.
               </Text>
               <View className="flex-row flex-wrap items-center gap-3">
                 <Link

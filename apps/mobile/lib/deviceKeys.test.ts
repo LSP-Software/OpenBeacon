@@ -37,7 +37,11 @@ const setItemAsyncMock = mock(async (key: string, value: string) => {
 
 mock.module("react-native", () => createReactNativeTestModule({ platformOS: "android" }));
 
-mock.module("expo-device", () => ({ modelName: "Pixel 8" }));
+mock.module("expo-device", () => ({
+  DeviceType: { PHONE: 1, TABLET: 2 },
+  deviceType: 1,
+  modelName: "Pixel 8",
+}));
 
 mock.module("expo-secure-store", () => ({
   WHEN_UNLOCKED_THIS_DEVICE_ONLY: "when-unlocked-this-device-only",

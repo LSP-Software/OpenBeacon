@@ -61,6 +61,7 @@ import {
   timelineRoute,
 } from "../lib/timelineMap.ts";
 import type { TimelineSender } from "../lib/timelineTypes.ts";
+import { thisDeviceNoun } from "../lib/thisDeviceNoun.ts";
 
 const SPEEDS = [60, 300, 900] as const;
 const STEP_MS = 15 * 60_000;
@@ -110,7 +111,7 @@ const TimelineScreen = () => {
     return (
       <View className="flex-1 items-center justify-center gap-4 bg-background px-8">
         <Text className="text-center text-foreground">
-          This group isn’t available on this phone.
+          This group isn’t available on this {thisDeviceNoun()}.
         </Text>
         <Button variant="secondary" onPress={close}>
           <Text>Go back</Text>
@@ -1112,8 +1113,8 @@ const TimelineView = ({
             {undecryptable > 0 ? (
               <Text className="text-xs text-secondary">
                 {undecryptable === 1
-                  ? "1 location couldn’t be decrypted on this phone, so it’s left out."
-                  : `${undecryptable.toLocaleString()} locations couldn’t be decrypted on this phone, so they’re left out.`}
+                  ? `1 location couldn’t be decrypted on this ${thisDeviceNoun()}, so it’s left out.`
+                  : `${undecryptable.toLocaleString()} locations couldn’t be decrypted on this ${thisDeviceNoun()}, so they’re left out.`}
               </Text>
             ) : null}
           </View>

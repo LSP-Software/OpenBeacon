@@ -17,6 +17,7 @@ import { errorReason } from "./errorReason.ts";
 import { SERVER_UNREACHABLE_MESSAGE } from "./serverUnreachable.ts";
 import { storage } from "./storage.ts";
 import { requestTrackingSync } from "./trackingEvents.ts";
+import { thisDeviceNoun } from "./thisDeviceNoun.ts";
 
 const pendingPrefix = "locationSharing.pending.";
 const pendingKey = (userId: string, scope: "device" | "account") =>
@@ -290,7 +291,7 @@ export const changeLocationSharing = async (input: {
   latestScopeRevisions.set(input.scope, revision);
   const requestedGeneration = generation;
   const device = await getRegisteredDeviceKey();
-  if (!device) throw new Error("This device isn’t registered yet.");
+  if (!device) throw new Error(`This ${thisDeviceNoun()} isn’t registered yet.`);
   if (generation !== requestedGeneration) throw new Error("You’ve signed out.");
   const deviceId = input.deviceId ?? device.deviceId;
   const affectsThisDevice = input.scope === "account" || deviceId === device.deviceId;

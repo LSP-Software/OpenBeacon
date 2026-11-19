@@ -14,6 +14,7 @@ import { Text } from "../components/ui/Text.tsx";
 import { checkServerCompatibility } from "../lib/apiCompatibility.ts";
 import { changeServer } from "../lib/changeServer.ts";
 import { getServerUrl, hasCustomServerUrl, normaliseServerUrl } from "../lib/currentServer.ts";
+import { thisDeviceNoun } from "../lib/thisDeviceNoun.ts";
 
 const serverUrlSchema = z.object({
   url: z.string().superRefine((url, context) => {
@@ -115,7 +116,7 @@ export default function ServerUrl() {
 
             <View className="rounded-xl bg-secondary p-4">
               <Text className="text-sm text-secondary">
-                Changing server signs you out on this phone.
+                Changing server signs you out on this {thisDeviceNoun()}.
               </Text>
             </View>
 

@@ -33,6 +33,7 @@ import { groupPlacesQueryKey, groupPlacesQueryOptions } from "../../lib/placeSyn
 import { registeredDeviceQueryOptions } from "../../lib/registeredDevice.ts";
 import { storage } from "../../lib/storage.ts";
 import { userMessage } from "../../lib/userMessage.ts";
+import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 
 const PlacesTab = ({
   groupId,
@@ -144,8 +145,7 @@ const PlacesTab = ({
       <View className="flex-row gap-3 rounded-2xl border border-warning-border bg-warning p-4">
         <Icon as={InfoIcon} size={20} className="mt-0.5 text-warning-text" />
         <Text className="flex-1 text-warning-text">
-          Arrivals and departures are off on this phone. {groupName} sees “Arrivals off” for{" "}
-          {thisDeviceName ? `your ${thisDeviceName}` : "this phone"}.
+          {`Arrivals and departures are off on this ${thisDeviceNoun()}. ${groupName} sees “Arrivals off” for ${thisDeviceName ? `your ${thisDeviceName}` : `this ${thisDeviceNoun()}`}.`}
         </Text>
       </View>
     ) : null;
@@ -157,7 +157,7 @@ const PlacesTab = ({
         <Text className="text-sm text-tertiary">
           {sharing.isError
             ? "Couldn’t load this setting."
-            : `Only this phone. When it arrives at or leaves a place, ${groupName} gets an alert.`}
+            : `Only this ${thisDeviceNoun()}. When it arrives at or leaves a place, ${groupName} gets an alert.`}
         </Text>
       </View>
       {sharing.isError ? (
@@ -181,7 +181,7 @@ const PlacesTab = ({
           onValueChange={async (enabled) => {
             const result = await tryCatch(setSharing.mutateAsync({ groupId, enabled }));
             if (result.error) {
-              Alert.alert("Unable to change this setting", userMessage(result.error));
+              Alert.alert("Couldn’t change this setting", userMessage(result.error));
               return;
             }
             queryClient.setQueryData(

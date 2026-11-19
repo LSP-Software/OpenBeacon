@@ -4,6 +4,7 @@ import type { MapGroupOption } from "../../lib/mapPeopleTypes.ts";
 import { Icon } from "../ui/Icon.tsx";
 import { Switch } from "../ui/Switch.tsx";
 import { Text } from "../ui/Text.tsx";
+import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 
 export const LiveMapGroupMenu = ({
   groups,
@@ -60,7 +61,7 @@ export const LiveMapGroupMenu = ({
       ))}
     </ScrollView>
     <Text className="mx-4 mb-1.5 mt-1 border-t border-border pt-2.5 text-xs text-secondary">
-      Only changes this phone. You still share your location with hidden groups.
+      Only changes this {thisDeviceNoun()}. You still share your location with hidden groups.
     </Text>
   </View>
 );

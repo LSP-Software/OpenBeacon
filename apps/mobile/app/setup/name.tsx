@@ -62,7 +62,7 @@ const NameThisPhoneScreen = () => {
     const result = await tryCatch(updateDevice.mutateAsync({ deviceId: thisPhone.id, name, icon }));
     saving.current = false;
     if (result.error) {
-      Alert.alert("Unable to save the name", userMessage(result.error));
+      Alert.alert("Couldn’t save the name", userMessage(result.error));
       return;
     }
     await queryClient.invalidateQueries({

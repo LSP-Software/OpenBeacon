@@ -21,6 +21,7 @@ import { getStoredHistoryKey, storeHistoryKey } from "./historyKeys.ts";
 import { needsFreshSignIn } from "./needsFreshSignIn.ts";
 import { deleteSavedDeviceLink } from "./savedDeviceLink.ts";
 import { secretOwner } from "./secretStorage.ts";
+import { thisDeviceNoun } from "./thisDeviceNoun.ts";
 
 export const pickConfirmationIndexes = () => {
   const indexes = new Set<number>();
@@ -82,10 +83,8 @@ const createRecoveryKeys = ({
   return { historyPrivateKey: historyKey.privateKey, input };
 };
 
-export const HISTORY_KEY_ON_OTHER_DEVICE_MESSAGE =
-  "This phone doesn’t have your account’s history key yet. Set up your recovery phrase on your other phone.";
-export const SETUP_KEYS_MISMATCH_MESSAGE =
-  "This phone’s saved keys don’t match your account, so your phrase wasn’t set up.";
+export const HISTORY_KEY_ON_OTHER_DEVICE_MESSAGE = `This ${thisDeviceNoun()} doesn’t have your account’s history key yet. Set up your recovery phrase on your other phone.`;
+export const SETUP_KEYS_MISMATCH_MESSAGE = `This ${thisDeviceNoun()}’s saved keys don’t match your account, so your phrase wasn’t set up.`;
 
 const sealEscrowsForHeldKeys = async ({
   historyKeys,
@@ -181,7 +180,7 @@ export const backfillHistoryWraps = async ({
     const storedHistoryKey = await getStoredHistoryKey(historyKey);
     if (!storedHistoryKey) return wrapped;
     if (getHistoryPublicKey(storedHistoryKey) !== historyKey.publicKey) {
-      throw new Error("The server’s history key doesn’t match this device.");
+      throw new Error(`The server’s history key doesn’t match this ${thisDeviceNoun()}.`);
     }
     const wraps = [];
     for (const { deviceWrap, epochId } of page.epochs) {
@@ -258,10 +257,8 @@ export const restoreFromRecoveryPhrase = async (phrase: RecoveryPhrase) => {
   return { userId: device.userId, versions };
 };
 
-export const MISSING_HISTORY_KEYS_MESSAGE =
-  "This phone needs your current recovery phrase first. Restore it, then try again.";
-export const HISTORY_KEYS_MISMATCH_MESSAGE =
-  "This phone’s saved keys don’t match your account, so your phrase wasn’t changed. Restore your current recovery phrase, then try again.";
+export const MISSING_HISTORY_KEYS_MESSAGE = `This ${thisDeviceNoun()} needs your current recovery phrase first. Restore it, then try again.`;
+export const HISTORY_KEYS_MISMATCH_MESSAGE = `This ${thisDeviceNoun()}’s saved keys don’t match your account, so your phrase wasn’t changed. Restore your current recovery phrase, then try again.`;
 export const RECOVERY_CHANGED_MESSAGE =
   "Your recovery phrase changed on another phone, so nothing was changed here. Go back and try again.";
 

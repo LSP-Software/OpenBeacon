@@ -212,7 +212,7 @@ test("a failed change rolls back only its own switch and a slow reply doesn't un
   options.onError(new Error("offline"), signIn, signInContext);
   expect(phoneOf("NEW_SIGN_IN")).toBe(true);
   expect(phoneOf("MEMBER_JOINED")).toBe(false);
-  expect(alerts).toEqual(["Unable to save your notification settings"]);
+  expect(alerts).toEqual(["Couldn’t save your notification settings"]);
 
   options.onSuccess(settingsFor(true));
   expect(phoneOf("MEMBER_JOINED")).toBe(false);

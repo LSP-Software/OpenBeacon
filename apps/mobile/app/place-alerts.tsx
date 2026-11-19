@@ -20,6 +20,7 @@ import { authClient } from "../lib/auth-client.ts";
 import { initials } from "../lib/initials.ts";
 import { placeMuteState } from "../lib/placeAlertMutes.ts";
 import { groupPlacesQueryOptions } from "../lib/placeSync.ts";
+import { thisDeviceNoun } from "../lib/thisDeviceNoun.ts";
 
 const PlaceAlertsScreen = () => {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
@@ -50,7 +51,7 @@ const PlaceAlertsScreen = () => {
         </Text>
 
         {cachedGroup.isMissing ? (
-          <Text>This group isn’t available on this phone.</Text>
+          <Text>{`This group isn’t available on this ${thisDeviceNoun()}.`}</Text>
         ) : cachedGroup.isError ? (
           <View className="gap-3">
             <Text>Couldn’t load your groups. Check your connection and try again.</Text>

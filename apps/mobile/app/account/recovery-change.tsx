@@ -32,7 +32,7 @@ const RecoveryPhraseChangeScreen = () => {
     const result = await tryCatch(changeRecoveryPhrase(phrase));
     if (result.error) {
       setStep("phrase");
-      Alert.alert("Unable to change recovery phrase", userMessage(result.error));
+      Alert.alert("Couldn’t change recovery phrase", userMessage(result.error));
       return;
     }
     if (result.data.status === "reauthenticate") {

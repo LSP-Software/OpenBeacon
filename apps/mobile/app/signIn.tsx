@@ -81,7 +81,7 @@ const SignIn = () => {
       return outcome;
     }
     if (sessionSetupResult.error) {
-      Alert.alert("Unable to finish sign in", sessionSetupResult.error.message);
+      Alert.alert("Couldn’t finish sign in", sessionSetupResult.error.message);
       setEmailLoading(false);
       return outcome;
     }
@@ -113,7 +113,7 @@ const SignIn = () => {
       return;
     }
     if (outcome.kind === "wrongPassword" || outcome.kind === "failed") {
-      Alert.alert("Sign in failed", outcome.message);
+      Alert.alert("Couldn’t sign in", outcome.message);
     }
   };
 
@@ -122,7 +122,7 @@ const SignIn = () => {
     if (outcome.kind === "wrongPassword") {
       setSignInCode(null);
       form.setValue("password", "");
-      Alert.alert("Sign in failed", outcome.message);
+      Alert.alert("Couldn’t sign in", outcome.message);
       return undefined;
     }
     if (outcome.kind === "failed" && outcome.code === "EMAIL_NOT_VERIFIED") {
@@ -135,7 +135,7 @@ const SignIn = () => {
   const handleGoogleSignIn = async () => {
     await performGoogleAuth({
       setLoading: setGoogleLoading,
-      failureTitle: "Google sign in failed",
+      failureTitle: "Couldn’t sign in with Google",
       onSuccess: finishSignIn,
       alert: Alert.alert,
     });

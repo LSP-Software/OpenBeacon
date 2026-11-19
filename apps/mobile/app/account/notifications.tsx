@@ -13,6 +13,7 @@ import { trpc } from "../../lib/api.ts";
 import { cn } from "../../lib/cn.ts";
 import { useNotificationSettings } from "../../lib/notifications.ts";
 import { userMessage } from "../../lib/userMessage.ts";
+import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 
 const sections = [
   { key: "places", title: "Places" },
@@ -64,7 +65,7 @@ const NotificationsScreen = () => {
       },
       onError: (error, { type, channel }, context) => {
         if (typeof context?.previous === "boolean") setCell(type, channel, context.previous);
-        Alert.alert("Unable to save your notification settings", userMessage(error));
+        Alert.alert("Couldn’t save your notification settings", userMessage(error));
       },
     }),
     networkMode: "always",
@@ -104,7 +105,7 @@ const NotificationsScreen = () => {
             icon={BellOffIcon}
             tone="warning"
             title="Notifications are off"
-            description="This phone can’t show any of the notifications below, show that it’s sharing your location, or tell you if sharing stops."
+            description={`This ${thisDeviceNoun()} can’t show any of the notifications below, show that it’s sharing your location, or tell you if sharing stops.`}
           >
             <Button size="sm" onPress={notifications.turnOn} loading={notifications.turningOn}>
               <Text>Turn on notifications</Text>

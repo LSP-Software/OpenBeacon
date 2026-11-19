@@ -17,6 +17,7 @@ import { trpc } from "../../lib/api.ts";
 import { protectHistory } from "../../lib/protectHistory.ts";
 import { setUpRecoveryPhrase } from "../../lib/recovery.ts";
 import { userMessage } from "../../lib/userMessage.ts";
+import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 
 const RecoveryPhraseSetupScreen = () => {
   const queryClient = useQueryClient();
@@ -38,7 +39,7 @@ const RecoveryPhraseSetupScreen = () => {
     const result = await tryCatch(setUpRecoveryPhrase(phrase));
     if (result.error) {
       setStep("phrase");
-      Alert.alert("Unable to set up recovery phrase", userMessage(result.error));
+      Alert.alert("Couldn’t set up recovery phrase", userMessage(result.error));
       return;
     }
     if (result.data.status === "reauthenticate") {
@@ -118,7 +119,8 @@ const RecoveryPhraseSetupScreen = () => {
             <View className="gap-4">
               <Text className="text-foreground text-2xl font-bold">Your phrase is set up</Text>
               <Text className="text-secondary text-base">
-                Use it to get your location history back if you lose or replace your phone.
+                Use it to get your location history back if you lose or replace your{" "}
+                {thisDeviceNoun()}.
               </Text>
               {progress.failed > 0 && (
                 <Text className="text-secondary text-base">

@@ -108,7 +108,7 @@ const RecoveryRestoreScreen = () => {
     const result = await tryCatch(restoreFromRecoveryPhrase(parsed.data));
     if (result.error) {
       setStep("enter");
-      Alert.alert("Unable to restore", userMessage(result.error));
+      Alert.alert("Couldn’t restore", userMessage(result.error));
       return;
     }
     setWords(emptyWords());
@@ -238,7 +238,7 @@ const RecoveryRestoreScreen = () => {
             <View className="gap-4">
               <Text className="text-foreground text-2xl font-bold">Your history is restored</Text>
               <Text className="text-secondary text-base">
-                This phone can now read the history your recovery phrase protects.
+                This {thisDeviceNoun()} can now read the history your recovery phrase protects.
               </Text>
               <RecoveryCoverage userId={userId} />
               <Button onPress={() => router.back()}>

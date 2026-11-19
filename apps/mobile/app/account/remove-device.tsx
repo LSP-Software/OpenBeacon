@@ -18,7 +18,7 @@ const RemoveDeviceScreen = () => {
   const { deviceId } = useLocalSearchParams<{ deviceId: string }>();
   const devices = useQuery(trpc.account.listDevices.queryOptions());
   const device = devices.data?.find((item) => item.id === deviceId);
-  const name = device?.name ?? "this device";
+  const name = device?.name ?? "the device";
   const [step, setStep] = useState<"verify" | "ready" | "removing">("verify");
   const gate = useIdentityGate();
   const navigation = useNavigation();
@@ -46,7 +46,7 @@ const RemoveDeviceScreen = () => {
     }
     if (result.error) {
       setStep("ready");
-      Alert.alert("Unable to remove device", userMessage(result.error));
+      Alert.alert("Couldn’t remove device", userMessage(result.error));
       return;
     }
     await queryClient.invalidateQueries({ queryKey: trpc.account.listDevices.queryKey() });
@@ -105,7 +105,7 @@ const RemoveDeviceScreen = () => {
             </>
           )}
           {devices.data && !device && step !== "removing" && (
-            <Text className="text-tertiary">This device is no longer on your account.</Text>
+            <Text className="text-tertiary">That device is no longer on your account.</Text>
           )}
           {device && step === "verify" && gate.decision === null && <LoadingIndicator />}
           {device && step === "verify" && gate.decision === "confirm" && (

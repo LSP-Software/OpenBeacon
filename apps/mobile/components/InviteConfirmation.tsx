@@ -87,7 +87,7 @@ export const InviteConfirmation = ({
         return;
       }
       if (result.error) {
-        Alert.alert("Unable to join", userMessage(result.error));
+        Alert.alert("Couldn’t join", userMessage(result.error));
         return;
       }
       const joinedGroupId = preview.data?.group.id;
@@ -106,7 +106,7 @@ export const InviteConfirmation = ({
           trpcClient.groupInvites.decline.mutate({ inviteId: invite.inviteId }),
         );
         if (result.error && !isNotFound(result.error)) {
-          Alert.alert("Unable to decline invite", userMessage(result.error));
+          Alert.alert("Couldn’t decline invite", userMessage(result.error));
           return;
         }
         await refreshInvites();

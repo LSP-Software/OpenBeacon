@@ -23,6 +23,7 @@ import {
   requestForegroundLocationPermissions,
 } from "../lib/locationPermissions.ts";
 import { dismissNotice } from "../lib/notifications.ts";
+import { thisDeviceNoun } from "../lib/thisDeviceNoun.ts";
 
 const LocationPermissionContext = createContext<{
   permissionState: LocationPermissionState | null;
@@ -145,7 +146,7 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
               where you are even when you are not actively using the app.{" "}
               {canAskInApp
                 ? "The app will ask for that access next."
-                : "You can update location access in your device settings."}
+                : `You can update location access in your ${thisDeviceNoun()} settings.`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

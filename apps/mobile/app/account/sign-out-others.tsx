@@ -13,6 +13,7 @@ import { Alert } from "../../lib/alert.ts";
 import { trpc } from "../../lib/api.ts";
 import { needsFreshSignIn } from "../../lib/needsFreshSignIn.ts";
 import { userMessage } from "../../lib/userMessage.ts";
+import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 
 const SignOutOtherSessionsScreen = () => {
   const [step, setStep] = useState<"verify" | "ready" | "signingOut">("verify");
@@ -41,7 +42,7 @@ const SignOutOtherSessionsScreen = () => {
     }
     if (result.error) {
       setStep("ready");
-      Alert.alert("Unable to sign out other sessions", userMessage(result.error));
+      Alert.alert("Couldn’t sign out other sessions", userMessage(result.error));
       return;
     }
     if (navigation.isFocused()) router.back();
@@ -51,14 +52,14 @@ const SignOutOtherSessionsScreen = () => {
     }
     Alert.alert(
       "Other sessions signed out",
-      "Every other session has been signed out. This device is still signed in.",
+      `Every other session has been signed out. This ${thisDeviceNoun()} is still signed in.`,
     );
   };
 
   const confirmSignOut = () =>
     Alert.alert(
-      "Sign out of all other sessions?",
-      "Every session except this device will be signed out.",
+      "Sign out other sessions?",
+      `Every session except this ${thisDeviceNoun()} will be signed out.`,
       [
         { text: "Cancel", style: "cancel" },
         { text: "Sign out others", style: "destructive", onPress: signOut },
@@ -67,7 +68,7 @@ const SignOutOtherSessionsScreen = () => {
 
   return (
     <View className="flex-1 bg-background">
-      <ScreenHeader title="Sign out others" hideBack={step === "signingOut"} />
+      <ScreenHeader title="Sign out other sessions" hideBack={step === "signingOut"} />
 
       <KeyboardAvoidingView
         className="flex-1"
@@ -82,8 +83,8 @@ const SignOutOtherSessionsScreen = () => {
           <View className="gap-2">
             <Text className="text-secondary text-base">
               Each phone or tablet where you’re signed in is a session. This signs out every session
-              except this device. Use it if you’ve lost a phone or tablet, or think someone else is
-              signed in.
+              except this {thisDeviceNoun()}. Use it if you’ve lost a phone or tablet, or think
+              someone else is signed in.
             </Text>
             <Text className="text-secondary text-base">
               Signed-out phones and tablets still show under Devices on the Account tab, but they
@@ -123,9 +124,7 @@ const SignOutOtherSessionsScreen = () => {
 
           {(step === "ready" || step === "signingOut") && (
             <Button variant="destructive" onPress={confirmSignOut} disabled={step === "signingOut"}>
-              <Text>
-                {step === "signingOut" ? "Signing out…" : "Sign out of all other sessions"}
-              </Text>
+              <Text>{step === "signingOut" ? "Signing out…" : "Sign out other sessions"}</Text>
             </Button>
           )}
         </ScrollView>

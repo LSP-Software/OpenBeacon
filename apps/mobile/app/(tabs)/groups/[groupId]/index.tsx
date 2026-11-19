@@ -25,6 +25,7 @@ import HistoryTab from "../../../../components/groups/HistoryTab.tsx";
 import MembersTab from "../../../../components/groups/MembersTab.tsx";
 import PlacesTab from "../../../../components/groups/PlacesTab.tsx";
 import SettingsTab from "../../../../components/groups/SettingsTab.tsx";
+import { thisDeviceNoun } from "../../../../lib/thisDeviceNoun.ts";
 
 type GroupTabValue = "members" | "places" | "history" | "settings";
 
@@ -178,22 +179,22 @@ const GroupBody = ({ groupId, initialTab }: { groupId: string; initialTab: Group
           {keyAccess?.data?.current === "missing" && (
             <View className="gap-2 rounded-2xl border border-destructive-text bg-card p-4">
               <Text className="font-semibold text-destructive-text">
-                This phone can’t access this group’s current encryption key
+                {`This ${thisDeviceNoun()} can’t access this group’s current encryption key`}
               </Text>
-              <Text>Current group locations may be unavailable on this phone.</Text>
+              <Text>{`Current group locations may be unavailable on this ${thisDeviceNoun()}.`}</Text>
             </View>
           )}
           {historyPartialFrom !== null && showHistoryWarning && (
             <View className="gap-2 rounded-2xl border border-warning-accent bg-card p-4">
               <Text className="font-semibold text-warning-text">
-                Some location history isn’t available on this phone
+                {`Some location history isn’t available on this ${thisDeviceNoun()}`}
               </Text>
               <Text>
                 History from before{" "}
                 {historyPartialFrom.toLocaleDateString(undefined, {
                   dateStyle: "medium",
                 })}{" "}
-                can’t be read on this phone.
+                {`can’t be read on this ${thisDeviceNoun()}.`}
               </Text>
               <View className="flex-row flex-wrap gap-3">
                 {canRestoreRecoveryPhrase && (

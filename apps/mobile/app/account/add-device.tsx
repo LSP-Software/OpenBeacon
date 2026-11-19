@@ -63,7 +63,7 @@ const AddDeviceScreen = () => {
     }
     if (result.error) {
       setStep("confirm");
-      Alert.alert(`Unable to add ${link.device.name}`, userMessage(result.error));
+      Alert.alert(`Couldn’t add ${link.device.name}`, userMessage(result.error));
       return;
     }
     await refreshDevices();
@@ -81,7 +81,7 @@ const AddDeviceScreen = () => {
     }
     if (result.error) {
       setStep("confirm");
-      Alert.alert(`Unable to remove ${link.device.name}`, userMessage(result.error));
+      Alert.alert(`Couldn’t remove ${link.device.name}`, userMessage(result.error));
       return;
     }
     await refreshDevices();

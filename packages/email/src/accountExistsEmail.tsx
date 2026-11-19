@@ -21,11 +21,11 @@ export const renderAccountExistsEmail = async ({
         </Text>
         <Text style={{ margin: "0 0 16px" }}>
           {hasPassword
-            ? "Sign in with your email and password instead. If you've forgotten your password, you can reset it from the sign-in screen."
+            ? "Sign in with your email and password instead. If you’ve forgotten your password, you can reset it from the sign-in screen."
             : "Sign in with Google instead."}
         </Text>
         <Text style={{ margin: 0 }}>
-          If this wasn't you, you can ignore this email. Nobody can create another account with your
+          If this wasn’t you, you can ignore this email. Nobody can create another account with your
           address.
         </Text>
       </>

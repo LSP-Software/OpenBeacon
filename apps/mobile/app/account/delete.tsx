@@ -52,7 +52,7 @@ const DeleteAccountScreen = () => {
             );
             deletionForm.reset();
             if (result.error) {
-              Alert.alert("Unable to delete account", userMessage(result.error));
+              Alert.alert("Couldn’t delete account", userMessage(result.error));
               return;
             }
             await tryCatch(endSession({ reason: immediate ? "accountDeleted" : "signedOut" }));
@@ -75,7 +75,7 @@ const DeleteAccountScreen = () => {
     const authorization = await tryCatch(beginGoogleVerification.mutateAsync());
     if (authorization.error) {
       setIsGoogleVerifying(false);
-      Alert.alert("Google verification failed", "Please try again.");
+      Alert.alert("Couldn’t verify with Google", "Please try again.");
       return;
     }
     const result = await tryCatch(
@@ -83,7 +83,7 @@ const DeleteAccountScreen = () => {
     );
     setIsGoogleVerifying(false);
     if (result.error) {
-      Alert.alert("Google verification failed", "Please try again.");
+      Alert.alert("Couldn’t verify with Google", "Please try again.");
       return;
     }
     if (result.data.type !== "success") return;
@@ -98,7 +98,7 @@ const DeleteAccountScreen = () => {
       state !== authorization.data.state ||
       !code
     ) {
-      Alert.alert("Google verification failed", "Please try again.");
+      Alert.alert("Couldn’t verify with Google", "Please try again.");
       return;
     }
     requestAccountDeletion({ google: { state, code } });

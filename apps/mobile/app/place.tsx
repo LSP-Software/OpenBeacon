@@ -43,6 +43,7 @@ import {
 } from "../lib/placeSync.ts";
 import { syncGroupPlaces } from "../lib/placeBackgroundSync.ts";
 import { userMessage } from "../lib/userMessage.ts";
+import { thisDeviceNoun } from "../lib/thisDeviceNoun.ts";
 
 const PIN_ABOVE_CENTER = 150;
 
@@ -82,7 +83,7 @@ const PlaceScreen = () => {
   const problem = groupError
     ? "Couldn’t load your groups. Check your connection and try again."
     : !group
-      ? "This group isn’t available on this phone."
+      ? `This group isn’t available on this ${thisDeviceNoun()}.`
       : role !== "OWNER" && role !== "ADMIN"
         ? "Only owners and admins can add or change places."
         : placeError
@@ -90,7 +91,7 @@ const PlaceScreen = () => {
           : placeId && !place
             ? "This place has been deleted."
             : place && !place.geometry
-              ? "This place is still syncing to this phone. Try again in a few minutes."
+              ? `This place is still syncing to this ${thisDeviceNoun()}. Try again in a few minutes.`
               : null;
 
   if ((problem && !closing) || !group) {
@@ -268,7 +269,7 @@ const PlaceEditor = ({
       }
       busyRef.current = false;
       setBusy(null);
-      Alert.alert("Unable to save place", placeErrorMessage(reason, userMessage(result.error)));
+      Alert.alert("Couldn’t save place", placeErrorMessage(reason, userMessage(result.error)));
       if (reason === "PLACE_GONE") {
         onClose();
         void refreshPlaces([]);

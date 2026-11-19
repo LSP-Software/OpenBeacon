@@ -1,6 +1,7 @@
+import { thisDeviceNoun } from "./thisDeviceNoun.ts";
 export class GroupKeyUnavailableError extends Error {
   constructor() {
-    super("This phone can’t use this group’s current key yet.");
+    super(`This ${thisDeviceNoun()} can’t use this group’s current key yet.`);
   }
 }
 

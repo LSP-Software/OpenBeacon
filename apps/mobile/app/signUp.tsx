@@ -90,7 +90,7 @@ const SignUp = () => {
         );
         setStep({ name: "email" });
       } else {
-        Alert.alert("Sign up failed", result.error.message);
+        Alert.alert("Couldn’t create your account", result.error.message);
       }
       setEmailLoading(false);
       return;
@@ -119,7 +119,7 @@ const SignUp = () => {
   const handleGoogleSignUp = async () => {
     await performGoogleAuth({
       setLoading: setGoogleLoading,
-      failureTitle: "Google sign up failed",
+      failureTitle: "Couldn’t sign up with Google",
       onSuccess: finishSignUp,
       alert: Alert.alert,
     });

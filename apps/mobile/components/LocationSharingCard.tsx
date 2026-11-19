@@ -32,6 +32,7 @@ import { Icon } from "./ui/Icon.tsx";
 import { SegmentedControl } from "./ui/SegmentedControl.tsx";
 import { Text } from "./ui/Text.tsx";
 import { useLoadedSharingState } from "../hooks/useLoadedSharingState.ts";
+import { thisDeviceNoun } from "../lib/thisDeviceNoun.ts";
 
 export const LocationSharingCard = ({
   device,
@@ -91,7 +92,7 @@ export const LocationSharingCard = ({
       : null;
   const until = effective ? effective.pausedUntil : devicePreference?.sharingPausedUntil;
   const resumeAccount = !device && accountPaused;
-  const target = device && !device.isCurrent ? device.name : "this device";
+  const target = device && !device.isCurrent ? device.name : `this ${thisDeviceNoun()}`;
   const selectScope = (selectedScope: "device" | "account") => {
     const selectedAt = serverNow();
     setNow(selectedAt);
@@ -200,8 +201,8 @@ export const LocationSharingCard = ({
               ? update.isPending
                 ? "Pausing…"
                 : pendingAccount
-                  ? "Sharing stopped on this phone. Your groups and other devices will update when we can reach the server."
-                  : "Sharing stopped on this phone. Your groups will update when we can reach the server."
+                  ? `Sharing stopped on this ${thisDeviceNoun()}. Your groups and other devices will update when we can reach the server.`
+                  : `Sharing stopped on this ${thisDeviceNoun()}. Your groups will update when we can reach the server.`
               : `${
                   until && until.getTime() > now
                     ? formatResumeTime(toDeviceClock(until), toDeviceClock(new Date(now)))
@@ -210,7 +211,8 @@ export const LocationSharingCard = ({
           </Text>
         ) : pendingHere && thisDevice && !update.isPending ? (
           <Text className="text-sm text-tertiary">
-            Sharing resumed on this phone. We’ll update your groups when you’re back online.
+            Sharing resumed on this {thisDeviceNoun()}. We’ll update your groups when you’re back
+            online.
           </Text>
         ) : null}
         {rejectedHere && !update.isPending ? (
@@ -257,7 +259,7 @@ export const LocationSharingCard = ({
           >
             <Text>
               {device && accountPaused && !devicePaused
-                ? "Pause this device separately"
+                ? `Pause this ${thisDeviceNoun()} separately`
                 : paused
                   ? "Change pause"
                   : "Pause sharing"}
@@ -266,8 +268,8 @@ export const LocationSharingCard = ({
         </View>
         {accountPaused && devicePaused ? (
           <Text className="text-sm text-tertiary">
-            {device?.name ?? "This device"} also has its own pause. It will stay paused when the
-            account resumes.
+            {device?.name ?? `This ${thisDeviceNoun()}`} also has its own pause. It will stay paused
+            when the account resumes.
           </Text>
         ) : null}
       </CardContent>
@@ -295,7 +297,7 @@ export const LocationSharingCard = ({
               <SegmentedControl
                 accessibilityLabel="Devices to pause"
                 options={[
-                  { value: "device", label: "This device" },
+                  { value: "device", label: `This ${thisDeviceNoun()}` },
                   { value: "account", label: "All my devices" },
                 ]}
                 selected={scope}

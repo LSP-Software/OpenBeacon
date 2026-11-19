@@ -216,7 +216,7 @@ test("a link that can't reach the server asks to check the connection", async ()
     await confirm();
 
     expect(alerts).toEqual([
-      "Unable to confirm it’s you|This phone couldn’t confirm it’s yours. Check your connection and try again.",
+      "Couldn’t confirm it’s you|This phone couldn’t confirm it’s yours. Check your connection and try again.",
     ]);
     expect(events).toEqual([]);
   }
@@ -276,7 +276,7 @@ test("too many screen lock tries stops before Google and says to wait", async ()
 
   expect(events).toEqual(["phoneLock"]);
   expect(alerts).toEqual([
-    "Unable to confirm it’s you|Too many tries. Wait a moment, then try again.",
+    "Couldn’t confirm it’s you|Too many tries. Wait a moment, then try again.",
   ]);
 });
 
@@ -373,7 +373,7 @@ test("a password changed elsewhere while entering a code goes back with an alert
   });
 
   expect(error).toBeUndefined();
-  expect(alerts).toEqual(["Unable to confirm it’s you|Invalid email or password"]);
+  expect(alerts).toEqual(["Couldn’t confirm it’s you|Invalid email or password"]);
   expect(root.container.queryAll((item) => item.type === "mock-button").length).toBe(2);
   expect(events).toEqual([]);
   await act(async () => root.unmount());

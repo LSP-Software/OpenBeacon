@@ -7,6 +7,7 @@ import { MAX_TIMELINE_POINTS } from "../../lib/timelineBudget.ts";
 import { Button } from "../ui/Button.tsx";
 import { Icon } from "../ui/Icon.tsx";
 import { Text } from "../ui/Text.tsx";
+import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 
 export const TimelinePeopleChooser = ({
   onApply,
@@ -57,8 +58,8 @@ export const TimelinePeopleChooser = ({
             </Button>
           </View>
           <Text className="text-sm text-tertiary">
-            This phone can decrypt and play about {MAX_TIMELINE_POINTS.toLocaleString()} locations
-            at once. Pick who to show on this day.
+            This {thisDeviceNoun()} can decrypt and play about{" "}
+            {MAX_TIMELINE_POINTS.toLocaleString()} locations at once. Pick who to show on this day.
           </Text>
           <ScrollView contentContainerClassName="gap-1" style={{ flexShrink: 1 }}>
             {people.map((person) => {

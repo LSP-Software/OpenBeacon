@@ -67,7 +67,7 @@ export const EditableImage = ({
 
       const uploadResult = await uploadImage(processedUri);
       if ("error" in uploadResult) {
-        Alert.alert("Upload failed", uploadResult.error);
+        Alert.alert("Couldn’t upload the picture", uploadResult.error);
         return;
       }
 
@@ -76,11 +76,11 @@ export const EditableImage = ({
           Promise.resolve(onImageUploaded(uploadResult.data)),
         );
         if (callbackError) {
-          Alert.alert("Unable to update the picture", userMessage(callbackError));
+          Alert.alert("Couldn’t update the picture", userMessage(callbackError));
         }
       }
     } catch (error) {
-      Alert.alert("Upload failed", userMessage(error));
+      Alert.alert("Couldn’t upload the picture", userMessage(error));
     } finally {
       setIsUploading(false);
       setPickerOpen(false);

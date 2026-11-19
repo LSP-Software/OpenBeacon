@@ -12,15 +12,14 @@ import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
 import { getStoredHistoryKey, storeHistoryKey } from "./historyKeys.ts";
 import { deleteSavedDeviceLink } from "./savedDeviceLink.ts";
 import { secretOwner } from "./secretStorage.ts";
+import { thisDeviceNoun } from "./thisDeviceNoun.ts";
 
 export const NOT_A_DEVICE_CODE_MESSAGE =
   "That isn’t an OpenBeacon setup code. On your new phone, choose “Link with your other device”.";
 export const DEVICE_KEY_MISMATCH_MESSAGE =
   "This code doesn’t match the phone that made it, so nothing was shared. Show a fresh code on your new phone and try again.";
-export const APPROVER_MISSING_HISTORY_KEY_MESSAGE =
-  "This phone doesn’t have your account’s current history key, so it can’t set up another phone. Use your recovery phrase on the new phone instead.";
-export const HANDOVER_REJECTED_MESSAGE =
-  "This phone is set up, but your other phone’s reply couldn’t be checked, so it can’t read location history yet. To read it, restore your recovery phrase in Account → Recovery phrase.";
+export const APPROVER_MISSING_HISTORY_KEY_MESSAGE = `This ${thisDeviceNoun()} doesn’t have your account’s current history key, so it can’t set up another phone. Use your recovery phrase on the new phone instead.`;
+export const HANDOVER_REJECTED_MESSAGE = `This ${thisDeviceNoun()} is set up, but your other phone’s reply couldn’t be checked, so it can’t read location history yet. To read it, restore your recovery phrase in Account → Recovery phrase.`;
 
 export const lookUpDeviceLink = async (code: string) => {
   const parsed = parseDeviceLinkCode(code);

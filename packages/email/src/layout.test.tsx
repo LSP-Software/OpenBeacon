@@ -15,7 +15,7 @@ describe("renderEmailLayout", () => {
     const { html, text } = await render();
     expect(text).toContain("Your code is 123456.");
     expect(text).toContain(
-      "We will never ask for your recovery phrase. Don't share it with anyone, including us.",
+      "We will never ask for your recovery phrase. Don’t share it with anyone, including us.",
     );
     expect(text).toContain("Sent from Family Server");
     expect(html).toContain("Your code is 123456.");

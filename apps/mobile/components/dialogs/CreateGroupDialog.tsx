@@ -84,7 +84,7 @@ export const CreateGroupDialog = ({
         return;
       }
       if (result.error) {
-        Alert.alert("Unable to create group", userMessage(result.error));
+        Alert.alert("Couldn’t create group", userMessage(result.error));
       }
     });
   };

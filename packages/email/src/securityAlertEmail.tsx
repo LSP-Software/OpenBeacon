@@ -13,12 +13,11 @@ import {
 const secureGoogleAdvice =
   "Change your Google password, because someone may have used your Google account to sign in.";
 
-const signOutOthersAdvice =
-  'open Account → Password and Security and tap "Sign out of all other sessions".';
+const signOutOthersAdvice = "open Account → Password and security and tap Sign out other sessions.";
 
 const secureAccountAdvice = (hasPassword: boolean) =>
   hasPassword
-    ? "In the OpenBeacon app, change your password in Account → Password and Security. That signs out every other device."
+    ? "In the OpenBeacon app, change your password in Account → Password and security. That signs out every other device."
     : `${secureGoogleAdvice} After that, in the OpenBeacon app, ${signOutOthersAdvice}`;
 
 const signedInAdvice = (hasPassword: boolean) =>
@@ -54,7 +53,7 @@ const alertCopy = (
         happened: "Your OpenBeacon password was changed.",
         details: [{ label: "Changed at", value: happenedAt }],
         ifNotYou:
-          'Use "Forgot password" on the app\'s sign-in screen to choose a new password. That signs out every other device.',
+          "Use Forgot password on the app’s sign-in screen to choose a new password. That signs out every other device.",
       };
     case "password-reset":
       return {
@@ -63,7 +62,7 @@ const alertCopy = (
         happened: "Your OpenBeacon password was reset, and every device was signed out.",
         details: [{ label: "Reset at", value: happenedAt }],
         ifNotYou:
-          'Someone may be able to read your email. Secure your email account, then use "Forgot password" on the app\'s sign-in screen to choose a new password.',
+          "Someone may be able to read your email. Secure your email account, then use Forgot password on the app’s sign-in screen to choose a new password.",
       };
     case "recovery-phrase-changed":
       return {
@@ -79,7 +78,7 @@ const alertCopy = (
         title: "Recovery phrase reset",
         happened: "Your OpenBeacon recovery phrase was reset. Your old phrase no longer works.",
         details: [{ label: "Reset at", value: happenedAt }],
-        ifNotYou: `${signedInAdvice(hasPassword)} Then open Account → Recovery phrase and tap "I’ve lost my phrase" to set a new one.`,
+        ifNotYou: `${signedInAdvice(hasPassword)} Then open Account → Recovery phrase and tap I’ve lost my phrase to set a new one.`,
       };
     case "other-sessions-signed-out":
       return {
@@ -96,7 +95,7 @@ const alertCopy = (
         ],
         ifNotYou: `Someone else is signed in to your account and may have signed you out. ${
           hasPassword
-            ? 'Use "Forgot password" on the app\'s sign-in screen to choose a new password. That signs out every other device, including theirs.'
+            ? "Use Forgot password on the app’s sign-in screen to choose a new password. That signs out every other device, including theirs."
             : `${secureGoogleAdvice} After that, sign in to the OpenBeacon app, then ${signOutOthersAdvice}`
         }`,
       };
@@ -160,7 +159,7 @@ const alertCopy = (
         happened:
           "Signing in to OpenBeacon now only needs your password. We no longer email a code when someone signs in.",
         details: [{ label: "Turned off at", value: happenedAt }],
-        ifNotYou: `${signedInAdvice(hasPassword)} Then turn sign-in codes back on in Account → Password and Security.`,
+        ifNotYou: `${signedInAdvice(hasPassword)} Then turn sign-in codes back on in Account → Password and security.`,
       };
     case "account-deleted":
       return {
@@ -214,7 +213,7 @@ export const renderSecurityAlertEmail = async ({
         <EmailDetails rows={details} />
         {ifNotYou && (
           <>
-            <EmailSubheading>If this wasn't you</EmailSubheading>
+            <EmailSubheading>If this wasn’t you</EmailSubheading>
             <Text style={{ margin: 0 }}>{ifNotYou}</Text>
           </>
         )}

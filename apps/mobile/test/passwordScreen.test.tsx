@@ -126,7 +126,7 @@ test("a failed password change doesn't try to link a sign-in", async () => {
   await changeThePassword();
 
   expect(steps).toEqual(["changePassword"]);
-  expect(alerts).toEqual(["Unable to change password"]);
+  expect(alerts).toEqual(["Couldn’t change password"]);
 });
 
 test("a password lockout shows when to try again", async () => {

@@ -78,7 +78,7 @@ describe("every email", () => {
   test("ends with the recovery phrase warning and the server name", async () => {
     for (const email of await renderEveryEmail()) {
       expect(email.text).toContain(
-        "We will never ask for your recovery phrase. Don't share it with anyone, including us.",
+        "We will never ask for your recovery phrase. Don’t share it with anyone, including us.",
       );
       expect(email.text).toContain(`Sent from ${serverName}`);
     }
@@ -102,6 +102,21 @@ describe("every email", () => {
       "Your OpenBeacon recovery phrase was reset",
       "Your other OpenBeacon sessions were signed out",
     ]);
+  });
+
+  test("uses curly apostrophes and names buttons without quotes", async () => {
+    for (const email of await renderEveryEmail()) {
+      for (const copy of [email.subject, email.text]) {
+        expect(copy).not.toMatch(/[A-Za-z]'[A-Za-z]/);
+        expect(copy).not.toMatch(/["“”]/);
+      }
+    }
+  });
+
+  test("names the password menu item as the app does", async () => {
+    const text = (await renderEveryEmail()).map((email) => email.text).join("\n");
+    expect(text).toContain("Account → Password and security");
+    expect(text).not.toContain("Password and Security");
   });
 
   test("starts with a short title", async () => {

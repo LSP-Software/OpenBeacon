@@ -354,7 +354,7 @@ describe("LocationPermissionProvider", () => {
     await act(async () => {
       pressButton(root, 0);
     });
-    expect(getRenderedOutput(root)).toContain("update location access in your device settings");
+    expect(getRenderedOutput(root)).toContain("update location access in your phone settings");
     await act(async () => {
       pressButton(root, 2);
       await Promise.resolve();

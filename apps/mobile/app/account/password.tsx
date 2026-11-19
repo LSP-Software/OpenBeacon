@@ -51,7 +51,7 @@ const PasswordScreen = () => {
     if (result.error) {
       setSaving(false);
       Alert.alert(
-        "Unable to change password",
+        "Couldn’t change password",
         passwordErrorMessage(result.error, "Please try again."),
       );
       return;
@@ -76,7 +76,7 @@ const PasswordScreen = () => {
 
   return (
     <View className="flex-1 bg-background">
-      <ScreenHeader title="Password" />
+      <ScreenHeader title="Password and security" />
 
       <KeyboardAvoidingView
         className="flex-1"
@@ -146,7 +146,7 @@ const PasswordScreen = () => {
             )}
             <Link href="/account/sign-out-others" replace asChild>
               <Button variant="secondary">
-                <Text>Sign out of all other sessions</Text>
+                <Text>Sign out other sessions</Text>
               </Button>
             </Link>
           </View>

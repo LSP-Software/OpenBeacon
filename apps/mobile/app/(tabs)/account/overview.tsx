@@ -62,6 +62,7 @@ import { appVersion } from "../../../lib/versions.ts";
 import { useLocationPermissions } from "../../../providers/LocationPermissionProvider.tsx";
 import { useTheme } from "../../../providers/ThemeProvider.tsx";
 import { userMessage } from "../../../lib/userMessage.ts";
+import { thisDeviceNoun } from "../../../lib/thisDeviceNoun.ts";
 
 const schema = z.object({ name: accountNameSchema });
 
@@ -111,7 +112,7 @@ const AccountScreen = () => {
   const saveName = async ({ name }: z.infer<typeof schema>) => {
     const result = await tryCatch(updateName.mutateAsync({ name }));
     if (result.error) {
-      Alert.alert("Unable to update name", userMessage(result.error));
+      Alert.alert("Couldn’t update name", userMessage(result.error));
       return;
     }
     await Promise.all([
@@ -119,7 +120,6 @@ const AccountScreen = () => {
       queryClient.invalidateQueries({ queryKey: trpc.groupMembership.list.queryKey() }),
     ]);
     setNameOpen(false);
-    Alert.alert("Profile updated", "Your name has been saved.");
   };
 
   const signOut = async ({ removeThisPhone }: { removeThisPhone: boolean }) => {
@@ -140,7 +140,7 @@ const AccountScreen = () => {
     if (status === "serverUnreachable") {
       Alert.alert(
         "Couldn’t reach the server",
-        "This phone may not have been removed. Try again, or sign out without removing this phone.",
+        `This ${thisDeviceNoun()} may not have been removed. Try again, or sign out without removing this ${thisDeviceNoun()}.`,
         [
           { text: "Cancel", style: "cancel" },
           { text: "Sign out without removing", onPress: () => signOut({ removeThisPhone: false }) },
@@ -151,8 +151,8 @@ const AccountScreen = () => {
     }
     if (removeThisPhone && status === "signedOut") {
       Alert.alert(
-        "This phone is still in Devices",
-        "You’ve been signed out, but we couldn’t remove this phone. Remove it from another device in Account → Devices.",
+        `This ${thisDeviceNoun()} is still in Devices`,
+        `You’ve been signed out, but we couldn’t remove this ${thisDeviceNoun()}. Remove it from another device in Account → Devices.`,
       );
     }
     router.replace("/");
@@ -198,11 +198,11 @@ const AccountScreen = () => {
   const confirmSignOut = () =>
     Alert.alert(
       "Sign out?",
-      "This phone stays in Account → Devices, so you can sign in on it again. If you’re giving it away or won’t use it again, remove it too.",
+      `This ${thisDeviceNoun()} stays in Account → Devices, so you can sign in on it again. If you’re giving it away or won’t use it again, remove it too.`,
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Also remove this phone from your account",
+          text: `Also remove this ${thisDeviceNoun()} from your account`,
           style: "destructive",
           onPress: confirmRemoveThisPhone,
         },
@@ -289,7 +289,7 @@ const AccountScreen = () => {
             icon={BellOffIcon}
             tone="warning"
             title="Notifications are off"
-            description="This phone can’t show that it’s sharing your location, or tell you if sharing stops."
+            description={`This ${thisDeviceNoun()} can’t show that it’s sharing your location, or tell you if sharing stops.`}
           >
             <Button size="sm" onPress={notifications.turnOn} loading={notifications.turningOn}>
               <Text>Turn on notifications</Text>
@@ -330,7 +330,7 @@ const AccountScreen = () => {
             description={
               heldHistoryKeyVersions.data?.length
                 ? "Your recovery phrase was reset on another phone. Enter the new phrase to keep reading new history here."
-                : "Enter your recovery phrase to read your location history on this phone."
+                : `Enter your recovery phrase to read your location history on this ${thisDeviceNoun()}.`
             }
           >
             <Link href="/account/recovery-restore" asChild>
@@ -409,7 +409,7 @@ const AccountScreen = () => {
                     label: "Theme",
                     icon: SunIcon,
                     href: "/account/theme",
-                    value: { system: "Match phone", light: "Light", dark: "Dark" }[
+                    value: { system: `Match ${thisDeviceNoun()}`, light: "Light", dark: "Dark" }[
                       appThemePreference
                     ],
                   },

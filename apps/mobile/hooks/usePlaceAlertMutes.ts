@@ -31,7 +31,7 @@ export const usePlaceAlertMutes = (groupId: string) => {
         if (errorReason(error) === "PLACE_GONE") {
           void queryClient.invalidateQueries({ queryKey: groupPlacesQueryKey(groupId) });
         }
-        Alert.alert("Unable to change alerts", userMessage(error));
+        Alert.alert("Couldn’t change alerts", userMessage(error));
       },
       onSettled: () =>
         isLastChange()

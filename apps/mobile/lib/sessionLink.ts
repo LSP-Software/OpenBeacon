@@ -5,10 +5,11 @@ import { AppState } from "react-native";
 import { Alert } from "./alert.ts";
 import { queryClient, trpcClient } from "./api.ts";
 import { isDeviceRemovedError } from "./deviceRemovedError.ts";
+import { thisDeviceNoun } from "./thisDeviceNoun.ts";
 
 export class SessionLinkChallengeUnopenableError extends Error {
   constructor() {
-    super("This phone couldn’t confirm it’s yours. Sign in again.");
+    super(`This ${thisDeviceNoun()} couldn’t confirm it’s yours. Sign in again.`);
   }
 }
 
@@ -90,7 +91,7 @@ export const signOutAfterRefusedSessionLink = () => {
       }),
     );
     await tryCatch(Promise.resolve().then(() => router.replace("/")));
-    Alert.alert("You’ve been signed out", "Sign in again to keep using this phone.");
+    Alert.alert("You’ve been signed out", `Sign in again to keep using this ${thisDeviceNoun()}.`);
   })().finally(() => {
     pendingSignOut = null;
   });

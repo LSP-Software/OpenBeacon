@@ -11,6 +11,7 @@ import { File as FSFile } from "expo-file-system";
 import { errorReason } from "./errorReason.ts";
 import { imageCacheGeneration, writeCachedImage } from "./imageCache.ts";
 import { GroupKeyUnavailableError, ImageStorageError } from "./imageUploadErrors.ts";
+import { thisDeviceNoun } from "./thisDeviceNoun.ts";
 
 const computeSha256Base64 = async (bytes: Uint8Array<ArrayBuffer>): Promise<string> => {
   const hashBuffer = await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, bytes);
@@ -82,17 +83,18 @@ export const uploadEncryptedImage = async ({
 
 export const imageUploadErrorMessage = (error: unknown) => {
   if (error instanceof GroupKeyUnavailableError) {
-    return "This phone is still catching up with this group. Try again in a minute.";
+    return `This ${thisDeviceNoun()} is still catching up with this group. Try again in a minute.`;
   }
   if (error instanceof ImageStorageError || !(error instanceof TRPCClientError) || !error.data) {
     return "Unable to upload the picture. Check your connection and try again.";
   }
   const cause: unknown = error.data.cause;
   if (cause === devicePendingCause || cause === deviceUnverifiedCause) return error.message;
-  if (cause === deviceRemovedCause) return "This phone was removed from your account.";
+  if (cause === deviceRemovedCause)
+    return `This ${thisDeviceNoun()} was removed from your account.`;
   switch (errorReason(error)) {
     case "DEVICE_NOT_REGISTERED":
-      return "This phone is still being set up. Try again in a minute.";
+      return `This ${thisDeviceNoun()} is still being set up. Try again in a minute.`;
     case "EPOCH_NOT_LATEST":
     case "EPOCH_ROTATION_PENDING":
       return "This group’s keys are being updated. Try again in a minute.";

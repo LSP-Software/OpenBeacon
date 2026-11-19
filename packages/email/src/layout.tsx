@@ -138,7 +138,7 @@ export const renderEmailLayout = async ({
             <Text
               style={{ color: emailColors.muted, fontSize: "13px", lineHeight: "20px", margin: 0 }}
             >
-              We will never ask for your recovery phrase. Don't share it with anyone, including us.
+              We will never ask for your recovery phrase. Don’t share it with anyone, including us.
             </Text>
             {footerNote && (
               <Text

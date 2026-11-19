@@ -115,7 +115,7 @@ test("a phone that isn't set up yet is told why instead of being asked to sign i
   });
 
   expect(await signOutAndCollectAlerts()).toEqual([
-    { title: "Unable to sign out other sessions", message: "Finish setting up this phone first." },
+    { title: "Couldn’t sign out other sessions", message: "Finish setting up this phone first." },
   ]);
   expect(recheck).not.toHaveBeenCalled();
 });

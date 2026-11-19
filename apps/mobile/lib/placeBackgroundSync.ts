@@ -15,6 +15,7 @@ import { catchUpGroupPlaces } from "./placeCatchUp.ts";
 import { groupPlacesQueryKey, loadGroupPlaces } from "./placeSync.ts";
 import { storage } from "./storage.ts";
 import { loadTrackingModule } from "./trackingModule.ts";
+import { thisDeviceNoun } from "./thisDeviceNoun.ts";
 
 type PlaceAlert = NonNullable<
   RouterOutputs["groupTracking"]["uploadBatch"]["placeAlerts"]
@@ -84,7 +85,7 @@ export const describePlacesChanged = ({
     title: only
       ? `${groupName} ${verb} ${only.emoji} ${only.name}`
       : `${groupName} ${verb} ${changed.length} places`,
-    body: `This phone will tell ${groupName} when it arrives at or leaves ${only ? only.name : "them"}.`,
+    body: `This ${thisDeviceNoun()} will tell ${groupName} when it arrives at or leaves ${only ? only.name : "them"}.`,
   };
 };
 

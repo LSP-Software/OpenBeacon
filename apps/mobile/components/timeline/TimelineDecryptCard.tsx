@@ -5,6 +5,7 @@ import { useReducedMotion } from "../../hooks/useReducedMotion.ts";
 import type { TimelineDecryptProgress } from "../../lib/timelineTypes.ts";
 import { Icon } from "../ui/Icon.tsx";
 import { Text } from "../ui/Text.tsx";
+import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 
 type Person = TimelineDecryptProgress & { color: string; name: string };
 
@@ -54,7 +55,9 @@ export const TimelineDecryptCard = ({
       style={{ opacity, top }}
     >
       <View className="gap-0.5">
-        <Text className="font-semibold text-background">Decrypting on this phone…</Text>
+        <Text className="font-semibold text-background">
+          Decrypting on this {thisDeviceNoun()}…
+        </Text>
         <Text accessibilityLiveRegion="polite" className="text-xs text-background opacity-70">
           {!people
             ? "Downloading locations"

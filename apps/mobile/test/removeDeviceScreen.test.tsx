@@ -121,7 +121,7 @@ test("a phone that isn't set up yet is told why instead of being asked to sign i
       throw forbidden(message, cause);
     });
 
-    expect(await removeAndCollectAlerts()).toEqual([{ title: "Unable to remove device", message }]);
+    expect(await removeAndCollectAlerts()).toEqual([{ title: "Couldn’t remove device", message }]);
     alerts.length = 0;
   }
   expect(recheck).not.toHaveBeenCalled();
@@ -140,7 +140,7 @@ test("a lost session says the person was signed out instead of showing UNAUTHORI
 
   expect(await removeAndCollectAlerts()).toEqual([
     {
-      title: "Unable to remove device",
+      title: "Couldn’t remove device",
       message: "You’ve been signed out. Sign in again to keep using this phone.",
     },
   ]);
@@ -165,6 +165,6 @@ test("a device that is no longer on the account can't be removed", async () => {
   const buttons = root.container.queryAll((item) => item.type === "mock-button");
   await act(async () => root.unmount());
 
-  expect(text).toContain("This device is no longer on your account.");
+  expect(text).toContain("That device is no longer on your account.");
   expect(buttons).toHaveLength(0);
 });

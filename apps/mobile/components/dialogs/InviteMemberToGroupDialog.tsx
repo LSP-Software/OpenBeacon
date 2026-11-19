@@ -129,7 +129,7 @@ export const InviteMembersInputs = ({
         }),
       );
       if (result.error) {
-        Alert.alert("Unable to send invitation", userMessage(result.error));
+        Alert.alert("Couldn’t send invitation", userMessage(result.error));
         return;
       }
       form.reset();

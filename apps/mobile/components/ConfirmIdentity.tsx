@@ -22,6 +22,7 @@ import { LoadingIndicator } from "./LoadingIndicator.tsx";
 import { Button } from "./ui/Button.tsx";
 import { Input } from "./ui/Input.tsx";
 import { Text } from "./ui/Text.tsx";
+import { thisDeviceNoun } from "../lib/thisDeviceNoun.ts";
 
 export const ConfirmIdentity = ({ onConfirmed }: { onConfirmed: () => void }) => {
   const { data: session } = authClient.useSession();
@@ -45,7 +46,7 @@ export const ConfirmIdentity = ({ onConfirmed }: { onConfirmed: () => void }) =>
     const currentSession = current.data?.data;
     if (!currentSession || currentSession.session.token === previous.token) {
       setPending(false);
-      Alert.alert("Unable to confirm it’s you", "Please try again.");
+      Alert.alert("Couldn’t confirm it’s you", "Please try again.");
       return;
     }
     if (currentSession.user.id !== previous.userId) {
@@ -68,8 +69,8 @@ export const ConfirmIdentity = ({ onConfirmed }: { onConfirmed: () => void }) =>
     }
     if (linked.error) {
       Alert.alert(
-        "Unable to confirm it’s you",
-        "This phone couldn’t confirm it’s yours. Check your connection and try again.",
+        "Couldn’t confirm it’s you",
+        `This ${thisDeviceNoun()} couldn’t confirm it’s yours. Check your connection and try again.`,
       );
       return;
     }
@@ -101,7 +102,7 @@ export const ConfirmIdentity = ({ onConfirmed }: { onConfirmed: () => void }) =>
     const outcome = await confirmWithPassword(password, code);
     if (outcome.kind === "wrongPassword") {
       setSignInCode(null);
-      Alert.alert("Unable to confirm it’s you", outcome.message);
+      Alert.alert("Couldn’t confirm it’s you", outcome.message);
       return undefined;
     }
     return signInCodeEntryError(outcome, code !== undefined);
@@ -115,7 +116,7 @@ export const ConfirmIdentity = ({ onConfirmed }: { onConfirmed: () => void }) =>
     if (phoneLock === "lockedOut" || phoneLock === "failed") {
       setPending(false);
       if (phoneLock === "lockedOut") {
-        Alert.alert("Unable to confirm it’s you", "Too many tries. Wait a moment, then try again.");
+        Alert.alert("Couldn’t confirm it’s you", "Too many tries. Wait a moment, then try again.");
       }
       return;
     }
@@ -127,7 +128,7 @@ export const ConfirmIdentity = ({ onConfirmed }: { onConfirmed: () => void }) =>
     const failure = result.error ?? result.data.error;
     if (failure) {
       setPending(false);
-      Alert.alert("Unable to confirm it’s you", passwordErrorMessage(failure, "Please try again."));
+      Alert.alert("Couldn’t confirm it’s you", passwordErrorMessage(failure, "Please try again."));
       return;
     }
     await finishConfirming(previous);
@@ -138,9 +139,9 @@ export const ConfirmIdentity = ({ onConfirmed }: { onConfirmed: () => void }) =>
       <Text className="text-foreground text-3xl font-bold">Confirm it’s you</Text>
       <Text className="text-secondary text-base">
         {methods.data?.password !== false
-          ? "Sign in again to continue. This stops anyone who picks up your unlocked phone from making important changes to your account."
+          ? `Sign in again to continue. This stops anyone who picks up your unlocked ${thisDeviceNoun()} from making important changes to your account.`
           : screenLock.data === true
-            ? "Use your phone’s screen lock, then sign in with Google again to continue. This stops anyone who picks up your unlocked phone from making important changes to your account."
+            ? `Use your ${thisDeviceNoun()}’s screen lock, then sign in with Google again to continue. This stops anyone who picks up your unlocked ${thisDeviceNoun()} from making important changes to your account.`
             : "Sign in with Google again to continue."}
       </Text>
       {signInCode && (
@@ -171,7 +172,7 @@ export const ConfirmIdentity = ({ onConfirmed }: { onConfirmed: () => void }) =>
             onPress={form.handleSubmit(async ({ password }) => {
               const outcome = await confirmWithPassword(password);
               if (outcome.kind === "wrongPassword" || outcome.kind === "failed") {
-                Alert.alert("Unable to confirm it’s you", outcome.message);
+                Alert.alert("Couldn’t confirm it’s you", outcome.message);
               }
             })}
             disabled={pending}
@@ -199,7 +200,9 @@ export const ConfirmIdentity = ({ onConfirmed }: { onConfirmed: () => void }) =>
         </View>
       )}
       {methods.data && !methods.data.password && !google && (
-        <Text>No sign-in method is available on this phone. Please contact support.</Text>
+        <Text>
+          No sign-in method is available on this {thisDeviceNoun()}. Please contact support.
+        </Text>
       )}
     </View>
   );

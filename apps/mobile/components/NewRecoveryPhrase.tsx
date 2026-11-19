@@ -51,7 +51,8 @@ export const NewRecoveryPhrase = ({
     }
     await submission.run("confirm", async () => {
       const result = await tryCatch(onConfirm(phrase));
-      if (result.error) Alert.alert("Something went wrong", userMessage(result.error));
+      if (result.error)
+        Alert.alert("Couldn’t save your recovery phrase", userMessage(result.error));
     });
   };
 

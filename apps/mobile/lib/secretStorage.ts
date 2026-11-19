@@ -1,13 +1,14 @@
 import { tryCatch } from "@openbeacon/shared";
 import * as SecureStore from "expo-secure-store";
 import { getSecureStoreOptions } from "./secureStoreOptions.ts";
+import { thisDeviceNoun } from "./thisDeviceNoun.ts";
 
 const generations = new Map<string, number>();
 const pendingWrites = new Map<string, Set<Promise<void>>>();
 const keyOperations = new Map<string, Promise<unknown>>();
 
 export const SECRET_STORAGE_UNAVAILABLE_MESSAGE = "Key storage is unavailable.";
-export const SIGNED_OUT_MESSAGE = "This phone was signed out while saving its keys.";
+export const SIGNED_OUT_MESSAGE = `This ${thisDeviceNoun()} was signed out while saving its keys.`;
 
 export const secretOwner = (userId: string) => ({
   userId,
