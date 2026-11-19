@@ -88,6 +88,45 @@ describe("group epoch encryption", () => {
     expect(() => decodeBase64("AAAA===")).toThrow("Invalid base64 value.");
   });
 
+  test("rejects non-canonical trailing bits so each value has one spelling", () => {
+    for (const value of ["AB==", "AP==", "AAB=", "AAD=", "/x==", "AAAAAB==", "AB", "AAB"]) {
+      expect(() => decodeBase64(value)).toThrow("Invalid base64 value.");
+    }
+    expect(decodeBase64("AA==")).toEqual(new Uint8Array([0]));
+    expect(decodeBase64("AAA=")).toEqual(new Uint8Array([0, 0]));
+    expect(decodeBase64("/w==")).toEqual(new Uint8Array([255]));
+  });
+
+  test("still accepts whitespace and missing padding", () => {
+    expect(decodeBase64(" AQID\nBA ")).toEqual(new Uint8Array([1, 2, 3, 4]));
+    expect(decodeBase64("AQIDBA")).toEqual(new Uint8Array([1, 2, 3, 4]));
+    expect(decodeBase64("AQI")).toEqual(new Uint8Array([1, 2]));
+  });
+
+  test("accepts the last character only when its unused bits are zero", () => {
+    let seed = 7;
+    const nextByte = () => {
+      seed = (seed * 1_103_515_245 + 12_345) % 2 ** 31;
+      return seed % 256;
+    };
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    for (let length = 1; length <= 64; length += 1) {
+      const bytes = Uint8Array.from({ length }, nextByte);
+      const encoded = encodeBase64(bytes);
+      expect(decodeBase64(encoded)).toEqual(bytes);
+      const lastIndex = encoded.replace(/=+$/, "").length - 1;
+      const accepted = [...alphabet].filter((character) => {
+        try {
+          decodeBase64(`${encoded.slice(0, lastIndex)}${character}${encoded.slice(lastIndex + 1)}`);
+          return true;
+        } catch {
+          return false;
+        }
+      });
+      expect(accepted.length).toBe(length % 3 === 0 ? 64 : length % 3 === 1 ? 4 : 16);
+    }
+  });
+
   test("encrypts and decrypts a payload", () => {
     const { keyPair, recipient } = createRecipient("device-a", "user-a");
     const { epoch, wrappedKeys } = createInitialGroupEpoch({

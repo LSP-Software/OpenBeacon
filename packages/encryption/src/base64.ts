@@ -94,5 +94,9 @@ export const decodeBase64 = (value: string) => {
     }
   }
 
+  if (encodeBase64(output) !== paddedValue) {
+    throw new Error("Invalid base64 value.");
+  }
+
   return output;
 };
