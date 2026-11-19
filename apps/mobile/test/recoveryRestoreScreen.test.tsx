@@ -176,6 +176,44 @@ test("when setting up fails after the phrase is restored, Try again only retries
   await act(async () => root.unmount());
 });
 
+test("setting up refused at the device limit shows why and offers removing a device", async () => {
+  searchParams = { setup: "true" };
+  const message =
+    "Your account already has 10 phones set up. Remove one in Account › Devices to set up this one.";
+  activateWithHistoryKey.mockImplementationOnce(async () => {
+    throw TRPCClientError.from({
+      error: {
+        code: -32600,
+        data: { code: "PRECONDITION_FAILED", reason: "DEVICE_LIMIT" },
+        message,
+      },
+    });
+  });
+  const root = createRoot();
+  await act(async () => root.render(<RecoveryRestoreScreen />));
+  const [grid] = root.container.queryAll((item) => item.type === "phrase-grid");
+  if (!grid) throw new Error("Missing phrase grid");
+  await act(async () =>
+    (grid.props as { onChangeWords: (words: string[]) => void }).onChangeWords(
+      Array.from({ length: 12 }, () => "word"),
+    ),
+  );
+  const restore = root.container
+    .queryAll((item) => item.type === "mock-button")
+    .find((item) => JSON.stringify(item.children).includes("Restore"));
+  if (!restore) throw new Error("Missing Restore");
+  await act(async () => (restore.props as { onPress: () => Promise<void> }).onPress());
+
+  expect(JSON.stringify(root.container.toJSON())).toContain(message);
+  const removeLink = root.container
+    .queryAll((item) => item.type === "expo-link")
+    .find((item) => JSON.stringify(item.children).includes("Remove a device"));
+  if (!removeLink) throw new Error("Missing Remove a device");
+  expect(JSON.parse((removeLink.props as { href: string }).href)).toBe("/setup/device-limit");
+  expect(replace).not.toHaveBeenCalled();
+  await act(async () => root.unmount());
+});
+
 test("back is blocked while this phone is being set up after the phrase is restored", async () => {
   searchParams = { setup: "true" };
   let release = () => {};

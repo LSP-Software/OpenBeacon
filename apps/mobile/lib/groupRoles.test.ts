@@ -15,23 +15,35 @@ const actionsFor = (
 ) => memberActions({ ownerId: owner.userId, self, target });
 
 describe("memberActions", () => {
-  test("only Admins change roles, never the owner's or their own", () => {
-    expect(actionsFor(owner, admin).changeRole).toBe(true);
-    expect(actionsFor(owner, editor).changeRole).toBe(true);
-    expect(actionsFor(admin, member).changeRole).toBe(true);
-    expect(actionsFor(admin, otherAdmin).changeRole).toBe(true);
-    expect(actionsFor(admin, owner).changeRole).toBe(false);
-    expect(actionsFor(admin, admin).changeRole).toBe(false);
-    expect(actionsFor(editor, member).changeRole).toBe(false);
-    expect(actionsFor(member, otherMember).changeRole).toBe(false);
+  test("only the owner offers every role, including Admin", () => {
+    expect(actionsFor(owner, admin).roleChoices).toEqual(["ADMIN", "EDITOR", "MEMBER"]);
+    expect(actionsFor(owner, editor).roleChoices).toEqual(["ADMIN", "EDITOR", "MEMBER"]);
+    expect(actionsFor(owner, member).roleChoices).toEqual(["ADMIN", "EDITOR", "MEMBER"]);
   });
 
-  test("Admins remove anyone but the owner", () => {
-    expect(actionsFor(admin, otherAdmin).leaveOrRemove).toBe(true);
+  test("other Admins move people between Editor and Member but never touch Admins", () => {
+    expect(actionsFor(admin, member).roleChoices).toEqual(["EDITOR", "MEMBER"]);
+    expect(actionsFor(admin, editor).roleChoices).toEqual(["EDITOR", "MEMBER"]);
+    expect(actionsFor(admin, otherAdmin).roleChoices).toEqual([]);
+    expect(actionsFor(admin, owner).roleChoices).toEqual([]);
+  });
+
+  test("nobody changes their own role, and Editors and Members change nobody's", () => {
+    for (const self of [owner, admin, editor, member]) {
+      expect(actionsFor(self, self).roleChoices).toEqual([]);
+    }
+    expect(actionsFor(editor, member).roleChoices).toEqual([]);
+    expect(actionsFor(member, otherMember).roleChoices).toEqual([]);
+  });
+
+  test("the owner removes anyone else, other Admins remove Editors and Members", () => {
+    expect(actionsFor(owner, admin).leaveOrRemove).toBe(true);
+    expect(actionsFor(owner, editor).leaveOrRemove).toBe(true);
+    expect(actionsFor(owner, member).leaveOrRemove).toBe(true);
     expect(actionsFor(admin, editor).leaveOrRemove).toBe(true);
     expect(actionsFor(admin, member).leaveOrRemove).toBe(true);
+    expect(actionsFor(admin, otherAdmin).leaveOrRemove).toBe(false);
     expect(actionsFor(admin, owner).leaveOrRemove).toBe(false);
-    expect(actionsFor(owner, admin).leaveOrRemove).toBe(true);
   });
 
   test("Editors remove Members only", () => {
@@ -58,7 +70,7 @@ describe("memberActions", () => {
 
   test("a phone without a membership gets no actions on others", () => {
     expect(memberActions({ ownerId: owner.userId, self: undefined, target: member })).toEqual({
-      changeRole: false,
+      roleChoices: [],
       makeOwner: false,
       leaveOrRemove: false,
     });

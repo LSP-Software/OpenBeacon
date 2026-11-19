@@ -7,8 +7,11 @@ import {
 } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
+import { removeDeviceSchema } from "@openbeacon/schemas";
 import z from "zod";
 import { activateDevice, lockActivatingAccount } from "../lib/deviceActivation.ts";
+import { limits } from "../lib/limits.ts";
+import { removeUserDevice } from "../lib/removeDevice.ts";
 import {
   requireFreshSession,
   setupDeviceProcedure,
@@ -101,9 +104,42 @@ export const deviceRouter = createTRPCRouter({
     return {
       accountHasActiveDevice: otherActiveDevices > 0,
       activated: Boolean(device?.activatedAt),
+      deviceLimitReached: !device?.activatedAt && otherActiveDevices >= limits.devicesPerAccount,
       registered: Boolean(device),
     };
   }),
+  devicesAtLimit: setupDeviceProcedure.query(async ({ ctx }) => {
+    const devices = await ctx.db.userDevice.findMany({
+      orderBy: { createdAt: "asc" },
+      select: { id: true, icon: true, lastSeenAt: true, model: true, name: true, platform: true },
+      where: {
+        userId: ctx.session.user.id,
+        activatedAt: { not: null },
+        revokedAt: null,
+        id: { not: ctx.deviceId },
+      },
+    });
+    return devices.length >= limits.devicesPerAccount ? devices : [];
+  }),
+  removeAtLimit: setupDeviceProcedure
+    .use(requireFreshSession)
+    .meta({ rateLimit: { limit: 10, windowMs: 60_000 } })
+    .input(removeDeviceSchema)
+    .mutation(async ({ ctx, input }) => {
+      const device = await removeUserDevice({
+        db: ctx.db,
+        deviceId: input.deviceId,
+        userId: ctx.session.user.id,
+        currentSessionId: ctx.session.session.id,
+        current: false,
+        onlyAtDeviceLimit: true,
+      });
+      ctx.securityAlerts?.send(
+        ctx.session.user.id,
+        { type: "device-removed", device },
+        ctx.deviceId,
+      );
+    }),
   activationChallenge: setupDeviceProcedure
     .use(requireFreshSession)
     .meta({ rateLimit: { limit: 20, windowMs: 60_000 } })

@@ -917,6 +917,14 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           onHold: 0,
           unit: { one: "group", other: "groups" },
         },
+        {
+          id: "devices",
+          label: "Devices",
+          used: 1,
+          max: 10,
+          onHold: 0,
+          unit: { one: "device", other: "devices" },
+        },
       ]);
       expect(usage.limits).toEqual([
         {
@@ -989,7 +997,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         allowSelfSetSeats: true,
         selfHosted: true,
       }).account.usage();
-      expect(usage.gauges.map(({ id }) => id)).toEqual(["groups"]);
+      expect(usage.gauges.map(({ id }) => id)).toEqual(["groups", "devices"]);
       expect(usage.gauges[0]).toMatchObject({ used: 1, max: 16 });
       expect(usage.seats).toBeNull();
       expect(usage.groups).toEqual([

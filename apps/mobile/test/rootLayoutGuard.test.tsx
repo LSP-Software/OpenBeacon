@@ -67,6 +67,7 @@ const setupRoutes = [
   "device-removed",
   "onboarding/index",
   "setup/index",
+  "setup/device-limit",
   "setup/link",
   "setup/waiting",
   "account/recovery-restore",

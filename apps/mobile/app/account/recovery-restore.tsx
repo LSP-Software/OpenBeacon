@@ -21,6 +21,7 @@ import { useHeldHistoryKeyVersions } from "../../hooks/useHeldHistoryKeyVersions
 import { trpc } from "../../lib/api.ts";
 import { authClient } from "../../lib/auth-client.ts";
 import { activateWithHistoryKey } from "../../lib/deviceActivation.ts";
+import { errorReason } from "../../lib/errorReason.ts";
 import { restoreFromRecoveryPhrase } from "../../lib/recovery.ts";
 import { requestTrackingSync } from "../../lib/trackingEvents.ts";
 import { resealPersonalData } from "../../lib/resealPersonalData.ts";
@@ -45,7 +46,10 @@ const RecoveryRestoreScreen = () => {
   const [userId, setUserId] = useState<string>();
   const [words, setWords] = useState(emptyWords);
   const [problem, setProblem] = useState<{ message: string; invalidIndexes: number[] }>();
-  const [activationProblem, setActivationProblem] = useState<string>();
+  const [activationProblem, setActivationProblem] = useState<{
+    message: string;
+    deviceLimit: boolean;
+  }>();
 
   const entering = step === "enter" || step === "restoring";
   const busy = step === "restoring" || step === "activating";
@@ -116,11 +120,13 @@ const RecoveryRestoreScreen = () => {
       setActivationProblem(undefined);
       const activated = await tryCatch(activateWithHistoryKey());
       if (activated.error) {
-        setActivationProblem(
-          activated.error instanceof TRPCClientError && !activated.error.data
-            ? "We couldn’t reach the server. Check your connection and try again."
-            : activated.error.message,
-        );
+        setActivationProblem({
+          message:
+            activated.error instanceof TRPCClientError && !activated.error.data
+              ? "We couldn’t reach the server. Check your connection and try again."
+              : activated.error.message,
+          deviceLimit: errorReason(activated.error) === "DEVICE_LIMIT",
+        });
         setStep("activationFailed");
         return;
       }
@@ -203,8 +209,15 @@ const RecoveryRestoreScreen = () => {
                     : "text-secondary text-base"
                 }
               >
-                {activationProblem ?? `Setting up this ${thisDeviceNoun()}…`}
+                {activationProblem?.message ?? `Setting up this ${thisDeviceNoun()}…`}
               </Text>
+              {activationProblem?.deviceLimit && (
+                <Link href="/setup/device-limit" asChild>
+                  <Button variant="secondary">
+                    <Text>Remove a device</Text>
+                  </Button>
+                </Link>
+              )}
               <Button onPress={() => finish(userId)} loading={step === "activating"}>
                 <Text>Try again</Text>
               </Button>

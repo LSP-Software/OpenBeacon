@@ -186,11 +186,13 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(await account.pending.device.status()).toEqual({
         accountHasActiveDevice: true,
         activated: false,
+        deviceLimitReached: false,
         registered: true,
       });
       expect(await caller(account.userId, account.firstDeviceId).device.status()).toEqual({
         accountHasActiveDevice: false,
         activated: true,
+        deviceLimitReached: false,
         registered: true,
       });
     });
@@ -500,6 +502,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(await next.api.device.status()).toEqual({
         accountHasActiveDevice: false,
         activated: false,
+        deviceLimitReached: false,
         registered: true,
       });
       expect(await rotationRequired(account.groupId)).toBe(false);
@@ -584,6 +587,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(await unverified.device.status()).toEqual({
         accountHasActiveDevice: false,
         activated: false,
+        deviceLimitReached: false,
         registered: false,
       });
     });

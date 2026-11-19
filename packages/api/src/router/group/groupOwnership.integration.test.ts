@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
-import { WRAPPED_EPOCH_KEY_ALGORITHM } from "@openbeacon/encryption";
+import { createDeviceKeyPair, WRAPPED_EPOCH_KEY_ALGORITHM } from "@openbeacon/encryption";
 import { beginAccountDeletion, deleteAccountRecords } from "../../lib/account-deletion.ts";
 import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
@@ -52,6 +52,42 @@ const nextEpoch = {
       wrappedKey: Buffer.alloc(48).toString("base64"),
     },
   ],
+};
+const devicePublicKey = createDeviceKeyPair().publicKey;
+const removalEpoch = async ({
+  by,
+  groupId,
+  leaving,
+}: {
+  by: string;
+  groupId: string;
+  leaving: string;
+}) => {
+  const latest = await prisma.groupEpoch.findFirst({
+    orderBy: { epochNumber: "desc" },
+    select: { epochNumber: true },
+    where: { groupId },
+  });
+  const remaining = await prisma.groupMember.findMany({
+    select: { userId: true },
+    where: { groupId, userId: { not: leaving } },
+  });
+  const epochId = crypto.randomUUID();
+  return {
+    createdByDeviceId: `${by}-device`,
+    epochId,
+    epochNumber: (latest?.epochNumber ?? 0) + 1,
+    historyKeys: [],
+    recipientKeys: remaining.map(({ userId }) => ({
+      algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
+      createdAt: new Date(),
+      ephemeralPublicKey: createDeviceKeyPair().publicKey,
+      epochId,
+      recipientDeviceId: `${userId}-device`,
+      senderPublicKey: devicePublicKey,
+      wrappedKey: Buffer.alloc(48).toString("base64"),
+    })),
+  };
 };
 const seedGroup = async (name: string) => {
   const groupId = `${prefix}-${name}`;
@@ -105,7 +141,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           icon: "phone" as const,
           id: `${userId}-device`,
           name: "Phone",
-          publicKey: "public-key",
+          publicKey: devicePublicKey,
           publicKeyAlgorithm: "X25519",
           userId,
         })),
@@ -150,6 +186,125 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         }),
       ).toEqual([{ role: "ADMIN" }, { role: "ADMIN" }]);
       expect((await ownership(groupId)).ownerId).toBe(owner);
+    });
+
+    test("only the owner makes, demotes or removes Admins", async () => {
+      const { groupId, memberIdOf } = await seedGroup("admin-guards");
+      const promoteRefused = {
+        code: "FORBIDDEN",
+        message: "Only the group's owner can make someone an Admin or change an Admin's role.",
+      };
+      for (const target of [editor, member]) {
+        await expect(
+          caller(admin).groupMembership.updateRole({
+            groupId,
+            memberId: memberIdOf(target),
+            role: "ADMIN",
+          }),
+        ).rejects.toMatchObject(promoteRefused);
+      }
+      for (const role of ["EDITOR", "MEMBER"] as const) {
+        await expect(
+          caller(admin).groupMembership.updateRole({
+            groupId,
+            memberId: memberIdOf(otherAdmin),
+            role,
+          }),
+        ).rejects.toMatchObject(promoteRefused);
+      }
+      await expect(
+        caller(admin).groupMembership.remove({
+          groupId,
+          memberId: memberIdOf(otherAdmin),
+          nextEpoch,
+        }),
+      ).rejects.toMatchObject({
+        code: "FORBIDDEN",
+        message: "Only the group's owner can remove an Admin.",
+      });
+      const roles = async () =>
+        Object.fromEntries(
+          (
+            await prisma.groupMember.findMany({
+              where: { groupId },
+              select: { userId: true, role: true },
+            })
+          ).map(({ userId, role }) => [userId, role]),
+        );
+      expect(await roles()).toEqual({
+        [owner]: "ADMIN",
+        [admin]: "ADMIN",
+        [otherAdmin]: "ADMIN",
+        [editor]: "EDITOR",
+        [member]: "MEMBER",
+      });
+
+      await caller(owner).groupMembership.updateRole({
+        groupId,
+        memberId: memberIdOf(member),
+        role: "ADMIN",
+      });
+      await caller(owner).groupMembership.updateRole({
+        groupId,
+        memberId: memberIdOf(member),
+        role: "EDITOR",
+      });
+      await caller(owner).groupMembership.updateRole({
+        groupId,
+        memberId: memberIdOf(admin),
+        role: "MEMBER",
+      });
+      await caller(owner).groupMembership.remove({
+        groupId,
+        memberId: memberIdOf(otherAdmin),
+        nextEpoch: await removalEpoch({ by: owner, groupId, leaving: otherAdmin }),
+      });
+      expect(await roles()).toEqual({
+        [owner]: "ADMIN",
+        [admin]: "MEMBER",
+        [editor]: "EDITOR",
+        [member]: "EDITOR",
+      });
+    });
+
+    test("other Admins still manage Editors and Members and can step down themselves", async () => {
+      const { groupId, memberIdOf } = await seedGroup("admin-keeps");
+      await caller(admin).groupMembership.updateRole({
+        groupId,
+        memberId: memberIdOf(member),
+        role: "EDITOR",
+      });
+      await caller(admin).groupMembership.updateRole({
+        groupId,
+        memberId: memberIdOf(editor),
+        role: "MEMBER",
+      });
+      await caller(admin).groupMembership.remove({
+        groupId,
+        memberId: memberIdOf(member),
+        nextEpoch: await removalEpoch({ by: admin, groupId, leaving: member }),
+      });
+      await caller(admin).groupMembership.remove({
+        groupId,
+        memberId: memberIdOf(editor),
+        nextEpoch: await removalEpoch({ by: admin, groupId, leaving: editor }),
+      });
+      await caller(otherAdmin).groupMembership.updateRole({
+        groupId,
+        memberId: memberIdOf(otherAdmin),
+        role: "EDITOR",
+      });
+      expect(
+        await prisma.groupMember.findMany({
+          where: { groupId },
+          orderBy: { userId: "asc" },
+          select: { userId: true, role: true },
+        }),
+      ).toEqual([
+        { userId: admin, role: "ADMIN" },
+        { userId: otherAdmin, role: "EDITOR" },
+        { userId: owner, role: "ADMIN" },
+      ]);
     });
 
     test("only the owner can delete the group", async () => {
@@ -276,7 +431,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
     test("demoting the offered Admin or cancelling clears the offer", async () => {
       const { groupId, memberIdOf } = await seedGroup("offer-cleared");
       await caller(owner).groupOwnership.offer({ groupId, memberId: memberIdOf(admin) });
-      await caller(otherAdmin).groupMembership.updateRole({
+      await caller(owner).groupMembership.updateRole({
         groupId,
         memberId: memberIdOf(admin),
         role: "EDITOR",

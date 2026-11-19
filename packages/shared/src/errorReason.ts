@@ -32,6 +32,7 @@ export const errorReasons = [
   "NO_FREE_SEATS",
   "GROUP_FULL",
   "SEAT_ON_HOLD",
+  "DEVICE_LIMIT",
 ] as const;
 
 export type ErrorReason = (typeof errorReasons)[number];

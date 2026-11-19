@@ -19,6 +19,7 @@ import { useIdentityGate } from "../../hooks/useIdentityGate.ts";
 import { trpc } from "../../lib/api.ts";
 import { activateWithHistoryKey, isThisDeviceActive } from "../../lib/deviceActivation.ts";
 import { invalidCodeMessage } from "../../lib/emailCodes.ts";
+import { errorReason } from "../../lib/errorReason.ts";
 import type { EpochKeyDevice } from "../../lib/epochKeys.ts";
 import { protectHistory } from "../../lib/protectHistory.ts";
 import { isResetConfirmed } from "../../lib/isResetConfirmed.ts";
@@ -127,7 +128,16 @@ const RecoveryPhraseResetScreen = () => {
     const result = await tryCatch(resetRecoveryPhrase(phrase, resetToken));
     if (result.error) {
       setStep("phrase");
-      Alert.alert("Unable to reset recovery phrase", result.error.message);
+      Alert.alert(
+        "Unable to reset recovery phrase",
+        result.error.message,
+        errorReason(result.error) === "DEVICE_LIMIT"
+          ? [
+              { text: "Not now", style: "cancel" },
+              { text: "Remove a device", onPress: () => router.push("/setup/device-limit") },
+            ]
+          : undefined,
+      );
       return;
     }
     if (result.data.status === "reauthenticate") {

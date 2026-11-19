@@ -49,7 +49,6 @@ import { buildRemoveGroupMemberInput, submitEpochChange } from "../../../../lib/
 import {
   canEditGroup,
   type GroupRole,
-  groupRoles,
   memberActions,
   roleLabel,
 } from "../../../../lib/groupRoles.ts";
@@ -450,12 +449,15 @@ const MembersTab = ({
                 </Text>
               </View>
             </View>
-            {selectedActions?.changeRole ? (
+            {selectedActions && selectedActions.roleChoices.length > 0 ? (
               <View className="gap-2">
                 <Text variant="label">Role</Text>
                 <SegmentedControl
                   accessibilityLabel={`Role for ${selectedMember.user.name}`}
-                  options={groupRoles.map((role) => ({ value: role, label: roleLabel(role) }))}
+                  options={selectedActions.roleChoices.map((role) => ({
+                    value: role,
+                    label: roleLabel(role),
+                  }))}
                   selected={selectedMember.role}
                   disabled={changingRole !== null}
                   onChange={(role) => {

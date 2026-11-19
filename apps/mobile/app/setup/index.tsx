@@ -24,6 +24,7 @@ const SetUpPhoneScreen = () => {
   const status = useQuery(trpc.accountRecovery.status.queryOptions());
   const deviceStatus = useQuery(trpc.device.status.queryOptions());
   const noOtherPhone = deviceStatus.data?.accountHasActiveDevice === false;
+  const deviceLimitReached = deviceStatus.data?.deviceLimitReached === true;
   const [cancelling, setCancelling] = useState(false);
   const cancellingRef = useRef(false);
   const refetchDeviceStatus = deviceStatus.refetch;
@@ -184,7 +185,21 @@ const SetUpPhoneScreen = () => {
           </Text>
         )}
 
-        {status.data && selected && (
+        {status.data && deviceLimitReached && (
+          <View className="gap-4">
+            <Text className="text-secondary text-base">
+              Your account already has as many devices set up as it can have. Remove one you no
+              longer use to set up this {noun}.
+            </Text>
+            <Link href="/setup/device-limit" asChild>
+              <Button disabled={cancelling}>
+                <Text>Remove a device</Text>
+              </Button>
+            </Link>
+          </View>
+        )}
+
+        {status.data && !deviceLimitReached && selected && (
           <View className="gap-4">
             <Text accessibilityRole="header" className="font-semibold">
               How do you want to set up this {noun}?

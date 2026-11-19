@@ -2,6 +2,8 @@ import { Prisma, type PrismaClient } from "@openbeacon/database";
 import type { AlertDevice } from "@openbeacon/email";
 import { devicePlatformSchema } from "@openbeacon/schemas";
 import { TRPCError } from "@trpc/server";
+import { countActivatedDevices } from "./deviceActivation.ts";
+import { limits } from "./limits.ts";
 import { lockUserGroups } from "./lockUserGroups.ts";
 import { ReasonError } from "./reasonError.ts";
 
@@ -22,6 +24,7 @@ export const removeUserDevice = async ({
   currentSessionId,
   current,
   pendingOnly = false,
+  onlyAtDeviceLimit = false,
 }: {
   db: Pick<PrismaClient, "$transaction">;
   deviceId: string;
@@ -29,6 +32,7 @@ export const removeUserDevice = async ({
   currentSessionId: string;
   current: boolean;
   pendingOnly?: boolean;
+  onlyAtDeviceLimit?: boolean;
 }) =>
   db.$transaction(async (tx) => {
     await tx.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR NO KEY UPDATE`);
@@ -50,6 +54,15 @@ export const removeUserDevice = async ({
         message:
           "This phone has already been set up. Remove it from your devices if it isn't yours.",
         cause: new ReasonError("ALREADY_SET_UP"),
+      });
+    }
+    if (
+      onlyAtDeviceLimit &&
+      (!device.activatedAt || (await countActivatedDevices(tx, userId)) < limits.devicesPerAccount)
+    ) {
+      throw new TRPCError({
+        code: "CONFLICT",
+        message: `Your account has fewer than ${limits.devicesPerAccount} phones set up now, so you can set up this one.`,
       });
     }
     if (!current && currentSession.deviceId === deviceId) {

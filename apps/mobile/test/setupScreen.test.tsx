@@ -8,7 +8,10 @@ import { createRoot, type Root } from "test-renderer";
 
 let deviceActive: boolean | Error = false;
 let recoveryKey: object | null = {};
-let deviceStatus: { data?: { accountHasActiveDevice?: boolean }; isError: boolean } = {
+let deviceStatus: {
+  data?: { accountHasActiveDevice?: boolean; deviceLimitReached?: boolean };
+  isError: boolean;
+} = {
   data: { accountHasActiveDevice: true },
   isError: false,
 };
@@ -195,6 +198,18 @@ test("stays on setup when the device status can't be checked", async () => {
   deviceActive = new Error("offline");
   await render();
   expect(replace).not.toHaveBeenCalled();
+});
+
+test("a phone on an account at its device limit is sent to remove a device instead of choosing a method", async () => {
+  deviceStatus = {
+    data: { accountHasActiveDevice: true, deviceLimitReached: true },
+    isError: false,
+  };
+  await render();
+  expect(findByText("mock-link", "Remove a device").props["href"]).toBe("/setup/device-limit");
+  expect(shownText()).not.toContain("How do you want to set up this phone?");
+  expect(() => continueHref()).toThrow("Missing mock-link Continue");
+  findByText("mock-button", "Cancel and remove this phone");
 });
 
 test("Cancel asks first, and keeping setup going does nothing", async () => {

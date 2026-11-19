@@ -284,6 +284,16 @@ export const groupMembershipRouter = {
               message: "Only Admins can remove Admins or Editors.",
             });
           }
+          if (
+            actor.id !== input.memberId &&
+            member.role === GroupRole.ADMIN &&
+            member.group.ownerId !== ctx.session.user.id
+          ) {
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message: "Only the group's owner can remove an Admin.",
+            });
+          }
 
           const isLeaving = actor.id === input.memberId;
           if (!isLeaving) {
@@ -408,6 +418,17 @@ export const groupMembershipRouter = {
             code: "FORBIDDEN",
             message: "The group's owner is always an Admin.",
             cause: new ReasonError("GROUP_OWNER"),
+          });
+        }
+        if (
+          (input.role === GroupRole.ADMIN || member.role === GroupRole.ADMIN) &&
+          member.role !== input.role &&
+          member.group.ownerId !== ctx.session.user.id &&
+          member.userId !== ctx.session.user.id
+        ) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Only the group's owner can make someone an Admin or change an Admin's role.",
           });
         }
         if (member.user.pendingDeletion && member.role !== input.role) {

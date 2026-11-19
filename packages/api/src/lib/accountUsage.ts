@@ -122,6 +122,14 @@ export const readAccountUsage = async ({
       onHold: 0,
       unit: { one: "group", other: "groups" },
     },
+    {
+      id: "devices",
+      label: "Devices",
+      used: ownPhones.length,
+      max: limits.devicesPerAccount,
+      onHold: 0,
+      unit: { one: "device", other: "devices" },
+    },
   ];
 
   const usageLimits: Array<{

@@ -95,6 +95,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(await pending.device.status()).toEqual({
         accountHasActiveDevice: true,
         activated: false,
+        deviceLimitReached: false,
         registered: true,
       });
       expect((await pending.accountRecovery.status()).currentHistoryKey?.version).toBe(1);
