@@ -272,6 +272,10 @@ const TimelineView = ({
   );
 
   useEffect(() => {
+    if (pickedDayKey === null && day) setPickedDayKey(day.key);
+  }, [day, pickedDayKey]);
+
+  useEffect(() => {
     rememberTimelineGroup(selfUserId, group.id);
   }, [group.id, selfUserId]);
 
