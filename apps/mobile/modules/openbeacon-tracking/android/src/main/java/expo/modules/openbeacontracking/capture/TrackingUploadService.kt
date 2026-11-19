@@ -11,29 +11,28 @@ import com.facebook.react.jstasks.HeadlessJsTaskConfig
 import com.facebook.react.jstasks.HeadlessJsTaskContext
 
 class TrackingUploadService : HeadlessJsTaskService() {
-  override fun onCreate() {
-    super.onCreate()
-    live = this
-  }
-
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     val token = wakes.accept(intent?.getStringExtra(EXTRA_REASON) == REASON_PUSH) ?: return START_NOT_STICKY
-    return super.onStartCommand((intent ?: Intent()).putExtra(EXTRA_TASK_TOKEN, token), flags, startId)
+    return super.onStartCommand((intent ?: Intent()).putExtra(UploadTasks.EXTRA_TOKEN, token), flags, startId)
   }
 
   override fun getTaskConfig(intent: Intent?): HeadlessJsTaskConfig =
     HeadlessJsTaskConfig(
-      "OpenBeaconTrackingUpload",
+      UploadTasks.NAME,
       Arguments.createMap().apply {
         putString("reason", intent?.getStringExtra(EXTRA_REASON) ?: "upload")
-        putString("taskToken", intent?.getStringExtra(EXTRA_TASK_TOKEN))
+        putString(UploadTasks.EXTRA_TOKEN, intent?.getStringExtra(UploadTasks.EXTRA_TOKEN))
       },
-      60_000,
+      UploadTasks.TIMEOUT_MS,
       true,
     )
 
   override fun onHeadlessJsTaskStart(taskId: Int) {
-    wakes.started(taskId)
+    if (!UploadTasks.isStartingDirectly) {
+      val token = wakes.started(taskId)
+      val context = reactContext
+      if (token != null && context != null) UploadTasks.register(token, HeadlessJsTaskContext.getInstance(context), taskId)
+    }
     super.onHeadlessJsTaskStart(taskId)
   }
 
@@ -44,15 +43,8 @@ class TrackingUploadService : HeadlessJsTaskService() {
   }
 
   override fun onDestroy() {
-    if (live === this) live = null
     super.onDestroy()
     if (wakes.stopped()) startFollowUp()
-  }
-
-  private fun finishTask(token: String) {
-    val taskId = wakes.taskFor(token) ?: return
-    val tasks = HeadlessJsTaskContext.getInstance(reactContext ?: return)
-    if (tasks.isTaskRunning(taskId)) tasks.finishTask(taskId)
   }
 
   private fun startFollowUp() {
@@ -63,14 +55,7 @@ class TrackingUploadService : HeadlessJsTaskService() {
   companion object {
     const val EXTRA_REASON = "reason"
     const val REASON_PUSH = "push"
-    private const val EXTRA_TASK_TOKEN = "taskToken"
     private val wakes = UploadWakeGate()
-    private var live: TrackingUploadService? = null
-
-    // React Native 0.83 never registers HeadlessJsTaskSupport, so JS can't finish its own task and every upload would run to its timeout.
-    fun finish(token: String) {
-      Handler(Looper.getMainLooper()).post { live?.finishTask(token) }
-    }
 
     fun start(context: Context, reason: String) {
       try {
