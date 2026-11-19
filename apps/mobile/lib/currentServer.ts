@@ -7,6 +7,7 @@ export const normaliseServerUrl = (
   input: string,
 ): { url: string; error: null } | { url: null; error: string } => {
   const trimmed = input.trim();
+  if (trimmed.length > 200) return { url: null, error: "That address is too long" };
   const parsed = URL.canParse(trimmed) ? new URL(trimmed) : null;
   if (!parsed || (parsed.protocol !== "http:" && parsed.protocol !== "https:") || !parsed.host) {
     return {
@@ -23,13 +24,26 @@ export const normaliseServerUrl = (
     };
   }
   if (parsed.username || parsed.password) {
-    return { url: null, error: "Remove the username and password from the URL" };
+    return {
+      url: null,
+      error: "Remove the username and password from the URL",
+    };
   }
   if (parsed.search || parsed.hash || /[?#]/.test(trimmed)) {
     return { url: null, error: "Remove everything from the ? or # onwards" };
   }
+  const plainHost = /^([a-z0-9._-]+|\[[0-9a-f:.]+\])(:\d*)?$/i;
+  const typedHost = /^[a-z][a-z0-9+.-]*:[\\/]*([^\\/?#]*)/i.exec(trimmed)?.[1] ?? "";
+  if (!plainHost.test(typedHost) || !plainHost.test(parsed.host)) {
+    return {
+      url: null,
+      error:
+        "Use the address in plain letters, numbers, dots and hyphens. For a domain with accents or other alphabets, use its xn-- form.",
+    };
+  }
   const path = parsed.pathname.replace(/\/+$/, "");
-  return { url: `${parsed.origin}${path}`, error: null };
+  const url = `${parsed.origin}${path}`;
+  return url.length > 200 ? { url: null, error: "That address is too long" } : { url, error: null };
 };
 
 export const getServerUrl = () => {
@@ -43,6 +57,8 @@ export const setServerUrl = (url: string) => {
   else storage.remove(SERVER_URL_KEY);
 };
 
+export const isHostedServer = (url: string) => url === hostedApiUrl;
+
 export const hasCustomServerUrl = () => getServerUrl() !== "";
 
 const getDevelopmentUrl = () => {
@@ -50,6 +66,8 @@ const getDevelopmentUrl = () => {
   return developmentUrl ? (normaliseServerUrl(developmentUrl).url ?? developmentUrl) : "";
 };
 
-export const getBaseUrl = () => getDevelopmentUrl() || getServerUrl() || hostedApiUrl;
+export const getSelectedServerUrl = () => getServerUrl() || hostedApiUrl;
+
+export const getBaseUrl = () => getDevelopmentUrl() || getSelectedServerUrl();
 
 export const getFeedbackUrl = () => getDevelopmentUrl() || hostedApiUrl;

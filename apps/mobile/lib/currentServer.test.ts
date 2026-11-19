@@ -11,8 +11,15 @@ mock.module("./storage.ts", () => ({
   },
 }));
 
-const { getBaseUrl, getFeedbackUrl, getServerUrl, normaliseServerUrl, setServerUrl } =
-  await import("./currentServer.ts");
+const { URL: PhoneUrl } = await import("whatwg-url-minimum");
+const {
+  getBaseUrl,
+  getFeedbackUrl,
+  getSelectedServerUrl,
+  getServerUrl,
+  normaliseServerUrl,
+  setServerUrl,
+} = await import("./currentServer.ts");
 const originalDevUrl = process.env.EXPO_PUBLIC_DEV_API_URL;
 
 afterEach(() => {
@@ -45,6 +52,67 @@ describe("normalising a server URL", () => {
     ["https://beacon.example.com/#top", "Remove everything from the ? or # onwards"],
   ])("rejects %p", (input, error) => {
     expect(normaliseServerUrl(input)).toEqual({ url: null, error });
+  });
+});
+
+describe("refusing addresses that only look like another", () => {
+  const plainLettersError =
+    "Use the address in plain letters, numbers, dots and hyphens. For a domain with accents or other alphabets, use its xn-- form.";
+  const withPhoneUrl = (check: () => void) => {
+    const original = globalThis.URL;
+    Object.assign(globalThis, { URL: PhoneUrl });
+    try {
+      check();
+    } finally {
+      Object.assign(globalThis, { URL: original });
+    }
+  };
+
+  test.each([
+    ["Cyrillic а", "https://\u0430pi.openbeacon.net"],
+    ["a zero-width space", "https://a\u200Bpi.openbeacon.net"],
+    ["a percent-encoded Cyrillic а", "https://%D0%B0pi.openbeacon.net"],
+    ["an accented letter", "https://bücher.example"],
+    ["a full-width dot", "https://api\uFF0Eopenbeacon.net"],
+  ])("rejects a host with %s, whichever URL parser the phone uses", (_, input) => {
+    expect(normaliseServerUrl(input)).toEqual({
+      url: null,
+      error: plainLettersError,
+    });
+    withPhoneUrl(() => {
+      expect(normaliseServerUrl(input)).toEqual({
+        url: null,
+        error: plainLettersError,
+      });
+    });
+  });
+
+  test.each([
+    ["https://xn--bcher-kva.example", "https://xn--bcher-kva.example"],
+    ["https://192.168.1.10:8443/", "https://192.168.1.10:8443"],
+    ["https://[fd00::1]:3000/", "https://[fd00::1]:3000"],
+    ["https://beacon-1.example.com:8443/api", "https://beacon-1.example.com:8443/api"],
+    ["https://family_server.home.lan", "https://family_server.home.lan"],
+  ])("still accepts %p", (input, expected) => {
+    expect(normaliseServerUrl(input)).toEqual({ url: expected, error: null });
+    withPhoneUrl(() => {
+      expect(normaliseServerUrl(input)).toEqual({ url: expected, error: null });
+    });
+  });
+
+  test("rejects an address longer than 200 characters", () => {
+    expect(normaliseServerUrl(`https://${"a".repeat(181)}.example.com`)).toEqual({
+      url: null,
+      error: "That address is too long",
+    });
+    expect(normaliseServerUrl(`https://${"a".repeat(180)}.example.com`).url).not.toBeNull();
+  });
+
+  test("rejects an address that only grows past 200 characters once encoded", () => {
+    expect(normaliseServerUrl(`https://beacon.example.com/${" ".repeat(60)}x`)).toEqual({
+      url: null,
+      error: "That address is too long",
+    });
   });
 });
 
@@ -142,6 +210,13 @@ describe("the base URL", () => {
     process.env.EXPO_PUBLIC_DEV_API_URL = "http://localhost:3000/";
     setServerUrl("https://self-hosted.example");
     expect(getBaseUrl()).toBe("http://localhost:3000");
+  });
+
+  test("the selected server ignores the development override", () => {
+    process.env.EXPO_PUBLIC_DEV_API_URL = "http://localhost:3000/";
+    expect(getSelectedServerUrl()).toBe("https://api.openbeacon.net");
+    setServerUrl("https://self-hosted.example");
+    expect(getSelectedServerUrl()).toBe("https://self-hosted.example");
   });
 
   test("ignores the development override in release builds", () => {

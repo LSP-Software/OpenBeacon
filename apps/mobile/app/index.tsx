@@ -15,6 +15,7 @@ import { isThisDeviceActive } from "../lib/deviceActivation.ts";
 import { ensureDeviceKeyRegistration } from "../lib/deviceKeys.ts";
 import { launchRetryDelayMs } from "../lib/launchRetry.ts";
 import { readOnboarding, startOnboarding } from "../lib/onboarding.ts";
+import { takeInviteForSignIn } from "../lib/pendingJoinCode.ts";
 import { readSavedDeviceLink } from "../lib/savedDeviceLink.ts";
 import { SERVER_UNREACHABLE_MESSAGE } from "../lib/serverUnreachable.ts";
 import { signOutOfThisPhone } from "../lib/signOut.ts";
@@ -90,6 +91,14 @@ export default function HomeScreen() {
   });
   const [attempt, setAttempt] = useState(0);
   const [signingOut, setSigningOut] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!rootNavigationState?.key || isPending || session) return;
+      const code = takeInviteForSignIn();
+      if (code) router.replace({ pathname: "/join", params: { code } });
+    }, [rootNavigationState?.key, session, isPending]),
+  );
 
   useFocusEffect(
     // biome-ignore lint/correctness/useExhaustiveDependencies: attempt reruns the check when the user taps Try again

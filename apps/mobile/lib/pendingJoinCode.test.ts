@@ -21,22 +21,28 @@ mock.module("./registeredDevice.ts", () => ({
   readRegisteredDeviceNow: () =>
     registeredUserId ? { deviceId: "device-1", publicKey: "key", userId: registeredUserId } : null,
 }));
-mock.module("./deviceActivation.ts", () => ({ readThisDeviceState: () => thisDeviceState }));
+mock.module("./deviceActivation.ts", () => ({
+  readThisDeviceState: () => thisDeviceState,
+}));
 mock.module("expo-router", () => ({
   router: { replace: (target: unknown) => replacements.push(target) },
 }));
 
 const {
+  clearInviteForSignIn,
   clearPendingJoinCodes,
-  joinCodeFromInput,
-  joinCodeFromLink,
   openAppAfterSetup,
   saveJoinLinkForAfterSetup,
+  saveInviteForSignIn,
   savePendingJoinCode,
-  takePendingJoinCode,
+  takeInviteForSignIn,
+  takePendingInvite,
 } = await import("./pendingJoinCode.ts");
+const { inviteLink } = await import("./inviteLink.ts");
 
 const code = "0123456789ABCDEF0123456789ABCDEF";
+const server = "https://beacon.example.com/openbeacon";
+const invite = { code, server: null };
 
 beforeEach(() => {
   storageValues.clear();
@@ -55,16 +61,16 @@ describe("saved join codes", () => {
   test("a saved code is handed back once, then forgotten", () => {
     savePendingJoinCode({ code, userId: "user-1" });
 
-    expect(takePendingJoinCode("user-1")).toBe(code);
-    expect(takePendingJoinCode("user-1")).toBeNull();
+    expect(takePendingInvite("user-1")).toEqual(invite);
+    expect(takePendingInvite("user-1")).toBeNull();
     expect(storageValues.size).toBe(0);
   });
 
   test("a code saved for one account isn't handed to another, and is forgotten", () => {
     savePendingJoinCode({ code, userId: "user-1" });
 
-    expect(takePendingJoinCode("user-2")).toBeNull();
-    expect(takePendingJoinCode("user-1")).toBeNull();
+    expect(takePendingInvite("user-2")).toBeNull();
+    expect(takePendingInvite("user-1")).toBeNull();
   });
 
   test("saving a code for another account forgets the first account's code", () => {
@@ -77,27 +83,36 @@ describe("saved join codes", () => {
   test("a code expires after 24 hours", () => {
     savePendingJoinCode({ code, userId: "user-1" });
     now += 24 * 60 * 60 * 1000 - 1;
-    expect(takePendingJoinCode("user-1")).toBe(code);
+    expect(takePendingInvite("user-1")).toEqual(invite);
 
     savePendingJoinCode({ code, userId: "user-1" });
     now += 24 * 60 * 60 * 1000;
-    expect(takePendingJoinCode("user-1")).toBeNull();
+    expect(takePendingInvite("user-1")).toBeNull();
     expect(storageValues.size).toBe(0);
   });
 
   test("a code saved in the future or stored badly is ignored", () => {
     savePendingJoinCode({ code, userId: "user-1" });
     now -= 1;
-    expect(takePendingJoinCode("user-1")).toBeNull();
+    expect(takePendingInvite("user-1")).toBeNull();
 
     storageValues.set("pendingJoinCode.user-1", "garbage");
-    expect(takePendingJoinCode("user-1")).toBeNull();
+    expect(takePendingInvite("user-1")).toBeNull();
+
+    storageValues.set("pendingJoinCode.user-1", JSON.stringify({ savedAt: now, code: "ABC" }));
+    expect(takePendingInvite("user-1")).toBeNull();
+  });
+
+  test("a saved invite keeps the server it came from", () => {
+    savePendingJoinCode({ code, server, userId: "user-1" });
+
+    expect(takePendingInvite("user-1")).toEqual({ code, server });
   });
 
   test("clearing forgets every saved code and nothing else", () => {
     storageValues.set("other", "kept");
     savePendingJoinCode({ code, userId: "user-1" });
-    storageValues.set("pendingJoinCode.user-2", `${now}:${code}`);
+    storageValues.set("pendingJoinCode.user-2", "{}");
 
     clearPendingJoinCodes();
 
@@ -105,43 +120,17 @@ describe("saved join codes", () => {
   });
 });
 
-describe("join links", () => {
-  test.each([
-    `openbeacon://join?code=${code}`,
-    `openbeacon:///join?code=${code}`,
-    `openbeacon://join/?code=${code.toLowerCase()}`,
-    `/join?code=${code}`,
-    `exp+open-beacon://expo-development-client/--/join?other=1&code=${code}#top`,
-  ])("reads the code from %s", (link) => {
-    expect(joinCodeFromLink(link)).toBe(code);
-  });
-
-  test.each([
-    `openbeacon://setup?code=${code}`,
-    `openbeacon://rejoin?code=${code}`,
-    "openbeacon://join",
-    "openbeacon://join?code=",
-    "openbeacon://join?code=ABC123",
-    `openbeacon://join?xcode=${code}`,
-  ])("ignores %s", (link) => {
-    expect(joinCodeFromLink(link)).toBeNull();
-  });
-
-  test.each([code, ` ${code.toLowerCase()} `, `openbeacon://join?code=${code}`])(
-    "accepts a typed or scanned %s",
-    (input) => {
-      expect(joinCodeFromInput(input)).toBe(code);
-    },
-  );
-
-  test.each(["", "ABC123", `${code}0`, "https://example.test/"])("rejects %s", (input) => {
-    expect(joinCodeFromInput(input)).toBeNull();
-  });
-
+describe("invite links opened during setup", () => {
   test("an invite link opened on a phone that isn't set up is saved for after setup", () => {
     expect(saveJoinLinkForAfterSetup(`openbeacon://join?code=${code}`)).toBe(true);
 
-    expect(takePendingJoinCode("user-1")).toBe(code);
+    expect(takePendingInvite("user-1")).toEqual(invite);
+  });
+
+  test("an invite link from another server opened during setup keeps its server", () => {
+    expect(saveJoinLinkForAfterSetup(inviteLink({ code, server }))).toBe(true);
+
+    expect(takePendingInvite("user-1")).toEqual({ code, server });
   });
 
   test("an invite link opened during onboarding is saved for after onboarding", () => {
@@ -150,7 +139,7 @@ describe("join links", () => {
 
     expect(saveJoinLinkForAfterSetup(`openbeacon://join?code=${code}`)).toBe(true);
 
-    expect(takePendingJoinCode("user-1")).toBe(code);
+    expect(takePendingInvite("user-1")).toEqual(invite);
   });
 
   test("another account's unfinished onboarding doesn't hold back an invite", () => {
@@ -159,7 +148,7 @@ describe("join links", () => {
 
     expect(saveJoinLinkForAfterSetup(`openbeacon://join?code=${code}`)).toBe(false);
 
-    expect(takePendingJoinCode("user-1")).toBeNull();
+    expect(takePendingInvite("user-1")).toBeNull();
   });
 
   test("an invite link on a set-up or unregistered phone opens normally and isn't saved", () => {
@@ -168,6 +157,13 @@ describe("join links", () => {
     thisDeviceState = "unregistered";
     registeredUserId = null;
     expect(saveJoinLinkForAfterSetup(`openbeacon://join?code=${code}`)).toBe(false);
+
+    expect(storageValues.size).toBe(0);
+  });
+
+  test("an invite whose server can't be used opens normally so the join screen can say why", () => {
+    const link = `openbeacon://join?code=${code}&server=${encodeURIComponent("https://\u0430pi.openbeacon.net")}`;
+    expect(saveJoinLinkForAfterSetup(link)).toBe(false);
 
     expect(storageValues.size).toBe(0);
   });
@@ -187,6 +183,14 @@ describe("leaving setup", () => {
     openAppAfterSetup("/");
 
     expect(replacements).toEqual([{ pathname: "/join", params: { code } }, "/"]);
+  });
+
+  test("passes a saved invite's server on to the join screen", () => {
+    savePendingJoinCode({ code, server, userId: "user-1" });
+
+    openAppAfterSetup("/");
+
+    expect(replacements).toEqual([{ pathname: "/join", params: { code, server } }]);
   });
 
   test("goes to the given screen when there's no saved invite", () => {
@@ -212,5 +216,59 @@ describe("leaving setup", () => {
 
     expect(replacements).toEqual(["/"]);
     expect(storageValues.size).toBe(0);
+  });
+});
+
+describe("an invite kept for signing in on a new server", () => {
+  test("is handed back once, then forgotten", () => {
+    saveInviteForSignIn(code);
+
+    expect(takeInviteForSignIn()).toBe(code);
+    expect(takeInviteForSignIn()).toBeNull();
+    expect(storageValues.size).toBe(0);
+  });
+
+  test("is still there just before 30 minutes and gone at 30 minutes", () => {
+    saveInviteForSignIn(code);
+    now += 30 * 60 * 1000 - 1;
+    expect(takeInviteForSignIn()).toBe(code);
+
+    saveInviteForSignIn(code);
+    now += 30 * 60 * 1000;
+    expect(takeInviteForSignIn()).toBeNull();
+    expect(storageValues.size).toBe(0);
+  });
+
+  test("saved in the future is ignored", () => {
+    saveInviteForSignIn(code);
+    now -= 1;
+
+    expect(takeInviteForSignIn()).toBeNull();
+  });
+
+  test.each([
+    ["not JSON", "not json"],
+    ["a bad code", JSON.stringify({ savedAt: now, code: "not-a-code" })],
+    ["no time", JSON.stringify({ code })],
+  ])("with %s is ignored and forgotten", (_, value) => {
+    storageValues.set("inviteForSignIn", value);
+
+    expect(takeInviteForSignIn()).toBeNull();
+    expect(storageValues.size).toBe(0);
+  });
+
+  test("can be forgotten without being used", () => {
+    saveInviteForSignIn(code);
+    clearInviteForSignIn();
+
+    expect(takeInviteForSignIn()).toBeNull();
+  });
+
+  test("survives clearing the join codes saved during setup", () => {
+    savePendingJoinCode({ code: "F".repeat(32), userId: "user-1" });
+    saveInviteForSignIn(code);
+    clearPendingJoinCodes();
+
+    expect(takeInviteForSignIn()).toBe(code);
   });
 });

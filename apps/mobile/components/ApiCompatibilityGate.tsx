@@ -1,5 +1,5 @@
 import { tryCatch } from "@openbeacon/shared";
-import { Link, usePathname } from "expo-router";
+import { Link, useGlobalSearchParams, usePathname } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { AccessibilityInfo, AppState, BackHandler, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -11,7 +11,12 @@ import {
   useApiCompatibility,
 } from "../lib/apiCompatibility.ts";
 import { authClient } from "../lib/auth-client.ts";
-import { getBaseUrl, hasCustomServerUrl } from "../lib/currentServer.ts";
+import {
+  getBaseUrl,
+  getSelectedServerUrl,
+  hasCustomServerUrl,
+  normaliseServerUrl,
+} from "../lib/currentServer.ts";
 import { endSession } from "../lib/endSession.ts";
 import { dismissNotice } from "../lib/notifications.ts";
 import { openPlayStore } from "../lib/openPlayStore.ts";
@@ -23,7 +28,17 @@ import { Text } from "./ui/Text.tsx";
 export const useApiCompatibilityGateShown = () => {
   const compatibility = useApiCompatibility();
   const pathname = usePathname();
-  return compatibility !== null && pathname !== "/serverUrl" && pathname !== "/account/contact-us";
+  const { server } = useGlobalSearchParams<{ server?: string | string[] }>();
+  const inviteForAnotherServer =
+    pathname === "/join" &&
+    typeof server === "string" &&
+    normaliseServerUrl(server).url !== getSelectedServerUrl();
+  return (
+    compatibility !== null &&
+    pathname !== "/serverUrl" &&
+    pathname !== "/account/contact-us" &&
+    !inviteForAnotherServer
+  );
 };
 
 export const ApiCompatibilityGate = () => {

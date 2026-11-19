@@ -6,6 +6,8 @@ import { Platform, Share, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { useCachedGroup } from "../../hooks/useCachedGroup.ts";
 import { trpc } from "../../lib/api.ts";
+import { getBaseUrl, isHostedServer } from "../../lib/currentServer.ts";
+import { inviteLink } from "../../lib/inviteLink.ts";
 import { BrandedQrCode } from "../BrandedQrCode.tsx";
 import { Button } from "../ui/Button.tsx";
 import { Text } from "../ui/Text.tsx";
@@ -27,6 +29,9 @@ export const SharedInvite = ({
   const inviteId = invite.data?.id;
   const expiresInMs = invite.data?.expiresInMs;
   const reset = invite.reset;
+  useEffect(() => {
+    if (value) reset();
+  }, [value, reset]);
   const { group } = useCachedGroup(groupId);
   const memberIdsKey = group?.members.map((member) => member.id).join(",");
   const statuses = useQuery({
@@ -68,7 +73,9 @@ export const SharedInvite = ({
     setOpen(false);
   }, [open, reset, setOpen, used]);
   const create = async () => {
-    const result = await tryCatch(invite.mutateAsync({ groupId }));
+    const result = await tryCatch(
+      invite.mutateAsync({ groupId, kind: value === "link" ? "link" : "qr" }),
+    );
     if (result.error) {
       Alert.alert("Couldn’t create invitation");
       return;
@@ -80,12 +87,12 @@ export const SharedInvite = ({
     <View className="items-center gap-4">
       {invite.data && !isExpired ? (
         <>
-          <Text>Valid for five minutes and one use.</Text>
+          <Text>{`Valid for ${Math.round(invite.data.expiresInMs / 60_000)} minutes and one use.`}</Text>
           {value === "qr" ? (
             <BrandedQrCode
               accessibilityLabel="Invitation code. Scan it to join the group."
               size={200}
-              value={invite.data.code}
+              value={inviteLink({ code: invite.data.code, server: getBaseUrl() })}
             />
           ) : (
             <>
@@ -107,9 +114,10 @@ export const SharedInvite = ({
                 <Button
                   onPress={async () => {
                     if (Platform.OS === "ios") setOpen(false);
+                    const server = getBaseUrl();
                     const result = await tryCatch(
                       Share.share({
-                        message: `Join my OpenBeacon group: openbeacon://join?code=${invite.data.code}`,
+                        message: `Join my OpenBeacon group${isHostedServer(server) ? "" : ` on ${new URL(server).host}`}. Install OpenBeacon, then open this link: ${inviteLink({ code: invite.data.code, server })}`,
                       }),
                     );
                     if (result.error) Alert.alert("Couldn’t share invitation");

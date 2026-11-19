@@ -129,7 +129,7 @@ export const InviteConfirmation = ({
           </Text>
           <Text className="text-center text-secondary">
             {invite.kind === "code"
-              ? "This code is wrong, has expired or was already used. Ask for a new one."
+              ? "This code is wrong, has expired or was already used. Ask for a new one. If the group is on a different server, ask for an invite link instead."
               : "This invite has expired or is no longer available. Ask for a new one."}
           </Text>
         </View>

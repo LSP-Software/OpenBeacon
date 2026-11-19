@@ -34,6 +34,7 @@ mock.module("../components/KeyboardFormScrollView.tsx", () => ({
 }));
 mock.module("../components/LoadingIndicator.tsx", () => ({ LoadingIndicator: () => null }));
 mock.module("../components/HeldKeysNotice.tsx", () => ({ HeldKeysNotice: () => null }));
+mock.module("../components/ServerNotice.tsx", () => ({ ServerNotice: () => null }));
 mock.module("../components/headers/ReturnToHomeHeader.tsx", () => ({
   ReturnToHomeHeader: () => null,
 }));
