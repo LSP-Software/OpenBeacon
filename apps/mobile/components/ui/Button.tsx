@@ -1,4 +1,5 @@
 import { cva, type VariantProps } from "class-variance-authority";
+import { isValidElement, type ReactNode } from "react";
 import { ActivityIndicator, Pressable, View } from "react-native";
 import { cn } from "../../lib/cn.ts";
 import { TextClassContext } from "./Text.tsx";
@@ -63,7 +64,15 @@ type ButtonProps = React.ComponentProps<typeof Pressable> &
     loading?: boolean;
   };
 
-function Button({ className, variant, size, loading, disabled, ...props }: ButtonProps) {
+function Button({
+  className,
+  variant,
+  size,
+  loading,
+  disabled,
+  accessibilityLabel,
+  ...props
+}: ButtonProps) {
   return (
     <TextClassContext.Provider value={buttonTextVariants({ variant, size })}>
       <Pressable
@@ -74,6 +83,15 @@ function Button({ className, variant, size, loading, disabled, ...props }: Butto
         )}
         role="button"
         disabled={loading || disabled}
+        // React Native's Android BaseViewManager writes "busy" into the content description but
+        // never clears it afterwards when the view has no accessibility label, so the button is
+        // announced as "busy" until it remounts. A label built from the button's text avoids that.
+        accessibilityLabel={
+          accessibilityLabel ??
+          (typeof props.children === "function"
+            ? undefined
+            : textOf(props.children).replace(/\s+/g, " ").trim() || undefined)
+        }
         accessibilityState={{ disabled: !!(loading || disabled), busy: !!loading }}
         {...props}
       >
@@ -93,5 +111,12 @@ function Button({ className, variant, size, loading, disabled, ...props }: Butto
     </TextClassContext.Provider>
   );
 }
+
+const textOf = (node: ReactNode): string => {
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(textOf).filter(Boolean).join(" ");
+  if (isValidElement<{ children?: ReactNode }>(node)) return textOf(node.props.children);
+  return "";
+};
 
 export { Button };
