@@ -179,6 +179,36 @@ test("a device row without a location on the map isn't a button", async () => {
   ]);
 });
 
+test("a device that went quiet on a low battery says it may be out of battery", async () => {
+  const device = {
+    icon: "phone" as const,
+    isThisDevice: false,
+    paused: false,
+    platform: null,
+    timestamp: "2026-11-11T12:00:00.000Z",
+    unreadable: false,
+  };
+  const rows = await pressables(
+    <LiveMapPersonSheet
+      battery={null}
+      devices={[
+        { ...device, battery: { charging: false, level: 4 }, deviceId: "device-1", name: "Phone" },
+        { ...device, battery: { charging: true, level: 4 }, deviceId: "device-2", name: "Tablet" },
+      ]}
+      image={null}
+      initials="Al"
+      name="Alice"
+      onDismiss={() => {}}
+      otherSharedGroupNames={[]}
+      timestamp={null}
+    />,
+  );
+  expect(rows.map((row) => row.accessibilityLabel)).toEqual([
+    "Show Phone, May be out of battery, updated 1 min ago, battery 4%",
+    "Show Tablet, Updated 1 min ago, battery 4%",
+  ]);
+});
+
 test("someone with several devices still gets a way to open the group whose key is missing", async () => {
   const device = {
     battery: null,

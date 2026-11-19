@@ -5,6 +5,7 @@ import { useTimeSince } from "../../hooks/useTimeSince.ts";
 import { getBatteryVisual } from "../../lib/batteryVisual.ts";
 import { type DeviceIcon, deviceIconFor } from "../../lib/deviceIcons.ts";
 import { locationStaleAt } from "../../lib/locationStaleAt.ts";
+import { lowBatteryWhenLastSeen } from "../../lib/lowBatteryWhenLastSeen.ts";
 import { DecryptedAvatarImage } from "../image/DecryptedAvatarImage.tsx";
 import { Avatar, AvatarFallback } from "../ui/Avatar.tsx";
 import { Button } from "../ui/Button.tsx";
@@ -57,6 +58,9 @@ export const LiveMapPersonSheet = ({
   const updatedAge = useTimeSince(timestamp);
   const isMultiDevice = devices !== undefined && devices.length >= 2;
   const isOutOfDate = !isSelf && timestamp !== null && Date.now() >= locationStaleAt(timestamp);
+  const lastLowBattery = isSelf
+    ? null
+    : lowBatteryWhenLastSeen({ battery, now: Date.now(), timestamp });
   const batteryVisual = battery
     ? getBatteryVisual({
         batteryLevel: battery.level,
@@ -103,8 +107,9 @@ export const LiveMapPersonSheet = ({
           {!isMultiDevice && isOutOfDate && !unreadableGroup ? (
             <View className="mt-3 rounded-xl bg-secondary p-3">
               <Text className="text-sm">
-                {name}’s phone hasn’t sent a location since then. It might be offline, out of
-                battery, or have location turned off.
+                {lastLowBattery === null
+                  ? `${name}’s phone hasn’t sent a location since then. It might be offline, out of battery, or have location turned off.`
+                  : `Battery was at ${lastLowBattery}%. ${name}’s phone may have run out.`}
               </Text>
             </View>
           ) : null}
@@ -168,13 +173,22 @@ const PersonDeviceRow = ({ device, onPress }: { device: PersonDevice; onPress: (
     ? getBatteryVisual({ batteryLevel: device.battery.level, charging: device.battery.charging })
     : null;
   const label = device.isThisDevice ? `${device.name} (this ${thisDeviceNoun()})` : device.name;
+  const lastLowBattery = device.isThisDevice
+    ? null
+    : lowBatteryWhenLastSeen({
+        battery: device.battery,
+        now: Date.now(),
+        timestamp: device.timestamp,
+      });
   const updated = device.paused
     ? "Location sharing paused"
     : device.unreadable
       ? "Newer location can’t be read"
       : updatedAge === null
         ? "No location sent yet"
-        : `${device.isThisDevice ? "Location sent" : "Updated"} ${updatedAge}`;
+        : lastLowBattery !== null
+          ? `May be out of battery, updated ${updatedAge}`
+          : `${device.isThisDevice ? "Location sent" : "Updated"} ${updatedAge}`;
   const batteryLevel = batteryVisual?.label ?? null;
 
   const content = (
