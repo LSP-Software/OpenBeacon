@@ -1,15 +1,11 @@
 import { beforeEach, expect, mock, test } from "bun:test";
 
-const stored = new Map<string, string | number | boolean>();
+const stored = new Map<string, string | boolean>();
 const nativeCalls: string[] = [];
-const failing = new Set<"clear" | "size">();
+const failing = new Set<"clear">();
 
 mock.module("./storage.ts", () => ({
   storage: {
-    getNumber: (key: string) => {
-      const value = stored.get(key);
-      return typeof value === "number" ? value : undefined;
-    },
     getBoolean: (key: string) => {
       const value = stored.get(key);
       return typeof value === "boolean" ? value : undefined;
@@ -18,7 +14,7 @@ mock.module("./storage.ts", () => ({
       const value = stored.get(key);
       return typeof value === "string" ? value : undefined;
     },
-    set: (key: string, value: string | number | boolean) => {
+    set: (key: string, value: string | boolean) => {
       stored.set(key, value);
     },
     remove: (key: string) => stored.delete(key),
@@ -33,48 +29,17 @@ mock.module("@maplibre/maplibre-react-native", () => ({
     },
     setMaximumAmbientCacheSize: async (size: number) => {
       nativeCalls.push(`size:${size}`);
-      if (failing.has("size")) throw new Error("size failed");
     },
   },
 }));
 
-const {
-  applyMapCacheSize,
-  clearSavedMap,
-  getMapCacheSizeMb,
-  prepareMapCache,
-  readLastMapSource,
-  saveLastMapSource,
-  setMapCacheSizeMb,
-} = await import("./mapCache.ts");
+const { clearSavedMap, prepareMapCache, readLastMapSource, saveLastMapSource } =
+  await import("./mapCache.ts");
 
 beforeEach(() => {
   stored.clear();
   nativeCalls.length = 0;
   failing.clear();
-});
-
-test("uses 250 MB until a valid size is chosen", async () => {
-  expect(getMapCacheSizeMb()).toBe(250);
-  stored.set("map.cacheSizeMb", 123);
-  expect(getMapCacheSizeMb()).toBe(250);
-  await applyMapCacheSize();
-  expect(nativeCalls).toEqual(["size:250000000"]);
-});
-
-test("stores a chosen size and applies it in SI bytes", async () => {
-  await setMapCacheSizeMb(1000);
-  expect(getMapCacheSizeMb()).toBe(1000);
-  expect(nativeCalls).toEqual(["size:1000000000"]);
-});
-
-test("keeps the old size when applying a new one fails", async () => {
-  await setMapCacheSizeMb(500);
-  failing.add("size");
-
-  await expect(setMapCacheSizeMb(100)).rejects.toThrow("size failed");
-
-  expect(getMapCacheSizeMb()).toBe(500);
 });
 
 test("remembers the last map source with or without an archive", () => {
@@ -91,8 +56,7 @@ test("remembers the last map source with or without an archive", () => {
   });
 });
 
-test("clearing the saved map forgets the source, wipes the tiles and keeps the size", async () => {
-  await setMapCacheSizeMb(500);
+test("clearing the saved map forgets the source and wipes the tiles", async () => {
   saveLastMapSource({ archiveId: "a-20261101", sourceUrl: "https://t.example/a.pmtiles" });
   nativeCalls.length = 0;
 
@@ -101,11 +65,9 @@ test("clearing the saved map forgets the source, wipes the tiles and keeps the s
   expect(readLastMapSource()).toBeNull();
   expect(nativeCalls).toEqual(["clear"]);
   expect(stored.has("map.clearPending")).toBe(false);
-  expect(getMapCacheSizeMb()).toBe(500);
 });
 
 test("a failed clear stays pending until the map is prepared again", async () => {
-  await setMapCacheSizeMb(100);
   saveLastMapSource({ archiveId: "a-20261101", sourceUrl: "https://t.example/a.pmtiles" });
   failing.add("clear");
 
@@ -120,11 +82,13 @@ test("a failed clear stays pending until the map is prepared again", async () =>
   nativeCalls.length = 0;
   await prepareMapCache();
 
-  expect(nativeCalls).toEqual(["clear", "size:100000000"]);
+  expect(nativeCalls).toEqual(["clear", "size:250000000"]);
   expect(stored.has("map.clearPending")).toBe(false);
 });
 
-test("preparing the map without a pending clear only applies the size", async () => {
+test("preparing the map caps the cache at 250 MB and forgets the old size setting", async () => {
+  stored.set("map.cacheSizeMb", "1000");
   await prepareMapCache();
   expect(nativeCalls).toEqual(["size:250000000"]);
+  expect(stored.has("map.cacheSizeMb")).toBe(false);
 });

@@ -108,10 +108,6 @@ mock.module("../hooks/useHeldHistoryKeyVersions.ts", () => ({
 }));
 mock.module("../hooks/useHistoryShare.ts", () => ({ useHistoryShare: () => ({ setting: null }) }));
 mock.module("../lib/appLock.ts", () => ({ useAppLock: () => ({ enabled: false }) }));
-mock.module("../lib/mapCache.ts", () => ({
-  formatMapCacheSize: () => "250 MB",
-  getMapCacheSizeMb: () => 250,
-}));
 mock.module("../lib/versions.ts", () => ({ appVersion: "1.0.0" }));
 mock.module("../providers/ThemeProvider.tsx", () => ({
   useTheme: () => ({ appThemePreference: "system" }),

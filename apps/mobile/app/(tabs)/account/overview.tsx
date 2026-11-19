@@ -16,7 +16,6 @@ import {
   LockIcon,
   LogOutIcon,
   MailIcon,
-  MapIcon,
   MapPinIcon,
   ScanFaceIcon,
   SmartphoneIcon,
@@ -55,7 +54,6 @@ import {
   getLocationPermissionWarningDescription,
   getLocationPermissionWarningTitle,
 } from "../../../lib/locationPermissions.ts";
-import { formatMapCacheSize, getMapCacheSizeMb } from "../../../lib/mapCache.ts";
 import { useNotificationSettings } from "../../../lib/notifications.ts";
 import { dismissRestoreCard, isRestoreCardDismissed } from "../../../lib/restoreReminders.ts";
 import { storage } from "../../../lib/storage.ts";
@@ -429,12 +427,6 @@ const AccountScreen = () => {
                     value: { system: `Match ${thisDeviceNoun()}`, light: "Light", dark: "Dark" }[
                       appThemePreference
                     ],
-                  },
-                  {
-                    label: "Map storage",
-                    icon: MapIcon,
-                    href: "/account/map-storage",
-                    value: formatMapCacheSize(getMapCacheSizeMb()),
                   },
                 ],
               },
