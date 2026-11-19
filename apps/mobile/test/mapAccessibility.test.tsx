@@ -179,6 +179,62 @@ test("a device row without a location on the map isn't a button", async () => {
   ]);
 });
 
+test("a device that went quiet on a low battery may be out of battery, except on your own sheet", async () => {
+  const device = {
+    icon: "phone" as const,
+    isThisDevice: false,
+    paused: false,
+    platform: null,
+    timestamp: new Date(Date.now() - 2 * 3_600_000).toISOString(),
+    unreadable: false,
+  };
+  const sheet = (isSelf: boolean) => (
+    <LiveMapPersonSheet
+      battery={null}
+      devices={[
+        { ...device, battery: { charging: false, level: 4 }, deviceId: "device-1", name: "Phone" },
+        { ...device, battery: { charging: true, level: 4 }, deviceId: "device-2", name: "Tablet" },
+      ]}
+      image={null}
+      initials="Al"
+      isSelf={isSelf}
+      name="Alice"
+      onDismiss={() => {}}
+      otherSharedGroupNames={[]}
+      timestamp={null}
+    />
+  );
+  expect((await pressables(sheet(false))).map((row) => row.accessibilityLabel)).toEqual([
+    "Show Phone, May be out of battery, 2h ago, battery 4%",
+    "Show Tablet, Updated 1 min ago, battery 4%",
+  ]);
+  expect((await pressables(sheet(true))).map((row) => row.accessibilityLabel)).toEqual([
+    "Show Phone, Updated 1 min ago, battery 4%",
+    "Show Tablet, Updated 1 min ago, battery 4%",
+  ]);
+});
+
+test.each([
+  [10, "Battery was at 10%. Alice’s phone may have run out."],
+  [11, "Alice’s phone hasn’t sent a location since then."],
+])("a quiet phone last seen at %p%% says %p", async (level, text) => {
+  root = createRoot();
+  await act(async () =>
+    root?.render(
+      <LiveMapPersonSheet
+        battery={{ charging: false, level }}
+        image={null}
+        initials="Al"
+        name="Alice"
+        onDismiss={() => {}}
+        otherSharedGroupNames={[]}
+        timestamp={new Date(Date.now() - 2 * 3_600_000).toISOString()}
+      />,
+    ),
+  );
+  expect(JSON.stringify(root?.container.toJSON())).toContain(text);
+});
+
 test("someone with several devices still gets a way to open the group whose key is missing", async () => {
   const device = {
     battery: null,
