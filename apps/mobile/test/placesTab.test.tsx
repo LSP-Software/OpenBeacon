@@ -79,6 +79,7 @@ mock.module("../lib/auth-client.ts", () => ({
   authClient: { useSession: () => ({ data: { user: { id: "self" } } }) },
 }));
 mock.module("../hooks/useMemberNames.ts", () => ({
+  useMemberNameList: () => (userId: string) => (userId === "sam" ? ["Sam"] : []),
   useMemberNames: () => (userId: string) => (userId === "sam" ? "Sam" : null),
 }));
 mock.module("../lib/registeredDevice.ts", () => ({
