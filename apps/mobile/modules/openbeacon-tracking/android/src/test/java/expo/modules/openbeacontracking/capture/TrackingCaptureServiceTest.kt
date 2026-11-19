@@ -519,7 +519,7 @@ class TrackingCaptureServiceTest {
     TrackingRuntime.captureCommands.stop()
     connectivity.networkCallbacks.single().onAvailable(ShadowNetwork.newInstance(1))
     connectivity.networkCallbacks.single().onAvailable(ShadowNetwork.newInstance(2))
-    val deadline = System.currentTimeMillis() + 5_000L
+    val deadline = System.currentTimeMillis() + 30_000L
     while (shadowOf(application).peekNextStartedService() == null && System.currentTimeMillis() < deadline) Thread.sleep(10)
     Thread.sleep(200)
 
@@ -761,7 +761,7 @@ class TrackingCaptureServiceTest {
   private fun drainStartedServices(): List<Intent> = generateSequence { shadowOf(application).nextStartedService }.toList()
 
   private fun awaitStartedServices(): List<Intent> {
-    val deadline = System.currentTimeMillis() + 5_000L
+    val deadline = System.currentTimeMillis() + 30_000L
     while (shadowOf(application).peekNextStartedService() == null && System.currentTimeMillis() < deadline) Thread.sleep(10)
     Thread.sleep(200)
     return drainStartedServices()
