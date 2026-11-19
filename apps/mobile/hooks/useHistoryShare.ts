@@ -9,11 +9,15 @@ import type { HistoryShareChange } from "../lib/historyShareTypes.ts";
 import { syncLocationSharing } from "../lib/locationSharing.ts";
 import { userMessage } from "../lib/userMessage.ts";
 
-const confirmShortening = (label: string) =>
+const confirmShortening = (label: string, groupName: string | null) =>
   new Promise<"cancel" | "change" | "saveCopy">((resolve) =>
     Alert.alert(
       `Change to “${label}”?`,
-      "This deletes your older location history from the server straight away, so your groups can’t see it any more. Copies members have already seen on their phones aren’t deleted. You can save a copy of your own history first.",
+      `${
+        groupName === null
+          ? "This deletes your older location history from the server straight away, so your groups can’t see it any more."
+          : `This deletes your older location history in ${groupName} from the server straight away, so its members can’t see it any more.`
+      } Copies members have already seen on their phones aren’t deleted. You can save a copy of your own history first.`,
       [
         { text: "Cancel", style: "cancel", onPress: () => resolve("cancel") },
         { text: "Save a copy first", onPress: () => resolve("saveCopy") },
@@ -35,7 +39,7 @@ export const useHistoryShare = (
   });
   const [saving, setSaving] = useState(false);
 
-  const change = async (next: HistoryShareChange) => {
+  const change = async (next: HistoryShareChange, groupName = "this group") => {
     const setting = query.data;
     if (!setting || saving) return false;
     const label = historyShareLabel(
@@ -47,7 +51,7 @@ export const useHistoryShare = (
       setting,
     });
     if (shortens) {
-      const choice = await confirmShortening(label);
+      const choice = await confirmShortening(label, "account" in next ? null : groupName);
       if (choice === "saveCopy") saveCopy();
       if (choice !== "change") return false;
     }

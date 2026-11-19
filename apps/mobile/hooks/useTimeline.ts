@@ -14,7 +14,10 @@ import type {
 } from "../lib/timelineTypes.ts";
 
 export const useTimelineDays = (groupId: string, userId?: string) => {
-  const query = useQuery(trpc.groupTracking.historyDays.queryOptions({ groupId }));
+  const query = useQuery({
+    ...trpc.groupTracking.historyDays.queryOptions({ groupId }),
+    refetchInterval: 60_000,
+  });
   const { data, dataUpdatedAt } = query;
   const windowStart = useMemo(() => (data ? timelineWindowStart(data) : null), [data]);
   const days = useMemo(
