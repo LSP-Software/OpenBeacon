@@ -28,7 +28,26 @@ const preference = (paused: boolean): SharingPreference => ({
 const Host = ({ children, ...props }: { children?: React.ReactNode; [key: string]: unknown }) =>
   React.createElement("host", props, children);
 mock.module("react-native", () => ({ View: Host }));
-mock.module("lucide-react-native", () => ({ PauseIcon: () => null }));
+mock.module("lucide-react-native", () => ({ MapPinOffIcon: () => null, PauseIcon: () => null }));
+let permissionState: {
+  isReadyForSharing: boolean;
+  missing: ("foreground" | "precise" | "background")[];
+} | null = null;
+let permissionSettingsOpened = 0;
+mock.module("expo-location", () => ({
+  getBackgroundPermissionsAsync: async () => ({}),
+  getForegroundPermissionsAsync: async () => ({}),
+  requestBackgroundPermissionsAsync: async () => ({}),
+  requestForegroundPermissionsAsync: async () => ({}),
+}));
+mock.module("../../providers/LocationPermissionProvider.tsx", () => ({
+  useLocationPermissions: () => ({
+    permissionState,
+    openLocationPermissionSettings: async () => {
+      permissionSettingsOpened += 1;
+    },
+  }),
+}));
 mock.module("@tanstack/react-query", () => ({
   useQuery: () => ({ data: sharingData }),
   useQueryClient: () => ({
@@ -104,6 +123,8 @@ beforeEach(() => {
     paused: false,
   };
   locallyPaused = false;
+  permissionState = null;
+  permissionSettingsOpened = 0;
   changes.length = 0;
   syncs = 0;
   fetched = null;
@@ -116,6 +137,29 @@ afterEach(async () => {
 
 test("stays hidden while this device is sharing", async () => {
   expect(await render()).not.toContain("paused");
+});
+
+test("says this device isn't sharing when a location permission is missing", async () => {
+  permissionState = { isReadyForSharing: false, missing: ["background"] };
+  const banner = await render();
+  expect(banner).toContain("You’re not sharing your location");
+  expect(banner).toContain("Background location is off");
+  await pressResume();
+  expect(permissionSettingsOpened).toBe(1);
+});
+
+test("the paused banner takes the place of the not-sharing banner", async () => {
+  permissionState = { isReadyForSharing: false, missing: ["precise"] };
+  locallyPaused = true;
+  const banner = await render();
+  expect(banner).toContain("Your location sharing is paused");
+  expect(banner).not.toContain("not sharing");
+});
+
+test("no not-sharing banner once every permission is granted, or before they're known", async () => {
+  expect(await render()).not.toContain("not sharing");
+  permissionState = { isReadyForSharing: true, missing: [] };
+  expect(await render()).not.toContain("not sharing");
 });
 
 test("shows when capture stopped locally before the server knows", async () => {

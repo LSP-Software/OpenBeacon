@@ -54,7 +54,7 @@ const LocationStepScreen = () => {
         </View>
       }
       title="Share where you really are"
-      description="With approximate location your family only sees a blur a few miles wide, and place alerts won’t work."
+      description="OpenBeacon shares nothing until it has precise location, location all the time and notifications. Approximate location isn’t enough."
       primary={{ label: "Allow location", onPress: allow, loading: asking }}
       secondary={{
         label: "Not now",

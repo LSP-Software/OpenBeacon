@@ -10,6 +10,7 @@ import type { z } from "zod";
 import { EmailCodeEntry } from "../components/EmailCodeEntry.tsx";
 import { KeyboardFormScrollView } from "../components/KeyboardFormScrollView.tsx";
 import { LoadingIndicator } from "../components/LoadingIndicator.tsx";
+import { HeldKeysNotice } from "../components/HeldKeysNotice.tsx";
 import { ReturnToHomeHeader } from "../components/headers/ReturnToHomeHeader.tsx";
 import { Button } from "../components/ui/Button.tsx";
 import { Input } from "../components/ui/Input.tsx";
@@ -167,6 +168,7 @@ const SignUp = () => {
         {(formProps) => (
           <>
             <ReturnToHomeHeader />
+            <HeldKeysNotice />
 
             <View className="gap-2">
               <Text accessibilityRole="header" className="text-3xl font-bold">

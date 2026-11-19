@@ -1,5 +1,6 @@
 import { Alert } from "../lib/alert.ts";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useQuery } from "@tanstack/react-query";
 import { Link, router } from "expo-router";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -11,9 +12,13 @@ import { Button } from "../components/ui/Button.tsx";
 import { Input } from "../components/ui/Input.tsx";
 import { Separator } from "../components/ui/Separator.tsx";
 import { Text } from "../components/ui/Text.tsx";
+import { trpc } from "../lib/api.ts";
 import { checkServerCompatibility } from "../lib/apiCompatibility.ts";
+import { authClient } from "../lib/auth-client.ts";
 import { changeServer } from "../lib/changeServer.ts";
 import { getServerUrl, hasCustomServerUrl, normaliseServerUrl } from "../lib/currentServer.ts";
+import { readLostSessions } from "../lib/endSession.ts";
+import { serverChangeKeyWarning } from "../lib/keyRemovalWarnings.ts";
 import { thisDeviceNoun } from "../lib/thisDeviceNoun.ts";
 
 const serverUrlSchema = z.object({
@@ -25,6 +30,12 @@ const serverUrlSchema = z.object({
 
 export default function ServerUrl() {
   const [clearing, setClearing] = useState(false);
+  const { data: session } = authClient.useSession();
+  const signedIn = Boolean(session?.user.id);
+  const recoveryStatus = useQuery({
+    ...trpc.accountRecovery.status.queryOptions(),
+    enabled: signedIn,
+  });
   const form = useForm<z.infer<typeof serverUrlSchema>>({
     resolver: zodResolver(serverUrlSchema),
     mode: "onTouched",
@@ -34,10 +45,43 @@ export default function ServerUrl() {
     shouldFocusError: true,
   });
 
+  const warnBeforeChange = async (url: string, change: () => Promise<void>) => {
+    const warning =
+      url === getServerUrl()
+        ? null
+        : serverChangeKeyWarning({
+            held: readLostSessions(),
+            hasRecoveryPhrase: recoveryStatus.data
+              ? Boolean(recoveryStatus.data.recoveryKey)
+              : undefined,
+            noun: thisDeviceNoun(),
+            signedIn,
+          });
+    if (!warning) {
+      await change();
+      return;
+    }
+    Alert.alert("Change server?", warning.message, [
+      { text: "Cancel", style: "cancel" },
+      ...(warning.offerRecoverySetup
+        ? [
+            {
+              text: "Set up recovery phrase",
+              onPress: () => router.push("/account/recovery-setup"),
+            },
+          ]
+        : []),
+      { text: "Change server", style: "destructive", onPress: () => void change() },
+    ]);
+  };
+
   const handleSave = async (data: z.infer<typeof serverUrlSchema>) => {
     const { url } = normaliseServerUrl(data.url);
     if (!url) return;
+    await warnBeforeChange(url, () => checkAndSave(url));
+  };
 
+  const checkAndSave = async (url: string) => {
     const save = async () => {
       await changeServer(url);
       Alert.alert("Server saved", undefined, [{ text: "OK", onPress: () => router.back() }]);
@@ -66,12 +110,15 @@ export default function ServerUrl() {
     );
   };
 
-  const handleClear = async () => {
-    setClearing(true);
-    await changeServer("");
-    setClearing(false);
-    Alert.alert("Using default server", undefined, [{ text: "OK", onPress: () => router.back() }]);
-  };
+  const handleClear = () =>
+    warnBeforeChange("", async () => {
+      setClearing(true);
+      await changeServer("");
+      setClearing(false);
+      Alert.alert("Using default server", undefined, [
+        { text: "OK", onPress: () => router.back() },
+      ]);
+    });
 
   return (
     <SafeAreaView className="flex-1 bg-background">
@@ -117,6 +164,9 @@ export default function ServerUrl() {
             <View className="rounded-xl bg-secondary p-4">
               <Text className="text-sm text-secondary">
                 Changing server signs you out on this {thisDeviceNoun()}.
+                {signedIn
+                  ? " Your keys stay on it for 30 days, unless you sign in to a different account."
+                  : ""}
               </Text>
             </View>
 

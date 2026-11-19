@@ -167,7 +167,7 @@ describe("locationPermissions", () => {
       "Precise location is off",
     );
     expect(getLocationPermissionWarningDescription({ missing: ["precise"] })).toBe(
-      "Enable precise location so your family can see your exact location.",
+      "OpenBeacon doesn’t share your location at all while precise location is off. Turn it on to start sharing.",
     );
   });
 
@@ -179,7 +179,7 @@ describe("locationPermissions", () => {
   test("formats a foreground-only warning", () => {
     expect(getLocationPermissionWarningTitle({ missing: ["foreground"] })).toBe("Location is off");
     expect(getLocationPermissionWarningDescription({ missing: ["foreground"] })).toBe(
-      "Enable location so your family can see your location.",
+      "OpenBeacon doesn’t share your location until you allow location all the time, with precise location on.",
     );
   });
 
@@ -188,7 +188,7 @@ describe("locationPermissions", () => {
       "Background location is off",
     );
     expect(getLocationPermissionWarningDescription({ missing: ["background"] })).toBe(
-      "Allow background location so sharing keeps working when the app is closed.",
+      "OpenBeacon doesn’t share your location at all, even while the app is open, until you allow location all the time.",
     );
   });
 
@@ -197,7 +197,7 @@ describe("locationPermissions", () => {
       "Precise location and Background location are off",
     );
     expect(getLocationPermissionWarningDescription({ missing: ["precise", "background"] })).toBe(
-      "Enable precise and background location so your family can see your exact location even when the app is closed.",
+      "OpenBeacon doesn’t share your location until you allow location all the time, with precise location on.",
     );
   });
 
@@ -206,7 +206,7 @@ describe("locationPermissions", () => {
       "Location access and Background location are off",
     );
     expect(getLocationPermissionWarningDescription({ missing: ["foreground", "background"] })).toBe(
-      "Enable location access to continue using the app and share your location with your family.",
+      "OpenBeacon doesn’t share your location until you allow location all the time, with precise location on.",
     );
   });
 });

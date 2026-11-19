@@ -18,6 +18,10 @@ let writeGate: Promise<void> | null = null;
 let writesStarted: string[] = [];
 let providersError: Error | null = null;
 const providerRequests: unknown[] = [];
+let recoveryStatus:
+  { currentHistoryKey: { version: number }; recoveryKey?: object | null } | undefined = {
+  currentHistoryKey: { version: 3 },
+};
 
 mock.module("./pendingJoinCode.ts", () => ({
   clearPendingJoinCodes: () => {
@@ -72,7 +76,7 @@ mock.module("./api.ts", () => ({
   queryClient: {
     cancelQueries: async () => {},
     clear: () => {},
-    getQueryData: () => ({ currentHistoryKey: { version: 3 } }),
+    getQueryData: () => recoveryStatus,
   },
   trpc: { accountRecovery: { status: { queryKey: () => [["accountRecovery", "status"]] } } },
   trpcClient: {
@@ -164,7 +168,7 @@ mock.module("./trackingUploadTime.ts", () => ({ clearTrackingUploadTimes: () => 
 
 const { ensureDeviceKeyRegistration } = await import("./deviceKeys.ts");
 const { handleDeviceRemoved, wipeAfterRemovingThisPhone } = await import("./deviceRemoved.ts");
-const { endSession, settleLostSessions } = await import("./endSession.ts");
+const { endSession, readLostSessions, settleLostSessions } = await import("./endSession.ts");
 const { storeHistoryKey } = await import("./historyKeys.ts");
 const baseUrl = (await import("./currentServer.ts")).getBaseUrl();
 const pendingSharingKey = `locationSharing.pending.${JSON.stringify([baseUrl, "user-a", "device"])}`;
@@ -475,7 +479,26 @@ describe("ending a session", () => {
     sessionUserId = "user-a";
     providersError = null;
     providerRequests.length = 0;
+    recoveryStatus = { currentHistoryKey: { version: 3 } };
   });
+
+  test.each([
+    [{ recoveryKey: {} }, { hasRecoveryPhrase: true }],
+    [{ recoveryKey: null }, { hasRecoveryPhrase: false }],
+    [undefined, {}],
+  ] as const)(
+    "a lost session remembers whether the account had a recovery phrase (%p)",
+    async (status, expected) => {
+      await seedSignedInPhone();
+      recoveryStatus = status ? { currentHistoryKey: { version: 3 }, ...status } : undefined;
+
+      await endSession({ reason: "serverChanged" });
+
+      expect(readLostSessions()).toEqual([
+        { userId: "user-a", lostAt: expect.any(Number), ...expected },
+      ]);
+    },
+  );
 
   const seedSignedInPhone = async () => {
     const device = await ensureDeviceKeyRegistration();

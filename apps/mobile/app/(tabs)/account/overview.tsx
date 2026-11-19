@@ -50,6 +50,7 @@ import { authClient } from "../../../lib/auth-client.ts";
 import { getStoredDeviceId } from "../../../lib/deviceKeys.ts";
 import { historyLossRisk } from "../../../lib/historyLossRisk.ts";
 import { historyShareLabel } from "../../../lib/historyShare.ts";
+import { removePhoneRecoveryPrompt } from "../../../lib/keyRemovalWarnings.ts";
 import {
   getLocationPermissionWarningDescription,
   getLocationPermissionWarningTitle,
@@ -58,11 +59,11 @@ import { formatMapCacheSize, getMapCacheSizeMb } from "../../../lib/mapCache.ts"
 import { useNotificationSettings } from "../../../lib/notifications.ts";
 import { dismissRestoreCard, isRestoreCardDismissed } from "../../../lib/restoreReminders.ts";
 import { storage } from "../../../lib/storage.ts";
+import { thisDeviceNoun } from "../../../lib/thisDeviceNoun.ts";
 import { appVersion } from "../../../lib/versions.ts";
 import { useLocationPermissions } from "../../../providers/LocationPermissionProvider.tsx";
 import { useTheme } from "../../../providers/ThemeProvider.tsx";
 import { userMessage } from "../../../lib/userMessage.ts";
-import { thisDeviceNoun } from "../../../lib/thisDeviceNoun.ts";
 
 const schema = z.object({ name: accountNameSchema });
 
@@ -166,7 +167,23 @@ const AccountScreen = () => {
       thisDeviceId: session?.user.id ? getStoredDeviceId(session.user.id) : undefined,
     });
     if (risk === "none") {
-      void signOut({ removeThisPhone: true });
+      const prompt = removePhoneRecoveryPrompt({
+        noun: thisDeviceNoun(),
+        recoveryStatus: recoveryStatus.data,
+      });
+      if (!prompt) {
+        void signOut({ removeThisPhone: true });
+        return;
+      }
+      Alert.alert(prompt.title, prompt.message, [
+        { text: "Cancel", style: "cancel" },
+        { text: "Set up recovery phrase", onPress: () => router.push("/account/recovery-setup") },
+        {
+          text: "Remove anyway",
+          style: "destructive",
+          onPress: () => signOut({ removeThisPhone: true }),
+        },
+      ]);
       return;
     }
     Alert.alert(
@@ -198,7 +215,7 @@ const AccountScreen = () => {
   const confirmSignOut = () =>
     Alert.alert(
       "Sign out?",
-      `This ${thisDeviceNoun()} stays in Account → Devices, so you can sign in on it again. If you’re giving it away or won’t use it again, remove it too.`,
+      `Signing out keeps this ${thisDeviceNoun()} in Account → Devices and keeps your keys on it, so you can sign in again and carry on. If you’re giving it away or won’t use it again, remove it too. That deletes your keys from it.`,
       [
         { text: "Cancel", style: "cancel" },
         {

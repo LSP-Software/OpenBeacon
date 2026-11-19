@@ -83,24 +83,26 @@ export const endSessionClears = {
 
 const LOST_SESSIONS_KEY = "session.lost";
 
-const lostSessionsSchema = z.array(z.object({ userId: z.string(), lostAt: z.number() }));
+const lostSessionsSchema = z.array(
+  z.object({ userId: z.string(), lostAt: z.number(), hasRecoveryPhrase: z.boolean().optional() }),
+);
 
-const readLostSessions = () => {
+export const readLostSessions = () => {
   const stored = storage.getString(LOST_SESSIONS_KEY);
   if (!stored) return [];
   const parsed = lostSessionsSchema.safeParse(parseJson(stored));
   return parsed.success ? parsed.data : [];
 };
 
-const writeLostSessions = (sessions: { userId: string; lostAt: number }[]) => {
+const writeLostSessions = (sessions: z.infer<typeof lostSessionsSchema>) => {
   if (sessions.length) storage.set(LOST_SESSIONS_KEY, JSON.stringify(sessions));
   else storage.remove(LOST_SESSIONS_KEY);
 };
 
-const recordLostSession = ({ userId, lostAt }: { userId: string; lostAt: number }) =>
+const recordLostSession = (lost: z.infer<typeof lostSessionsSchema>[number]) =>
   writeLostSessions([
-    ...readLostSessions().filter((session) => session.userId !== userId),
-    { userId, lostAt },
+    ...readLostSessions().filter((session) => session.userId !== lost.userId),
+    lost,
   ]);
 
 const forgetLostSession = (userId: string) =>
@@ -166,9 +168,8 @@ export const endSession = async ({
       : (await tryCatch(trpcClient.auth.deviceKeyContext.query())).data?.userId);
   const deviceId = registered?.deviceId ?? (userId ? getStoredDeviceId(userId) : undefined);
   await queryClient.cancelQueries();
-  const historyKeyVersion =
-    queryClient.getQueryData(trpc.accountRecovery.status.queryKey())?.currentHistoryKey?.version ??
-    0;
+  const recoveryStatus = queryClient.getQueryData(trpc.accountRecovery.status.queryKey());
+  const historyKeyVersion = recoveryStatus?.currentHistoryKey?.version ?? 0;
   const tracking = await import("./tracking.ts");
   await tryCatch(tracking.revokeTrackingAccess({ keepDeviceRegistration: true }));
   await tryCatch(tracking.forgetPushToken());
@@ -208,7 +209,11 @@ export const endSession = async ({
   clearTrackingKeyCheck();
   if (clears.compatibility) clearApiCompatibility();
   if (userId && clears.keyMaterial === "keepUntilExpiry") {
-    recordLostSession({ userId, lostAt: Date.now() });
+    recordLostSession({
+      userId,
+      lostAt: Date.now(),
+      ...(recoveryStatus ? { hasRecoveryPhrase: Boolean(recoveryStatus.recoveryKey) } : {}),
+    });
   }
   return { signedOut };
 };

@@ -8,7 +8,7 @@ import { createRoot, type Root } from "test-renderer";
 
 type AlertAction = { text: string; style?: string; onPress?: () => void };
 
-const alerts: { title: string; actions: AlertAction[] }[] = [];
+const alerts: { title: string; message: string; actions: AlertAction[] }[] = [];
 const replace = mock((_route: string) => {});
 const signOutOfThisPhone = mock(
   async (_input: {
@@ -25,6 +25,7 @@ mock.module("../components/LocationSharingCard.tsx", () => ({ LocationSharingCar
 
 const View = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
 const query = { data: undefined, isError: false };
+let recoveryData: { recoveryKey: object | null; currentHistoryKey: null } | undefined;
 const notificationSettings: { enabled: boolean | null } = { enabled: true };
 let settings: { label: string; onPress?: () => void }[] = [];
 mock.module("@react-navigation/native", () => ({ useIsFocused: () => true }));
@@ -34,7 +35,8 @@ mock.module("expo-router", () => ({
 }));
 mock.module("@tanstack/react-query", () => ({
   useMutation: () => ({ isPending: false, mutateAsync: async () => {} }),
-  useQuery: () => query,
+  useQuery: (options: { key?: string }) =>
+    options.key === "recovery" ? { data: recoveryData, isError: false } : query,
   useQueryClient: () => ({ invalidateQueries: async () => {} }),
 }));
 mock.module("react-hook-form", () => ({
@@ -116,8 +118,8 @@ mock.module("../providers/ThemeProvider.tsx", () => ({
 }));
 mock.module("../lib/alert.ts", () => ({
   Alert: {
-    alert: (title: string, _message: string, actions: AlertAction[] = []) => {
-      alerts.push({ title, actions });
+    alert: (title: string, message: string, actions: AlertAction[] = []) => {
+      alerts.push({ title, message, actions });
     },
   },
 }));
@@ -127,7 +129,7 @@ mock.module("../lib/api.ts", () => ({
       listDevices: { queryOptions: () => ({}) },
       updateName: { mutationOptions: () => ({}) },
     },
-    accountRecovery: { status: { queryOptions: () => ({}) } },
+    accountRecovery: { status: { queryOptions: () => ({ key: "recovery" }) } },
     groupMembership: { list: { queryKey: () => [], queryOptions: () => ({}) } },
   },
 }));
@@ -164,6 +166,7 @@ mock.module("../providers/LocationPermissionProvider.tsx", () => ({
   }),
 }));
 mock.module("../lib/signOut.ts", () => ({ signOutOfThisPhone }));
+mock.module("../lib/thisDeviceNoun.ts", () => ({ thisDeviceNoun: () => "phone" }));
 
 const { default: AccountScreen } = await import("../app/(tabs)/account/overview.tsx");
 
@@ -198,6 +201,7 @@ const showsNotificationsCard = (screen: Root) =>
 
 beforeEach(() => {
   notificationSettings.enabled = true;
+  recoveryData = undefined;
   settings = [];
   alerts.length = 0;
   replace.mockClear();
@@ -302,4 +306,51 @@ test("the sign-out alert puts plain Sign out in the confirm slot, with removing 
     "Also remove this phone from your account",
     "Sign out",
   ]);
+});
+
+const openSignOut = async () => {
+  await renderScreen();
+  await act(async () => settings.find((item) => item.label === "Sign out")?.onPress?.());
+};
+
+test("the sign-out alert says plain sign-out keeps this phone's keys and removing it deletes them", async () => {
+  await openSignOut();
+
+  const message = alerts.at(-1)?.message ?? "";
+  expect(message).toContain("keeps your keys on it, so you can sign in again");
+  expect(message).toContain("That deletes your keys from it.");
+});
+
+test("removing this phone without a recovery phrase asks to set one up before going ahead", async () => {
+  recoveryData = { recoveryKey: null, currentHistoryKey: null };
+  await openSignOut();
+  await press("Sign out?", "Also remove this phone from your account");
+
+  expect(signOutOfThisPhone).not.toHaveBeenCalled();
+  expect(alerts.at(-1)?.title).toBe("Set up a recovery phrase first?");
+  expect(alerts.at(-1)?.actions.map(({ text }) => text)).toEqual([
+    "Cancel",
+    "Set up recovery phrase",
+    "Remove anyway",
+  ]);
+  await press("Set up a recovery phrase first?", "Remove anyway");
+  expect(removeCalls()).toEqual([true]);
+});
+
+test("removing this phone with a recovery phrase goes ahead without another prompt", async () => {
+  recoveryData = { recoveryKey: {}, currentHistoryKey: null };
+  await openSignOut();
+  await press("Sign out?", "Also remove this phone from your account");
+
+  expect(alerts.map(({ title }) => title)).not.toContain("Set up a recovery phrase first?");
+  expect(removeCalls()).toEqual([true]);
+});
+
+test("plain sign-out never asks about a recovery phrase", async () => {
+  recoveryData = { recoveryKey: null, currentHistoryKey: null };
+  await openSignOut();
+  await press("Sign out?", "Sign out");
+
+  expect(alerts.map(({ title }) => title)).toEqual(["Sign out?"]);
+  expect(removeCalls()).toEqual([false]);
 });

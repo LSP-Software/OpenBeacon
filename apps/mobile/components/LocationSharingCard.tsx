@@ -10,6 +10,7 @@ import { MapPinIcon, PauseIcon } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { trpc } from "../lib/api.ts";
+import { useApiCompatibility } from "../lib/apiCompatibility.ts";
 import { cn } from "../lib/cn.ts";
 import {
   changeLocationSharing,
@@ -23,6 +24,8 @@ import { useAppLock } from "../lib/appLock.ts";
 import { authClient } from "../lib/auth-client.ts";
 import { formatResumeTime } from "../lib/formatResumeTime.ts";
 import { getLocationPermissionWarningTitle } from "../lib/locationPermissions.ts";
+import { thisDeviceNoun } from "../lib/thisDeviceNoun.ts";
+import { loadTrackingModule } from "../lib/trackingModule.ts";
 import { useLocationPermissions } from "../providers/LocationPermissionProvider.tsx";
 import { BottomSheet } from "./ui/BottomSheet.tsx";
 import { Button } from "./ui/Button.tsx";
@@ -32,7 +35,6 @@ import { Icon } from "./ui/Icon.tsx";
 import { SegmentedControl } from "./ui/SegmentedControl.tsx";
 import { Text } from "./ui/Text.tsx";
 import { useLoadedSharingState } from "../hooks/useLoadedSharingState.ts";
-import { thisDeviceNoun } from "../lib/thisDeviceNoun.ts";
 
 export const LocationSharingCard = ({
   device,
@@ -58,6 +60,23 @@ export const LocationSharingCard = ({
   const { permissionState } = useLocationPermissions();
   const missingPermission =
     thisDevice && permissionState && !permissionState.isReadyForSharing ? permissionState : null;
+  const compatibilityProblem = useApiCompatibility()?.problem;
+  const groups = useQuery({
+    ...trpc.groupMembership.list.queryOptions(),
+    enabled: thisDevice,
+    subscribed: isFocused,
+  });
+  const sharingKeys = useQuery({
+    queryKey: ["thisPhoneHasSharingKeys"],
+    queryFn: async () => {
+      const trackingModule = await loadTrackingModule();
+      return trackingModule ? trackingModule.listProvisionedEpochKeys().length > 0 : null;
+    },
+    enabled: thisDevice,
+    networkMode: "always",
+    refetchInterval: 15_000,
+    subscribed: isFocused,
+  });
   const pending = session?.user.id ? getPendingSharingChanges(session.user.id) : null;
   const pendingDevice = thisDevice ? (pending?.device ?? null) : null;
   const pendingAccount = thisDevice ? (pending?.account ?? null) : null;
@@ -92,7 +111,22 @@ export const LocationSharingCard = ({
       : null;
   const until = effective ? effective.pausedUntil : devicePreference?.sharingPausedUntil;
   const resumeAccount = !device && accountPaused;
-  const target = device && !device.isCurrent ? device.name : `this ${thisDeviceNoun()}`;
+  const noun = thisDeviceNoun();
+  const target = device && !device.isCurrent ? device.name : `this ${noun}`;
+  const notSharing =
+    !thisDevice || paused || missingPermission
+      ? null
+      : compatibilityProblem === "appTooOld"
+        ? "appTooOld"
+        : compatibilityProblem === "outOfSync"
+          ? "outOfSync"
+          : sharing.isPending || sharing.isError
+            ? null
+            : groups.data?.length === 0
+              ? "noGroups"
+              : groups.data && sharingKeys.data === false
+                ? "noKeys"
+                : null;
   const selectScope = (selectedScope: "device" | "account") => {
     const selectedAt = serverNow();
     setNow(selectedAt);
@@ -169,12 +203,15 @@ export const LocationSharingCard = ({
         <View
           className={cn(
             "size-10 items-center justify-center rounded-full",
-            paused ? "bg-warning" : "bg-success-soft",
+            paused || notSharing || missingPermission ? "bg-warning" : "bg-success-soft",
           )}
         >
           <Icon
             as={paused ? PauseIcon : MapPinIcon}
-            className={cn("size-5", paused ? "text-warning-text" : "text-success")}
+            className={cn(
+              "size-5",
+              paused || notSharing || missingPermission ? "text-warning-text" : "text-success",
+            )}
           />
         </View>
         <View className="flex-1 gap-1">
@@ -186,11 +223,19 @@ export const LocationSharingCard = ({
                 ? `Paused on ${target}`
                 : missingPermission
                   ? getLocationPermissionWarningTitle(missingPermission)
-                  : sharing.isPending
-                    ? "Checking sharing status…"
-                    : sharing.isError
-                      ? "Couldn’t check sharing status"
-                      : `Sharing enabled on ${target}`}
+                  : notSharing === "appTooOld"
+                    ? "Not sharing until you update OpenBeacon"
+                    : notSharing === "outOfSync"
+                      ? "Not sharing until the app and server match"
+                      : notSharing === "noGroups"
+                        ? "Not sharing: you’re not in any groups"
+                        : notSharing === "noKeys"
+                          ? `Not sharing: this ${noun} is waiting for its keys`
+                          : sharing.isPending
+                            ? "Checking sharing status…"
+                            : sharing.isError
+                              ? "Couldn’t check sharing status"
+                              : `Sharing enabled on ${target}`}
           </Text>
         </View>
       </CardHeader>
@@ -213,6 +258,15 @@ export const LocationSharingCard = ({
           <Text className="text-sm text-tertiary">
             Sharing resumed on this {thisDeviceNoun()}. We’ll update your groups when you’re back
             online.
+          </Text>
+        ) : null}
+        {notSharing === "noGroups" ? (
+          <Text className="text-sm text-tertiary">
+            {`Create or join a group to start sharing from this ${noun}.`}
+          </Text>
+        ) : notSharing === "noKeys" ? (
+          <Text className="text-sm text-tertiary">
+            {`This ${noun} doesn’t have the keys it needs to share with your groups yet. It keeps trying while it’s online.`}
           </Text>
         ) : null}
         {rejectedHere && !update.isPending ? (

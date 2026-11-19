@@ -17,6 +17,9 @@ let mutationStatus: Awaited<ReturnType<typeof changeLocationSharing>> = "applied
 let pauseLocallyBeforeFailing = false;
 let sharingData: { account: SharingPreference; device: SharingPreference };
 let pendingAccount: z.infer<typeof setLocationSharingSchema> | null = null;
+let groupsData: { id: string }[] | undefined = [{ id: "family" }];
+let hasSharingKeys: boolean | null | undefined = true;
+let compatibilityProblem: "appTooOld" | "serverTooOld" | "outOfSync" | null = null;
 let permissionState: {
   isReadyForSharing: boolean;
   shouldShowAccountWarning: boolean;
@@ -71,7 +74,12 @@ mock.module("lucide-react-native", () => ({
 mock.module("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ bottom: 0 }) }));
 mock.module("@react-navigation/native", () => ({ useIsFocused: () => true }));
 mock.module("@tanstack/react-query", () => ({
-  useQuery: () => ({ data: sharingData, isPending: false, isError: false }),
+  useQuery: ({ queryKey }: { queryKey: string[] }) =>
+    queryKey[0] === "groups"
+      ? { data: groupsData }
+      : queryKey[0] === "thisPhoneHasSharingKeys"
+        ? { data: hasSharingKeys }
+        : { data: sharingData, isPending: false, isError: false },
   useQueryClient: () => ({ invalidateQueries: async () => {} }),
   useMutation: () => ({
     isPending: false,
@@ -91,11 +99,17 @@ mock.module("@tanstack/react-query", () => ({
 mock.module("../lib/api.ts", () => ({
   trpc: {
     account: {
-      locationSharing: { queryOptions: () => ({}), queryKey: () => [] },
+      locationSharing: { queryOptions: () => ({ queryKey: ["sharing"] }), queryKey: () => [] },
       listDevices: { queryKey: () => [] },
     },
+    groupMembership: { list: { queryOptions: () => ({ queryKey: ["groups"] }) } },
   },
 }));
+mock.module("../lib/apiCompatibility.ts", () => ({
+  useApiCompatibility: () => (compatibilityProblem ? { problem: compatibilityProblem } : null),
+}));
+mock.module("../lib/thisDeviceNoun.ts", () => ({ thisDeviceNoun: () => "phone" }));
+mock.module("../lib/trackingModule.ts", () => ({ loadTrackingModule: async () => null }));
 mock.module("../lib/auth-client.ts", () => ({
   authClient: { useSession: () => ({ data: { user: { id: "alex" } } }) },
 }));
@@ -153,6 +167,9 @@ beforeEach(() => {
   sharingData = { account: preference(), device: preference() };
   pendingAccount = null;
   permissionState = null;
+  groupsData = [{ id: "family" }];
+  hasSharingKeys = true;
+  compatibilityProblem = null;
   locallyPaused = false;
   rejectedChange = false;
   mutationError = null;
@@ -404,4 +421,81 @@ test("another device's card isn't affected by this phone's permissions", async (
   };
   const output = await render({ ...preference(), id: "tablet", name: "Tablet", isCurrent: false });
   expect(output).toContain("Sharing enabled on Tablet");
+});
+
+test("says this phone isn't sharing when it isn't in any groups", async () => {
+  groupsData = [];
+  const output = await render();
+  expect(output).toContain("Not sharing: you’re not in any groups");
+  expect(output).toContain("Create or join a group to start sharing from this phone.");
+  expect(output).not.toContain("Sharing enabled");
+});
+
+test("says this phone is waiting for keys when it is in groups but holds none", async () => {
+  hasSharingKeys = false;
+  const output = await render();
+  expect(output).toContain("Not sharing: this phone is waiting for its keys");
+  expect(output).toContain("doesn’t have the keys it needs to share with your groups yet");
+  expect(output).not.toContain("Sharing enabled");
+});
+
+test.each([
+  ["appTooOld", "Not sharing until you update OpenBeacon"],
+  ["outOfSync", "Not sharing until the app and server match"],
+] as const)(
+  "says this phone isn't sharing while the app is blocked as %s",
+  async (problem, text) => {
+    compatibilityProblem = problem;
+    const output = await render();
+    expect(output).toContain(text);
+    expect(output).not.toContain("Sharing enabled");
+  },
+);
+
+test("a server that is too old doesn't stop this phone sharing, so the card says it is sharing", async () => {
+  compatibilityProblem = "serverTooOld";
+  expect(await render()).toContain("Sharing enabled on this phone");
+});
+
+test("still says sharing while the groups or keys aren't known yet", async () => {
+  groupsData = undefined;
+  hasSharingKeys = false;
+  expect(await render()).toContain("Sharing enabled on this phone");
+  groupsData = [{ id: "family" }];
+  hasSharingKeys = null;
+  expect(await render()).toContain("Sharing enabled on this phone");
+});
+
+test("a paused or permission-blocked phone shows that reason instead of the key state", async () => {
+  hasSharingKeys = false;
+  sharingData.device = preference({
+    sharingPaused: true,
+    sharingChangedAt: new Date(),
+    sharingRevision: 1,
+  });
+  const paused = await render();
+  expect(paused).toContain("Paused on this phone");
+  expect(paused).not.toContain("waiting for its keys");
+
+  sharingData.device = preference();
+  permissionState = {
+    isReadyForSharing: false,
+    shouldShowAccountWarning: true,
+    missing: ["precise"],
+  };
+  const blocked = await render();
+  expect(blocked).toContain("Precise location is off");
+  expect(blocked).not.toContain("waiting for its keys");
+});
+
+test("another device's card never shows this phone's key state", async () => {
+  groupsData = [];
+  hasSharingKeys = false;
+  const tablet = await render({
+    ...preference(),
+    id: "tablet",
+    name: "Alex’s tablet",
+    isCurrent: false,
+  });
+  expect(tablet).toContain("Sharing enabled on Alex’s tablet");
 });

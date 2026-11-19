@@ -99,7 +99,7 @@ const WelcomeScreen = () => {
       <View className="rounded-2xl border border-border bg-card px-4">
         {[
           `Name this ${noun}`,
-          "Choose what OpenBeacon can use",
+          "Allow location and notifications",
           "Protect your location history",
         ].map((item, index, items) => (
           <View
