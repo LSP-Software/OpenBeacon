@@ -11,7 +11,7 @@ import type {
 } from "./timelineTypes.ts";
 
 export const SAME_STOP_METERS = 100;
-const NO_LOCATION_AFTER_MS = 10 * 60_000;
+export const NO_LOCATION_AFTER_MS = 10 * 60_000;
 
 const positionOf = ({ accuracy, latitude, longitude }: TimelinePoint): TimelinePosition => ({
   accuracy,

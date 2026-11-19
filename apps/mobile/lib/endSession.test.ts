@@ -170,6 +170,7 @@ const { ensureDeviceKeyRegistration } = await import("./deviceKeys.ts");
 const { handleDeviceRemoved, wipeAfterRemovingThisPhone } = await import("./deviceRemoved.ts");
 const { endSession, readLostSessions, settleLostSessions } = await import("./endSession.ts");
 const { storeHistoryKey } = await import("./historyKeys.ts");
+const { finishHistoryExport, startHistoryExport } = await import("./historyExportFile.ts");
 const baseUrl = (await import("./currentServer.ts")).getBaseUrl();
 const pendingSharingKey = `locationSharing.pending.${JSON.stringify([baseUrl, "user-a", "device"])}`;
 const accountStorageKeys = [
@@ -646,15 +647,37 @@ describe("ending a session", () => {
     "accountDeleted",
     "serverChanged",
     "sessionLost",
-  ] as const)("%s deletes every decrypted picture on this phone", async (reason) => {
+  ] as const)(
+    "%s deletes every decrypted picture and history export on this phone",
+    async (reason) => {
+      await seedSignedInPhone();
+      cachedFiles.add("cache/images/0d6c8c2e-2b1a-4c55-9a4e-6f1b2f3c4d5e");
+      cachedFiles.add("cache/images/7f0a1b2c-3d4e-4f50-8a6b-7c8d9e0f1a2b");
+      cachedFiles.add("cache/history-export/openbeacon-history-2026-11-19.gpx");
+      cachedFiles.add("cache/map/tiles.pmtiles");
+
+      await endSession({ reason });
+
+      expect([...cachedFiles]).toEqual(["cache/map/tiles.pmtiles"]);
+    },
+  );
+
+  test.each([
+    "signedOut",
+    "phoneRemoved",
+    "accountDeleted",
+    "serverChanged",
+    "sessionLost",
+  ] as const)("%s cancels a history export that's running", async (reason) => {
     await seedSignedInPhone();
-    cachedFiles.add("cache/images/0d6c8c2e-2b1a-4c55-9a4e-6f1b2f3c4d5e");
-    cachedFiles.add("cache/images/7f0a1b2c-3d4e-4f50-8a6b-7c8d9e0f1a2b");
-    cachedFiles.add("cache/map/tiles.pmtiles");
+    const running = startHistoryExport();
 
     await endSession({ reason });
 
-    expect([...cachedFiles]).toEqual(["cache/map/tiles.pmtiles"]);
+    expect(running?.signal.aborted).toBe(true);
+    const next = startHistoryExport();
+    expect(next).not.toBeNull();
+    if (next) finishHistoryExport(next);
   });
 
   test("a plain sign-out stops the picture key check", async () => {

@@ -12,6 +12,7 @@ import {
 import { isDeviceRemovedError } from "./deviceRemovedError.ts";
 import { clearGroupColors } from "./groupColor.ts";
 import { settleBy } from "./deadline.ts";
+import { abortHistoryExport, clearHistoryExports } from "./historyExportFile.ts";
 import { clearImageCache } from "./imageCache.ts";
 import { resetImageKeyCheck } from "./imageKeySelfCheck.ts";
 import { deleteStoredHistoryKeys } from "./historyKeys.ts";
@@ -150,7 +151,9 @@ export const endSession = async ({
   serverDeadline?: number;
 }): Promise<{ signedOut: boolean }> => {
   resetImageKeyCheck();
+  abortHistoryExport();
   await tryCatch(Promise.resolve().then(clearImageCache));
+  await tryCatch(Promise.resolve().then(clearHistoryExports));
   const clears = endSessionClears[reason];
   const registered = await readRegisteredDevice();
   if (reason === "sessionLost") {
@@ -208,6 +211,7 @@ export const endSession = async ({
   if (clears.pendingJoinCodes) clearPendingJoinCodes();
   queryClient.clear();
   await tryCatch(Promise.resolve().then(clearImageCache));
+  await tryCatch(Promise.resolve().then(clearHistoryExports));
   clearGroupColors();
   clearTrackingUploadTimes();
   clearTrackingKeyCheck();
