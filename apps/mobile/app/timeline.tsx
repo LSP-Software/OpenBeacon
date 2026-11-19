@@ -35,6 +35,7 @@ import { Icon } from "../components/ui/Icon.tsx";
 import { Text } from "../components/ui/Text.tsx";
 import { useCachedGroup } from "../hooks/useCachedGroup.ts";
 import { useReducedMotion } from "../hooks/useReducedMotion.ts";
+import { useUses24HourClock } from "../hooks/useUses24HourClock.ts";
 import { useTimelineDay, useTimelineDays } from "../hooks/useTimeline.ts";
 import { trpc } from "../lib/api.ts";
 import { authClient } from "../lib/auth-client.ts";
@@ -52,6 +53,7 @@ import {
   timelinePlayStart,
   timelinePositionAt,
 } from "../lib/timeline.ts";
+import { formatTimelineClock, formatTimelineDayEnd } from "../lib/timelineClock.ts";
 import { pickTimelinePeople } from "../lib/timelineBudget.ts";
 import { rememberTimelineGroup } from "../lib/timelineGroup.ts";
 import {
@@ -150,6 +152,8 @@ const TimelineView = ({
   selfUserId: string;
 }) => {
   const insets = useSafeAreaInsets();
+  const uses24HourClock = useUses24HourClock();
+  const formatClock = (time: number) => formatTimelineClock(time, uses24HourClock);
   const map = useNativeMapStyle();
   const cameraRef = useRef<CameraRef>(null);
   const mapRef = useRef<MapRef>(null);
@@ -752,7 +756,10 @@ const TimelineView = ({
   );
 
   const nextSpeed = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length] ?? 60;
-  const clockLabel = timeline && time >= timeline.day.end ? "24:00" : formatClock(time);
+  const clockLabel =
+    timeline && time >= timeline.day.end
+      ? formatTimelineDayEnd(timeline.day.end, uses24HourClock)
+      : formatClock(time);
 
   const scrubTo = (value: number) => {
     setPlaying(false);
@@ -981,6 +988,7 @@ const TimelineView = ({
                 step={STEP_MS}
                 time={time}
                 to={timeline.to}
+                uses24HourClock={uses24HourClock}
                 valueLabel={status ? `${clockLabel}, ${status.title}` : clockLabel}
                 onScrub={scrubTo}
               />
@@ -1286,9 +1294,6 @@ const ProblemNote = ({
     </Button>
   </View>
 );
-
-const formatClock = (time: number) =>
-  new Date(time).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 
 const formatDate = (time: number) =>
   new Date(time).toLocaleDateString(undefined, {

@@ -2,7 +2,7 @@ import { Camera, type CameraRef, Map as MapLibreMap } from "@maplibre/maplibre-r
 import { placeEmojiSchema, placeNameSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { LocateFixedIcon, XIcon } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -159,6 +159,7 @@ const PlaceEditor = ({
 }) => {
   const [place] = useState(initialPlace);
   const userId = authClient.useSession().data?.user.id;
+  const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const map = useNativeMapStyle();
@@ -187,9 +188,47 @@ const PlaceEditor = ({
   );
   const [busy, setBusy] = useState<"deleting" | "saving" | null>(null);
   const busyRef = useRef(false);
+  const [movedByUser, setMovedByUser] = useState(false);
+  const unsaved = place
+    ? center !== null &&
+      !isPlaceEditUnchanged({
+        before: place,
+        after: { name, emoji, geometry: { ...center, radiusMeters } },
+      })
+    : name !== "" ||
+      emoji !== PLACE_EMOJI_CHOICES[0] ||
+      radiusMeters !== PLACE_RADIUS_DEFAULT ||
+      movedByUser;
+  const unsavedRef = useRef(unsaved);
+  unsavedRef.current = unsaved;
+  const leavingRef = useRef(false);
+  const leave = () => {
+    leavingRef.current = true;
+    onClose();
+  };
   const mapStyleJson = useMemo(
     () => (map.mapStyle ? JSON.stringify(map.mapStyle) : null),
     [map.mapStyle],
+  );
+
+  useEffect(
+    () =>
+      navigation.addListener("beforeRemove", (event) => {
+        if (leavingRef.current || !unsavedRef.current) return;
+        event.preventDefault();
+        Alert.alert("Discard this place?", undefined, [
+          { text: "Keep editing", style: "cancel" },
+          {
+            text: "Discard",
+            style: "destructive",
+            onPress: () => {
+              leavingRef.current = true;
+              navigation.dispatch(event.data.action);
+            },
+          },
+        ]);
+      }),
+    [navigation],
   );
 
   useEffect(() => {
@@ -240,7 +279,7 @@ const PlaceEditor = ({
         after: { name: parsedName.data, emoji: parsedEmoji.data, geometry },
       })
     ) {
-      onClose();
+      leave();
       return;
     }
     busyRef.current = true;
@@ -271,12 +310,12 @@ const PlaceEditor = ({
       setBusy(null);
       Alert.alert("Couldn’t save place", placeErrorMessage(reason, userMessage(result.error)));
       if (reason === "PLACE_GONE") {
-        onClose();
+        leave();
         void refreshPlaces([]);
       }
       return;
     }
-    onClose();
+    leave();
     void refreshPlaces([result.data.place.id]);
   };
 
@@ -327,9 +366,11 @@ const PlaceEditor = ({
         touchRotate={false}
         androidView="surface"
         onRegionIsChanging={(event) => {
+          if (event.nativeEvent.userInteraction && !movedByUser) setMovedByUser(true);
           if (center || place) updateCenter(event.nativeEvent.center, event.nativeEvent.zoom);
         }}
         onRegionDidChange={(event) => {
+          if (event.nativeEvent.userInteraction && !movedByUser) setMovedByUser(true);
           if (center || place || event.nativeEvent.userInteraction) {
             updateCenter(event.nativeEvent.center, event.nativeEvent.zoom);
           }
@@ -522,7 +563,7 @@ const PlaceEditor = ({
                           setBusy(deleting ? "deleting" : null);
                         },
                         onDeleted: () => {
-                          onClose();
+                          leave();
                           void refreshPlaces([]);
                         },
                       })

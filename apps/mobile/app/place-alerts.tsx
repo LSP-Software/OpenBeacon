@@ -46,8 +46,7 @@ const PlaceAlertsScreen = () => {
         showsVerticalScrollIndicator={false}
       >
         <Text className="text-secondary text-base">
-          Choose whose arrivals and departures you hear about. This only changes your alerts.
-          Everyone else still gets theirs.
+          {`Choose whose arrivals and departures you hear about. This changes your alerts on all your ${thisDeviceNoun()}s. Everyone else still gets theirs.`}
         </Text>
 
         {cachedGroup.isMissing ? (

@@ -184,7 +184,6 @@ describe("classifyMapPeople", () => {
       status: { connection: "failing", groups: {}, membership: "failed", undecryptable: [] },
     });
     expect(sectionsOf(listFailed).waiting).toEqual(["me", "mum"]);
-    expect(listFailed.connectionLost).toBe(true);
   });
 
   test("ignores a failed fetch for a group whose key is missing, since it can't locate anyone", () => {

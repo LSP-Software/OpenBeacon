@@ -51,13 +51,19 @@ const device = (points: TimelinePoint[], deviceId = "phone"): TimelineDeviceData
 
 const segmentsOf = (
   points: TimelinePoint[],
-  options: { joinStart?: number | null; now?: number; windowStart?: number } = {},
+  options: {
+    joinStart?: number | null;
+    now?: number;
+    pausedDeviceIds?: ReadonlySet<string>;
+    windowStart?: number;
+  } = {},
 ) =>
   buildTimeline({
     day,
     devices: [device(points)],
     joinStart: options.joinStart ?? null,
     now: options.now ?? day.end + HOUR_MS,
+    ...(options.pausedDeviceIds ? { pausedDeviceIds: options.pausedDeviceIds } : {}),
     windowStart: options.windowStart ?? dayStart - 14 * 24 * HOUR_MS,
   }).devices[0]?.segments ?? [];
 
@@ -82,6 +88,45 @@ describe("buildTimeline", () => {
       ["pause", 602, 660],
       ["noLocation", 660, 1440],
     ]);
+  });
+
+  test("today's gap after the last point is a pause while the phone is paused now", () => {
+    const points = [point({ time: at(9) }), point({ latitude: 51.6, time: at(10) })];
+    const paused = new Set(["phone"]);
+
+    expect(kinds(points, { now: at(15) })).toEqual([
+      ["noLocation", 0, 540],
+      ["noLocation", 540, 600],
+      ["noLocation", 600, 900],
+    ]);
+    const segments = segmentsOf(points, { now: at(15), pausedDeviceIds: paused });
+    expect(segments.at(-1)).toEqual({
+      end: at(15),
+      from: { accuracy: 5, latitude: 51.6, longitude: -0.12 },
+      kind: "pause",
+      ongoing: true,
+      start: at(10),
+      to: { accuracy: 5, latitude: 51.6, longitude: -0.12 },
+    });
+    expect(timelinePositionAt(segments, at(14))).toEqual({
+      position: { accuracy: 5, latitude: 51.6, longitude: -0.12 },
+      state: "pause",
+    });
+  });
+
+  test("a phone paused since before today shows the whole day so far as paused", () => {
+    expect(
+      kinds([point({ time: at(-3) })], { now: at(8), pausedDeviceIds: new Set(["phone"]) }),
+    ).toEqual([["pause", 0, 480]]);
+  });
+
+  test("a past day's trailing gap stays no location even if the phone is paused now", () => {
+    expect(
+      kinds([point({ stayUntil: at(10), time: at(9) })], {
+        now: day.end + HOUR_MS,
+        pausedDeviceIds: new Set(["phone"]),
+      }).at(-1),
+    ).toEqual(["noLocation", 600, 1440]);
   });
 
   test("an epoch rotation keeps the revision, so it isn't a pause", () => {
@@ -484,5 +529,18 @@ describe("timelinePauseDetail", () => {
     expect(pause(10, 40)).toBe("Alice paused from t10 to t40");
     expect(pause(60, 100)).toBe("Alice paused from t60");
     expect(pause(0, 100)).toBe("Alice paused");
+  });
+
+  test("a pause still running gives no start time it can't know", () => {
+    const ongoing = (start: number) =>
+      timelinePauseDetail({
+        clock,
+        from: 0,
+        name: "Alice",
+        segment: { end: 100, ongoing: true, start },
+        to: 100,
+      });
+    expect(ongoing(60)).toBe("Alice paused some time after t60");
+    expect(ongoing(0)).toBe("Alice paused");
   });
 });

@@ -63,6 +63,9 @@ mock.module("../lib/placeSync.ts", () => ({
   groupPlacesQueryOptions: () => ({ queryKey: ["groupPlaces"] }),
 }));
 
+let deviceNoun = "phone";
+mock.module("../lib/thisDeviceNoun.ts", () => ({ thisDeviceNoun: () => deviceNoun }));
+
 const { default: PlaceAlertsScreen } = await import("../app/place-alerts.tsx");
 
 const render = async () => {
@@ -89,4 +92,11 @@ test("a failed group list offers to try again", async () => {
   expect(text).toContain("Couldn’t load your groups.");
   expect(text).toContain("Try again");
   expect(text).not.toContain("loading");
+});
+
+test("says mutes apply on all your devices, using this device's noun", async () => {
+  expect(await render()).toContain("This changes your alerts on all your phones.");
+  deviceNoun = "tablet";
+  expect(await render()).toContain("This changes your alerts on all your tablets.");
+  deviceNoun = "phone";
 });

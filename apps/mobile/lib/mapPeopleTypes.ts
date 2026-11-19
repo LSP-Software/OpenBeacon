@@ -29,7 +29,6 @@ export type MapWaitingForLocationPerson = MapPerson & { waitingForLocation: true
 
 export type MapPeople = {
   cantLocate: MapPerson[];
-  connectionLost: boolean;
   cantRead: MapUnreadablePerson[];
   finding: MapPerson[];
   hidden: MapHiddenPerson[];

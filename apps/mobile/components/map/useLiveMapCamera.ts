@@ -29,6 +29,7 @@ export const useLiveMapCamera = ({
   onClearSelection,
   onSelectDevice,
   pmtilesUrl,
+  reduceMotion,
   selectedMarker,
   selectedDeviceId,
   topInset,
@@ -41,12 +42,13 @@ export const useLiveMapCamera = ({
   onClearSelection: () => void;
   onSelectDevice: (deviceId: string) => void;
   pmtilesUrl: string | null;
+  reduceMotion: boolean;
   selectedMarker: LiveMapMarker | null;
   selectedDeviceId: string | null;
   topInset: number;
 }) => {
   const cameraRef = useRef<CameraRef>(null);
-  const { scheduleRelease, setCamera } = useLiveMapCameraCommands(cameraRef);
+  const { scheduleRelease, setCamera } = useLiveMapCameraCommands(cameraRef, reduceMotion);
   const scheduleCameraRelease = useEffectEvent(scheduleRelease);
   const moveCamera = useEffectEvent(setCamera);
   const initialFitStateRef = useRef(createLiveMapInitialFitState());
@@ -118,6 +120,7 @@ export const useLiveMapCamera = ({
       camera: cameraRef.current,
       markers: markersToFit,
       padding,
+      reduceMotion,
     });
     if (animationDuration !== null) {
       scheduleRelease(animationDuration);
@@ -322,6 +325,7 @@ export const useLiveMapCamera = ({
         camera,
         markers,
         padding: cameraPadding,
+        reduceMotion,
       });
       if (animationDuration !== null) {
         scheduleCameraRelease(animationDuration);
@@ -332,7 +336,7 @@ export const useLiveMapCamera = ({
       });
       scheduleLiveMapInitialFitClose(initialFitTimerRef, initialFitStateRef);
     }
-  }, [cameraPadding, isStyleLoaded, mapStyle, markers]);
+  }, [cameraPadding, isStyleLoaded, mapStyle, markers, reduceMotion]);
 
   useEffect(() => {
     if (!mapStyle || !cameraRef.current) return;

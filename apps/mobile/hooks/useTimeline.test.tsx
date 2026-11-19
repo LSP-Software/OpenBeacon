@@ -9,8 +9,31 @@ import type { TimelineDay } from "../lib/timelineTypes.ts";
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 let downloads = 0;
+let sharingReads = 0;
+let builtWithPaused: string[][] = [];
 
-mock.module("../lib/api.ts", () => ({ trpc: {}, trpcClient: {} }));
+mock.module("../lib/api.ts", () => ({
+  trpc: {
+    groupTracking: {
+      getLatest: {
+        queryOptions: ({ groupId }: { groupId: string }) => ({
+          queryKey: ["groupTracking.getLatest", groupId],
+          queryFn: async () => {
+            sharingReads += 1;
+            return {
+              points: [],
+              sharing: [
+                { deviceId: "paused-phone", paused: true, revisionPrefix: "a", userId: "user-2" },
+                { deviceId: "live-phone", paused: false, revisionPrefix: "b", userId: "user-2" },
+              ],
+            };
+          },
+        }),
+      },
+    },
+  },
+  trpcClient: {},
+}));
 mock.module("../lib/deviceKeys.ts", () => ({
   ensureDeviceKeyRegistration: async () => ({
     deviceId: "device-1",
@@ -27,7 +50,12 @@ mock.module("../lib/timelineLoad.ts", () => ({
     return { devices: [], joinStart: null };
   },
 }));
-mock.module("../lib/timeline.ts", () => ({ buildTimeline: () => ({}) }));
+mock.module("../lib/timeline.ts", () => ({
+  buildTimeline: ({ pausedDeviceIds }: { pausedDeviceIds: ReadonlySet<string> }) => {
+    builtWithPaused.push([...pausedDeviceIds]);
+    return {};
+  },
+}));
 
 const { useTimelineDay } = await import("./useTimeline.ts");
 
@@ -35,6 +63,8 @@ const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 20))
 
 const downloadsAfterReturningToTheApp = async (day: TimelineDay) => {
   downloads = 0;
+  sharingReads = 0;
+  builtWithPaused = [];
   const Probe = () => {
     useTimelineDay({
       day,
@@ -82,4 +112,26 @@ test("today is refreshed on returning to the app", async () => {
   const now = Date.now();
   const day = { key: "today", start: now - 3_600_000, end: now + 3_600_000 };
   expect(await downloadsAfterReturningToTheApp(day)).toBe(2);
+});
+
+test("today's timeline is built knowing which phones are paused now", async () => {
+  const now = Date.now();
+  await downloadsAfterReturningToTheApp({
+    key: "today",
+    start: now - 3_600_000,
+    end: now + 3_600_000,
+  });
+  expect(sharingReads).toBeGreaterThan(0);
+  expect(builtWithPaused.at(-1)).toEqual(["paused-phone"]);
+});
+
+test("a past day doesn't ask who is paused now", async () => {
+  const now = Date.now();
+  await downloadsAfterReturningToTheApp({
+    key: "past",
+    start: now - 2 * 86_400_000,
+    end: now - 86_400_000,
+  });
+  expect(sharingReads).toBe(0);
+  expect(builtWithPaused.at(-1)).toEqual([]);
 });

@@ -30,6 +30,7 @@ import { buildLiveMapMarkers, labelDeviceIcons } from "../../../lib/buildLiveMap
 import { classifyMapPeople, flagUnreadableMarkers } from "../../../lib/classifyMapPeople.ts";
 import { loadPersonalNicknames } from "../../../lib/personalNicknames.ts";
 import { Alert } from "../../../lib/alert.ts";
+import { useOfflineStatus } from "../../../lib/networkStatus.ts";
 import { buildPlacePins, hiddenGroupWithPlace } from "../../../lib/places.ts";
 import {
   confirmDeletePlace,
@@ -68,6 +69,7 @@ const MapScreen = () => {
   const { data: session } = authClient.useSession();
   const userId = session?.user.id;
   const isFocused = useIsFocused();
+  const offline = useOfflineStatus();
   const { data: groupsQueryData } = useQuery({
     ...trpc.groupMembership.list.queryOptions(),
     enabled: false,
@@ -443,6 +445,17 @@ const MapScreen = () => {
           subscribed={isFocused}
           userId={selfUserId}
         />
+        {!offline &&
+          (trackingStatus.connection === "failing" || trackingStatus.membership === "failed") && (
+            <View
+              accessibilityRole="alert"
+              className="mb-2 rounded-2xl border border-warning-accent bg-card p-4"
+            >
+              <Text className="text-warning-text">
+                Can’t reach the server. Locations shown may be out of date.
+              </Text>
+            </View>
+          )}
         {queueEviction && (
           <View className="mb-2 gap-2 rounded-2xl border border-warning-accent bg-card p-4">
             <Text className="font-semibold text-warning-text">

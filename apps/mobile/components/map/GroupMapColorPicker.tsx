@@ -55,6 +55,7 @@ export const GroupMapColorPicker = ({ groupId }: { groupId: string }) => {
                   accessibilityLabel={GROUP_COLOR_NAMES[color]}
                   accessibilityState={{ selected, disabled: locked }}
                   disabled={locked}
+                  hitSlop={6}
                   onPress={() => {
                     if (userId) save.mutate({ userId, groupId, color });
                   }}

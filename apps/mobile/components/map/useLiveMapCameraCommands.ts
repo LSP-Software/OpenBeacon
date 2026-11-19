@@ -1,7 +1,10 @@
 import type { CameraRef } from "@maplibre/maplibre-react-native";
 import { type RefObject, useEffect, useRef } from "react";
 
-export const useLiveMapCameraCommands = (cameraRef: RefObject<CameraRef | null>) => {
+export const useLiveMapCameraCommands = (
+  cameraRef: RefObject<CameraRef | null>,
+  reduceMotion: boolean,
+) => {
   const releaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearReleaseTimer = () => {
@@ -32,10 +35,11 @@ export const useLiveMapCameraCommands = (cameraRef: RefObject<CameraRef | null>)
     };
   }) => {
     if (!cameraRef.current) return;
+    const duration = reduceMotion ? 0 : stop.animationDuration;
     const options = {
       center: stop.centerCoordinate,
       ...(stop.zoomLevel !== undefined ? { zoom: stop.zoomLevel } : {}),
-      duration: stop.animationDuration,
+      duration,
       ...(stop.padding
         ? {
             padding: {
@@ -47,10 +51,10 @@ export const useLiveMapCameraCommands = (cameraRef: RefObject<CameraRef | null>)
           }
         : {}),
     };
-    if (stop.animationDuration === 0) cameraRef.current.jumpTo(options);
+    if (duration === 0) cameraRef.current.jumpTo(options);
     else if (stop.animationMode === "flyTo") cameraRef.current.flyTo(options);
     else cameraRef.current.easeTo(options);
-    scheduleRelease(stop.animationDuration ?? 0);
+    scheduleRelease(duration);
   };
 
   useEffect(

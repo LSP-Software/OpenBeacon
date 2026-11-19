@@ -74,13 +74,6 @@ export const LiveMapPeopleTray = ({
           </View>
         ) : null}
       </View>
-      {people.connectionLost ? (
-        <View className="mx-4 mb-3 rounded-xl bg-warning px-3 py-2">
-          <Text className="text-sm text-warning-text">
-            Can’t reach the server. Locations shown may be out of date.
-          </Text>
-        </View>
-      ) : null}
       {allUpToDate ? null : (
         <View className="flex-row flex-wrap gap-1.5 px-4 pb-3">
           {sections.map((section) => {

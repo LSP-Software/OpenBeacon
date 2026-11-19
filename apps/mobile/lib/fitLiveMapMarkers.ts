@@ -8,6 +8,7 @@ export const fitLiveMapMarkers = ({
   camera,
   markers,
   padding,
+  reduceMotion,
 }: {
   camera: CameraRef | null;
   markers: readonly LiveMapMarker[];
@@ -17,6 +18,7 @@ export const fitLiveMapMarkers = ({
     paddingRight: number;
     paddingTop: number;
   };
+  reduceMotion: boolean;
 }) => {
   if (!camera) {
     return null;
@@ -28,6 +30,7 @@ export const fitLiveMapMarkers = ({
     return null;
   }
 
+  const duration = reduceMotion ? 0 : ANIMATION_DURATION_MS;
   const paddingConfig = {
     top: padding.paddingTop,
     right: padding.paddingRight,
@@ -36,21 +39,23 @@ export const fitLiveMapMarkers = ({
   };
 
   if (rest.length === 0) {
-    camera.easeTo({
-      duration: ANIMATION_DURATION_MS,
-      center: [firstMarker.longitude, firstMarker.latitude],
+    const stop = {
+      duration,
+      center: [firstMarker.longitude, firstMarker.latitude] as [number, number],
       padding: paddingConfig,
       zoom: 14,
-    });
-    return ANIMATION_DURATION_MS;
+    };
+    if (reduceMotion) camera.jumpTo(stop);
+    else camera.easeTo(stop);
+    return duration;
   }
 
   const bounds = computeLiveMapFitBounds(validMarkers);
   camera.fitBounds([bounds.sw[0], bounds.sw[1], bounds.ne[0], bounds.ne[1]], {
     padding: paddingConfig,
-    duration: ANIMATION_DURATION_MS,
+    duration,
   });
-  return ANIMATION_DURATION_MS;
+  return duration;
 };
 
 const hasValidCoordinate = (marker: LiveMapMarker) =>

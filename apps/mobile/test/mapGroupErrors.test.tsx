@@ -39,6 +39,8 @@ let queueEviction: {
   revision: number;
 } | null = null;
 const dismissedEvictions: unknown[] = [];
+let offline = false;
+mock.module("../lib/networkStatus.ts", () => ({ useOfflineStatus: () => offline }));
 mock.module("../components/AnnouncementBanner.tsx", () => ({ AnnouncementBanner: () => null }));
 mock.module("@tanstack/react-query", () => ({
   queryOptions: <T,>(options: T) => options,
@@ -337,4 +339,32 @@ test("keeps members waiting instead of missing when their group's key check erro
   expect(people?.cantLocate.map(({ userId }) => userId)).toEqual(["mum"]);
   expect(people?.cantRead).toEqual([]);
   await act(async () => root.unmount());
+});
+
+test("warns that the server can't be reached on the map itself, unless the phone is offline", async () => {
+  groups = [];
+  access = [];
+  queueEviction = null;
+  sessionUser = { id: "me", image: null, name: "Me" };
+  const root = createRoot();
+  const rendered = async () => {
+    await act(async () => root.render(<MapScreen />));
+    return JSON.stringify(root.container.toJSON());
+  };
+  const warning = "Can’t reach the server. Locations shown may be out of date.";
+
+  trackingStatus = { connection: "ok", groups: {}, membership: "loaded", undecryptable: [] };
+  expect(await rendered()).not.toContain(warning);
+
+  trackingStatus = { connection: "failing", groups: {}, membership: "loaded", undecryptable: [] };
+  expect(await rendered()).toContain(warning);
+
+  trackingStatus = { connection: "ok", groups: {}, membership: "failed", undecryptable: [] };
+  expect(await rendered()).toContain(warning);
+
+  offline = true;
+  expect(await rendered()).not.toContain(warning);
+  offline = false;
+  await act(async () => root.unmount());
+  trackingStatus = { connection: "ok", groups: {}, membership: "loading", undecryptable: [] };
 });

@@ -1,6 +1,7 @@
 import { memo, useLayoutEffect, useRef, useState } from "react";
 import { PanResponder, View } from "react-native";
 import Svg, { Defs, Line, Pattern, Rect } from "react-native-svg";
+import { formatTimelineHourTick } from "../../lib/timelineClock.ts";
 import type { TimelineSegment } from "../../lib/timelineTypes.ts";
 import { useColors } from "../../lib/theme.ts";
 import { Text } from "../ui/Text.tsx";
@@ -32,6 +33,7 @@ export const TimelineScrubber = ({
   step,
   time,
   to,
+  uses24HourClock,
   valueLabel,
 }: {
   day: { end: number; start: number };
@@ -42,6 +44,7 @@ export const TimelineScrubber = ({
   step: number;
   time: number;
   to: number;
+  uses24HourClock: boolean;
   valueLabel: string;
 }) => {
   const [width, setWidth] = useState(0);
@@ -72,6 +75,7 @@ export const TimelineScrubber = ({
     hour,
     at: new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour).getTime(),
   }));
+  const tickWidth = uses24HourClock ? 16 : 40;
 
   return (
     <View>
@@ -146,12 +150,12 @@ export const TimelineScrubber = ({
                 key={tick.hour}
                 className="absolute text-xs text-secondary"
                 style={{
-                  left: Math.min(Math.max(xOf(tick.at) - 8, 0), width - 16),
-                  width: 16,
+                  left: Math.min(Math.max(xOf(tick.at) - tickWidth / 2, 0), width - tickWidth),
+                  width: tickWidth,
                   textAlign: "center",
                 }}
               >
-                {String(tick.hour).padStart(2, "0")}
+                {formatTimelineHourTick(tick.hour, uses24HourClock)}
               </Text>
             ))
           : null}

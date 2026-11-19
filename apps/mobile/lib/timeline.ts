@@ -70,7 +70,12 @@ const interpolate = (
   };
 };
 
-const clipSegments = (segments: readonly TimelineSegment[], from: number, to: number) => {
+const clipSegments = (
+  segments: readonly TimelineSegment[],
+  from: number,
+  to: number,
+  pausedAt: TimelinePosition | null,
+) => {
   const clipped: TimelineSegment[] = [];
   for (const segment of segments) {
     const start = Math.max(segment.start, from);
@@ -90,14 +95,17 @@ const clipSegments = (segments: readonly TimelineSegment[], from: number, to: nu
   }
   const first = clipped[0];
   const last = clipped.at(-1);
-  if (!first || !last)
-    return from < to ? [{ kind: "noLocation" as const, start: from, end: to }] : [];
+  const tail = (start: number): TimelineSegment =>
+    pausedAt
+      ? { kind: "pause", start, end: to, from: pausedAt, to: pausedAt, ongoing: true }
+      : { kind: "noLocation", start, end: to };
+  if (!first || !last) return from < to ? [tail(from)] : [];
   return [
     ...(first.start - from > NO_LOCATION_AFTER_MS
       ? [{ kind: "noLocation" as const, start: from, end: first.start }]
       : []),
     ...clipped,
-    ...(last.end < to ? [{ kind: "noLocation" as const, start: last.end, end: to }] : []),
+    ...(last.end < to ? [tail(last.end)] : []),
   ];
 };
 
@@ -106,6 +114,7 @@ export const buildTimeline = ({
   devices,
   joinStart,
   now,
+  pausedDeviceIds = new Set(),
   senders = [],
   windowStart,
 }: {
@@ -113,6 +122,7 @@ export const buildTimeline = ({
   devices: readonly TimelineDeviceData[];
   joinStart: number | null;
   now: number;
+  pausedDeviceIds?: ReadonlySet<string>;
   senders?: readonly TimelineSender[];
   windowStart: number;
 }) => {
@@ -127,12 +137,28 @@ export const buildTimeline = ({
     devices: devices.map(({ deviceId, points, undecryptable, userId }) => {
       const personStart = Math.max(historyStart, senderHistoryStart(senders, userId) ?? 0);
       const personFrom = Math.max(from, personStart);
+      const latest =
+        day.end > now && pausedDeviceIds.has(deviceId)
+          ? points.reduce<TimelinePoint | null>(
+              (found, point) =>
+                point.time <= to && (!found || point.time > found.time) ? point : found,
+              null,
+            )
+          : null;
       return {
         deviceId,
         historyStart: personStart,
         pointCount: points.filter((point) => point.time >= day.start && point.time < day.end)
           .length,
-        segments: personFrom < to ? clipSegments(deviceSegments(points), personFrom, to) : [],
+        segments:
+          personFrom < to
+            ? clipSegments(
+                deviceSegments(points),
+                personFrom,
+                to,
+                latest ? positionOf(latest) : null,
+              )
+            : [],
         undecryptable,
         userId,
       };
@@ -150,12 +176,13 @@ export const timelinePauseDetail = ({
   clock: (time: number) => string;
   from: number;
   name: string;
-  segment: { end: number; start: number };
+  segment: { end: number; ongoing?: true; start: number };
   to: number;
 }) => {
   const fromBefore = segment.start <= from;
   const toAfter = segment.end >= to;
   if (fromBefore && toAfter) return `${name} paused`;
+  if (segment.ongoing) return `${name} paused some time after ${clock(segment.start)}`;
   if (fromBefore) return `${name} paused until ${clock(segment.end)}`;
   if (toAfter) return `${name} paused from ${clock(segment.start)}`;
   return `${name} paused from ${clock(segment.start)} to ${clock(segment.end)}`;

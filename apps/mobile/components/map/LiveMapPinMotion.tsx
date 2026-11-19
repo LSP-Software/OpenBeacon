@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useRef } from "react";
 import { Animated } from "react-native";
+import { useReducedMotion } from "../../hooks/useReducedMotion.ts";
 import type { LiveMapPinOffset } from "../../lib/liveMapPinGroups.ts";
 
 const SPRING = { damping: 24, stiffness: 300, mass: 0.9, useNativeDriver: true };
@@ -13,12 +14,20 @@ export const LiveMapPinMotion = ({
   children: ReactNode;
   gatherTo?: LiveMapPinOffset | undefined;
 }) => {
-  const translateX = useRef(new Animated.Value(arrival?.x ?? 0)).current;
-  const translateY = useRef(new Animated.Value(arrival?.y ?? 0)).current;
-  const scale = useRef(new Animated.Value(arrival?.pop ? 0.6 : 1)).current;
+  const reduceMotion = useReducedMotion();
+  const translateX = useRef(new Animated.Value(reduceMotion ? 0 : (arrival?.x ?? 0))).current;
+  const translateY = useRef(new Animated.Value(reduceMotion ? 0 : (arrival?.y ?? 0))).current;
+  const scale = useRef(new Animated.Value(arrival?.pop && !reduceMotion ? 0.6 : 1)).current;
   const wasGatheringRef = useRef(false);
 
   useEffect(() => {
+    if (reduceMotion) {
+      wasGatheringRef.current = gatherTo !== undefined;
+      translateX.setValue(gatherTo?.x ?? 0);
+      translateY.setValue(gatherTo?.y ?? 0);
+      scale.setValue(1);
+      return;
+    }
     if (gatherTo) {
       wasGatheringRef.current = true;
       Animated.parallel([
@@ -38,7 +47,7 @@ export const LiveMapPinMotion = ({
       Animated.spring(translateY, { ...SPRING, toValue: 0 }),
       Animated.spring(scale, { ...SPRING, damping: 16, toValue: 1 }),
     ]).start();
-  }, [arrival, gatherTo, scale, translateX, translateY]);
+  }, [arrival, gatherTo, reduceMotion, scale, translateX, translateY]);
 
   return (
     <Animated.View

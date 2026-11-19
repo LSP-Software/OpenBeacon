@@ -82,6 +82,7 @@ const testPlatform = { OS: "ios" as "ios" | "android" };
 let mapAssetUrls: { glyphs: string; sprites: string } | null = null;
 const backPressListeners = new Set<() => boolean>();
 const accessibilityAnnouncements: string[] = [];
+let reduceMotionEnabled = false;
 
 mock.module("react-native", () => {
   const reactNative = createReactNativeTestModule({ platformOS: "android" });
@@ -92,6 +93,7 @@ mock.module("react-native", () => {
       announceForAccessibility: (message: string) => {
         accessibilityAnnouncements.push(message);
       },
+      isReduceMotionEnabled: async () => reduceMotionEnabled,
       isScreenReaderEnabled: async () => false,
     },
     BackHandler: {
@@ -124,6 +126,8 @@ mock.module("react-native", () => {
     Pressable: (props: {
       accessibilityLabel?: string;
       children?: React.ReactNode;
+      className?: string;
+      hitSlop?: unknown;
       onPress?: () => void;
       style?: unknown;
     }) => {
@@ -137,6 +141,8 @@ mock.module("react-native", () => {
         "pressable",
         {
           accessibilityLabel: props.accessibilityLabel,
+          className: props.className,
+          hitSlop: props.hitSlop,
           onClick: props.onPress,
           onPress: props.onPress,
           style: props.style,
@@ -509,6 +515,7 @@ describe("NativeMap over a fake MapLibre", () => {
     mapAssetUrls = null;
     backPressListeners.clear();
     accessibilityAnnouncements.length = 0;
+    reduceMotionEnabled = false;
     resetNativeMapHarness();
     currentSignedPmtilesUrlQuery = {
       data: defaultSignedUrl,
@@ -1572,6 +1579,76 @@ describe("NativeMap over a fake MapLibre", () => {
     expect(
       getNativeMapCameraCommands().filter((command) => command.type === "fitBounds"),
     ).toHaveLength(1);
+  });
+
+  test("moves the camera without animation when Reduce motion is on", async () => {
+    reduceMotionEnabled = true;
+    const alice = createLiveMapMarkerFixture({
+      initials: "AL",
+      latitude: 51.5,
+      longitude: -0.12,
+      name: "Alice",
+      userId: "alice",
+    });
+
+    await renderNativeMap({ markers: [alice] });
+    await finishLoadingStyle();
+    await flushEffects();
+    await renderNativeMap({ markers: [alice], selectedDeviceId: "alice" });
+    await flushEffects();
+
+    const moves = getNativeMapCameraCommands().filter((command) => command.type === "setCamera");
+    expect(moves.length).toBeGreaterThan(1);
+    for (const move of moves) {
+      expect(move).toEqual({
+        type: "setCamera",
+        stop: expect.objectContaining({ animationDuration: 0 }),
+      });
+      expect(move).toEqual({
+        type: "setCamera",
+        stop: expect.not.objectContaining({ animationMode: expect.anything() }),
+      });
+    }
+    expect(moves.at(-1)).toEqual({
+      type: "setCamera",
+      stop: expect.objectContaining({ centerCoordinate: [-0.12, 51.5], zoomLevel: 15 }),
+    });
+  });
+
+  test("gives every map control a touch target of at least 48 dp", async () => {
+    const self = createLiveMapMarkerFixture({ isSelf: true, userId: "self" });
+    await renderNativeMap({
+      groupOptions: [
+        { color: "#FF1464", hidden: false, id: "family", memberCount: 1, name: "Family" },
+        { color: "#2A9D8F", hidden: false, id: "club", memberCount: 1, name: "Club" },
+      ],
+      markers: [self],
+      people: null,
+      timelineGroupId: "family",
+    });
+    const sizes: Record<string, number> = { "h-10": 40, "size-11": 44, "size-12": 48 };
+    const controls = (root?.container.queryAll((node) => node.type === "pressable") ?? []).filter(
+      (node) =>
+        [
+          "Groups on the map",
+          "Show map names and symbols",
+          "Timeline",
+          "People",
+          "Show everyone",
+          "Go to current location",
+        ].includes(String(node.props["accessibilityLabel"])),
+    );
+    expect(controls).toHaveLength(6);
+    for (const control of controls) {
+      const height = Object.entries(sizes).find(([name]) =>
+        String(control.props["className"]).split(" ").includes(name),
+      )?.[1];
+      const slop = control.props["hitSlop"] as { top?: number; bottom?: number } | undefined;
+      expect({
+        label: control.props["accessibilityLabel"],
+        height: (height ?? 0) + (slop?.top ?? 0) + (slop?.bottom ?? 0),
+      }).toEqual({ label: control.props["accessibilityLabel"], height: 48 });
+    }
   });
 
   test("focuses selection once with zoom, then follows without resetting zoom", async () => {
@@ -2883,7 +2960,6 @@ describe("NativeMap over a fake MapLibre", () => {
     const emptyPeople: MapPeople = {
       cantLocate: [],
       cantRead: [],
-      connectionLost: false,
       finding: [],
       hidden: [],
       outOfDate: [],
@@ -3078,7 +3154,6 @@ describe("NativeMap over a fake MapLibre", () => {
     const createPeople = (overrides: Partial<MapPeople> = {}): MapPeople => ({
       cantLocate: [],
       cantRead: [],
-      connectionLost: false,
       finding: [],
       hidden: [],
       outOfDate: [],

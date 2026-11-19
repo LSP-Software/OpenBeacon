@@ -43,6 +43,13 @@ export type TimelineSegment =
   | { kind: "moving"; start: number; end: number; from: TimelinePosition; to: TimelinePosition }
   | { kind: "stay"; start: number; end: number; position: TimelinePosition }
   | { kind: "noLocation"; start: number; end: number }
-  | { kind: "pause"; start: number; end: number; from: TimelinePosition; to: TimelinePosition };
+  | {
+      kind: "pause";
+      start: number;
+      end: number;
+      from: TimelinePosition;
+      to: TimelinePosition;
+      ongoing?: true;
+    };
 
 export type Coordinate = [longitude: number, latitude: number];

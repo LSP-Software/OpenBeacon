@@ -84,6 +84,7 @@
         "expo-image-picker": "~55.0.13",
         "expo-linking": "~55.0.8",
         "expo-local-authentication": "~55.0.18",
+        "expo-localization": "~55.0.19",
         "expo-location": "^55.1.4",
         "expo-network": "^55.0.9",
         "expo-router": "~55.0.7",
@@ -1373,6 +1374,8 @@
 
     "expo-local-authentication": ["expo-local-authentication@55.0.18", "", { "dependencies": { "invariant": "^2.2.4" }, "peerDependencies": { "expo": "*" } }, "sha512-3ybbTDvEOHR/H8HF65iavsnlgVvI0FYo9JREiLQzaq8/s4nfJ0KZN5e9e+KUfSwqOhdqf8urf3jlAHRZQYUXSg=="],
 
+    "expo-localization": ["expo-localization@55.0.19", "", { "dependencies": { "rtl-detect": "^1.0.2" }, "peerDependencies": { "expo": "*", "react": "*" } }, "sha512-rw8pcC4QL8HC3K8Vs5pdVCB+ayFkaVD0f+Ul+jHgM6W7XdzGtCzd0x7rI3M/9PzP1YpAgQ4jYZid/g+UKi9IIA=="],
+
     "expo-location": ["expo-location@55.1.4", "", { "dependencies": { "@expo/image-utils": "^0.8.12" }, "peerDependencies": { "expo": "*" } }, "sha512-0QWQ4QP8I6svtGUL895Y8bvKM3nGUWNp/MdCoCQNH3uAuwvLf2TQ6ZDVD3kdlkl2wGGdw6ziHQIYDHL96OlfnA=="],
 
     "expo-manifests": ["expo-manifests@55.0.11", "", { "dependencies": { "@expo/config": "~55.0.10", "expo-json-utils": "~55.0.0" }, "peerDependencies": { "expo": "*" } }, "sha512-3+pFun4C9F/eFMVpwZgOBrBWq5sfu7rS1uxTrcg9G7jUFatNe5W6hr+M7z7aQPDf0J1afaSudUZPawx1LLf15w=="],
@@ -1974,6 +1977,8 @@
     "robust-predicates": ["robust-predicates@3.0.3", "", {}, "sha512-NS3levdsRIUOmiJ8FZWCP7LG3QpJyrs/TE0Zpf1yvZu8cAJJ6QMW92H1c7kWpdIHo8RvmLxN/o2JXTKHp74lUA=="],
 
     "rou3": ["rou3@0.9.2", "", {}, "sha512-3SOzvaAg8rkHrXtRjpCvCvbyO5to9oOO27Z/XqHEYXfMRVSw/qMIVdmaOk9W2lcRLtR6dlqTjo9hDeJk70QBYQ=="],
+
+    "rtl-detect": ["rtl-detect@1.1.2", "", {}, "sha512-PGMBq03+TTG/p/cRB7HCLKJ1MgDIi07+QU1faSjiYRfmY5UsAttV9Hs08jDAHVwcOwmVLcSJkpwyfXszVjWfIQ=="],
 
     "run-parallel": ["run-parallel@1.2.0", "", { "dependencies": { "queue-microtask": "^1.2.2" } }, "sha512-5l4VyZR86LZ/lDxZTR6jqL8AFE2S0IFLMP26AbjsLVADxHdhB/c0GUsH+y39UfCi3dzz8OlQuPmnaJOMoDHQBA=="],
 

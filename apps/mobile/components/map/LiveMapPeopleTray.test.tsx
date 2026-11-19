@@ -62,7 +62,6 @@ const marker = (userId: string, name: string, minutesAgo: number): LiveMapMarker
 const emptyPeople: MapPeople = {
   cantLocate: [],
   cantRead: [],
-  connectionLost: false,
   finding: [],
   hidden: [],
   outOfDate: [],
@@ -103,15 +102,6 @@ describe("LiveMapPeopleTray", () => {
     expect(output).toContain('"Finding"," ","3 people"');
     expect(output).toContain('"Waiting for"," ","1 person"');
     expect(output).toContain("Waiting for connection");
-  });
-
-  test("shows the offline notice only when the connection is lost", async () => {
-    expect(await renderTray({ waiting: [person("d", "Dan")] })).not.toContain(
-      "Can’t reach the server",
-    );
-    expect(
-      await renderTray({ connectionLost: true, upToDate: [marker("a", "Alice Smith", 2)] }),
-    ).toContain("Can’t reach the server. Locations shown may be out of date.");
   });
 
   test("lists people from hidden groups last, with a hidden badge", async () => {
