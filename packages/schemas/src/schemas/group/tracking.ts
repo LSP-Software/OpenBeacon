@@ -7,6 +7,7 @@ import {
 } from "@openbeacon/encryption";
 import z from "zod";
 import { alertsCursorSchema, placeTransitionSchema } from "./placeTransitions.ts";
+import { storableDateSchema } from "../storableDate.ts";
 
 const decodesTo = (value: string, isValid: (decoded: Uint8Array) => boolean) => {
   try {
@@ -83,7 +84,7 @@ export const groupTrackingPollSchema = z.object({
   cursor: z
     .object({
       senderDeviceId: z.string().min(1).max(128),
-      updatedAt: z.date(),
+      updatedAt: storableDateSchema,
     })
     .nullable()
     .optional(),

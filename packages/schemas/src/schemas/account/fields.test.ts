@@ -29,6 +29,21 @@ describe("accountNameSchema", () => {
     }
   });
 
+  test("refuses hidden format characters inside a visible name, and names made only of blank letters", () => {
+    for (const name of [
+      "Fam\u200Bily",
+      "Ali\u2060ce",
+      "Bo\uFEFFb",
+      "\u3164",
+      "\u2800\u2800",
+      "\u115F\u1160",
+      "\uFFA0 \u3164",
+    ]) {
+      expect(accountNameSchema.safeParse(name).success).toBe(false);
+    }
+    expect(accountNameSchema.parse("\u3164Bob")).toBe("\u3164Bob");
+  });
+
   test("keeps the joiners and marks Persian, Arabic and Hebrew names use", () => {
     for (const name of [
       "\u0645\u06CC\u200C\u062E\u0648\u0627\u0645",
