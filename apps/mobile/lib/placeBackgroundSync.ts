@@ -15,6 +15,7 @@ import { getRegisteredDeviceKey } from "./deviceKeys.ts";
 import { catchUpGroupImageKeys } from "./imageKeyCatchUp.ts";
 import { showNotices } from "./noticeBackgroundSync.ts";
 import { showEventNotice } from "./notifications.ts";
+import { ownedDeviceName } from "./ownedDeviceName.ts";
 import { parseJson } from "./parseJson.ts";
 import { nicknamesByGroup } from "./nicknamesByGroup.ts";
 import { catchUpGroupPlaces } from "./placeCatchUp.ts";
@@ -68,12 +69,12 @@ export const getPlaceAlertsCursor = (userId: string) => {
 
 export const describePlaceAlert = ({
   alert,
-  ownerName,
+  ownerNames,
 }: {
   alert: Pick<PlaceAlert, "deviceName" | "direction" | "placeEmoji" | "placeName">;
-  ownerName: string | null;
+  ownerNames: readonly string[];
 }) =>
-  `${ownerName ?? "Someone"}’s ${alert.deviceName} ${alert.direction === "ARRIVE" ? "arrived at" : "left"} ${alert.placeEmoji} ${alert.placeName}`;
+  `${ownedDeviceName({ deviceName: alert.deviceName, ownerNames, isYou: false })} ${alert.direction === "ARRIVE" ? "arrived at" : "left"} ${alert.placeEmoji} ${alert.placeName}`;
 
 export const describePlacesChanged = ({
   added,
@@ -206,11 +207,10 @@ const showPlaceAlerts = async ({
     const group = (await groups()).find(({ id }) => id === alert.groupId);
     if (!group) continue;
     const member = group.members.find((item) => item.userId === alert.userId);
-    const ownerName = member
-      ? ((await nicknamesFor(alert.groupId))[member.id]?.name ?? member.name)
-      : null;
+    const nickname = member ? (await nicknamesFor(alert.groupId))[member.id]?.name : undefined;
+    const ownerNames = member ? [...(nickname ? [nickname] : []), member.name] : [];
     await showEventNotice({
-      title: describePlaceAlert({ alert, ownerName }),
+      title: describePlaceAlert({ alert, ownerNames }),
       body: null,
       groupName: group.name,
       key: alert.id,

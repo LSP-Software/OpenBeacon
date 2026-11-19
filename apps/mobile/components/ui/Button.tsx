@@ -28,7 +28,7 @@ const buttonVariants = cva(
   },
 );
 
-const buttonTextVariants = cva("text-base font-semibold", {
+const buttonTextVariants = cva("text-center text-base font-semibold", {
   variants: {
     variant: {
       default: "text-white",
