@@ -1,5 +1,6 @@
 import { tryCatch } from "@openbeacon/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { router } from "expo-router";
 import { useState } from "react";
 import { Alert } from "../lib/alert.ts";
 import { trpc, trpcClient } from "../lib/api.ts";
@@ -9,19 +10,23 @@ import { syncLocationSharing } from "../lib/locationSharing.ts";
 import { userMessage } from "../lib/userMessage.ts";
 
 const confirmShortening = (label: string) =>
-  new Promise<boolean>((resolve) =>
+  new Promise<"cancel" | "change" | "saveCopy">((resolve) =>
     Alert.alert(
       `Change to “${label}”?`,
-      "This deletes your older location history from the server straight away, so your groups can’t see it any more. Copies members have already seen on their phones aren’t deleted.",
+      "This deletes your older location history from the server straight away, so your groups can’t see it any more. Copies members have already seen on their phones aren’t deleted. You can save a copy of your own history first.",
       [
-        { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
-        { text: "Delete and change", style: "destructive", onPress: () => resolve(true) },
+        { text: "Cancel", style: "cancel", onPress: () => resolve("cancel") },
+        { text: "Save a copy first", onPress: () => resolve("saveCopy") },
+        { text: "Delete and change", style: "destructive", onPress: () => resolve("change") },
       ],
-      { cancelable: true, onDismiss: () => resolve(false) },
+      { cancelable: true, onDismiss: () => resolve("cancel") },
     ),
   );
 
-export const useHistoryShare = (enabled = true) => {
+export const useHistoryShare = (
+  enabled = true,
+  saveCopy = () => router.push("/account/location-history"),
+) => {
   const queryClient = useQueryClient();
   const query = useQuery({
     ...trpc.account.locationSharing.queryOptions(),
@@ -41,7 +46,11 @@ export const useHistoryShare = (enabled = true) => {
       next,
       setting,
     });
-    if (shortens && !(await confirmShortening(label))) return false;
+    if (shortens) {
+      const choice = await confirmShortening(label);
+      if (choice === "saveCopy") saveCopy();
+      if (choice !== "change") return false;
+    }
     setSaving(true);
     const result = await tryCatch<unknown>(
       "account" in next

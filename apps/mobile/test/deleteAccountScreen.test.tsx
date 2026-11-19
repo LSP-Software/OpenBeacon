@@ -12,7 +12,11 @@ let methods = { google: false, password: true };
 const ownScreenWhileOpen: boolean[] = [];
 const View = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
 
-mock.module("expo-router", () => ({ router: { replace: () => {} } }));
+mock.module("expo-router", () => ({
+  Link: ({ children }: { children?: React.ReactNode }) =>
+    React.createElement(React.Fragment, null, children),
+  router: { replace: () => {} },
+}));
 mock.module("expo-web-browser", () => ({
   openAuthSessionAsync: async () => {
     const { isOwnScreenOpen } = await import("../lib/ownScreen.ts");

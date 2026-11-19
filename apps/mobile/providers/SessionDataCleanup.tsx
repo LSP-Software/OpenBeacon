@@ -31,6 +31,14 @@ export const SessionDataCleanup = () => {
   const userIdRef = useRef(userId);
 
   useEffect(() => {
+    void tryCatch(
+      import("../lib/historyExportFile.ts").then(({ clearHistoryExports }) =>
+        clearHistoryExports(),
+      ),
+    );
+  }, []);
+
+  useEffect(() => {
     userIdRef.current = userId;
   }, [userId]);
 
