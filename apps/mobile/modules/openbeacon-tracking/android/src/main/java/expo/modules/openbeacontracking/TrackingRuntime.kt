@@ -101,6 +101,7 @@ object TrackingRuntime {
           .putString(org.json.JSONArray(group).toString(), "${allowance.tokens}:${allowance.updatedAt}")
           .apply()
       },
+      onRowFailure = { groupId, error -> Log.e("TrackingRuntime", "Failed to encrypt a location for group $groupId.", error) },
     )
 
   fun sharingState(context: Context): SharingCaptureState {

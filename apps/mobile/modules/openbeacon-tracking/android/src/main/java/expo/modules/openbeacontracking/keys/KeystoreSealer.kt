@@ -12,10 +12,29 @@ import org.json.JSONObject
 
 class KeystoreSealer(
   private val keyAlias: String,
+  private val findKey: (String) -> SecretKey? = { alias ->
+    KeyStore.getInstance(ANDROID_KEY_STORE).apply { load(null) }.getKey(alias, null) as? SecretKey
+  },
+  private val generateKey: (String) -> SecretKey = { alias ->
+    KeyGenerator
+      .getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEY_STORE)
+      .apply {
+        init(
+          KeyGenParameterSpec
+            .Builder(
+              alias,
+              KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
+            ).setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+            .setKeySize(256)
+            .build(),
+        )
+      }.generateKey()
+  },
 ) {
   fun seal(plaintext: String): String {
     val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-    cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
+    cipher.init(Cipher.ENCRYPT_MODE, findKey(keyAlias) ?: generateKey(keyAlias))
     return JSONObject()
       .put("version", 1)
       .put("iv", Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
@@ -31,39 +50,13 @@ class KeystoreSealer(
     val cipher = Cipher.getInstance("AES/GCM/NoPadding")
     cipher.init(
       Cipher.DECRYPT_MODE,
-      getOrCreateKey(),
+      checkNotNull(findKey(keyAlias)) { "The sealed storage key is missing." },
       GCMParameterSpec(128, Base64.decode(payload.getString("iv"), Base64.NO_WRAP)),
     )
     return String(
       cipher.doFinal(Base64.decode(payload.getString("ciphertext"), Base64.NO_WRAP)),
       Charsets.UTF_8,
     )
-  }
-
-  private fun getOrCreateKey(): SecretKey {
-    val keyStore =
-      KeyStore.getInstance(ANDROID_KEY_STORE).apply {
-        load(null)
-      }
-    val existingKey = keyStore.getKey(keyAlias, null)
-    if (existingKey is SecretKey) {
-      return existingKey
-    }
-
-    return KeyGenerator
-      .getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEY_STORE)
-      .apply {
-        init(
-          KeyGenParameterSpec
-            .Builder(
-              keyAlias,
-              KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
-            ).setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-            .setKeySize(256)
-            .build(),
-        )
-      }.generateKey()
   }
 
   companion object {
