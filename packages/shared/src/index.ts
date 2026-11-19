@@ -30,3 +30,4 @@ export {
   resolveHistoryShare,
 } from "./historyShare.ts";
 export type { HistoryShare } from "./historyShare.ts";
+export { googleSignInNonce } from "./googleSignInNonce.ts";

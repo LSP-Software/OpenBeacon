@@ -42,12 +42,16 @@ export const readSessionTokenToRevoke = async () => {
 
 const authBaseUrl = `${getBaseUrl()}/api/auth`;
 
-const toCurrentServer = (input: RequestInfo | URL) => {
+const toServer = (input: RequestInfo | URL, server: string) => {
   const url = input instanceof Request ? input.url : String(input);
-  return url.startsWith(authBaseUrl)
-    ? `${getBaseUrl()}/api/auth${url.slice(authBaseUrl.length)}`
-    : url;
+  return url.startsWith(authBaseUrl) ? `${server}/api/auth${url.slice(authBaseUrl.length)}` : url;
 };
+
+const boundServerHeader = "x-openbeacon-bound-server";
+
+export const SERVER_CHANGED_CODE = "SERVER_CHANGED";
+
+export const bindToServer = (server: string) => ({ headers: { [boundServerHeader]: server } });
 
 const toCurrentServerKey = (key: string) =>
   key.replace(/^openbeacon_/, `openbeacon_${getServerKey(getBaseUrl())}_`);
@@ -61,6 +65,15 @@ const unreachable = () =>
     { status: 503, headers: { "Content-Type": "application/json" } },
   );
 
+const serverChanged = () =>
+  new Response(
+    JSON.stringify({
+      code: SERVER_CHANGED_CODE,
+      message: "The server changed. Try again.",
+    }),
+    { status: 409, headers: { "Content-Type": "application/json" } },
+  );
+
 export const authClient = createAuthClient({
   baseURL: authBaseUrl,
   sessionOptions: { refetchOnWindowFocus: false },
@@ -72,6 +85,11 @@ export const authClient = createAuthClient({
     // so an aborted signal below always means the caller cancelled.
     signal: new AbortController().signal,
     customFetchImpl: async (input, init) => {
+      const server = getBaseUrl();
+      const headers = new Headers(init?.headers);
+      const boundServer = headers.get(boundServerHeader);
+      if (boundServer !== null && boundServer !== server) return serverChanged();
+      headers.delete(boundServerHeader);
       const timeout =
         init && "timeout" in init && typeof init.timeout === "number" ? init.timeout : 30_000;
       const callerSignal = init?.signal;
@@ -81,8 +99,9 @@ export const authClient = createAuthClient({
       if (callerSignal?.aborted) abort();
       const timer = setTimeout(abort, timeout);
       const response = await tryCatch(
-        apiCompatibilityFetch(toCurrentServer(input), {
+        apiCompatibilityFetch(toServer(input, server), {
           ...init,
+          headers,
           signal: controller.signal,
         }).then(async (received) => {
           const body = await received.text();

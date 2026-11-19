@@ -9,15 +9,7 @@ export const createGoogleIdTokenVerifier = ({
   timeoutMs: number;
 }) => {
   const keys = createRemoteJWKSet(certsUrl, { timeoutDuration: timeoutMs });
-  return async ({
-    token,
-    audience,
-    nonce,
-  }: {
-    token: string;
-    audience: string;
-    nonce?: string | undefined;
-  }) => {
+  return async ({ token, audience, nonce }: { token: string; audience: string; nonce: string }) => {
     const verified = await tryCatch(
       jwtVerify(token, keys, {
         issuer: ["https://accounts.google.com", "accounts.google.com"],
@@ -29,7 +21,9 @@ export const createGoogleIdTokenVerifier = ({
       }),
     );
     if (verified.error) return null;
-    if (nonce && verified.data.payload["nonce"] !== nonce) return null;
+    const tokenNonce = verified.data.payload["nonce"];
+    if (!nonce || typeof tokenNonce !== "string") return null;
+    if (tokenNonce !== nonce) return "wrong-nonce";
     return verified.data.payload;
   };
 };

@@ -157,4 +157,32 @@ describe("performGoogleAuth", () => {
     expect(alertMock).not.toHaveBeenCalled();
     expect(onSuccess).not.toHaveBeenCalled();
   });
+
+  test("a second tap while Google sign-in is running does nothing", async () => {
+    let finishSignIn = (_result: { data: { ok: true } }) => {};
+    signInWithGoogleMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishSignIn = resolve;
+        }),
+    );
+    const onSuccess = mock(async () => {});
+    const { performGoogleAuth } = await importGoogleAuthModule();
+    const options = {
+      setLoading: () => {},
+      failureTitle: "Google sign in failed",
+      onSuccess,
+      alert: alertMock,
+    };
+
+    const first = performGoogleAuth(options);
+    await performGoogleAuth(options);
+    finishSignIn({ data: { ok: true } });
+    await first;
+    await performGoogleAuth(options);
+
+    expect(signInWithGoogleMock).toHaveBeenCalledTimes(2);
+    expect(completeAuthenticatedSessionSetupMock).toHaveBeenCalledTimes(2);
+    expect(onSuccess).toHaveBeenCalledTimes(2);
+  });
 });
