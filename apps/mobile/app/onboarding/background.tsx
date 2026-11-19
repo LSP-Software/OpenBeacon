@@ -120,7 +120,7 @@ const BackgroundLocationStepScreen = () => {
           ? "OpenBeacon can’t use your location yet. Allow it first, then allow it all the time."
           : needsForegroundFirst
             ? "Location is off for OpenBeacon, so nothing is shared. Turn it on in Settings and allow it all the time."
-            : "OpenBeacon shares nothing until it has precise location, location all the time and notifications, even while the app is open."
+            : "OpenBeacon shares nothing until it has precise location and location all the time, even while the app is open."
       }
       primary={{
         label: asksForLocationFirst

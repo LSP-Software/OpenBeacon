@@ -29,6 +29,10 @@ class OpenBeaconTrackingModule : Module() {
         Notices.removeOldChannels(requireContext())
       }
 
+      OnActivityEntersForeground {
+        appContext.reactContext?.let { TrackingCaptureService.showNoticeIfMissing(it) }
+      }
+
       Function("setSharingState") { owner: String, deviceId: String, prefix: String, paused: Boolean, until: Double?, after: Double? ->
         TrackingRuntime.applySharingState(requireContext(), owner, deviceId, SharingCaptureState(prefix, paused, until?.toLong(), after?.toLong() ?: 0L))
       }

@@ -456,6 +456,52 @@ class TrackingCaptureServiceTest {
   }
 
   @Test
+  fun aSwipedAwaySharingNoticeIsShownAgain() {
+    val service = createService()
+    service.onStartCommand(checkSharingIntent(), 0, 1)
+    val manager = application.getSystemService(NotificationManager::class.java)
+    val deleteIntent = shadowOf(shadowOf(service).lastForegroundNotification.deleteIntent).savedIntent
+    manager.cancel(7260)
+
+    assertEquals(TrackingCaptureService.ACTION_SHOW_NOTICE, deleteIntent.action)
+    assertTrue(TrackingCaptureService.isNoticeMissing(application))
+    assertEquals(Service.START_STICKY, service.onStartCommand(deleteIntent, 0, 2))
+    assertFalse(TrackingCaptureService.isNoticeMissing(application))
+  }
+
+  @Test
+  fun aSharingNoticeHiddenWhileNotificationsWereOffIsShownOnceTheyAreAllowed() {
+    val service = createService()
+    val manager = application.getSystemService(NotificationManager::class.java)
+    shadowOf(manager).setNotificationsEnabled(false)
+    service.onStartCommand(checkSharingIntent(), 0, 1)
+    manager.cancel(7260)
+    drainStartedServices()
+
+    TrackingCaptureService.showNoticeIfMissing(application)
+    assertTrue(drainStartedServices().isEmpty())
+
+    shadowOf(manager).setNotificationsEnabled(true)
+    TrackingCaptureService.showNoticeIfMissing(application)
+    val show = drainStartedServices().single()
+    assertEquals(TrackingCaptureService.ACTION_SHOW_NOTICE, show.action)
+    service.onStartCommand(show, 0, 2)
+    assertFalse(TrackingCaptureService.isNoticeMissing(application))
+  }
+
+  @Test
+  fun aShowNoticeRequestAfterCaptureStoppedDoesNotKeepTheServiceAlive() {
+    val service = createService()
+    val result = service.onStartCommand(Intent(application, TrackingCaptureService::class.java).apply {
+      action = TrackingCaptureService.ACTION_SHOW_NOTICE
+    }, 0, 1)
+
+    assertEquals(Service.START_NOT_STICKY, result)
+    assertTrue(shadowOf(service).isStoppedBySelf)
+    assertTrue(TrackingCaptureService.isNoticeMissing(application))
+  }
+
+  @Test
   fun aTimedPauseSaysWhenSharingStartsAgain() {
     val until = Calendar.getInstance().apply {
       set(Calendar.HOUR_OF_DAY, 23)
@@ -777,6 +823,9 @@ class TrackingCaptureServiceTest {
       action = TrackingCaptureService.ACTION_START
       putExtra(TrackingCaptureService.EXTRA_COMMAND_GENERATION, generation)
     }
+
+  private fun checkSharingIntent() =
+    Intent(application, TrackingCaptureService::class.java).apply { action = TrackingCaptureService.ACTION_CHECK_SHARING }
 
   private fun createService(): TrackingCaptureService {
     val created = Robolectric.buildService(TrackingCaptureService::class.java).create()

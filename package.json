@@ -40,6 +40,7 @@
     "audit": "bun audit --audit-level=high --ignore=GHSA-qr28-fpjm-wq7f --ignore=GHSA-5p2g-fcmc-qvqq --ignore=GHSA-w3rx-r6r6-pgpr --ignore=GHSA-mrhx-c7xc-m3w5 --ignore=GHSA-fc5q-39xc-vjpf"
   },
   "overrides": {
+    "effect": "^3.22.5",
     "postcss": "^8.5.23"
   },
   "devDependencies": {
