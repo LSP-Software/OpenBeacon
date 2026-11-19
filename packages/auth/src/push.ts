@@ -8,7 +8,7 @@ import {
 } from "@openbeacon/database";
 import { effectiveNotificationSetting } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
-import type { FcmClient } from "./fcm.ts";
+import type { FcmClient, WakeKind } from "./fcm.ts";
 
 export const noticeSettleMs = 15_000;
 export const noticeLookbackMs = 24 * 60 * 60_000;
@@ -172,21 +172,32 @@ export const createPushSender = ({
     return devicesOf([notice.userId], notice.excludeDeviceId);
   };
 
-  const queued = new Set<string>();
+  const queued = new Map<string, WakeKind>();
   const lastWokenAt = new Map<string, number>();
+  const lastLocatedAt = new Map<string, number>();
   const followUps = new Set<string>();
 
-  const sendTo = async (deviceId: string, token: string, retried = false): Promise<void> => {
+  const sendTo = async (
+    deviceId: string,
+    token: string,
+    kind: WakeKind,
+    retried = false,
+  ): Promise<void> => {
     if (!fcm) return;
-    const result = await fcm.send(token);
+    const result = await fcm.send(token, kind);
     if (result.outcome === "sent") return;
     if (result.outcome === "unregistered") {
       await db.pushToken.deleteMany({ where: { deviceId, token } });
       return;
     }
+    if (result.outcome === "retry" && kind === "locate" && result.afterMs > 30_000) {
+      logError("FCM asked to wait past an update request's lifetime, so a wake was dropped");
+      return;
+    }
     if (result.outcome === "retry" && !retried) {
       setTimer(
-        () => background(() => sendTo(deviceId, token, true), "could not send a retried wake"),
+        () =>
+          background(() => sendTo(deviceId, token, kind, true), "could not send a retried wake"),
         result.afterMs,
       );
       return;
@@ -198,20 +209,25 @@ export const createPushSender = ({
     );
   };
 
-  const queue = (deviceIds: string[]) => {
-    const fresh = deviceIds.filter((deviceId) => !queued.has(deviceId));
+  const queue = (deviceIds: string[], kind: WakeKind = "sync") => {
+    const fresh = deviceIds.filter(
+      (deviceId) => !queued.has(deviceId) || (kind === "locate" && queued.get(deviceId) === "sync"),
+    );
     if (fresh.length === 0) return;
     const startBatch = queued.size === 0;
-    for (const deviceId of fresh) queued.add(deviceId);
+    for (const deviceId of fresh) queued.set(deviceId, kind);
     if (startBatch) setTimer(() => background(flush, "could not send wakes"), batchMs);
   };
 
   const flush = async () => {
     const at = now();
-    for (const [deviceId, wokenAt] of lastWokenAt) {
-      if (at - wokenAt >= wakeGapMs) lastWokenAt.delete(deviceId);
+    for (const woken of [lastWokenAt, lastLocatedAt]) {
+      for (const [deviceId, wokenAt] of woken) {
+        if (at - wokenAt >= wakeGapMs) woken.delete(deviceId);
+      }
     }
-    const due = [...queued].filter((deviceId) => {
+    const due = [...queued].filter(([deviceId, kind]) => {
+      if (kind === "locate" && !lastLocatedAt.has(deviceId)) return true;
       const wokenAt = lastWokenAt.get(deviceId);
       if (wokenAt === undefined) return true;
       if (!followUps.has(deviceId)) {
@@ -228,17 +244,21 @@ export const createPushSender = ({
     });
     queued.clear();
     if (due.length === 0) return;
-    for (const deviceId of due) lastWokenAt.set(deviceId, at);
+    for (const [deviceId, kind] of due) {
+      lastWokenAt.set(deviceId, at);
+      if (kind === "locate") lastLocatedAt.set(deviceId, at);
+    }
+    const kinds = new Map(due);
     const tokens = await db.pushToken.findMany({
       where: {
-        deviceId: { in: due },
+        deviceId: { in: [...kinds.keys()] },
         device: usableDevice(),
       },
       select: { deviceId: true, token: true },
     });
     await Promise.all(
       tokens.map(({ deviceId, token }) =>
-        tryCatch(sendTo(deviceId, token)).then((result) => {
+        tryCatch(sendTo(deviceId, token, kinds.get(deviceId) ?? "sync")).then((result) => {
           if (result.error) logError("could not send a wake");
         }),
       ),
@@ -264,6 +284,9 @@ export const createPushSender = ({
       if (eventIds.length > 0) wakeAfterSettle(() => groupEventRecipients(eventIds));
     },
     accountNotice: (noticeId: string) => wakeAfterSettle(() => accountNoticeRecipients(noticeId)),
+    requestLocation: (deviceIds: string[]) => {
+      if (fcm && deviceIds.length > 0) queue(deviceIds, "locate");
+    },
   };
 };
 

@@ -25,6 +25,8 @@ const worldPoint = (latitude: number, longitude: number) => {
 
 const pixelsPerWorld = (zoom: number) => 512 * 2 ** zoom;
 
+const nearestWorldX = (x: number, to: number) => x + Math.round(to - x);
+
 const groupId = (members: readonly LiveMapMarker[]) => {
   const deviceIds = members.map((member) => member.deviceId).sort();
   return deviceIds.length === 1 ? (deviceIds[0] ?? "") : `stack:${deviceIds[0]}`;
@@ -96,7 +98,8 @@ export const groupLiveMapPins = ({
         world: worldPoint(marker.latitude, marker.longitude),
       };
     }),
-    distanceBetween: (a, b) => Math.hypot(a.world.x - b.world.x, a.world.y - b.world.y) * scale,
+    distanceBetween: (a, b) =>
+      Math.hypot(nearestWorldX(b.world.x, a.world.x) - a.world.x, a.world.y - b.world.y) * scale,
     mergeDistanceFor: (a, b) =>
       [...a.previousGroupIds].some((id) => id.startsWith("stack:") && b.previousGroupIds.has(id))
         ? 64
@@ -107,19 +110,31 @@ export const groupLiveMapPins = ({
         members: [...a.members, ...b.members],
         previousGroupIds: new Set([...a.previousGroupIds, ...b.previousGroupIds]),
         world: {
-          x: (a.world.x * a.members.length + b.world.x * b.members.length) / total,
+          x:
+            (a.world.x * a.members.length +
+              nearestWorldX(b.world.x, a.world.x) * b.members.length) /
+            total,
           y: (a.world.y * a.members.length + b.world.y * b.members.length) / total,
         },
       };
     },
   });
 
-  return clusters.map(({ members }) => ({
-    id: groupId(members),
-    latitude: members.reduce((sum, member) => sum + member.latitude, 0) / members.length,
-    longitude: members.reduce((sum, member) => sum + member.longitude, 0) / members.length,
-    members,
-  }));
+  return clusters.map(({ members }) => {
+    const first = members[0]?.longitude ?? 0;
+    const longitude =
+      members.reduce(
+        (sum, member) =>
+          sum + member.longitude + 360 * Math.round((first - member.longitude) / 360),
+        0,
+      ) / members.length;
+    return {
+      id: groupId(members),
+      latitude: members.reduce((sum, member) => sum + member.latitude, 0) / members.length,
+      longitude: longitude - 360 * Math.round(longitude / 360),
+      members,
+    };
+  });
 };
 
 export const hasSameLiveMapPinGroups = (
@@ -168,7 +183,7 @@ const screenOffset = (
   const start = worldPoint(from.latitude, from.longitude);
   const end = worldPoint(to.latitude, to.longitude);
   const scale = pixelsPerWorld(zoom);
-  return { x: (end.x - start.x) * scale, y: (end.y - start.y) * scale };
+  return { x: (nearestWorldX(end.x, start.x) - start.x) * scale, y: (end.y - start.y) * scale };
 };
 
 export const liveMapPinTransition = ({

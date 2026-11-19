@@ -2,7 +2,7 @@ import { GroupEventType, GroupRole, Prisma, readDatabaseTime } from "@openbeacon
 import { createGroupSchema, groupEpochBundleSchema, newGroupIdSchema } from "@openbeacon/schemas";
 import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
-import { deleteGroup } from "../../lib/deleteGroup.ts";
+import { deleteGroup, deleteGroupImages } from "../../lib/deleteGroup.ts";
 import { persistGroupEpoch } from "../../lib/groupEpochs.ts";
 import { assertAccountBelowGroupLimit } from "../../lib/groupLimit.ts";
 import { groupOwnerProcedure } from "../../procedures/auth/group.ts";
@@ -19,7 +19,7 @@ export const groupLifecycleRouter = {
     })
     .input(z.object({ groupId: z.string(), onlyIfLastMember: z.boolean().optional() }))
     .mutation(async ({ ctx, input }) => {
-      await ctx.db.$transaction(
+      const deleted = await ctx.db.$transaction(
         async (tx) => {
           await tx.$queryRaw(
             Prisma.sql`SELECT id FROM "Group" WHERE id = ${input.groupId} FOR UPDATE`,
@@ -42,10 +42,11 @@ export const groupLifecycleRouter = {
               message: "The group has other members. Please try leaving again.",
             });
           }
-          await deleteGroup({ db: tx, groupId: input.groupId });
+          return deleteGroup({ db: tx, groupId: input.groupId });
         },
         { timeout: 15_000 },
       );
+      await deleteGroupImages(deleted.imageKeys);
       return { message: "Group deleted successfully" };
     }),
   create: protectedProcedure

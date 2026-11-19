@@ -85,6 +85,7 @@ mock.module("../lib/apiCompatibility.ts", () => ({
     return {
       ...(compatibility.shift() ?? { verdict: "ok" }),
       serverVersion: "0.1.0",
+      problem: { kind: "unreachable" },
     };
   },
 }));

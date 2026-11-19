@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "GroupEventType" ADD VALUE 'LOCATION_UPDATE_REQUESTED';

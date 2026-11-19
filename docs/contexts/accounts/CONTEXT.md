@@ -41,5 +41,5 @@ One Email or Phone switch for one message type in Account › Notifications. It'
 _Avoid_: Preference, per-device setting
 
 **Push wake-up**:
-A Firebase Cloud Messaging message with no content that makes a phone fetch its Account Notices straight away and, if it's in a group, run its tracking upload to fetch new Place Alerts and group activity. Only a server with the `FCM_*` settings sends them, which means the hosted service. Self-hosted servers send none, and their phones get the same notifications on their next upload.
+A Firebase Cloud Messaging message with no content that makes a phone fetch its Account Notices straight away and, if it's in a group, run its tracking upload to fetch new Place Alerts and group activity. Only a server with the `FCM_*` settings sends them, which means the hosted service. Self-hosted servers send none, and their phones get the same notifications on their next upload. An Update now wake-up (`t: "locate"`) does the same and also asks a sharing phone to upload a fresh location straight away.
 _Avoid_: Push notification

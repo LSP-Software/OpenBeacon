@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, jest, mock, test } from "bun:test";
 import {
   apiCompatibilityLevel,
   apiCompatibilityLevelHeader,
@@ -200,21 +200,56 @@ describe("checkServerCompatibility", () => {
     expect(requests[0]?.url).toBe("https://family.example.test/health");
   });
 
-  test.each([
-    ["the network fails", () => Promise.reject(new Error("offline"))],
-    ["the server errors", () => new Response("Bad gateway", { status: 502 })],
-    ["the body isn't JSON", () => new Response("<html>")],
-    ["the server isn't ready", () => json({ status: "starting", version: "0.4.4" })],
+  test.each<
+    [
+      string,
+      () => Response | Promise<Response>,
+      Extract<Awaited<ReturnType<typeof checkServerCompatibility>>, { verdict: null }>["problem"],
+    ]
+  >([
+    ["the network fails", () => Promise.reject(new Error("offline")), { kind: "unreachable" }],
+    [
+      "the server errors",
+      () => new Response("Bad gateway", { status: 502 }),
+      { kind: "httpStatus", status: 502 },
+    ],
+    ["the body isn't JSON", () => new Response("<html>"), { kind: "notOpenBeacon" }],
+    [
+      "the server isn't ready",
+      () => json({ status: "starting", version: "0.4.4" }),
+      { kind: "notOpenBeacon" },
+    ],
     [
       "the levels are unreadable",
       () => json({ status: "ok", version: "1.0.0", apiCompatibilityLevel: "new" }),
+      { kind: "notOpenBeacon" },
     ],
-  ])("knows nothing when %s", async (_, response) => {
+  ])("knows nothing when %s, and says why", async (_, response, problem) => {
     respond = response;
     expect(await checkServerCompatibility("https://family.example.test")).toEqual({
       verdict: null,
       serverVersion: null,
       announcements: null,
+      problem,
+    });
+  });
+
+  test("says the server took too long when it doesn't answer within 10 seconds", async () => {
+    globalThis.fetch = ((_input: RequestInfo | URL, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new Error("Aborted")));
+      })) as typeof fetch;
+    jest.useFakeTimers();
+    const checking = checkServerCompatibility("https://family.example.test");
+    jest.advanceTimersByTime(10_000);
+    const checked = await checking;
+    jest.useRealTimers();
+
+    expect(checked).toEqual({
+      verdict: null,
+      serverVersion: null,
+      announcements: null,
+      problem: { kind: "timeout" },
     });
   });
 

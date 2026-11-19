@@ -1,5 +1,6 @@
 import { afterEach, expect, jest, mock, test } from "bun:test";
 import React, { act, useEffect } from "react";
+import { TRPCClientError } from "@trpc/client";
 import { createRoot, type Root } from "test-renderer";
 
 (
@@ -337,4 +338,34 @@ test("a signed-in phone leaves a kept invite alone", async () => {
   await renderSignedIn();
   expect(replace.mock.calls).toEqual([["/(tabs)/map"]]);
   expect(inviteForSignIn).toBe(code);
+});
+
+test.each([
+  [
+    "key storage on this phone fails",
+    new Error("Device key storage is unavailable."),
+    "Device key storage is unavailable. Trying again automatically.",
+  ],
+  [
+    "the server answers with an error",
+    TRPCClientError.from({
+      error: {
+        code: -32603,
+        data: { code: "INTERNAL_SERVER_ERROR", httpStatus: 500 },
+        message: "Internal server error",
+      },
+    }),
+    "Something went wrong on the server. Trying again automatically.",
+  ],
+  [
+    "the server can't be reached",
+    TRPCClientError.from(new TypeError("Network request failed")),
+    "Couldn’t connect to https://beacon.example.com.",
+  ],
+])("says what went wrong when %s", async (_, error, message) => {
+  deviceActive = error;
+  await renderSignedIn();
+  const screen = JSON.stringify(root?.container.children);
+  expect(screen).toContain(message);
+  if (!message.startsWith("Couldn’t connect")) expect(screen).not.toContain("Couldn’t connect");
 });

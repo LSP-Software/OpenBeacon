@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, jest, mock, test } from "bun:test";
 import { deviceRemovedCause, deviceUnverifiedCause } from "@openbeacon/shared";
 import { TRPCClientError } from "@trpc/client";
 
@@ -11,6 +11,7 @@ let removalErrors: Error[] = [];
 let challengeError: Error | null = null;
 let signOutError: Error | null = null;
 let removedErrorDuringRemoval = false;
+let serverHangs = false;
 let pendingSharingPause = false;
 let deleteQueueError: Error | null = null;
 const sharingEvents: string[] = [];
@@ -89,6 +90,7 @@ mock.module("./api.ts", () => ({
         mutate: async () => {
           events.push("removeThisDevice");
           removalHeaders.push(await readHeaderDeviceId());
+          if (serverHangs) await new Promise(() => {});
           const queued = removalErrors.shift();
           if (queued) throw queued;
           if (removalError) throw removalError;
@@ -110,7 +112,12 @@ mock.module("./api.ts", () => ({
       },
     },
     auth: {
-      deviceKeyContext: { query: async () => ({ recipients: [], userId: "user-a" }) },
+      deviceKeyContext: {
+        query: async () => {
+          if (serverHangs) await new Promise(() => {});
+          return { recipients: [], userId: "user-a" };
+        },
+      },
       registerDeviceKey: { mutate: async () => ({}) },
     },
   },
@@ -126,6 +133,7 @@ mock.module("./auth-client.ts", () => ({
   authClient: {
     signOut: async () => {
       events.push("signOut");
+      if (serverHangs) await new Promise(() => {});
       if (signOutError) throw signOutError;
       return { error: null };
     },
@@ -162,7 +170,24 @@ const { cancelDeviceKeyRegistrations, ensureDeviceKeyRegistration } =
   await import("./deviceKeys.ts");
 const { signOutOfThisPhone } = await import("./signOut.ts");
 
+const settleWithin = async <T>(task: Promise<T>, ms: number) => {
+  let settled = false;
+  void task.finally(() => {
+    settled = true;
+  });
+  for (let elapsed = 0; elapsed < ms && !settled; elapsed += 500) {
+    await new Promise((resolve) => setImmediate(resolve));
+    jest.advanceTimersByTime(500);
+  }
+  await new Promise((resolve) => setImmediate(resolve));
+  return settled;
+};
+
 describe("signing out of this phone", () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   beforeEach(() => {
     cancelDeviceKeyRegistrations();
     secureStoreValues.clear();
@@ -174,6 +199,7 @@ describe("signing out of this phone", () => {
     challengeError = null;
     signOutError = null;
     removedErrorDuringRemoval = false;
+    serverHangs = false;
     pendingSharingPause = false;
     deleteQueueError = null;
     sharingEvents.length = 0;
@@ -472,5 +498,39 @@ describe("signing out of this phone", () => {
 
     expect(secureStoreValues.get("sessionTokenToRevokeOnNextLogin")).toBe("token-1");
     expect(storageValues.has("encryption.device.registered")).toBe(false);
+  });
+
+  test("a removal the server never answers gives up after 20 seconds and keeps this phone signed in", async () => {
+    await ensureDeviceKeyRegistration();
+    serverHangs = true;
+    jest.useFakeTimers();
+
+    const signingOut = signOutOfThisPhone({
+      onSigningOut: () => {},
+      removeThisPhone: true,
+      sessionTokenToRevoke: "token-1",
+    });
+
+    expect(await settleWithin(signingOut, 19_000)).toBe(false);
+    expect(await settleWithin(signingOut, 1_500)).toBe(true);
+    expect(await signingOut).toEqual({ status: "serverUnreachable" });
+    expect(events).not.toContain("signOut");
+    expect(secureStoreValues.has("encryption.device.privateKey.user-a")).toBe(true);
+  });
+
+  test("a sign-out the server never answers finishes on this phone within 20 seconds and keeps the token to revoke", async () => {
+    serverHangs = true;
+    jest.useFakeTimers();
+
+    const signingOut = signOutOfThisPhone({
+      onSigningOut: () => {},
+      removeThisPhone: false,
+      sessionTokenToRevoke: "token-1",
+    });
+
+    expect(await settleWithin(signingOut, 21_000)).toBe(true);
+    expect(await signingOut).toEqual({ status: "signedOut" });
+    expect(events).toContain("signOut");
+    expect(secureStoreValues.get("sessionTokenToRevokeOnNextLogin")).toBe("token-1");
   });
 });

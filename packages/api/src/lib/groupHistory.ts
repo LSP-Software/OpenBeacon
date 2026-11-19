@@ -18,6 +18,7 @@ const categoryEventTypes = {
     GroupEventType.MEMBER_LEFT,
     GroupEventType.MEMBER_REMOVED,
     GroupEventType.ACCOUNT_DELETED,
+    GroupEventType.LOCATION_UPDATE_REQUESTED,
   ],
   roles: [GroupEventType.ROLE_CHANGED],
   group: [
@@ -145,6 +146,7 @@ export const readGroupHistoryLatest = async ({
         AND e."createdAt" >= m."createdAt"
         AND e."createdAt" >= (${new Date(now.getTime() - HISTORY_RETENTION_MS).toISOString()}::timestamptz AT TIME ZONE 'UTC')
         AND COALESCE(e."actorUserId", e."subjectUserId") IS DISTINCT FROM ${userId}
+        AND e."type" <> ${GroupEventType.LOCATION_UPDATE_REQUESTED}::"GroupEventType"
     ) AS "latestAt"
     FROM "GroupMember" m
     WHERE m."userId" = ${userId}

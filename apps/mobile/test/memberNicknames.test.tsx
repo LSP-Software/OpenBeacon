@@ -165,17 +165,22 @@ mock.module("../lib/batteryVisual.ts", () => ({
     label: batteryLevel === null ? null : `${batteryLevel}%`,
   }),
 }));
-mock.module("../lib/timeSince.ts", () => ({ timeSince: () => "2 minutes ago" }));
+mock.module("../lib/timeSince.ts", () => ({
+  shortTimeSince: () => "2h",
+  timeSince: () => "2 minutes ago",
+}));
 const { default: MembersTab } = await import("../components/groups/MembersTab.tsx");
 const { getSnapshot: getAlerts } = await import("../lib/alert.ts");
-const live = () => ({
+const live = (
+  undecryptable: readonly { deviceId: string; groupId: string; userId: string }[] = [],
+) => ({
   dropRemovedDevices: () => {},
   positions,
   status: {
     connection: "ok" as const,
     groups: {},
     membership: "loaded" as const,
-    undecryptable: [],
+    undecryptable,
   },
 });
 const button = (label: string) => buttons.findLast((item) => item.label === label)!;
@@ -251,6 +256,53 @@ test("each of a member's devices is read out as one line", async () => {
   expect(labels).toEqual([
     "Pixel, updated 2 minutes ago, battery 80%",
     "iPad, updated 2 minutes ago, battery 35%",
+  ]);
+  positions = [];
+  memberDevices = [];
+  await act(async () => root.unmount());
+});
+
+test("a device that went quiet on a low battery may be out of battery, unless its newer locations can't be read", async () => {
+  const root = createRoot();
+  pending = false;
+  records = {};
+  const position = {
+    latitude: 51.5,
+    longitude: -0.1,
+    sourceGroupId: "group",
+    speed: null,
+    timestamp: "2026-11-11T12:00:00.000Z",
+    userId: "other",
+  };
+  positions = [
+    { ...position, battery: { charging: false, level: 4 }, deviceId: "phone" },
+    { ...position, battery: { charging: true, level: 4 }, deviceId: "tablet" },
+  ];
+  memberDevices = [
+    { deviceId: "phone", icon: "phone", name: "Pixel", platform: "android", userId: "other" },
+    { deviceId: "tablet", icon: "tablet", name: "iPad", platform: "ios", userId: "other" },
+  ];
+  const labels = () =>
+    root.container
+      .queryAll((item) => item.type === "view")
+      .map((item) => (item.props as { accessibilityLabel?: string }).accessibilityLabel)
+      .filter(Boolean);
+  await act(async () => root.render(<MembersTab groupId="group" live={live()} />));
+  expect(labels()).toEqual([
+    "Pixel, may be out of battery, updated 2 minutes ago, battery 4%",
+    "iPad, updated 2 minutes ago, battery 4%",
+  ]);
+  await act(async () =>
+    root.render(
+      <MembersTab
+        groupId="group"
+        live={live([{ deviceId: "phone", groupId: "group", userId: "other" }])}
+      />,
+    ),
+  );
+  expect(labels()).toEqual([
+    "Pixel, updated 2 minutes ago, battery 4%",
+    "iPad, updated 2 minutes ago, battery 4%",
   ]);
   positions = [];
   memberDevices = [];

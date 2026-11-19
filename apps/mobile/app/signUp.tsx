@@ -31,6 +31,7 @@ const SignUp = () => {
   const [googleLoading, setGoogleLoading] = useState(false);
   const {
     data: providers,
+    isFetching: providersFetching,
     isPending: providersPending,
     refetch: refetchProviders,
   } = useQuery(trpc.auth.providers.queryOptions());
@@ -128,6 +129,25 @@ const SignUp = () => {
   };
 
   if (providersPending) return <LoadingIndicator />;
+  if (!providers) {
+    return (
+      <SafeAreaView className="flex-1 bg-background px-6 pt-1">
+        <ReturnToHomeHeader />
+        <View className="flex-1 items-center justify-center gap-4">
+          <Text className="text-center text-foreground">
+            Couldn’t load sign-up options. Check your connection and try again.
+          </Text>
+          <Button
+            variant="secondary"
+            loading={providersFetching}
+            onPress={() => void refetchProviders()}
+          >
+            <Text>Try again</Text>
+          </Button>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   const googleSignUp = isGoogleEnabled ? (
     <>

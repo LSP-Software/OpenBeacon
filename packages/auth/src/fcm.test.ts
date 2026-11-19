@@ -187,6 +187,18 @@ describe("send", () => {
     });
   });
 
+  test("an update request is a short-lived wake-up of its own kind", async () => {
+    const fcm = setup();
+    expect(await fcm.client.send("device-token", "locate")).toEqual({ outcome: "sent" });
+    expect(JSON.parse(String(fcm.sends()[0]?.init.body))).toStrictEqual({
+      message: {
+        token: "device-token",
+        data: { t: "locate" },
+        android: { priority: "high", collapse_key: "locate", ttl: "60s" },
+      },
+    });
+  });
+
   test("reports a token Google no longer knows or says is malformed", async () => {
     const fcm = setup([
       () => fcmError(404, "NOT_FOUND", "UNREGISTERED"),

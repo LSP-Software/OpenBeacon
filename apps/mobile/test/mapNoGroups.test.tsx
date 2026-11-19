@@ -13,6 +13,7 @@ const passThrough = ({ children }: { children?: React.ReactNode }) =>
   React.createElement("view", null, children);
 
 mock.module("@tanstack/react-query", () => ({
+  keepPreviousData: <T,>(previous: T) => previous,
   queryOptions: <T,>(options: T) => options,
   skipToken: Symbol("skipToken"),
   useQuery: ({ queryKey }: { queryKey?: unknown[] }) => ({
@@ -66,14 +67,13 @@ mock.module("react-native-safe-area-context", () => ({
 }));
 mock.module("../hooks/useGroupColorRevision.ts", () => ({ useGroupColorRevision: () => 0 }));
 mock.module("../hooks/useGroupKeyAccess.ts", () => ({ useCurrentGroupKeyAccess: () => [] }));
-mock.module("../hooks/useMapLivePositions.ts", () => ({
-  useMapLivePositions: () => ({
+mock.module("../hooks/useLiveTrackingPositions.ts", () => ({
+  useLiveTrackingPositions: () => ({
     dropRemovedDevices: () => {},
     positions: [],
     status: { connection: "ok", groups: {}, membership: "loaded", undecryptable: [] },
   }),
 }));
-mock.module("../hooks/useMembershipSnapshot.ts", () => ({ useMembershipSnapshot: () => [] }));
 mock.module("../hooks/useTrackingUploadTime.ts", () => ({ useTrackingUploadTime: () => null }));
 mock.module("../hooks/useSelfDeviceLocation.ts", () => ({
   useSelfDeviceLocation: () => ({
@@ -84,10 +84,12 @@ mock.module("../hooks/useSelfDeviceLocation.ts", () => ({
 }));
 mock.module("../lib/api.ts", () => ({
   trpc: {
+    auth: { providers: { queryOptions: () => ({}) } },
     groupMembership: {
       list: { queryOptions: () => ({}) },
       listMemberDevices: { queryOptions: () => ({}) },
     },
+    groupTracking: { requestUpdate: { mutationOptions: () => ({}) } },
   },
 }));
 mock.module("../lib/auth-client.ts", () => ({

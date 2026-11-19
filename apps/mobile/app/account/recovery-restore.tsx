@@ -2,7 +2,7 @@ import { Alert } from "../../lib/alert.ts";
 import { diagnoseRecoveryPhraseInput, parseRecoveryPhrase } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, router, Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { Link, router, Stack, useFocusEffect } from "expo-router";
 import {
   allowScreenCaptureAsync,
   disableAppSwitcherProtectionAsync,
@@ -22,7 +22,7 @@ import { useHeldHistoryKeyVersions } from "../../hooks/useHeldHistoryKeyVersions
 import { useIdentityGate } from "../../hooks/useIdentityGate.ts";
 import { trpc } from "../../lib/api.ts";
 import { authClient } from "../../lib/auth-client.ts";
-import { activateWithHistoryKey } from "../../lib/deviceActivation.ts";
+import { activateWithHistoryKey, readThisDeviceState } from "../../lib/deviceActivation.ts";
 import { needsFreshSignIn } from "../../lib/needsFreshSignIn.ts";
 import { restoreFromRecoveryPhrase } from "../../lib/recovery.ts";
 import { requestTrackingSync } from "../../lib/trackingEvents.ts";
@@ -33,7 +33,7 @@ import { userMessage } from "../../lib/userMessage.ts";
 const emptyWords = () => Array.from({ length: 12 }, () => "");
 
 const RecoveryRestoreScreen = () => {
-  const { setup } = useLocalSearchParams<{ setup?: string }>();
+  const [setup] = useState(() => readThisDeviceState() !== "active");
   const { data: session } = authClient.useSession();
   const queryClient = useQueryClient();
   const status = useQuery(trpc.accountRecovery.status.queryOptions());
@@ -194,15 +194,7 @@ const RecoveryRestoreScreen = () => {
                 <Text>{step === "restoring" ? "Restoring…" : "Restore"}</Text>
               </Button>
               {!holdsCurrent && (
-                <Link
-                  href={
-                    setup
-                      ? { pathname: "/account/recovery-reset", params: { setup: "true" } }
-                      : "/account/recovery-reset"
-                  }
-                  replace
-                  asChild
-                >
+                <Link href="/account/recovery-reset" replace asChild>
                   <Button variant="ghost" disabled={step === "restoring"}>
                     <Text>I’ve lost my phrase</Text>
                   </Button>

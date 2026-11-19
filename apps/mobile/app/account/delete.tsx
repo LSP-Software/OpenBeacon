@@ -2,7 +2,7 @@ import { Alert } from "../../lib/alert.ts";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { router } from "expo-router";
+import { Link, router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -16,6 +16,7 @@ import { ChoiceList } from "../../components/ui/ChoiceList.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { trpc } from "../../lib/api.ts";
 import { endSession } from "../../lib/endSession.ts";
+import { withOwnScreen } from "../../lib/ownScreen.ts";
 import { userMessage } from "../../lib/userMessage.ts";
 
 const DeleteAccountScreen = () => {
@@ -79,7 +80,9 @@ const DeleteAccountScreen = () => {
       return;
     }
     const result = await tryCatch(
-      WebBrowser.openAuthSessionAsync(authorization.data.url, "openbeacon://google-deletion"),
+      withOwnScreen(() =>
+        WebBrowser.openAuthSessionAsync(authorization.data.url, "openbeacon://google-deletion"),
+      ),
     );
     setIsGoogleVerifying(false);
     if (result.error) {
@@ -120,6 +123,14 @@ const DeleteAccountScreen = () => {
           Groups where you are the only member will be deleted. Transfer ownership or delete groups
           where you are the only owner before continuing.
         </Text>
+        <Text>
+          Your location history is deleted too. To keep a copy, save it from Location history first.
+        </Text>
+        <Link href="/account/location-history" asChild>
+          <Button variant="secondary">
+            <Text>Save a copy of my history</Text>
+          </Button>
+        </Link>
         <Text variant="label" className="pt-2">
           When to delete your account
         </Text>

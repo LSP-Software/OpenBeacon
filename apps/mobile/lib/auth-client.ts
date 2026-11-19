@@ -9,6 +9,7 @@ import { apiCompatibilityFetch } from "./apiCompatibility.ts";
 import { getBaseUrl } from "./currentServer.ts";
 import { parseJson } from "./parseJson.ts";
 import { getSecureStoreOptions } from "./secureStoreOptions.ts";
+import { withSecretDeadline } from "./secretStorage.ts";
 import { SERVER_UNREACHABLE_MESSAGE } from "./serverUnreachable.ts";
 import { z } from "zod";
 
@@ -115,11 +116,15 @@ export const authClient = createAuthClient({
       storage: {
         getItem: (key) => SecureStore.getItem(toCurrentServerKey(key), getSecureStoreOptions()),
         getItemAsync: (key) =>
-          SecureStore.getItemAsync(toCurrentServerKey(key), getSecureStoreOptions()),
+          withSecretDeadline(
+            SecureStore.getItemAsync(toCurrentServerKey(key), getSecureStoreOptions()),
+          ),
         setItem: (key, value) =>
           SecureStore.setItem(toCurrentServerKey(key), value, getSecureStoreOptions()),
         setItemAsync: (key, value) =>
-          SecureStore.setItemAsync(toCurrentServerKey(key), value, getSecureStoreOptions()),
+          withSecretDeadline(
+            SecureStore.setItemAsync(toCurrentServerKey(key), value, getSecureStoreOptions()),
+          ),
       },
     }),
   ],

@@ -3,7 +3,10 @@ import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
 import { createDeviceKeyPair } from "@openbeacon/encryption";
 import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
-import { storeTrackingPoints } from "../../lib/trackingPoints.testUtil.ts";
+import {
+  storeLatestTrackingPoint,
+  storeTrackingPoints,
+} from "../../lib/trackingPoints.testUtil.ts";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
 import { groupTrackingRouter } from "./groupTrackingRouter.ts";
 
@@ -262,6 +265,52 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       ]);
     });
 
+    test("a rejoined member's points from before they rejoined are not served if the departure clean-up never ran", async () => {
+      const { groupId, store } = await createGroup("rejoined");
+      const before = { epochNumber: 1, senderDeviceId: lateDeviceId, senderUserId: lateId };
+      await store({ ...before, capturedHour: nowHour() - 3, count: 2 });
+      await store({ ...before, capturedHour: nowHour() - 8 });
+      await storeLatestTrackingPoint(prisma, {
+        epochId: `${groupId}-epoch-1`,
+        groupId,
+        senderDeviceId: lateDeviceId,
+        senderUserId: lateId,
+      });
+      const viewer = caller(viewerId, viewerDeviceId);
+
+      expect((await viewer.historyDays({ groupId })).devices).toEqual([]);
+      const range = await viewer.historyRange({
+        groupId,
+        fromHour: nowHour() - 5,
+        toHour: nowHour() + 1,
+      });
+      expect(range.points).toEqual([]);
+      expect(range.lookback).toEqual([]);
+      expect(range.streams).toEqual([]);
+      expect((await viewer.getLatest({ groupId })).points).toEqual([]);
+
+      const after = await store({
+        epochNumber: 2,
+        senderDeviceId: lateDeviceId,
+        senderUserId: lateId,
+        capturedHour: nowHour() - 1,
+      });
+      await storeLatestTrackingPoint(prisma, {
+        epochId: `${groupId}-epoch-2`,
+        groupId,
+        senderDeviceId: lateDeviceId,
+        senderUserId: lateId,
+      });
+      expect(
+        (
+          await viewer.historyRange({ groupId, fromHour: nowHour() - 5, toHour: nowHour() + 1 })
+        ).points.map(({ streamId }) => streamId),
+      ).toEqual([String(after)]);
+      expect(
+        (await viewer.getLatest({ groupId })).points.map(({ senderDeviceId }) => senderDeviceId),
+      ).toEqual([lateDeviceId]);
+    });
+
     test("the 14-day window goes by arrival and ranges are at most 26 hours", async () => {
       const { groupId, store } = await createGroup("window");
       const windowHour = nowHour() - RETENTION_HOURS;
@@ -388,7 +437,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       }
     });
 
-    test("the lookback takes every stream's points in that hour, up to 100 per device", async () => {
+    test("the lookback takes every stream's points in that hour, even more than 100", async () => {
       const { groupId, store } = await createGroup("lookback-hour");
       const lastHour = nowHour() - 7;
       await store({ capturedHour: nowHour() - 9, count: 2 });
@@ -400,7 +449,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       `;
       await store({
         capturedHour: nowHour() - 8,
-        count: 120,
+        count: 250,
         senderDeviceId: viewerDeviceId,
         senderUserId: viewerId,
       });
@@ -417,7 +466,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(memberLookback).toHaveLength(2);
       expect(memberLookback.map(({ capturedHour }) => capturedHour)).toEqual([lastHour, lastHour]);
       expect(memberLookback.map(({ pointId }) => pointId)).toContain("-9000000000000000000");
-      expect(range.lookback).toHaveLength(102);
+      expect(range.lookback).toHaveLength(252);
       expect(range.streams.map(({ id }) => id)).toEqual(
         expect.arrayContaining([String(stayStream), String(movingStream)]),
       );

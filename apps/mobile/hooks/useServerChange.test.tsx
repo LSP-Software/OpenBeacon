@@ -15,7 +15,10 @@ const alerts: {
 }[] = [];
 const serverChanges: string[] = [];
 const events: string[] = [];
-const compatibility: { verdict: "ok" | "appTooOld" | "serverTooOld" | null }[] = [];
+const compatibility: {
+  verdict: "ok" | "appTooOld" | "serverTooOld" | null;
+  problem?: { kind: "notOpenBeacon" };
+}[] = [];
 let signedIn = false;
 
 mock.module("expo-router", () => ({ router: { push: () => {} } }));
@@ -36,8 +39,9 @@ mock.module("../lib/changeServer.ts", () => ({
 }));
 mock.module("../lib/apiCompatibility.ts", () => ({
   checkServerCompatibility: async () => ({
-    ...(compatibility.shift() ?? { verdict: "ok" }),
+    problem: { kind: "unreachable" },
     serverVersion: "0.1.0",
+    ...(compatibility.shift() ?? { verdict: "ok" }),
   }),
 }));
 mock.module("../lib/api.ts", () => ({
@@ -93,6 +97,20 @@ beforeEach(() => {
   events.length = 0;
   compatibility.length = 0;
   signedIn = false;
+});
+
+test("an invite address that isn't an OpenBeacon server can only be acknowledged", async () => {
+  compatibility.push({ verdict: null, problem: { kind: "notOpenBeacon" } });
+  const change = await startInviteChange();
+
+  expect(alerts.map(({ title, buttons }) => [title, buttons.map((b) => b.text)])).toEqual([
+    ["This isn’t an OpenBeacon server", ["OK"]],
+  ]);
+  await pressAlertButton("OK");
+  await change.done;
+
+  expect(change.outcome()).toBe(false);
+  expect(serverChanges).toEqual([]);
 });
 
 test("an invite server the app is too old for can only be acknowledged", async () => {

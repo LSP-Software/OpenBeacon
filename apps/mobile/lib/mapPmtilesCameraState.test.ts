@@ -57,4 +57,17 @@ describe("mapPmtilesCameraState", () => {
       zoomLevel: 11,
     });
   });
+
+  test("remembers a centre on the antimeridian for people either side of it", () => {
+    const camera = mapCameraAfterFittingMarkers({
+      markers: [
+        { latitude: -17, longitude: 179.9 },
+        { latitude: -17.2, longitude: -179.7 },
+      ],
+      previousCamera: INITIAL_MAP_CAMERA,
+    });
+
+    expect(camera.centerCoordinate[0]).toBeCloseTo(-179.9, 6);
+    expect(camera.centerCoordinate[1]).toBeCloseTo(-17.1, 6);
+  });
 });

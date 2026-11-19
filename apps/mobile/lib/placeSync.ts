@@ -7,7 +7,13 @@ import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
 import { resolveEpochKey } from "./epochKeys.ts";
 import { errorReason } from "./errorReason.ts";
 import { rotateGroupEpochIfRequired } from "./groupEncryption.ts";
-import { decryptPlaceGeometry, encryptPlaceGeometry, type GroupPlace } from "./places.ts";
+import {
+  decryptPlaceGeometry,
+  encryptPlaceGeometry,
+  type GroupPlace,
+  isPlaceEditUnchanged,
+  type PlaceEdit,
+} from "./places.ts";
 import { userMessage } from "./userMessage.ts";
 import { thisDeviceNoun } from "./thisDeviceNoun.ts";
 
@@ -50,12 +56,12 @@ export const savePlace = async ({
   name,
 }: {
   emoji: string;
-  existing: { expectedCiphertext: string; placeId: string } | null;
+  existing: { before: PlaceEdit; expectedCiphertext: string; placeId: string } | null;
   geometry: PlaceGeometryV1;
   groupId: string;
   name: string;
 }) => {
-  const attempt = async () => {
+  const attempt = async (expectedCiphertext: string | null) => {
     const device = await ensureDeviceKeyRegistration();
     const latest = await trpcClient.groupEpoch.getLatest.query({ groupId });
     if (!latest) throw new Error("This group isn’t ready yet. Try again in a moment.");
@@ -69,10 +75,10 @@ export const savePlace = async ({
       groupId,
       senderDeviceId: device.deviceId,
     });
-    if (existing) {
+    if (existing && expectedCiphertext !== null) {
       return trpcClient.groupPlaces.update.mutate({
         emoji,
-        expectedCiphertext: existing.expectedCiphertext,
+        expectedCiphertext,
         geometry: encrypted,
         groupId,
         name,
@@ -81,15 +87,31 @@ export const savePlace = async ({
     }
     return trpcClient.groupPlaces.create.mutate({ emoji, geometry: encrypted, groupId, name });
   };
-  const first = await tryCatch(attempt());
-  if (!first.error) return first.data;
-  const reason = errorReason(first.error);
-  if (reason === "EPOCH_ROTATION_PENDING") {
-    await rotateGroupEpochIfRequired(groupId);
-    return attempt();
-  }
-  if (reason === "EPOCH_NOT_LATEST") return attempt();
-  throw first.error;
+  const write = async (expectedCiphertext: string | null) => {
+    const first = await tryCatch(attempt(expectedCiphertext));
+    if (!first.error) return first.data;
+    const reason = errorReason(first.error);
+    if (reason === "EPOCH_ROTATION_PENDING") {
+      await rotateGroupEpochIfRequired(groupId);
+      return attempt(expectedCiphertext);
+    }
+    if (reason === "EPOCH_NOT_LATEST") return attempt(expectedCiphertext);
+    throw first.error;
+  };
+  const saved = await tryCatch(write(existing?.expectedCiphertext ?? null));
+  if (!saved.error) return saved.data;
+  if (!existing || errorReason(saved.error) !== "PLACE_CHANGED") throw saved.error;
+  const refreshed = await tryCatch(loadGroupPlaces(groupId));
+  const current = refreshed.data?.find((place) => place.id === existing.placeId);
+  if (
+    !current?.geometry ||
+    !isPlaceEditUnchanged({
+      before: existing.before,
+      after: { emoji: current.emoji, geometry: current.geometry, name: current.name },
+    })
+  )
+    throw saved.error;
+  return write(current.ciphertext);
 };
 
 export const confirmDeletePlace = ({

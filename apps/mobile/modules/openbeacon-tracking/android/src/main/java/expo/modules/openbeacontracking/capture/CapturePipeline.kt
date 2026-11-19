@@ -26,6 +26,7 @@ class CapturePipeline(
   private val historySettings: HistoryFilterSettings = HistoryFilterSettings(),
   private val loadAllowance: (List<String>) -> HistoryAllowance? = { null },
   private val saveAllowance: (List<String>, HistoryAllowance) -> Unit = { _, _ -> },
+  private val onRowFailure: (String, Exception) -> Unit = { _, _ -> },
 ) {
   private data class Stream(
     val owner: String,
@@ -111,47 +112,53 @@ class CapturePipeline(
             batteryLevel = point.batteryLevel,
             batteryCharging = point.batteryCharging,
           ) ?: return@mapNotNull null
-        if (role == CiphertextQueueRow.ROLE_LIVE || (role == CiphertextQueueRow.ROLE_POINT && point == fix)) currentFixEncoded = true
-        val encrypted =
-          GroupPayloadEncrypt.encryptGroupPayload(
-            epochKey = key.epochKey,
-            plaintext = plaintext,
-            groupId = key.groupId,
-            epochId = key.epochId,
-            kind = key.kind,
-            senderDeviceId = key.senderDeviceId,
-          )
+        try {
+          val encrypted =
+            GroupPayloadEncrypt.encryptGroupPayload(
+              epochKey = key.epochKey,
+              plaintext = plaintext,
+              groupId = key.groupId,
+              epochId = key.epochId,
+              kind = key.kind,
+              senderDeviceId = key.senderDeviceId,
+            )
 
-        val identity =
-          when {
-            bootId != null && point.fixId != null -> listOf(bootId, point.fixId.toString())
-            role == CiphertextQueueRow.ROLE_STAY -> listOf("arrival-time", point.timestampMillis.toString())
-            else -> null
+          val identity =
+            when {
+              bootId != null && point.fixId != null -> listOf(bootId, point.fixId.toString())
+              role == CiphertextQueueRow.ROLE_STAY -> listOf("arrival-time", point.timestampMillis.toString())
+              else -> null
+            }
+          CiphertextQueueRow(
+            clientPointId = if (identity != null) {
+              val mac = Mac.getInstance("HmacSHA256")
+              mac.init(SecretKeySpec(key.epochKey, "HmacSHA256"))
+              val parts = listOf("openbeacon.tracking-point-id.v1", owner, key.groupId, key.epochId, key.senderDeviceId, key.kind) + identity
+              val context = (if (role == CiphertextQueueRow.ROLE_POINT) parts else parts + role)
+                .joinToString(":") { GroupPayloadEncrypt.encodeBase64(it.toByteArray(Charsets.UTF_8)) }
+              GroupPayloadEncrypt.encodeBase64(mac.doFinal(context.toByteArray(Charsets.UTF_8)).copyOf(POINT_ID_BYTES))
+            } else {
+              GroupPayloadEncrypt.encodeBase64(newPointId())
+            },
+            captureId = captureId,
+            groupId = encrypted.groupId,
+            epochId = encrypted.epochId,
+            senderDeviceId = encrypted.senderDeviceId,
+            kind = encrypted.kind,
+            algorithm = encrypted.algorithm,
+            nonce = encrypted.nonce,
+            ciphertext = encrypted.ciphertext,
+            queuedAt = queuedAt,
+            status = CiphertextQueueRow.STATUS_PENDING,
+            role = role,
+            capturedHour = if (role == CiphertextQueueRow.ROLE_LIVE) null else point.timestampMillis.floorDiv(HOUR_MILLIS).toInt(),
+          ).also {
+            if (role == CiphertextQueueRow.ROLE_LIVE || (role == CiphertextQueueRow.ROLE_POINT && point == fix)) currentFixEncoded = true
           }
-        CiphertextQueueRow(
-          clientPointId = if (identity != null) {
-            val mac = Mac.getInstance("HmacSHA256")
-            mac.init(SecretKeySpec(key.epochKey, "HmacSHA256"))
-            val parts = listOf("openbeacon.tracking-point-id.v1", owner, key.groupId, key.epochId, key.senderDeviceId, key.kind) + identity
-            val context = (if (role == CiphertextQueueRow.ROLE_POINT) parts else parts + role)
-              .joinToString(":") { GroupPayloadEncrypt.encodeBase64(it.toByteArray(Charsets.UTF_8)) }
-            GroupPayloadEncrypt.encodeBase64(mac.doFinal(context.toByteArray(Charsets.UTF_8)).copyOf(POINT_ID_BYTES))
-          } else {
-            GroupPayloadEncrypt.encodeBase64(newPointId())
-          },
-          captureId = captureId,
-          groupId = encrypted.groupId,
-          epochId = encrypted.epochId,
-          senderDeviceId = encrypted.senderDeviceId,
-          kind = encrypted.kind,
-          algorithm = encrypted.algorithm,
-          nonce = encrypted.nonce,
-          ciphertext = encrypted.ciphertext,
-          queuedAt = queuedAt,
-          status = CiphertextQueueRow.STATUS_PENDING,
-          role = role,
-          capturedHour = if (role == CiphertextQueueRow.ROLE_LIVE) null else point.timestampMillis.floorDiv(HOUR_MILLIS).toInt(),
-        )
+        } catch (error: Exception) {
+          onRowFailure(key.groupId, error)
+          null
+        }
       }
 
     return synchronized(captureLock) {

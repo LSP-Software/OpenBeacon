@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { storableDateSchema } from "../storableDate.ts";
 
 const locationSharingChangeSchema = z.object({
   expectedUserId: z.string().min(1).max(128),
@@ -9,8 +10,8 @@ const locationSharingChangeSchema = z.object({
   durationMinutes: z
     .union([z.literal(15), z.literal(60), z.literal(480), z.literal(1440)])
     .nullable(),
-  pausedUntil: z.date().nullable(),
-  requestedAt: z.date(),
+  pausedUntil: storableDateSchema.nullable(),
+  requestedAt: storableDateSchema,
 });
 
 export const locationSharingChangeInputSchema = z

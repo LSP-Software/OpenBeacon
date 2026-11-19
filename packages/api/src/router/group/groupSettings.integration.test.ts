@@ -302,35 +302,45 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       }
     });
 
-    test("only an owner can delete a group, and a failure deleting its picture keeps the group", async () => {
+    test("only an owner can delete a group, and its picture is removed from storage after the group is gone", async () => {
       const imageGroupId = `${prefix}-image-group`;
       const path = `user/${users[0]}/uploads/group/${imageGroupId}/avatar`;
-      await prisma.group.create({
-        data: {
-          id: imageGroupId,
-          name: "Image group",
-          image: buildImagePublicUrl(env.IMAGES_S3_BUCKET_NAME, path, "avatar.webp"),
-          groupMembers: {
-            create: [
-              { userId: users[0]!, role: "OWNER", joinedEpochNumber: 1 },
-              { userId: users[2]!, role: "MEMBER", joinedEpochNumber: 1 },
-            ],
+      const createImageGroup = () =>
+        prisma.group.create({
+          data: {
+            id: imageGroupId,
+            name: "Image group",
+            image: buildImagePublicUrl(env.IMAGES_S3_BUCKET_NAME, path, "avatar.webp"),
+            groupMembers: {
+              create: [
+                { userId: users[0]!, role: "OWNER", joinedEpochNumber: 1 },
+                { userId: users[2]!, role: "MEMBER", joinedEpochNumber: 1 },
+              ],
+            },
           },
-        },
-      });
+        });
+      await createImageGroup();
+      const groupSeenByStorage: boolean[] = [];
       const send = spyOn(s3Client, "send");
+      const error = spyOn(console, "error").mockImplementation(() => {});
       try {
         await expect(
           caller(users[2]!).groupLifecycle.delete({ groupId: imageGroupId }),
         ).rejects.toThrow();
         expect(send).not.toHaveBeenCalled();
 
-        send.mockRejectedValue(new Error("Storage unavailable"));
-        await expect(
-          caller(users[0]!).groupLifecycle.delete({ groupId: imageGroupId }),
-        ).rejects.toThrow();
-        expect(await prisma.group.findUnique({ where: { id: imageGroupId } })).not.toBeNull();
+        send.mockImplementation(async () => {
+          groupSeenByStorage.push(
+            (await prisma.group.findUnique({ where: { id: imageGroupId } })) !== null,
+          );
+          throw new Error("Storage unavailable");
+        });
+        await caller(users[0]!).groupLifecycle.delete({ groupId: imageGroupId });
+        expect(await prisma.group.findUnique({ where: { id: imageGroupId } })).toBeNull();
+        expect(groupSeenByStorage).toEqual([false]);
+        expect(error).toHaveBeenCalledWith("Deleted group's picture clean-up failed");
 
+        await createImageGroup();
         send.mockReset();
         send.mockResolvedValue({ $metadata: {} });
         await caller(users[0]!).groupLifecycle.delete({ groupId: imageGroupId });
@@ -344,6 +354,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         expect(await prisma.group.findUnique({ where: { id: imageGroupId } })).toBeNull();
       } finally {
         send.mockRestore();
+        error.mockRestore();
         await prisma.group.deleteMany({ where: { id: imageGroupId } });
       }
     });

@@ -7,7 +7,7 @@ import { createRoot } from "test-renderer";
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-let searchParams: { setup?: string } = {};
+let deviceState: "active" | "registered" = "active";
 let heldVersions: number[] = [];
 let gateDecision: "confirm" | "ready" | null = "ready";
 const replace = mock((_route: string) => {});
@@ -36,7 +36,7 @@ mock.module("expo-router", () => ({
     },
   },
   useFocusEffect: (effect: () => () => void) => React.useEffect(effect, [effect]),
-  useLocalSearchParams: () => searchParams,
+  useLocalSearchParams: () => ({}),
 }));
 mock.module("@tanstack/react-query", () => ({
   useQuery: () => ({
@@ -78,7 +78,10 @@ mock.module("@openbeacon/encryption", () => ({
   parseRecoveryPhrase: () => new Uint8Array(16),
 }));
 mock.module("../lib/recovery.ts", () => ({ restoreFromRecoveryPhrase }));
-mock.module("../lib/deviceActivation.ts", () => ({ activateWithHistoryKey }));
+mock.module("../lib/deviceActivation.ts", () => ({
+  activateWithHistoryKey,
+  readThisDeviceState: () => deviceState,
+}));
 mock.module("../lib/trackingEvents.ts", () => ({ requestTrackingSync: () => {} }));
 mock.module("../lib/resealPersonalData.ts", () => ({ resealPersonalData: async () => {} }));
 mock.module("../components/headers/BackButton.tsx", () => ({ BackButton: () => null }));
@@ -113,7 +116,7 @@ const renderScreen = async () => {
 };
 
 beforeEach(() => {
-  searchParams = {};
+  deviceState = "active";
   heldVersions = [1];
   gateDecision = "ready";
   replace.mockClear();
@@ -123,14 +126,11 @@ beforeEach(() => {
 });
 
 test("setting up a new phone without the current key offers resetting and never skipping", async () => {
-  searchParams = { setup: "true" };
+  deviceState = "registered";
   const { rendered, resetLink } = await renderScreen();
   expect(rendered).not.toContain("Skip for now");
   expect(rendered).toContain("I’ve lost my phrase");
-  expect(JSON.parse(resetLink.href)).toEqual({
-    pathname: "/account/recovery-reset",
-    params: { setup: "true" },
-  });
+  expect(JSON.parse(resetLink.href)).toBe("/account/recovery-reset");
 });
 
 test("reached from Account without the current key, offers resetting", async () => {
@@ -143,15 +143,15 @@ test("reached from Account without the current key, offers resetting", async () 
 
 test("doesn't offer resetting when the phone already holds the current key", async () => {
   heldVersions = [2];
-  for (const params of [{}, { setup: "true" }]) {
-    searchParams = params;
+  for (const state of ["active", "registered"] as const) {
+    deviceState = state;
     const { rendered } = await renderScreen();
     expect(rendered).not.toContain("I’ve lost my phrase");
   }
 });
 
 test("when setting up fails after the phrase is restored, Try again only retries setting up", async () => {
-  searchParams = { setup: "true" };
+  deviceState = "registered";
   activateWithHistoryKey.mockImplementationOnce(async () => {
     throw new TRPCClientError("Network request failed");
   });
@@ -187,7 +187,7 @@ test("when setting up fails after the phrase is restored, Try again only retries
 });
 
 test("back is blocked while this phone is being set up after the phrase is restored", async () => {
-  searchParams = { setup: "true" };
+  deviceState = "registered";
   let release = () => {};
   activateWithHistoryKey.mockImplementationOnce(
     () =>
@@ -250,7 +250,7 @@ const enterPhraseAndRestore = async (root: ReturnType<typeof createRoot>) => {
 };
 
 test("a sign-in older than the fresh window asks for the password, then finishes without retyping the phrase", async () => {
-  searchParams = { setup: "true" };
+  deviceState = "registered";
   activateWithHistoryKey.mockImplementationOnce(async () => {
     throw freshSignInRequired();
   });
@@ -272,7 +272,7 @@ test("a sign-in older than the fresh window asks for the password, then finishes
 });
 
 test("setting up with a sign-in about to go stale asks for the password before the phrase", async () => {
-  searchParams = { setup: "true" };
+  deviceState = "registered";
   gateDecision = "confirm";
   const root = createRoot();
   await act(async () => root.render(<RecoveryRestoreScreen />));

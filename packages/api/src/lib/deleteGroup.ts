@@ -1,8 +1,9 @@
 import type { Prisma } from "@openbeacon/database";
+import { errorCode, tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import { env } from "../env.ts";
 import { buildGroupAvatarPath } from "./image-upload.ts";
-import { deleteFile, extractImageStorageObject } from "./storage.ts";
+import { deleteImageKey, extractImageStorageObject } from "./storage.ts";
 
 export const deleteGroup = async ({
   db,
@@ -19,13 +20,9 @@ export const deleteGroup = async ({
     where: { groupId, uploadType: "groupAvatar" },
     select: { fileName: true, userId: true },
   });
-  for (const upload of pendingUploads) {
-    await deleteFile(
-      env.IMAGES_S3_BUCKET_NAME,
-      buildGroupAvatarPath(upload.userId, groupId),
-      upload.fileName,
-    );
-  }
+  const imageKeys = pendingUploads.map(
+    (upload) => `${buildGroupAvatarPath(upload.userId, groupId)}/${upload.fileName}`,
+  );
   if (group.image) {
     const image = extractImageStorageObject(group.image);
     const uploaderId = image?.path.split("/")[1];
@@ -41,8 +38,19 @@ export const deleteGroup = async ({
         message: "The group image cannot be removed from storage.",
       });
     }
-    await deleteFile(image.bucketName, image.path, image.fileName);
+    imageKeys.push(`${image.path}/${image.fileName}`);
   }
   await db.pendingUpload.deleteMany({ where: { groupId } });
   await db.group.delete({ where: { id: groupId } });
+  return { imageKeys };
+};
+
+export const deleteGroupImages = async (imageKeys: string[]) => {
+  for (const key of imageKeys) {
+    const deleted = await tryCatch(deleteImageKey(env.IMAGES_S3_BUCKET_NAME, key));
+    if (deleted.error) {
+      const code = errorCode(deleted.error);
+      console.error(`Deleted group's picture clean-up failed${code ? ` (${code})` : ""}`);
+    }
+  }
 };

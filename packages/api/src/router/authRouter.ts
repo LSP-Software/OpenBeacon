@@ -11,7 +11,10 @@ import { protectedProcedure, publicProcedure, setupProcedure } from "../procedur
 import { createTRPCRouter } from "../trpcRuntime.ts";
 
 export const authRouter = createTRPCRouter({
-  providers: publicProcedure.query(() => authCapabilities),
+  providers: publicProcedure.query(({ ctx }) => ({
+    ...authCapabilities,
+    push: ctx.push?.enabled ?? false,
+  })),
   deviceKeyContext: setupProcedure
     .meta({ rateLimit: { limit: 240, windowMs: 60_000 } })
     .query(async ({ ctx }) => ({

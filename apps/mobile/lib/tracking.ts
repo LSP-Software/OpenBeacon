@@ -66,6 +66,7 @@ import {
   hasLocallyPausedSharing,
   hasPendingSharingChange,
   syncLocationSharing,
+  toServerClock,
 } from "./locationSharing.ts";
 
 let reconcilePromise: Promise<boolean> | null = null;
@@ -700,7 +701,7 @@ const placeUploadFields = (
           ({ clientId, direction, occurredAt, placeId, senderDeviceId }) => ({
             clientId,
             direction,
-            occurredAt: new Date(occurredAt),
+            occurredAt: toServerClock(occurredAt),
             placeId,
             senderDeviceId,
           }),

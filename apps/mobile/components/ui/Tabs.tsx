@@ -16,7 +16,7 @@ function TabsList({
   return (
     <TabsPrimitive.List
       className={cn(
-        "bg-secondary mr-auto flex h-12 flex-row items-center justify-center rounded-xl p-1",
+        "bg-secondary mr-auto flex min-h-12 flex-row items-center justify-center rounded-xl p-1",
         className,
       )}
       {...props}
@@ -38,7 +38,7 @@ function TabsTrigger({
     >
       <TabsPrimitive.Trigger
         className={cn(
-          "flex h-full flex-row items-center justify-center gap-1.5 rounded-lg px-3",
+          "flex min-h-10 flex-row items-center justify-center gap-1.5 self-stretch rounded-lg px-3 py-1.5",
           props.disabled && "opacity-50",
           props.value === value && "bg-card dark:bg-border-strong",
           className,

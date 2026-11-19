@@ -2,15 +2,18 @@ import { Link } from "expo-router";
 import { HistoryIcon } from "lucide-react-native";
 import { Pressable, View } from "react-native";
 import { useTimeSince } from "../../hooks/useTimeSince.ts";
+import { shortTimeSince } from "../../lib/timeSince.ts";
 import { getBatteryVisual } from "../../lib/batteryVisual.ts";
 import { type DeviceIcon, deviceIconFor } from "../../lib/deviceIcons.ts";
 import { locationStaleAt } from "../../lib/locationStaleAt.ts";
+import { mayBeOutOfBattery } from "../../lib/mayBeOutOfBattery.ts";
 import { DecryptedAvatarImage } from "../image/DecryptedAvatarImage.tsx";
 import { Avatar, AvatarFallback } from "../ui/Avatar.tsx";
 import { Button } from "../ui/Button.tsx";
 import { Icon } from "../ui/Icon.tsx";
 import { Text } from "../ui/Text.tsx";
 import { LiveMapBottomSheet } from "./LiveMapBottomSheet.tsx";
+import { RequestUpdateButton } from "./RequestUpdateButton.tsx";
 import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 
 type PersonDevice = {
@@ -34,6 +37,7 @@ export const LiveMapPersonSheet = ({
   name,
   onDismiss,
   onHeightChange,
+  onRequestUpdate,
   onSelectDevice,
   otherSharedGroupNames,
   timeline,
@@ -48,6 +52,7 @@ export const LiveMapPersonSheet = ({
   name: string;
   onDismiss: () => void;
   onHeightChange?: (height: number) => void;
+  onRequestUpdate?: (() => Promise<void>) | undefined;
   onSelectDevice?: (deviceId: string) => void;
   otherSharedGroupNames: readonly string[];
   timeline?: { groupId: string; userId: string } | undefined;
@@ -95,6 +100,7 @@ export const LiveMapPersonSheet = ({
                 <PersonDeviceRow
                   key={device.deviceId}
                   device={device}
+                  isSelf={isSelf}
                   onPress={() => onSelectDevice?.(device.deviceId)}
                 />
               ))}
@@ -103,8 +109,9 @@ export const LiveMapPersonSheet = ({
           {!isMultiDevice && isOutOfDate && !unreadableGroup ? (
             <View className="mt-3 rounded-xl bg-secondary p-3">
               <Text className="text-sm">
-                {name}’s phone hasn’t sent a location since then. It might be offline, out of
-                battery, or have location turned off.
+                {mayBeOutOfBattery({ battery, timestamp })
+                  ? `Battery was at ${battery?.level}%. ${name}’s phone may have run out.`
+                  : `${name}’s phone hasn’t sent a location since then. It might be offline, out of battery, or have location turned off.`}
               </Text>
             </View>
           ) : null}
@@ -124,6 +131,18 @@ export const LiveMapPersonSheet = ({
             <Text className="text-tertiary mt-2 text-sm">
               Also in {otherSharedGroupNames.join(", ")}
             </Text>
+          ) : null}
+          {onRequestUpdate && !isSelf ? (
+            <RequestUpdateButton
+              locationsKey={[
+                timestamp,
+                ...(devices ?? []).map((device) => device.timestamp),
+              ].join()}
+              hasLocation
+              name={name}
+              onRequestUpdate={onRequestUpdate}
+              phones={isMultiDevice ? "devices" : "phone"}
+            />
           ) : null}
           {timeline ? (
             <Link href={{ pathname: "/timeline", params: timeline }} asChild>
@@ -162,7 +181,15 @@ export const LiveMapPersonSheet = ({
   );
 };
 
-const PersonDeviceRow = ({ device, onPress }: { device: PersonDevice; onPress: () => void }) => {
+const PersonDeviceRow = ({
+  device,
+  isSelf,
+  onPress,
+}: {
+  device: PersonDevice;
+  isSelf: boolean;
+  onPress: () => void;
+}) => {
   const updatedAge = useTimeSince(device.timestamp);
   const batteryVisual = device.battery
     ? getBatteryVisual({ batteryLevel: device.battery.level, charging: device.battery.charging })
@@ -174,7 +201,9 @@ const PersonDeviceRow = ({ device, onPress }: { device: PersonDevice; onPress: (
       ? "Newer location can’t be read"
       : updatedAge === null
         ? "No location sent yet"
-        : `${device.isThisDevice ? "Location sent" : "Updated"} ${updatedAge}`;
+        : !isSelf && mayBeOutOfBattery(device)
+          ? `May be out of battery, ${shortTimeSince(device.timestamp ?? "")} ago`
+          : `${device.isThisDevice ? "Location sent" : "Updated"} ${updatedAge}`;
   const batteryLevel = batteryVisual?.label ?? null;
 
   const content = (

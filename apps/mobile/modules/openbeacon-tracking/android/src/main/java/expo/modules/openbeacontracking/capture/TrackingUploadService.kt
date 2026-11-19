@@ -55,6 +55,7 @@ class TrackingUploadService : HeadlessJsTaskService() {
   companion object {
     const val EXTRA_REASON = "reason"
     const val REASON_PUSH = "push"
+    const val REASON_UPLOAD = "upload"
     private val wakes = UploadWakeGate()
 
     fun start(context: Context, reason: String) {

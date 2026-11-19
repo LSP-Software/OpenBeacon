@@ -2,7 +2,7 @@ import { Alert } from "../../lib/alert.ts";
 import type { RecoveryPhrase } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, router, Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { Link, router, Stack, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useEffectEvent, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { BackHandler, KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
@@ -17,7 +17,11 @@ import { Input } from "../../components/ui/Input.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { useIdentityGate } from "../../hooks/useIdentityGate.ts";
 import { trpc } from "../../lib/api.ts";
-import { activateWithHistoryKey, isThisDeviceActive } from "../../lib/deviceActivation.ts";
+import {
+  activateWithHistoryKey,
+  isThisDeviceActive,
+  readThisDeviceState,
+} from "../../lib/deviceActivation.ts";
 import { invalidCodeMessage } from "../../lib/emailCodes.ts";
 import type { EpochKeyDevice } from "../../lib/epochKeys.ts";
 import { protectHistory } from "../../lib/protectHistory.ts";
@@ -32,7 +36,7 @@ import { userMessage } from "../../lib/userMessage.ts";
 import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 
 const RecoveryPhraseResetScreen = () => {
-  const { setup } = useLocalSearchParams<{ setup?: string }>();
+  const [setup] = useState(() => readThisDeviceState() !== "active");
   const queryClient = useQueryClient();
   const [step, setStep] = useState<
     | "warn"
@@ -346,15 +350,7 @@ const RecoveryPhraseResetScreen = () => {
                 Your new phrase is set up, but this {thisDeviceNoun()} couldn’t save its key.
                 Restore with the phrase you just wrote down.
               </Text>
-              <Link
-                href={
-                  setup
-                    ? { pathname: "/account/recovery-restore", params: { setup: "true" } }
-                    : "/account/recovery-restore"
-                }
-                replace
-                asChild
-              >
+              <Link href="/account/recovery-restore" replace asChild>
                 <Button>
                   <Text>Restore with recovery phrase</Text>
                 </Button>

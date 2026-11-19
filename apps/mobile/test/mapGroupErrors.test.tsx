@@ -43,6 +43,7 @@ let offline = false;
 mock.module("../lib/networkStatus.ts", () => ({ useOfflineStatus: () => offline }));
 mock.module("../components/AnnouncementBanner.tsx", () => ({ AnnouncementBanner: () => null }));
 mock.module("@tanstack/react-query", () => ({
+  keepPreviousData: <T,>(previous: T) => previous,
   queryOptions: <T,>(options: T) => options,
   skipToken: Symbol("skipToken"),
   useQuery: ({ queryKey }: { queryKey?: unknown[] }) => ({
@@ -101,22 +102,23 @@ mock.module("../components/ui/Text.tsx", () => ({
 }));
 mock.module("../hooks/useGroupColorRevision.ts", () => ({ useGroupColorRevision: () => 0 }));
 mock.module("../hooks/useGroupKeyAccess.ts", () => ({ useCurrentGroupKeyAccess: () => access }));
-mock.module("../hooks/useMapLivePositions.ts", () => ({
-  useMapLivePositions: () => ({
+mock.module("../hooks/useLiveTrackingPositions.ts", () => ({
+  useLiveTrackingPositions: () => ({
     dropRemovedDevices: () => {},
     positions: [],
     status: trackingStatus,
   }),
 }));
-mock.module("../hooks/useMembershipSnapshot.ts", () => ({ useMembershipSnapshot: () => groups }));
 mock.module("../hooks/useTrackingUploadTime.ts", () => ({ useTrackingUploadTime: () => null }));
 mock.module("../hooks/useSelfDeviceLocation.ts", () => ({ useSelfDeviceLocation: () => null }));
 mock.module("../lib/api.ts", () => ({
   trpc: {
+    auth: { providers: { queryOptions: () => ({}) } },
     groupMembership: {
       list: { queryOptions: () => ({}) },
       listMemberDevices: { queryOptions: () => ({}) },
     },
+    groupTracking: { requestUpdate: { mutationOptions: () => ({}) } },
   },
 }));
 mock.module("../lib/auth-client.ts", () => ({
