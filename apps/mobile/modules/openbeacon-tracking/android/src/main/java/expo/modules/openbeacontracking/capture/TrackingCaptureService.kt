@@ -111,6 +111,7 @@ class TrackingCaptureService : Service() {
           stopSelf()
           return START_NOT_STICKY
         }
+        capturePipeline.forgetGroups(TrackingRuntime.seatHoldNotice(this).heldGroupIds)
         getSystemService(NotificationManager::class.java)?.notify(NOTIFICATION_ID, buildNotification())
         return START_STICKY
       }
@@ -551,17 +552,23 @@ class TrackingCaptureService : Service() {
     val sharing = TrackingRuntime.sharingState(this)
     val paused = sharing.isPaused(System.currentTimeMillis())
     val pausedUntil = sharing.pausedUntil
-    val holds = TrackingRuntime.seatHoldNotice(this)
+    val text =
+      try {
+        TrackingRuntime.seatHoldNotice(this).text(paused, TrackingRuntime.epochKeyStore(this).list().map { it.groupId })
+      } catch (error: Exception) {
+        Log.e(TAG, "Failed to read the groups this phone shares with.", error)
+        SeatHoldNotice().text(paused, emptyList())
+      }
     val body =
       when {
-        !paused && holds.sharesNowhere -> getString(R.string.openbeacon_tracking_notification_on_hold_body)
-        !paused && holds.sharesSomewhere ->
+        text is SeatHoldNotice.Text.OnHoldEverywhere -> getString(R.string.openbeacon_tracking_notification_on_hold_body)
+        text is SeatHoldNotice.Text.SomeOnHold ->
           getString(
             R.string.openbeacon_tracking_notification_some_on_hold_body,
-            SeatHoldNotice.join(holds.sharing),
-            SeatHoldNotice.join(holds.held),
+            SeatHoldNotice.join(text.sharing),
+            SeatHoldNotice.join(text.held),
           )
-        !paused -> getString(R.string.openbeacon_tracking_notification_body)
+        text is SeatHoldNotice.Text.Sharing -> getString(R.string.openbeacon_tracking_notification_body)
         pausedUntil == null -> getString(R.string.openbeacon_tracking_notification_paused_body)
         isOnDay(pausedUntil, 0) ->
           getString(R.string.openbeacon_tracking_notification_paused_until_body, DateFormat.getTimeFormat(this).format(Date(pausedUntil)))
@@ -580,7 +587,7 @@ class TrackingCaptureService : Service() {
         getString(
           when {
             paused -> R.string.openbeacon_tracking_notification_paused_title
-            holds.sharesNowhere -> R.string.openbeacon_tracking_notification_on_hold_title
+            text is SeatHoldNotice.Text.OnHoldEverywhere -> R.string.openbeacon_tracking_notification_on_hold_title
             else -> R.string.openbeacon_tracking_notification_title
           },
         ),

@@ -30,7 +30,11 @@ import { groupEditorProcedure } from "../../procedures/auth/group.ts";
 import { protectedProcedure } from "../../procedures/auth/runtime.ts";
 import { imageKeySelect, toStoredImageKey } from "../../lib/imageKeys.ts";
 import type { GroupListItem } from "../../types/GroupListItem.ts";
-import { isAdminOrEditor, notAdminOrEditorError } from "../../lib/groupRoles.ts";
+import {
+  isAdminOrEditor,
+  notAdminOrEditorError,
+  visibleOwnershipOffer,
+} from "../../lib/groupRoles.ts";
 
 const creatorCanAdmit = async (
   db: Pick<Prisma.TransactionClient, "groupMember">,
@@ -250,71 +254,30 @@ export const groupInvitesRouter = {
     )
     .mutation(async ({ ctx, input }) => {
       const codeHash = sharedCodeHash(input.code);
-      const joinEvent = await ctx.db.$transaction(async (tx) => {
+      const notFound = () =>
+        new TRPCError({ code: "NOT_FOUND", message: "Invite is invalid or expired" });
+      const joinEventId = await ctx.db.$transaction(async (tx) => {
         const invite = await tx.groupSharedInvite.findUnique({ where: { codeHash } });
-        if (!invite)
-          throw new TRPCError({ code: "NOT_FOUND", message: "Invite is invalid or expired" });
-        const ownerId = await lockOwnerThenGroup({
-          db: tx,
-          groupId: invite.groupId,
-          userIds: [ctx.session.user.id],
-        });
-        await assertAccountCanJoinGroup(tx, ctx.session.user.id);
-        if (!ownerId)
-          throw new TRPCError({ code: "NOT_FOUND", message: "Invite is invalid or expired" });
-        if (!(await creatorCanAdmit(tx, invite)))
-          throw new TRPCError({ code: "NOT_FOUND", message: "Invite is invalid or expired" });
-        const claimed = await tx.groupSharedInvite.updateMany({
-          where: { codeHash, usedAt: null, expiresAt: { gt: new Date() } },
-          data: { usedAt: new Date() },
-        });
-        if (claimed.count !== 1)
-          throw new TRPCError({ code: "NOT_FOUND", message: "Invite is invalid or expired" });
-        const existing = await tx.groupMember.findUnique({
-          where: { userId_groupId: { userId: ctx.session.user.id, groupId: invite.groupId } },
-        });
-        if (existing)
-          throw new TRPCError({ code: "CONFLICT", message: "You are already a group member" });
-        await assertAccountBelowGroupLimit(tx, ctx.session.user.id);
-        await assertRoomToJoin({
-          db: tx,
-          groupId: invite.groupId,
-          joinerId: ctx.session.user.id,
-          selfHosted: ctx.selfHosted,
-        });
-        const joined = await tx.groupMember.create({
-          data: {
-            groupId: invite.groupId,
-            joinedEpochNumber: input.nextEpoch.epochNumber,
-            role: GroupRole.MEMBER,
-            userId: ctx.session.user.id,
-            historyShare: input.historyShare ?? null,
-            createdAt: await readDatabaseTime(tx),
-          },
-          select: { createdAt: true },
-        });
-        await tx.groupMemberInvite.deleteMany({
-          where: { groupId: invite.groupId, recipientId: ctx.session.user.id },
-        });
-        await persistGroupEpoch({
-          db: tx,
+        if (!invite) throw notFound();
+        return joinGroup(tx, {
+          ...input,
           deviceId: ctx.deviceId,
-          epoch: input.nextEpoch,
           groupId: invite.groupId,
+          notFound,
+          selfHosted: ctx.selfHosted,
           userId: ctx.session.user.id,
-        });
-        return tx.groupEvent.create({
-          data: {
-            groupId: invite.groupId,
-            type: GroupEventType.MEMBER_JOINED,
-            subjectUserId: ctx.session.user.id,
-            role: GroupRole.MEMBER,
-            createdAt: joined.createdAt,
+          claimInvite: async () => {
+            if (!(await creatorCanAdmit(tx, invite))) throw notFound();
+            const claimed = await tx.groupSharedInvite.updateMany({
+              where: { codeHash, usedAt: null, expiresAt: { gt: new Date() } },
+              data: { usedAt: new Date() },
+            });
+            if (claimed.count !== 1) throw notFound();
+            return GroupRole.MEMBER;
           },
-          select: { id: true },
         });
       });
-      ctx.push?.groupEvents([joinEvent.id]);
+      ctx.push?.groupEvents([joinEventId]);
       return { message: "Invite accepted." };
     }),
   preview: protectedProcedure
@@ -362,145 +325,66 @@ export const groupInvitesRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const member = await ctx.db.$transaction(async (tx) => {
-        const invite = await tx.groupMemberInvite.findFirst({
+      const notFound = () => new TRPCError({ code: "NOT_FOUND", message: "Invite not found" });
+      const openInvite = (db: Pick<Prisma.TransactionClient, "groupMemberInvite">) =>
+        db.groupMemberInvite.findFirst({
           where: {
             id: input.inviteId,
             recipientId: ctx.session.user.id,
             createdAt: { gt: emailInviteCreatedAfter() },
           },
         });
-
-        if (!invite) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Invite not found" });
-        }
-
-        const ownerId = await lockOwnerThenGroup({
-          db: tx,
+      const joined = await ctx.db.$transaction(async (tx) => {
+        const invite = await openInvite(tx);
+        if (!invite) throw notFound();
+        const joinEventId = await joinGroup(tx, {
+          ...input,
+          deviceId: ctx.deviceId,
           groupId: invite.groupId,
-          userIds: [ctx.session.user.id],
-        });
-        await assertAccountCanJoinGroup(tx, ctx.session.user.id);
-        if (!ownerId) throw new TRPCError({ code: "NOT_FOUND", message: "Invite not found" });
-
-        const currentInvite = await tx.groupMemberInvite.findFirst({
-          where: {
-            id: input.inviteId,
-            recipientId: ctx.session.user.id,
-            createdAt: { gt: emailInviteCreatedAfter() },
-          },
-        });
-        if (!currentInvite) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Invite not found" });
-        }
-        const existing = await tx.groupMember.findUnique({
-          where: { userId_groupId: { userId: ctx.session.user.id, groupId: invite.groupId } },
-        });
-        if (existing) {
-          throw new TRPCError({ code: "CONFLICT", message: "You are already a group member" });
-        }
-        await assertAccountBelowGroupLimit(tx, ctx.session.user.id);
-        await assertRoomToJoin({
-          db: tx,
-          groupId: invite.groupId,
-          joinerId: ctx.session.user.id,
+          notFound,
           selfHosted: ctx.selfHosted,
-        });
-
-        const createdMember = await tx.groupMember.create({
-          data: {
-            userId: currentInvite.recipientId,
-            groupId: currentInvite.groupId,
-            role: currentInvite.role,
-            joinedEpochNumber: input.nextEpoch.epochNumber,
-            historyShare: input.historyShare ?? null,
-            createdAt: await readDatabaseTime(tx),
+          userId: ctx.session.user.id,
+          claimInvite: async () => {
+            const current = await openInvite(tx);
+            if (!current) throw notFound();
+            return current.role;
           },
+        });
+        const group = await tx.group.findUniqueOrThrow({
+          where: { id: invite.groupId },
           select: {
             id: true,
-            createdAt: true,
-            user: {
+            name: true,
+            image: true,
+            ownerId: true,
+            ownershipOfferedToId: true,
+            ...imageKeySelect,
+            groupMembers: {
               select: {
                 id: true,
-                name: true,
-                image: true,
-              },
-            },
-            role: true,
-            group: {
-              select: {
-                id: true,
-                name: true,
-                image: true,
-                ownerId: true,
-                ownershipOfferedToId: true,
+                role: true,
                 ...imageKeySelect,
-                groupMembers: {
-                  select: {
-                    id: true,
-                    role: true,
-                    ...imageKeySelect,
-                    user: {
-                      select: {
-                        id: true,
-                        name: true,
-                        image: true,
-                      },
-                    },
-                  },
-                },
+                user: { select: { id: true, name: true, image: true } },
               },
             },
           },
         });
-
-        if (!createdMember.group) {
-          throw new TRPCError({
-            code: "INTERNAL_SERVER_ERROR",
-            message: "Failed to accept invite, group does not exist.",
-          });
-        }
-
-        const deletedInvite = await tx.groupMemberInvite.deleteMany({
-          where: { id: input.inviteId, recipientId: ctx.session.user.id },
-        });
-        if (deletedInvite.count !== 1) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Invite not found" });
-        }
-
-        await persistGroupEpoch({
-          db: tx,
-          deviceId: ctx.deviceId,
-          epoch: input.nextEpoch,
-          groupId: invite.groupId,
-          userId: ctx.session.user.id,
-        });
-        const joinEvent = await tx.groupEvent.create({
-          data: {
-            groupId: invite.groupId,
-            type: GroupEventType.MEMBER_JOINED,
-            subjectUserId: ctx.session.user.id,
-            role: createdMember.role,
-            createdAt: createdMember.createdAt,
-          },
-          select: { id: true },
-        });
-
-        return { ...createdMember, joinEventId: joinEvent.id };
+        return { group, joinEventId };
       });
-      ctx.push?.groupEvents([member.joinEventId]);
+      ctx.push?.groupEvents([joined.joinEventId]);
+      const { group } = joined;
 
       return {
         message: "Invite accepted.",
         group: {
-          id: member.group.id,
-          name: member.group.name,
-          image: member.group.image,
-          imageKey: toStoredImageKey(member.group),
-          ownerId: member.group.ownerId,
-          ownershipOfferedToId: member.group.ownershipOfferedToId,
+          id: group.id,
+          name: group.name,
+          image: group.image,
+          imageKey: toStoredImageKey(group),
+          ownerId: group.ownerId,
+          ownershipOfferedToId: visibleOwnershipOffer(group, ctx.session.user.id),
           onHold: false,
-          members: member.group.groupMembers.map((groupMember) => ({
+          members: group.groupMembers.map((groupMember) => ({
             id: groupMember.id,
             userId: groupMember.user.id,
             name: groupMember.user.name,
@@ -698,4 +582,63 @@ const assertAccountCanJoinGroup = async (tx: Prisma.TransactionClient, userId: s
       message: "An account pending deletion cannot join a group.",
     });
   }
+};
+
+const joinGroup = async (
+  tx: Prisma.TransactionClient,
+  {
+    claimInvite,
+    deviceId,
+    groupId,
+    historyShare,
+    nextEpoch,
+    notFound,
+    selfHosted,
+    userId,
+  }: {
+    claimInvite: () => Promise<GroupRole>;
+    deviceId: string;
+    groupId: string;
+    historyShare?: z.infer<typeof historyShareSchema> | null | undefined;
+    nextEpoch: z.infer<typeof groupEpochBundleSchema>;
+    notFound: () => TRPCError;
+    selfHosted: boolean;
+    userId: string;
+  },
+) => {
+  const ownerId = await lockOwnerThenGroup({ db: tx, groupId, userIds: [userId] });
+  await assertAccountCanJoinGroup(tx, userId);
+  if (!ownerId) throw notFound();
+  const role = await claimInvite();
+  const existing = await tx.groupMember.findUnique({
+    where: { userId_groupId: { userId, groupId } },
+  });
+  if (existing)
+    throw new TRPCError({ code: "CONFLICT", message: "You are already a group member" });
+  await assertAccountBelowGroupLimit(tx, userId);
+  await assertRoomToJoin({ db: tx, groupId, joinerId: userId, selfHosted });
+  const joined = await tx.groupMember.create({
+    data: {
+      groupId,
+      joinedEpochNumber: nextEpoch.epochNumber,
+      role,
+      userId,
+      historyShare: historyShare ?? null,
+      createdAt: await readDatabaseTime(tx),
+    },
+    select: { createdAt: true },
+  });
+  await tx.groupMemberInvite.deleteMany({ where: { groupId, recipientId: userId } });
+  await persistGroupEpoch({ db: tx, deviceId, epoch: nextEpoch, groupId, userId });
+  const event = await tx.groupEvent.create({
+    data: {
+      groupId,
+      type: GroupEventType.MEMBER_JOINED,
+      subjectUserId: userId,
+      role,
+      createdAt: joined.createdAt,
+    },
+    select: { id: true },
+  });
+  return event.id;
 };

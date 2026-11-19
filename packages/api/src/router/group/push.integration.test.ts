@@ -7,6 +7,7 @@ import { type AccountNoticeType, type GroupEventType, prisma } from "@openbeacon
 import { readAccountNotices, readGroupNotices } from "../../lib/accountNotices.ts";
 import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
 import { encodeAlertsCursor, readPlaceAlerts } from "../../lib/placeTransitions.ts";
+import { heldSeatDevices } from "../../lib/seats.ts";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
 import { accountNoticesRouter } from "../accountNoticesRouter.ts";
 import { groupTrackingRouter } from "./groupTrackingRouter.ts";
@@ -338,6 +339,44 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("push wake-ups", 
           `${f.bob}-tablet`,
           `${f.dave}-phone`,
         ].sort(),
+      );
+    });
+
+    test("devices on hold in the group aren't woken by its events or arrivals", async () => {
+      const f = await setup();
+      await prisma.user.update({ where: { id: f.alice }, data: { seats: 3 } });
+      const held = (
+        await heldSeatDevices({ db: prisma, groupIds: [f.groupId], selfHosted: false })
+      ).map(({ deviceId }) => deviceId);
+      expect(held).toHaveLength(3);
+      const holdingPush = () =>
+        testPush().withHeldDevices((groupIds) =>
+          heldSeatDevices({ db: prisma, groupIds, selfHosted: false }),
+        );
+      const notHeld = (deviceIds: string[]) =>
+        deviceIds.filter((deviceId) => !held.includes(deviceId)).sort();
+
+      holdingPush().groupEvents([await f.event("MEMBER_JOINED", { subjectUserId: f.carol })]);
+      await deliver();
+      expect(f.woken()).toEqual(
+        notHeld([
+          `${f.alice}-phone`,
+          `${f.alice}-tablet`,
+          `${f.bob}-phone`,
+          `${f.bob}-tablet`,
+          `${f.dave}-phone`,
+        ]),
+      );
+
+      sent.length = 0;
+      const arrival = await f.arrive(f.bob);
+      holdingPush().placeTransitions({
+        deviceId: arrival.deviceId,
+        clientIds: [arrival.clientId],
+      });
+      await deliver();
+      expect(f.woken()).toEqual(
+        notHeld([`${f.alice}-phone`, `${f.alice}-tablet`, `${f.carol}-phone`, `${f.dave}-phone`]),
       );
     });
 

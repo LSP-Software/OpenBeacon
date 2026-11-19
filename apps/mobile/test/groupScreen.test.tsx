@@ -34,7 +34,9 @@ let historyResult: {
   isError: boolean;
   isSuccess: boolean;
   isFetching: boolean;
+  error?: unknown;
 };
+let historyEnabled: boolean | undefined;
 const router = { replace };
 mock.module("@tanstack/react-query", () => ({
   skipToken: Symbol("skipToken"),
@@ -43,7 +45,10 @@ mock.module("@tanstack/react-query", () => ({
     data: select && queryResult.data !== undefined ? select(queryResult.data) : queryResult.data,
   }),
   useQueryClient: () => queryClient,
-  useInfiniteQuery: () => historyResult,
+  useInfiniteQuery: ({ enabled }: { enabled?: boolean }) => {
+    historyEnabled = enabled;
+    return historyResult;
+  },
 }));
 mock.module("@react-navigation/native", () => ({ useIsFocused: () => isFocused }));
 mock.module("expo-router", () => ({
@@ -441,4 +446,48 @@ test("keeps history unread after a failed load, then marks only displayed activi
   await act(async () => hidden.render(<HistoryTab groupId="group-2" active />));
   expect(storedValues.get("groupHistory.seenAt.user-1.group-2")).toBe(displayedAt.getTime());
   await act(async () => hidden.unmount());
+});
+
+test("a group this phone is on hold in explains the hold instead of loading history", async () => {
+  queryResult = {
+    data: [{ ...family([{ role: "MEMBER", userId: "user-1" }]), onHold: true }],
+    isPending: false,
+  };
+  historyResult = {
+    data: undefined,
+    isPending: true,
+    isError: false,
+    isSuccess: false,
+    isFetching: false,
+  };
+  const root = createRoot();
+  await act(async () => root.render(<HistoryTab groupId="group-1" active />));
+  const rendered = JSON.stringify(root.container.toJSON());
+  expect(historyEnabled).toBe(false);
+  expect(rendered).toContain("History is on hold");
+  expect(rendered).not.toContain("Couldn’t load history");
+  expect(storedValues.get("groupHistory.seenAt.user-1.group-1")).toBeUndefined();
+  await act(async () => root.unmount());
+});
+
+test("a hold that starts while history loads shows the hold, not a connection problem", async () => {
+  queryResult = {
+    data: [{ ...family([{ role: "MEMBER", userId: "user-1" }]), onHold: false }],
+    isPending: false,
+  };
+  historyResult = {
+    data: undefined,
+    isPending: false,
+    isError: true,
+    isSuccess: false,
+    isFetching: false,
+    error: { data: { code: "FORBIDDEN", reason: "SEAT_ON_HOLD" } },
+  };
+  const root = createRoot();
+  await act(async () => root.render(<HistoryTab groupId="group-1" active />));
+  const rendered = JSON.stringify(root.container.toJSON());
+  expect(historyEnabled).toBe(true);
+  expect(rendered).toContain("History is on hold");
+  expect(rendered).not.toContain("Try again");
+  await act(async () => root.unmount());
 });

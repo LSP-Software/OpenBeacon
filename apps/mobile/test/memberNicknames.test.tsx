@@ -164,6 +164,7 @@ mock.module("../lib/groupEncryption.ts", () => ({
 }));
 mock.module("../lib/trackingEvents.ts", () => ({ requestTrackingSync: () => {} }));
 mock.module("../lib/hiddenMapGroups.ts", () => ({ forgetHiddenMapGroup: () => {} }));
+mock.module("../lib/currentServer.ts", () => ({ hasCustomServerUrl: () => false }));
 mock.module("../lib/batteryVisual.ts", () => ({
   getBatteryVisual: ({ batteryLevel }: { batteryLevel: number | null }) => ({
     colorClass: "",

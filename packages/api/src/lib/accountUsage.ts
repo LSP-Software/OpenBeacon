@@ -4,8 +4,6 @@ import { seatAccountSelect, seatPeriod, seatsEnforced, type SeatHolds } from "./
 
 type Unit = { one: string; other: string };
 
-const unit = (one: string, other: string): Unit => ({ one, other });
-
 export const readAccountUsage = async ({
   allowSelfSetSeats,
   db,
@@ -38,7 +36,7 @@ export const readAccountUsage = async ({
       where: { userId, activatedAt: { not: null }, revokedAt: null },
       select: { id: true, name: true },
     }),
-    enforced ? seatHolds.seatsOf(userId) : Promise.resolve([]),
+    enforced ? seatHolds.ownSeats() : Promise.resolve([]),
   ]);
   const period = seatPeriod(account, now);
   const seatDevices = await db.userDevice.findMany({
@@ -48,7 +46,7 @@ export const readAccountUsage = async ({
 
   const groups = await Promise.all(
     memberships.map(async ({ group }) => {
-      const held = await seatHolds.heldIn(group.id, group.ownerId);
+      const held = await seatHolds.heldIn(group.id);
       const isOwner = group.ownerId === userId;
       const phones =
         enforced && isOwner
@@ -77,7 +75,7 @@ export const readAccountUsage = async ({
         owner: { userId: group.ownerId, name: group.owner.name },
         isOwner,
         seats: phones && {
-          used: phones.length,
+          used: Math.min(phones.length, limits.seatsPerGroup),
           max: limits.seatsPerGroup,
           onHold: phones.filter(({ onHold }) => onHold).length,
           phones,
@@ -94,8 +92,8 @@ export const readAccountUsage = async ({
   );
   groups.sort((a, b) => Number(b.isOwner) - Number(a.isOwner) || a.name.localeCompare(b.name));
 
-  const seatsUsed = groups.reduce((total, group) => total + (group.seats?.used ?? 0), 0);
-  const seatsOnHold = groups.reduce((total, group) => total + (group.seats?.onHold ?? 0), 0);
+  const seatsUsed = ownSeats.filter(({ overGroupLimit }) => !overGroupLimit).length;
+  const seatsOnHold = ownSeats.filter(({ held, overGroupLimit }) => held && !overGroupLimit).length;
   const gauges: Array<{
     id: string;
     label: string;
@@ -112,7 +110,7 @@ export const readAccountUsage = async ({
             used: seatsUsed,
             max: period.seats,
             onHold: seatsOnHold,
-            unit: unit("seat", "seats"),
+            unit: { one: "seat", other: "seats" },
           },
         ]
       : []),
@@ -122,7 +120,7 @@ export const readAccountUsage = async ({
       used: memberships.length,
       max: limits.groupsPerAccount,
       onHold: 0,
-      unit: unit("group", "groups"),
+      unit: { one: "group", other: "groups" },
     },
   ];
 
@@ -136,7 +134,7 @@ export const readAccountUsage = async ({
       id: "history",
       label: "Location history kept",
       value: limits.historyDays,
-      unit: unit("day", "days"),
+      unit: { one: "day", other: "days" },
     },
   ];
 

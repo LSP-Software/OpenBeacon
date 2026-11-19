@@ -36,12 +36,14 @@ export const createPushSender = ({
   },
   runInBackground = () => {},
   now = () => Date.now(),
+  heldDevices = async () => [],
 }: {
   db: PrismaClient;
   fcm: Pick<FcmClient, "send"> | null;
   setTimer?: (callback: () => void, ms: number) => void;
   runInBackground?: (task: Promise<unknown>) => void;
   now?: () => number;
+  heldDevices?: HeldDevices;
 }) => {
   const settleMs = noticeSettleMs + 1_000;
   const batchMs = 1_000;
@@ -90,19 +92,51 @@ export const createPushSender = ({
           })
         ).map(({ id }) => id);
 
-  const placeTransitionRecipients = async ({
-    deviceId,
-    clientIds,
-  }: {
-    deviceId: string;
-    clientIds: string[];
-  }) => {
+  const groupDevices = async (
+    recipients: Array<{ groupId: string; userId: string }>,
+    held: HeldDevices,
+  ) => {
+    if (recipients.length === 0) return [];
+    const [devices, heldInGroups] = await Promise.all([
+      db.userDevice.findMany({
+        where: {
+          ...usableDevice(),
+          userId: { in: [...new Set(recipients.map(({ userId }) => userId))] },
+          pushToken: { isNot: null },
+        },
+        select: { id: true, userId: true },
+      }),
+      held([...new Set(recipients.map(({ groupId }) => groupId))]),
+    ]);
+    const heldKeys = new Set(
+      heldInGroups.map(({ groupId, deviceId }) => `${groupId}\u0000${deviceId}`),
+    );
+    return devices
+      .filter((device) =>
+        recipients.some(
+          ({ groupId, userId }) =>
+            userId === device.userId && !heldKeys.has(`${groupId}\u0000${device.id}`),
+        ),
+      )
+      .map(({ id }) => id);
+  };
+
+  const placeTransitionRecipients = async (
+    {
+      deviceId,
+      clientIds,
+    }: {
+      deviceId: string;
+      clientIds: string[];
+    },
+    held: HeldDevices,
+  ) => {
     const oldestAlert = new Date((await readDatabaseTime(db)).getTime() - noticeLookbackMs);
     const transitions = await db.placeTransition.findMany({
       where: { deviceId, clientId: { in: clientIds }, occurredAt: { gte: oldestAlert } },
       select: { groupId: true, placeId: true, userId: true, occurredAt: true },
     });
-    const recipients = new Set<string>();
+    const recipients: Array<{ groupId: string; userId: string }> = [];
     for (const transition of transitions) {
       const members = await db.groupMember.findMany({
         where: {
@@ -125,13 +159,13 @@ export const createPushSender = ({
         members.map(({ userId }) => userId).filter((userId) => !muted.has(userId)),
         "PLACE_ALERTS",
       )) {
-        recipients.add(userId);
+        recipients.push({ groupId: transition.groupId, userId });
       }
     }
-    return devicesOf([...recipients]);
+    return groupDevices(recipients, held);
   };
 
-  const groupEventRecipients = async (eventIds: string[]) => {
+  const groupEventRecipients = async (eventIds: string[], held: HeldDevices) => {
     const events = await db.groupEvent.findMany({
       where: {
         id: { in: eventIds },
@@ -145,7 +179,7 @@ export const createPushSender = ({
         createdAt: true,
       },
     });
-    const recipients = new Set<string>();
+    const recipients: Array<{ groupId: string; userId: string }> = [];
     for (const event of events) {
       const members = await db.groupMember.findMany({
         where: {
@@ -159,9 +193,11 @@ export const createPushSender = ({
         .map(({ userId }) => userId)
         .filter((userId) => event.type !== "MEMBER_JOINED" || userId !== event.subjectUserId);
       const type = groupNoticeSettings[event.type as keyof typeof groupNoticeSettings];
-      for (const userId of await usersWithPhoneOn(userIds, type)) recipients.add(userId);
+      for (const userId of await usersWithPhoneOn(userIds, type)) {
+        recipients.push({ groupId: event.groupId, userId });
+      }
     }
-    return devicesOf([...recipients]);
+    return groupDevices(recipients, held);
   };
 
   const accountNoticeRecipients = async (noticeId: string) => {
@@ -254,18 +290,22 @@ export const createPushSender = ({
     );
   };
 
-  return {
+  const senders = (held: HeldDevices) => ({
     enabled: fcm !== null,
     placeTransitions: (transitions: { deviceId: string; clientIds: string[] }) => {
       if (transitions.clientIds.length > 0) {
-        wakeAfterSettle(() => placeTransitionRecipients(transitions));
+        wakeAfterSettle(() => placeTransitionRecipients(transitions, held));
       }
     },
     groupEvents: (eventIds: string[]) => {
-      if (eventIds.length > 0) wakeAfterSettle(() => groupEventRecipients(eventIds));
+      if (eventIds.length > 0) wakeAfterSettle(() => groupEventRecipients(eventIds, held));
     },
     accountNotice: (noticeId: string) => wakeAfterSettle(() => accountNoticeRecipients(noticeId)),
-  };
+  });
+
+  return { ...senders(heldDevices), withHeldDevices: senders };
 };
 
 export type PushSender = ReturnType<typeof createPushSender>;
+
+type HeldDevices = (groupIds: string[]) => Promise<Array<{ groupId: string; deviceId: string }>>;

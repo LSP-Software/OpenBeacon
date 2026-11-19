@@ -18,6 +18,7 @@ import { storeOwnImageKeyInGroup } from "../lib/imageKeys.ts";
 import { initials } from "../lib/initials.ts";
 import type { InviteToConfirm } from "../lib/inviteTypes.ts";
 import { pluralize } from "../lib/pluralize.ts";
+import { forgetSeatHoldGroupNames } from "../lib/seatHolds.ts";
 import { requestTrackingSync } from "../lib/trackingEvents.ts";
 import { useSingleFlight } from "../lib/useSingleFlight.ts";
 import { HistoryShareChoices } from "./HistoryShareChoices.tsx";
@@ -95,6 +96,7 @@ export const InviteConfirmation = ({
       void queryClient.invalidateQueries({
         predicate: (query) => query.queryKey[0] !== "invitePreview",
       });
+      forgetSeatHoldGroupNames();
       requestTrackingSync();
       leaveIfStillHere();
     });

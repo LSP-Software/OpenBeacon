@@ -34,8 +34,17 @@ class OpenBeaconTrackingModule : Module() {
         TrackingRuntime.applySharingState(requireContext(), owner, deviceId, SharingCaptureState(prefix, paused, until?.toLong(), after?.toLong() ?: 0L))
       }
 
-      Function("setSeatHoldNotice") { owner: String, deviceId: String, sharing: List<String>, held: List<String>, heldGroupIds: List<String> ->
-        TrackingRuntime.setSeatHoldNotice(requireContext(), owner, deviceId, SeatHoldNotice(sharing, held, heldGroupIds))
+      Function("setSeatHoldNotice") { owner: String, deviceId: String, groupNames: Map<String, String>, heldGroupIds: List<String> ->
+        TrackingRuntime.setSeatHoldNotice(requireContext(), owner, deviceId, SeatHoldNotice(groupNames, heldGroupIds))
+      }
+
+      Function("seatHoldGroupIds") { owner: String, deviceId: String ->
+        val context = requireContext()
+        if (TrackingRuntime.queueOwner(context) != owner || TrackingRuntime.queueDeviceId(context) != deviceId) {
+          null
+        } else {
+          TrackingRuntime.seatHoldNotice(context).heldGroupIds
+        }
       }
 
       Function("clearSeatHoldNotices") {
@@ -72,6 +81,7 @@ class OpenBeaconTrackingModule : Module() {
           }
 
         TrackingRuntime.epochKeyStore(requireContext()).replacePreserving(parsed, preserveGroupIds ?: emptyList())
+        TrackingRuntime.refreshSharingNoticeIfHeld(requireContext())
       }
 
       Function("revokeEpochKeys") { groupIds: List<String>? ->
@@ -80,6 +90,7 @@ class OpenBeaconTrackingModule : Module() {
         }
         TrackingRuntime.epochKeyStore(requireContext()).revoke(groupIds)
         TrackingRuntime.placeDetection(requireContext()).removeGroups(groupIds?.takeIf { it.isNotEmpty() })
+        TrackingRuntime.refreshSharingNoticeIfHeld(requireContext())
       }
 
       AsyncFunction("setGroupPlaces") { owner: String, deviceId: String, groupId: String, places: List<Map<String, Any?>> ->

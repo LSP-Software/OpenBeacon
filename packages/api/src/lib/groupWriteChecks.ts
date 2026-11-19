@@ -1,6 +1,7 @@
 import type { GroupRole } from "@openbeacon/database";
 import { Prisma } from "@openbeacon/database";
 import { TRPCError } from "@trpc/server";
+import { groupGoneError } from "./groupRoles.ts";
 import { ReasonError } from "./reasonError.ts";
 
 export type GroupWriteChecksDb = {
@@ -49,13 +50,7 @@ export const lockGroupMemberForWrite = async (
   const groups = await db.$queryRaw<Array<{ id: string }>>(
     Prisma.sql`SELECT id FROM "Group" WHERE id = ${groupId} ${Prisma.raw(groupLock)}`,
   );
-  if (!groups.length) {
-    throw new TRPCError({
-      code: "FORBIDDEN",
-      message: "This group no longer exists.",
-      cause: new ReasonError("GROUP_GONE"),
-    });
-  }
+  if (!groups.length) throw groupGoneError();
   const members = await db.$queryRaw<
     Array<{ id: string; createdAt: Date; role: GroupRole }>
   >(Prisma.sql`

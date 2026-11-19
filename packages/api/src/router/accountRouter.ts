@@ -36,6 +36,7 @@ import { deviceRemovedError } from "../lib/deviceRemoved.ts";
 import { deviceUnverifiedError } from "../lib/deviceUnverified.ts";
 import { removeUserDevice, toAlertDevice } from "../lib/removeDevice.ts";
 import { limits, maxAccountSeats } from "../lib/limits.ts";
+import { changePaidPeriod } from "../lib/seatGraceWarnings.ts";
 import { seatAccountSelect, seatPeriod, seatsEndingHolds, seatsEnforced } from "../lib/seats.ts";
 import {
   freshSessionProcedure,
@@ -473,7 +474,7 @@ export const accountRouter = {
   }),
   usage: protectedProcedure.meta({ rateLimit: { limit: 60, windowMs: 60_000 } }).query(({ ctx }) =>
     readAccountUsage({
-      allowSelfSetSeats: ctx.allowSelfSetSeats && !ctx.selfHosted,
+      allowSelfSetSeats: selfSetSeatsAllowed(ctx),
       db: ctx.db,
       deviceId: ctx.deviceId,
       now: new Date(),
@@ -499,10 +500,12 @@ export const accountRouter = {
     .input(z.object({ ended: z.boolean() }))
     .mutation(async ({ ctx, input }) => {
       assertSelfSetSeats(ctx);
-      const user = await ctx.db.user.update({
-        where: { id: ctx.session.user.id },
-        data: { paidPeriodEndsAt: input.ended ? new Date() : null },
-        select: { paidPeriodEndsAt: true },
+      const now = new Date();
+      const user = await changePaidPeriod({
+        db: ctx.db,
+        now,
+        paidPeriodEndsAt: input.ended ? now : null,
+        userId: ctx.session.user.id,
       });
       return { paidPeriodEndsAt: user.paidPeriodEndsAt };
     }),
@@ -713,8 +716,11 @@ export const accountRouter = {
     }),
 } satisfies TRPCRouterRecord;
 
+const selfSetSeatsAllowed = (ctx: { allowSelfSetSeats: boolean; selfHosted: boolean }) =>
+  ctx.allowSelfSetSeats && !ctx.selfHosted;
+
 const assertSelfSetSeats = (ctx: { allowSelfSetSeats: boolean; selfHosted: boolean }) => {
-  if (ctx.allowSelfSetSeats && !ctx.selfHosted) return;
+  if (selfSetSeatsAllowed(ctx)) return;
   throw new TRPCError({
     code: "FORBIDDEN",
     message: "This server doesn't let you set your own seats.",

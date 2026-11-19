@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { renderSeatsEndingEmail } from "./seatsEndingEmail.tsx";
 
 const holds = [
-  { groupName: "Family", memberName: "Alice", deviceName: "Pixel 8" },
-  { groupName: "Family", memberName: "Bob", deviceName: "Pixel 7" },
-  { groupName: "Climbing", memberName: "Alice", deviceName: "Pixel 8" },
+  { groupId: "family", groupName: "Family", memberName: "Alice", deviceName: "Pixel 8" },
+  { groupId: "family", groupName: "Family", memberName: "Bob", deviceName: "Pixel 7" },
+  { groupId: "climbing", groupName: "Climbing", memberName: "Alice", deviceName: "Pixel 8" },
 ];
 
 describe("renderSeatsEndingEmail", () => {
@@ -23,6 +23,20 @@ describe("renderSeatsEndingEmail", () => {
     expect(email.text).toContain("Family\n\n * Alice (Pixel 8)\n * Bob (Pixel 7)");
     expect(email.text).toContain("Climbing\n\n * Alice (Pixel 8)");
     expect(email.text).toContain("everyone can still pause sharing, leave the group or delete");
+  });
+
+  test("keeps two groups with the same name apart", async () => {
+    const email = await renderSeatsEndingEmail({
+      holds: [
+        { groupId: "a", groupName: "Family", memberName: "Alice", deviceName: "Pixel 8" },
+        { groupId: "b", groupName: "Family", memberName: "Bob", deviceName: "Pixel 7" },
+      ],
+      holdsFrom: new Date("2026-07-16T13:32:00Z"),
+      kind: "ending",
+      serverName: "Family Server",
+      timezone: null,
+    });
+    expect(email.text).toContain("Family\n\n * Alice (Pixel 8)\n\nFamily\n\n * Bob (Pixel 7)");
   });
 
   test("the reminder has its own subject", async () => {

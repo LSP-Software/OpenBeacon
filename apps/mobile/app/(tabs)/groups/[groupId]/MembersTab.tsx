@@ -41,11 +41,18 @@ import {
 } from "../../../../lib/personalNicknames.ts";
 import { authClient } from "../../../../lib/auth-client.ts";
 import { cn } from "../../../../lib/cn.ts";
+import { hasCustomServerUrl } from "../../../../lib/currentServer.ts";
 import { getBatteryVisual } from "../../../../lib/batteryVisual.ts";
 import { buildMemberLiveStatuses } from "../../../../lib/buildMemberLiveStatuses.ts";
 import { deviceIconFor } from "../../../../lib/deviceIcons.ts";
 import { buildRemoveGroupMemberInput, submitEpochChange } from "../../../../lib/groupEncryption.ts";
-import { canEditGroup, type GroupRole, groupRoles, roleLabel } from "../../../../lib/groupRoles.ts";
+import {
+  canEditGroup,
+  type GroupRole,
+  groupRoles,
+  memberActions,
+  roleLabel,
+} from "../../../../lib/groupRoles.ts";
 import { forgetHiddenMapGroup } from "../../../../lib/hiddenMapGroups.ts";
 import { pluralize } from "../../../../lib/pluralize.ts";
 import { timeSince } from "../../../../lib/timeSince.ts";
@@ -127,6 +134,17 @@ const MembersTab = ({
   });
   const self = members?.find((member) => member.user.id === session?.user.id);
   const selectedMember = memberStatuses.find((member) => member.id === selectedMemberId);
+  const selectedActions = selectedMember
+    ? memberActions({
+        ownerId: group?.ownerId,
+        self: self && { id: self.id, role: self.role, userId: self.user.id },
+        target: {
+          id: selectedMember.id,
+          role: selectedMember.role,
+          userId: selectedMember.user.id,
+        },
+      })
+    : null;
   const canManage = canEditGroup(self?.role);
   const selfIsOwner = !!self && self.user.id === group?.ownerId;
   const refreshGroups = () =>
@@ -170,7 +188,7 @@ const MembersTab = ({
   const askToTakeOver = (member: { id: string; user: { name: string } }) =>
     Alert.alert(
       `Ask ${member.user.name} to become the owner?`,
-      `${member.user.name} will see the request on their phone and can accept or decline it. Once they accept, their account pays for this group’s seats and only they can delete the group or hand it on. You’ll stay an Admin.`,
+      `${member.user.name} will see the request on their phone and can accept or decline it. Once they accept, ${hasCustomServerUrl() ? "" : "their account pays for this group’s seats and "}only they can delete the group or hand it on. You’ll stay an Admin.`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -334,11 +352,6 @@ const MembersTab = ({
           </Button>
         )}
       </View>
-      {group?.onHold ? (
-        <Text className="text-secondary pb-3 text-sm">
-          Locations are hidden while this phone is on hold in {group.name}.
-        </Text>
-      ) : null}
       <View className="overflow-hidden rounded-2xl border border-border bg-card">
         {memberStatuses.map((member, index) => (
           <Pressable
@@ -437,9 +450,7 @@ const MembersTab = ({
                 </Text>
               </View>
             </View>
-            {self?.role === "ADMIN" &&
-            selectedMember.id !== self.id &&
-            selectedMember.user.id !== group?.ownerId ? (
+            {selectedActions?.changeRole ? (
               <View className="gap-2">
                 <Text variant="label">Role</Text>
                 <SegmentedControl
@@ -483,7 +494,7 @@ const MembersTab = ({
                 />
               </View>
             ) : null}
-            {selfIsOwner && selectedMember.id !== self?.id && selectedMember.role === "ADMIN" ? (
+            {selectedActions?.makeOwner ? (
               group?.ownershipOfferedToId === selectedMember.user.id ? (
                 <View className="flex-row items-center gap-2">
                   <Text className="text-secondary flex-1 text-sm">Asked to take over as owner</Text>
@@ -542,10 +553,7 @@ const MembersTab = ({
                   <Text className="text-tertiary text-sm">Only you see nicknames</Text>
                 </View>
               </Pressable>
-              {(selectedMember.id === self?.id ||
-                (canManage &&
-                  selectedMember.user.id !== group?.ownerId &&
-                  (self?.role === "ADMIN" || selectedMember.role === "MEMBER"))) && (
+              {selectedActions?.leaveOrRemove && (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={

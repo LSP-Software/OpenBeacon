@@ -12,7 +12,7 @@ import { protectedProcedure } from "../../procedures/auth/runtime.ts";
 import type { GroupListItem } from "../../types/GroupListItem.ts";
 import { ReasonError } from "../../lib/reasonError.ts";
 import { removeGroupMemberWithOwnerGuard } from "./assertGroupMemberCanBeRemoved.ts";
-import { isAdminOrEditor } from "../../lib/groupRoles.ts";
+import { isAdminOrEditor, visibleOwnershipOffer } from "../../lib/groupRoles.ts";
 
 export const groupMembershipRouter = {
   list: protectedProcedure.query(async ({ ctx }) => {
@@ -48,19 +48,17 @@ export const groupMembershipRouter = {
       },
     });
 
-    const held = await Promise.all(
-      groups.map((group) => ctx.seatHolds.heldIn(group.id, group.ownerId)),
-    );
+    const heldGroupIds = await ctx.seatHolds.heldGroupIds(ctx.deviceId);
     return groups.map(
-      (group, index) =>
+      (group) =>
         ({
           id: group.id,
           name: group.name,
           image: group.image,
           imageKey: toStoredImageKey(group),
           ownerId: group.ownerId,
-          ownershipOfferedToId: group.ownershipOfferedToId,
-          onHold: held[index]?.has(ctx.deviceId) ?? false,
+          ownershipOfferedToId: visibleOwnershipOffer(group, ctx.session.user.id),
+          onHold: heldGroupIds.includes(group.id),
           members: group.groupMembers.map((member) => ({
             id: member.id,
             userId: member.user.id,
@@ -75,7 +73,13 @@ export const groupMembershipRouter = {
   get: groupMemberProcedure.query(async ({ ctx, input }) => {
     const group = await ctx.db.group.findUnique({ where: { id: input.groupId } });
     if (!group) throw new TRPCError({ code: "NOT_FOUND" });
-    return { ...group, groupMembers: [ctx.groupMember] };
+    const ownershipOfferedToId = visibleOwnershipOffer(group, ctx.session.user.id);
+    return {
+      ...group,
+      ownershipOfferedToId,
+      ownershipOfferedAt: ownershipOfferedToId ? group.ownershipOfferedAt : null,
+      groupMembers: [ctx.groupMember],
+    };
   }),
   removalContext: groupMemberProcedure
     .input(z.object({ groupId: z.string().min(1), memberId: z.string().min(1) }))

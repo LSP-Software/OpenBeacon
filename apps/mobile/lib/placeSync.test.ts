@@ -14,7 +14,7 @@ const epochKeys = new Map<string, EpochKeyMaterial>([
 let latestEpochIds: string[] = [];
 let failures: unknown[] = [];
 let keyLookupError: Error | null = null;
-let placeLimit: number | undefined;
+let placeLimit = 50;
 type SentPlace = { geometry: ReturnType<typeof encryptPlaceGeometry>; name: string };
 const sent: { epochId: string; input: SentPlace }[] = [];
 const rotate = mock(async (_groupId: string) => true);
@@ -45,7 +45,7 @@ mock.module("./api.ts", () => ({
         query: async () => ({
           latestEpochId: "epoch-2",
           placesRevision: 3,
-          ...(placeLimit === undefined ? {} : { placeLimit }),
+          placeLimit,
           places: [
             {
               ...encryptPlaceGeometry({
@@ -154,9 +154,7 @@ test("fails the load when the group's keys can't be fetched instead of showing s
   await expect(loadGroupPlaces("family")).rejects.toThrow("Network request failed");
 });
 
-test("takes the place limit from the server, and has none when an older server doesn't send it", async () => {
-  placeLimit = 50;
-  expect((await loadGroupPlaceList("family")).placeLimit).toBe(50);
-  placeLimit = undefined;
-  expect((await loadGroupPlaceList("family")).placeLimit).toBeNull();
+test("takes the place limit from the server", async () => {
+  placeLimit = 30;
+  expect((await loadGroupPlaceList("family")).placeLimit).toBe(30);
 });

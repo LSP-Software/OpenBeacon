@@ -5,6 +5,7 @@ import { describeGroupEvent } from "./groupHistory.ts";
 import { showEventNotice } from "./notifications.ts";
 import { nicknamesByGroup } from "./nicknamesByGroup.ts";
 import { storage } from "./storage.ts";
+import { notifyOwnershipOffered } from "./trackingEvents.ts";
 
 export type Notices = NonNullable<RouterOutputs["groupTracking"]["uploadBatch"]["notices"]>;
 
@@ -115,15 +116,23 @@ export const describeAccountNotice = (notice: AccountNotices["notices"][number])
       };
     case "SEATS_ENDED":
       return {
-        title: "Your seats have ended",
-        body: "Phones in the groups you own are on hold until you renew your seats. Open Account › Usage to see which.",
+        title: "Phones in your groups are on hold",
+        body: "Your seats have ended, so phones in the groups you own are on hold until you renew your seats. Open Account › Usage to see which.",
         link: accountLink("usage"),
       };
     case "SEAT_HOLD_COMING":
       return {
-        title: `Your phones go on hold in ${notice.group?.name ?? "a group"}${notice.holdsFrom ? ` on ${shortDate(notice.holdsFrom)}` : ""}`,
-        body: "The group’s owner has no seats after then, so your location won’t be shared there until they add seats. You can leave the group at any time.",
-        link: { href: "/(tabs)/groups/list" as const, url: "openbeacon:///groups/list" },
+        title: `Sharing with ${notice.group?.name ?? "a group"} goes on hold ${notice.holdsFrom ? `on ${shortDate(notice.holdsFrom)}` : "soon"}`,
+        body: "The group’s owner won’t have a seat for every phone of yours after then. A phone without a seat stops sharing your location there until they add seats. You can leave the group at any time.",
+        link: notice.group
+          ? {
+              href: {
+                pathname: "/(tabs)/groups/[groupId]" as const,
+                params: { groupId: notice.group.id },
+              },
+              url: `openbeacon:///groups/${encodeURIComponent(notice.group.id)}`,
+            }
+          : { href: "/(tabs)/groups/list" as const, url: "openbeacon:///groups/list" },
       };
     case "ALERTS_TURNED_OFF": {
       const turnedOff = notice.turnedOff
@@ -163,6 +172,9 @@ export const showAccountNotices = async ({
     });
   }
   storage.set(accountCursorKey(userId), notices.cursor);
+  if (notices.notices.some((notice) => notice.type === "OWNERSHIP_OFFERED")) {
+    notifyOwnershipOffered();
+  }
 };
 
 export const showNotices = async ({

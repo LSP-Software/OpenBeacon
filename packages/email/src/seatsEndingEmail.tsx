@@ -10,7 +10,7 @@ export const renderSeatsEndingEmail = async ({
   serverName,
   timezone,
 }: {
-  holds: { groupName: string; memberName: string; deviceName: string }[];
+  holds: { groupId: string; groupName: string; memberName: string; deviceName: string }[];
   holdsFrom: Date;
   kind: "ending" | "reminder" | "ended";
   serverName: string;
@@ -18,7 +18,7 @@ export const renderSeatsEndingEmail = async ({
 }): Promise<Omit<EmailMessage, "to">> => {
   if (!holds.length) throw new Error("At least one phone going on hold is required");
   const when = formatAlertTime(holdsFrom, timezone);
-  const groups = [...new Set(holds.map(({ groupName }) => groupName))];
+  const groups = [...new Map(holds.map(({ groupId, groupName }) => [groupId, groupName]))];
   const phones = holds.length === 1 ? "phone" : "phones";
   const renewBefore =
     "Renew your seats before then. If phones are already on hold, sharing starts again on its own as soon as you add seats.";
@@ -53,12 +53,12 @@ export const renderSeatsEndingEmail = async ({
     children: (
       <>
         <Text style={{ margin: "0 0 8px" }}>{text.intro}</Text>
-        {groups.map((groupName) => (
-          <div key={groupName}>
+        {groups.map(([groupId, groupName]) => (
+          <div key={groupId}>
             <Text style={{ margin: "0 0 4px", fontWeight: 600 }}>{groupName}</Text>
             <ul style={{ margin: "0 0 16px", paddingLeft: "24px" }}>
               {holds
-                .filter((hold) => hold.groupName === groupName)
+                .filter((hold) => hold.groupId === groupId)
                 .map(({ memberName, deviceName }) => (
                   <li key={`${memberName}\u0000${deviceName}`} style={{ margin: "0 0 4px" }}>
                     {`${memberName} (${deviceName})`}
@@ -69,9 +69,9 @@ export const renderSeatsEndingEmail = async ({
         ))}
         <EmailSubheading>What a hold means</EmailSubheading>
         <Text style={{ margin: "0 0 16px" }}>
-          A phone on hold stops sharing its location with that group and can't see anyone in it.
-          Nothing is deleted, and everyone can still pause sharing, leave the group or delete their
-          account.
+          A phone on hold stops sharing its location with that group, can't see anyone in it and
+          clears the locations it was waiting to send there. Your groups' history isn't deleted, and
+          everyone can still pause sharing, leave the group or delete their account.
         </Text>
         <EmailSubheading>Keep them sharing</EmailSubheading>
         <Text style={{ margin: 0 }}>{text.renew}</Text>

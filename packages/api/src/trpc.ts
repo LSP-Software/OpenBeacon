@@ -16,6 +16,7 @@ import { DeviceRemovedError, deviceRemovedError } from "./lib/deviceRemoved.ts";
 import { DeviceUnverifiedError } from "./lib/deviceUnverified.ts";
 import { ReasonError } from "./lib/reasonError.ts";
 import { linkRequestDevice } from "./lib/requestDevice.ts";
+import { heldSeatDevices } from "./lib/seats.ts";
 import { RateLimitContextError } from "./middlewares/rateLimit.ts";
 
 export const createTRPCContext = async (opts: {
@@ -51,7 +52,9 @@ export const createTRPCContext = async (opts: {
     db: opts.db,
     emailCodes,
     securityAlerts,
-    push,
+    push: push.withHeldDevices((groupIds) =>
+      heldSeatDevices({ db: opts.db, groupIds, selfHosted: opts.selfHosted }),
+    ),
     session,
     deviceId: requestDevice?.deviceId ?? null,
     unverifiedDeviceId: requestDevice?.unverifiedDeviceId ?? null,

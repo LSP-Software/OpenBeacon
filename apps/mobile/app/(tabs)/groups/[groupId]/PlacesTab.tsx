@@ -99,7 +99,7 @@ const PlacesTab = ({
     storage.set("places.notificationsAsked", true);
     void tryCatch(requestNotificationPermissions());
   }, [isFocused]);
-  const atLimit = placeLimit != null && placeCount >= placeLimit;
+  const atLimit = placeLimit !== undefined && placeCount >= placeLimit;
   const now = Date.now();
 
   if (places.isPending) {

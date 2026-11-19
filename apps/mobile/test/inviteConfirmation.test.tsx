@@ -122,6 +122,7 @@ mock.module("../lib/limitAlert.ts", () => ({
   limitAlert: () =>
     limitReached ? { title: "Too many groups", message: "Leave a group first." } : null,
 }));
+mock.module("../lib/seatHolds.ts", () => ({ forgetSeatHoldGroupNames: () => {} }));
 mock.module("../lib/trackingEvents.ts", () => ({
   requestTrackingSync: () => calls.push("sync"),
 }));

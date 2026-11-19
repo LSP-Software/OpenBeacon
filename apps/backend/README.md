@@ -29,7 +29,7 @@ Turning email off on a server locks accounts with sign-in codes on out of passwo
 
 ## Startup
 
-The Docker image validates its settings, applies Prisma migrations, then checks PostgreSQL, Redis, picture storage, the map bucket and, if configured, the email provider. If a check or migration fails, the container doesn't start. Rolling back an image doesn't reverse migrations, so migrations must stay compatible with the previous release.
+The Docker image validates its settings, applies Prisma migrations, then checks PostgreSQL, Redis, picture storage, the map bucket and, if configured, the email provider. If a check or migration fails, the container doesn't start. Rolling back an image doesn't reverse migrations, so migrations must stay compatible with the previous release. This release is an exception: the `group_owner` migration renames the group roles and makes every group's owner (`Group.ownerId`) required, so a server older than 0.39 can't run on the migrated database. Don't roll back past 0.39 once it has run.
 
 With no map tiles manifest in the bucket yet, the backend starts anyway, the app shows that the map isn't ready, and the backend logs a reminder every 5 minutes until the [map tiles service](../map-tiles/README.md) publishes the first map.
 

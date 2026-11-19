@@ -11,7 +11,7 @@ import { decryptPlaceGeometry, encryptPlaceGeometry, type GroupPlace } from "./p
 
 export const loadGroupPlaceList = async (
   groupId: string,
-): Promise<{ placeLimit: number | null; places: GroupPlace[] }> => {
+): Promise<{ placeLimit: number; places: GroupPlace[] }> => {
   const [list, device] = await Promise.all([
     trpcClient.groupPlaces.list.query({ groupId }),
     ensureDeviceKeyRegistration(),
@@ -22,9 +22,8 @@ export const loadGroupPlaceList = async (
     epochKeys.set(epochId, loaded);
     return loaded;
   };
-  const { placeLimit }: { placeLimit?: number } = list;
   return {
-    placeLimit: placeLimit ?? null,
+    placeLimit: list.placeLimit,
     places: await Promise.all(
       list.places.map(async (place) => {
         const key = await epochKey(place.epochId);

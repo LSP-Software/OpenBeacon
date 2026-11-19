@@ -23,10 +23,7 @@ export const accountNoticesRouter = {
           }),
         ]);
       }
-      const heldGroupIds = await ctx.seatHolds.heldGroupIds({
-        deviceId: ctx.deviceId,
-        userId: ctx.session.user.id,
-      });
+      const heldGroupIds = await ctx.seatHolds.heldGroupIds(ctx.deviceId);
       const notices = await readAccountNotices({
         cursor: input.cursor,
         db: ctx.db,

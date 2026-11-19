@@ -2,7 +2,12 @@ import { TRPCError } from "@trpc/server";
 import z from "zod";
 import { ReasonError } from "../../lib/reasonError.ts";
 import { protectedProcedure } from "./runtime.ts";
-import { isAdminOrEditor, notAdminOrEditorError } from "../../lib/groupRoles.ts";
+import {
+  groupGoneError,
+  isAdminOrEditor,
+  notAdminOrEditorError,
+  notOwnerError,
+} from "../../lib/groupRoles.ts";
 
 export const groupMemberProcedure = protectedProcedure
   .input(z.object({ groupId: z.string().min(1).max(128) }))
@@ -16,11 +21,7 @@ export const groupMemberProcedure = protectedProcedure
         select: { id: true },
       });
       if (!group) {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "This group no longer exists.",
-          cause: new ReasonError("GROUP_GONE"),
-        });
+        throw groupGoneError();
       }
       throw new TRPCError({
         code: "FORBIDDEN",
@@ -48,7 +49,7 @@ export const groupOwnerProcedure = groupMemberProcedure.use(async ({ ctx, next }
     select: { ownerId: true },
   });
   if (group?.ownerId !== ctx.session.user.id) {
-    throw new TRPCError({ code: "FORBIDDEN", message: "You are not the owner of this group" });
+    throw notOwnerError();
   }
 
   return next({

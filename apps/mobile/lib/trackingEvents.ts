@@ -24,3 +24,16 @@ export const subscribeToTrackingSync = (listener: () => void) => {
     listeners.delete(listener);
   };
 };
+
+const ownershipOfferListeners = new Set<() => void>();
+
+export const notifyOwnershipOffered = () => {
+  for (const listener of ownershipOfferListeners) listener();
+};
+
+export const subscribeToOwnershipOffers = (listener: () => void) => {
+  ownershipOfferListeners.add(listener);
+  return () => {
+    ownershipOfferListeners.delete(listener);
+  };
+};

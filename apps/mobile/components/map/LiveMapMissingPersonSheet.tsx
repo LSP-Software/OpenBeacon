@@ -48,7 +48,7 @@ export const LiveMapMissingPersonSheet = ({
   const hiddenGroupNames = hidden?.hiddenGroups.map((group) => group.name) ?? [];
   const name = person.isSelf ? "You" : person.name;
   const { data: session } = authClient.useSession();
-  const groups = useQuery({ ...trpc.groupMembership.list.queryOptions(), enabled: onHold });
+  const groups = useQuery({ ...trpc.groupMembership.list.queryOptions(), enabled: false });
   const personGroups =
     groups.data?.filter(
       (group) => !group.onHold && group.members.some((member) => member.userId === person.userId),

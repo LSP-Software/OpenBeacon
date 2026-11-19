@@ -13,8 +13,8 @@ export const seatsUsage = `Usage:
 <seats> is a whole number from 0 to ${maxAccountSeats}.
 end-period ends the account's paid period now, or [hours-ago] hours ago (up to ${maxHoursAgo}).
 The account keeps its seats for a ${limits.gracePeriodDays}-day grace period, at most once every ${limits.graceCooldownMonths} months, then has 0.
-renew clears the paid period's end. reset-grace forgets the last grace period, so the next
-end-period gets one again.`;
+renew clears the paid period's end. Ending or renewing after a paid period has ended still counts
+its grace period. reset-grace forgets the last grace period, so the next end-period gets one again.`;
 
 const wholeNumber = (max: number) =>
   z

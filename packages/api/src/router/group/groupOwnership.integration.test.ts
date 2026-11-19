@@ -200,10 +200,20 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           groupName: "transfer",
           owner: { userId: owner, name: "owner" },
           offeredAt: expect.any(Date),
-          seats: 5,
+          seats: null,
         },
       ]);
       expect(await caller(otherAdmin).groupOwnership.offers()).toEqual([]);
+      const offeredTo = async (userId: string) =>
+        (await caller(userId).groupMembership.list()).find(({ id }) => id === groupId)
+          ?.ownershipOfferedToId;
+      expect(await offeredTo(owner)).toBe(admin);
+      expect(await offeredTo(admin)).toBe(admin);
+      expect(await offeredTo(otherAdmin)).toBeNull();
+      expect(await offeredTo(member)).toBeNull();
+      expect(
+        (await caller(member).groupMembership.get({ groupId })).ownershipOfferedToId,
+      ).toBeNull();
       for (const userId of [otherAdmin, owner]) {
         await expect(caller(userId).groupOwnership.accept({ groupId })).rejects.toMatchObject(
           offerGone,
@@ -283,6 +293,57 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await caller(owner).groupOwnership.cancel({ groupId });
       expect((await ownership(groupId)).ownershipOfferedToId).toBeNull();
       expect((await ownership(groupId)).ownerId).toBe(owner);
+    });
+
+    test("an owner who starts deleting their account withdraws their offers, and an open offer can't be taken", async () => {
+      const { groupId, memberIdOf } = await seedGroup("owner-leaving");
+      await caller(owner).groupOwnership.offer({ groupId, memberId: memberIdOf(admin) });
+      await prisma.user.update({ where: { id: owner }, data: { pendingDeletion: true } });
+      try {
+        await expect(caller(admin).groupOwnership.accept({ groupId })).rejects.toMatchObject(
+          offerGone,
+        );
+        expect((await ownership(groupId)).ownerId).toBe(owner);
+      } finally {
+        await prisma.user.update({ where: { id: owner }, data: { pendingDeletion: false } });
+      }
+
+      const leaving = `${prefix}-leaving-owner`;
+      const ownedGroup = `${prefix}-offered-by-leaving`;
+      groupIds.push(ownedGroup);
+      await prisma.user.create({
+        data: { id: leaving, name: leaving, email: `${leaving}@example.test` },
+      });
+      try {
+        await prisma.group.create({
+          data: {
+            id: ownedGroup,
+            name: "Offered",
+            ownerId: leaving,
+            ownershipOfferedToId: admin,
+            ownershipOfferedAt: new Date(),
+            groupMembers: {
+              create: [
+                { userId: leaving, role: "ADMIN", joinedEpochNumber: 1 },
+                { userId: admin, role: "ADMIN", joinedEpochNumber: 1 },
+              ],
+            },
+          },
+        });
+        await prisma.$transaction((tx) =>
+          beginAccountDeletion(tx, { userId: leaving, delayHours: 168 }),
+        );
+        expect(await ownership(ownedGroup)).toMatchObject({
+          ownerId: leaving,
+          ownershipOfferedToId: null,
+        });
+        await expect(
+          caller(admin).groupOwnership.accept({ groupId: ownedGroup }),
+        ).rejects.toMatchObject(offerGone);
+      } finally {
+        await prisma.group.deleteMany({ where: { id: ownedGroup } });
+        await prisma.user.deleteMany({ where: { id: leaving } });
+      }
     });
 
     test("deleting an owner's account deletes the groups they own and keeps the ones they belong to", async () => {

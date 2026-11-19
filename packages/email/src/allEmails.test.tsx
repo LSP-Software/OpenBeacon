@@ -61,7 +61,9 @@ const renderEveryEmail = async () => {
     ...(await Promise.all(
       (["ending", "reminder", "ended"] as const).map((kind) =>
         renderSeatsEndingEmail({
-          holds: [{ groupName: "Family", memberName: "Alice", deviceName: "Pixel 8" }],
+          holds: [
+            { groupId: "family", groupName: "Family", memberName: "Alice", deviceName: "Pixel 8" },
+          ],
           holdsFrom: new Date("2026-07-16T13:32:00Z"),
           kind,
           serverName,

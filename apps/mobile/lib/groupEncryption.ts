@@ -56,7 +56,10 @@ export const submitEpochChange = async <Input, Output>({
 }) => {
   const result = await tryCatch(submit(await build()));
   if (!result.error) return result.data;
-  if (errorReason(result.error) !== "HISTORY_RECIPIENT_MISMATCH") throw result.error;
+  const reason = errorReason(result.error);
+  if (reason !== "HISTORY_RECIPIENT_MISMATCH" && reason !== "GROUP_OWNER_CHANGED") {
+    throw result.error;
+  }
   return submit(await build());
 };
 

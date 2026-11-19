@@ -40,7 +40,12 @@ export const beginAccountDeletion = async (
     await tx.groupSharedInvite.deleteMany({ where: { groupId: { in: ownedGroupIds } } });
   }
   await tx.group.updateMany({
-    where: { ownershipOfferedToId: userId },
+    where: {
+      OR: [
+        { ownershipOfferedToId: userId },
+        { ownerId: userId, ownershipOfferedToId: { not: null } },
+      ],
+    },
     data: { ownershipOfferedToId: null, ownershipOfferedAt: null },
   });
   await tx.groupMemberInvite.deleteMany({

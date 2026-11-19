@@ -173,8 +173,8 @@ describe("account notices", () => {
       link: { url: "openbeacon:///account/usage" },
     });
     expect(describeAccountNotice(account("SEATS_ENDED", { holdsFrom }))).toMatchObject({
-      title: "Your seats have ended",
-      body: "Phones in the groups you own are on hold until you renew your seats. Open Account › Usage to see which.",
+      title: "Phones in your groups are on hold",
+      body: "Your seats have ended, so phones in the groups you own are on hold until you renew your seats. Open Account › Usage to see which.",
       link: { url: "openbeacon:///account/usage" },
     });
     expect(describeAccountNotice(account("SEATS_ENDING_SOON", { holdsFrom })).title).toBe(
@@ -185,9 +185,13 @@ describe("account notices", () => {
         account("SEAT_HOLD_COMING", { group: { id: "g1", name: "Family" }, holdsFrom }),
       ),
     ).toMatchObject({
-      title: `Your phones go on hold in Family on ${date}`,
-      body: "The group’s owner has no seats after then, so your location won’t be shared there until they add seats. You can leave the group at any time.",
+      title: `Sharing with Family goes on hold on ${date}`,
+      body: "The group’s owner won’t have a seat for every phone of yours after then. A phone without a seat stops sharing your location there until they add seats. You can leave the group at any time.",
+      link: { url: "openbeacon:///groups/g1" },
     });
+    expect(describeAccountNotice(account("SEAT_HOLD_COMING")).link.url).toBe(
+      "openbeacon:///groups/list",
+    );
   });
 
   test("name the group a request to become its owner is about", () => {

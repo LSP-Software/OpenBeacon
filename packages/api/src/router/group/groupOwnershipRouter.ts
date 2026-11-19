@@ -8,11 +8,13 @@ import {
 import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
 import { recordGroupEvent } from "../../lib/groupHistory.ts";
+import { groupGoneError, notOwnerError } from "../../lib/groupRoles.ts";
 import { ReasonError } from "../../lib/reasonError.ts";
 import {
+  freeSeatCount,
   freeSeats,
   groupSeats,
-  lockAccounts,
+  lockOwnerThenGroup,
   noFreeSeatsError,
   seatCount,
   seatsEnforced,
@@ -26,18 +28,9 @@ const lockGroup = async (tx: Prisma.TransactionClient, groupId: string) => {
   >(
     Prisma.sql`SELECT "ownerId", "ownershipOfferedToId" FROM "Group" WHERE id = ${groupId} FOR UPDATE`,
   );
-  if (!group) {
-    throw new TRPCError({
-      code: "FORBIDDEN",
-      message: "This group no longer exists.",
-      cause: new ReasonError("GROUP_GONE"),
-    });
-  }
+  if (!group) throw groupGoneError();
   return group;
 };
-
-const notOwner = () =>
-  new TRPCError({ code: "FORBIDDEN", message: "You are not the owner of this group" });
 
 const offerGone = () =>
   new TRPCError({
@@ -53,7 +46,7 @@ export const groupOwnershipRouter = {
     .mutation(async ({ ctx, input }) => {
       const noticeId = await ctx.db.$transaction(async (tx) => {
         const group = await lockGroup(tx, input.groupId);
-        if (group.ownerId !== ctx.session.user.id) throw notOwner();
+        if (group.ownerId !== ctx.session.user.id) throw notOwnerError();
         const member = await tx.groupMember.findFirst({
           where: { id: input.memberId, groupId: input.groupId },
           select: { userId: true, role: true, user: { select: { pendingDeletion: true } } },
@@ -96,7 +89,7 @@ export const groupOwnershipRouter = {
   cancel: groupMemberProcedure.mutation(async ({ ctx, input }) => {
     await ctx.db.$transaction(async (tx) => {
       const group = await lockGroup(tx, input.groupId);
-      if (group.ownerId !== ctx.session.user.id) throw notOwner();
+      if (group.ownerId !== ctx.session.user.id) throw notOwnerError();
       await tx.group.update({
         where: { id: input.groupId },
         data: { ownershipOfferedToId: null, ownershipOfferedAt: null },
@@ -120,7 +113,7 @@ export const groupOwnershipRouter = {
         groupName: group.name,
         owner: { userId: group.owner.id, name: group.owner.name },
         offeredAt: group.ownershipOfferedAt,
-        seats: await groupSeats(ctx.db, group.id),
+        seats: seatsEnforced(ctx) ? await groupSeats(ctx.db, group.id) : null,
       })),
     );
   }),
@@ -136,9 +129,19 @@ export const groupOwnershipRouter = {
   }),
   accept: groupMemberProcedure.mutation(async ({ ctx, input }) => {
     const eventId = await ctx.db.$transaction(async (tx) => {
-      await lockAccounts(tx, [ctx.session.user.id]);
+      const ownerId = await lockOwnerThenGroup({
+        db: tx,
+        groupId: input.groupId,
+        userIds: [ctx.session.user.id],
+      });
+      if (!ownerId) throw groupGoneError();
       const group = await lockGroup(tx, input.groupId);
       if (group.ownershipOfferedToId !== ctx.session.user.id) throw offerGone();
+      const owner = await tx.user.findUnique({
+        where: { id: group.ownerId },
+        select: { pendingDeletion: true },
+      });
+      if (!owner || owner.pendingDeletion) throw offerGone();
       const member = await tx.groupMember.findUnique({
         where: { userId_groupId: { userId: ctx.session.user.id, groupId: input.groupId } },
         select: { role: true, user: { select: { pendingDeletion: true } } },
@@ -151,7 +154,7 @@ export const groupOwnershipRouter = {
         ]);
         if (needed > free) {
           throw noFreeSeatsError(
-            `Taking over this group needs ${seatCount(needed)} and you have ${free} free. Add seats first.`,
+            `Taking over this group needs ${seatCount(needed)} and you have ${freeSeatCount(free)}. Add seats first.`,
           );
         }
       }

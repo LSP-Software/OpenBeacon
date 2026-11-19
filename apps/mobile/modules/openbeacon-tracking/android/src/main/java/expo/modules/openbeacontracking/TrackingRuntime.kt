@@ -152,28 +152,31 @@ object TrackingRuntime {
       if (queueOwner(context) != owner || queueDeviceId(context) != deviceId) return false
       val unchanged = seatHoldNotice(context) == notice
       if (!unchanged) {
-        val stored = org.json.JSONObject()
-          .put("sharing", org.json.JSONArray(notice.sharing))
-          .put("held", org.json.JSONArray(notice.held))
-          .put("heldGroupIds", org.json.JSONArray(notice.heldGroupIds))
         check(context.getSharedPreferences("openbeacon_tracking_seat_holds", Context.MODE_PRIVATE)
           .edit()
-          .putString(org.json.JSONArray(listOf(owner, deviceId)).toString(), stored.toString())
+          .putString(org.json.JSONArray(listOf(owner, deviceId)).toString(), notice.toJson())
           .commit())
       }
       notice.dropHeldRecords(owner, ciphertextQueue(context), placeDetection(context))
       !unchanged
     }
-    if (changed && isCaptureRunning) {
-      try {
-        context.startService(Intent(context, TrackingCaptureService::class.java).apply {
-          action = TrackingCaptureService.ACTION_NOTICE_CHANGED
-        })
-      } catch (error: IllegalStateException) {
-        Log.e("TrackingRuntime", "Failed to update the location sharing notice.", error)
-      }
-    }
+    if (changed) refreshSharingNotice(context)
     return true
+  }
+
+  fun refreshSharingNoticeIfHeld(context: Context) {
+    if (seatHoldNotice(context).heldGroupIds.isNotEmpty()) refreshSharingNotice(context)
+  }
+
+  private fun refreshSharingNotice(context: Context) {
+    if (!isCaptureRunning) return
+    try {
+      context.startService(Intent(context, TrackingCaptureService::class.java).apply {
+        action = TrackingCaptureService.ACTION_NOTICE_CHANGED
+      })
+    } catch (error: IllegalStateException) {
+      Log.e("TrackingRuntime", "Failed to update the location sharing notice.", error)
+    }
   }
 
   fun historyShare(context: Context): CaptureHistoryShare {

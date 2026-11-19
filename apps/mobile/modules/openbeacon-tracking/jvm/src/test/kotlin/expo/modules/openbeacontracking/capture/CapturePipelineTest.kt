@@ -610,7 +610,7 @@ class CapturePipelineTest {
     val familyBefore = queued("family")
     assertTrue(queued("work").isNotEmpty())
 
-    notice = SeatHoldNotice(sharing = listOf("Family"), held = listOf("Work"), heldGroupIds = listOf("work"))
+    notice = SeatHoldNotice(heldGroupIds = listOf("work"))
     notice.dropHeldRecords("owner", queue, places)
     assertTrue(queued("work").isEmpty())
     assertEquals(familyBefore, queued("family"))
@@ -625,11 +625,51 @@ class CapturePipelineTest {
     assertEquals(familyWhilePaused, queued("family"))
     state = SharingCaptureState(revisionPrefix = "s1.2:")
 
-    notice = SeatHoldNotice(sharing = listOf("Family", "Work"))
+    notice = SeatHoldNotice()
     capture(6)
     val resumed = queued("work")
     assertTrue(resumed.isNotEmpty())
     assertTrue(resumed.all { decrypt(it).first == start + 6 * 60_000L })
+  }
+
+  @Test
+  fun aHoldThatLiftsWithoutAPauseStartsTheGroupAfresh() {
+    for (fixesWhileHeld in listOf(true, false)) {
+      val keys = InMemoryEpochKeyStore()
+      keys.replaceAll(
+        listOf(
+          ProvisionedEpochKey("family", "epoch_a", ByteArray(32), "device_1", "trackingPoint"),
+          ProvisionedEpochKey("work", "epoch_b", ByteArray(32), "device_1", "trackingPoint"),
+        ),
+      )
+      val queue = InMemoryCiphertextQueue()
+      val places = PlaceDetection(InMemoryPlaceStore(), InMemoryPlaceTransitionQueue())
+      var notice = SeatHoldNotice()
+      val pipeline = CapturePipeline(
+        epochKeyStore = keys,
+        ciphertextQueue = queue,
+        queueOwner = { "owner" },
+        heldGroupIds = { notice.heldGroupIds.toSet() },
+      )
+      val start = at("2026-07-13T18:45:00.000Z")
+      fun still(minute: Long) = pipeline.onFix(51.5, -0.1, start + minute * 60_000L, 0.0, 80, false, accuracyMeters = 5.0, live = false)
+      fun queued(groupId: String) = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 100).filter { it.groupId == groupId }
+
+      for (minute in 0L..5L) still(minute)
+      assertTrue(queued("work").isNotEmpty())
+
+      notice = SeatHoldNotice(heldGroupIds = listOf("work"))
+      notice.dropHeldRecords("owner", queue, places)
+      pipeline.forgetGroups(notice.heldGroupIds)
+      if (fixesWhileHeld) for (minute in 6L..10L) still(minute)
+      assertTrue(queued("work").isEmpty())
+
+      notice = SeatHoldNotice()
+      for (minute in 11L..20L) still(minute)
+      val resumed = queued("work")
+      assertTrue(resumed.isNotEmpty())
+      assertTrue(resumed.all { row -> decrypt(row).first >= start + 11 * 60_000L })
+    }
   }
 
   @Test

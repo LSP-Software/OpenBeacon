@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { prisma } from "@openbeacon/database";
-import { accountSeats, groupSeats, seatsUsed } from "./seats.ts";
+import { freeSeats, groupSeats, seatsUsed } from "./seats.ts";
 
 const prefix = `seats-${crypto.randomUUID()}`;
 const id = (name: string) => `${prefix}-${name}`;
@@ -77,7 +77,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("seats with Postg
   });
 
   test("a new account has 2 seats", async () => {
-    expect(await accountSeats(prisma, unused)).toBe(2);
+    expect(await freeSeats(prisma, unused)).toEqual({ seats: 2, used: 0, free: 2 });
   });
 
   test("an account using no seats has none used", async () => {

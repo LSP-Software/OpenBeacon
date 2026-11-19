@@ -21,9 +21,11 @@ import { LoadingIndicator } from "../../../../components/LoadingIndicator.tsx";
 import { Button } from "../../../../components/ui/Button.tsx";
 import { Icon } from "../../../../components/ui/Icon.tsx";
 import { Text } from "../../../../components/ui/Text.tsx";
+import { useCachedGroup } from "../../../../hooks/useCachedGroup.ts";
 import { useMemberNames } from "../../../../hooks/useMemberNames.ts";
 import { type RouterInputs, trpcClient } from "../../../../lib/api.ts";
 import { authClient } from "../../../../lib/auth-client.ts";
+import { errorReason } from "../../../../lib/errorReason.ts";
 import {
   describeGroupEvent,
   groupByDay,
@@ -64,6 +66,7 @@ const HistoryTab = ({ groupId, active }: { groupId: string; active: boolean }) =
   const userId = session?.user.id;
   const memberName = useMemberNames(groupId);
   const [category, setCategory] = useState<(typeof filters)[number]["category"]>(null);
+  const { group } = useCachedGroup(groupId);
   const history = useInfiniteQuery({
     queryKey: ["groupHistory", groupId, userId, category],
     initialPageParam: null,
@@ -78,8 +81,10 @@ const HistoryTab = ({ groupId, active }: { groupId: string; active: boolean }) =
         ...(category ? { categories: [category] } : {}),
       }),
     getNextPageParam: (page) => page.nextBefore,
+    enabled: group?.onHold !== true,
     subscribed: isFocused,
   });
+  const onHold = group?.onHold === true || errorReason(history.error) === "SEAT_ON_HOLD";
 
   const displayedLatestAt =
     category === null
@@ -92,7 +97,9 @@ const HistoryTab = ({ groupId, active }: { groupId: string; active: boolean }) =
       : null;
 
   useEffect(() => {
-    if (!active || !isFocused || !history.isSuccess || history.isFetching || !userId) return;
+    if (onHold || !active || !isFocused || !history.isSuccess || history.isFetching || !userId) {
+      return;
+    }
     markGroupHistorySeen({ groupId, latestAt: displayedLatestAt, userId });
   }, [
     active,
@@ -101,6 +108,7 @@ const HistoryTab = ({ groupId, active }: { groupId: string; active: boolean }) =
     history.isFetching,
     history.isSuccess,
     isFocused,
+    onHold,
     userId,
   ]);
 
@@ -131,6 +139,17 @@ const HistoryTab = ({ groupId, active }: { groupId: string; active: boolean }) =
       })}
     </View>
   );
+
+  if (onHold) {
+    return (
+      <View className="gap-1 rounded-2xl border border-border bg-card p-5 mt-1">
+        <Text className="text-foreground text-lg font-semibold">History is on hold</Text>
+        <Text className="text-secondary">
+          This phone can’t see this group’s history while it’s on hold.
+        </Text>
+      </View>
+    );
+  }
 
   if (history.isPending) {
     return (

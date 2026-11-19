@@ -124,7 +124,7 @@ const UsageScreen = () => {
           {seats && seats.onHold > 0 && (
             <View className="gap-2 rounded-2xl border border-warning-accent bg-card p-5">
               <Text className="text-foreground font-semibold">
-                {seats.onHold === 1 ? "1 phone is on hold" : `${seats.onHold} phones are on hold`}
+                {pluralize(seats.onHold, "phone")} {seats.onHold === 1 ? "is" : "are"} on hold
               </Text>
               <Text className="text-tertiary text-sm leading-5">
                 {seats.seats === 0
@@ -158,6 +158,18 @@ const UsageScreen = () => {
                     <Pressable
                       key={phone.deviceId}
                       accessibilityRole="button"
+                      accessibilityLabel={[
+                        `${phone.memberName}${phone.isThisPhone ? " (this phone)" : ""}`,
+                        phone.deviceName,
+                        phone.onHold
+                          ? "On hold"
+                          : phone.holdsFrom
+                            ? `On hold from ${formatDate(phone.holdsFrom)}`
+                            : null,
+                      ]
+                        .filter(Boolean)
+                        .join(", ")}
+                      accessibilityHint="Opens details"
                       onPress={() => setSelected({ groupId: group.id, deviceId: phone.deviceId })}
                       className={cn(
                         "flex-row items-center gap-3 px-5 py-3 active:bg-secondary/60",
@@ -194,6 +206,16 @@ const UsageScreen = () => {
                   <Pressable
                     key={group.id}
                     accessibilityRole="button"
+                    accessibilityLabel={[
+                      group.name,
+                      group.isOwner ? "You own this group" : `Owned by ${group.owner.name}`,
+                      group.yourPhonesOnHold.length > 0
+                        ? `On hold here: ${group.yourPhonesOnHold.map(({ deviceName }) => deviceName).join(", ")}`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(", ")}
+                    accessibilityHint="Opens details"
                     onPress={() => setSelected({ groupId: group.id, deviceId: null })}
                     className={cn(
                       "flex-row items-center gap-3 px-5 py-4 active:bg-secondary/60",

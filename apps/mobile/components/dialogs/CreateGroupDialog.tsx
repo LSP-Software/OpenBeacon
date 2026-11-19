@@ -15,6 +15,7 @@ import { limitAlert } from "../../lib/limitAlert.ts";
 import { cleanupTempFile } from "../../lib/image-upload.ts";
 import { storeOwnImageKeyInGroup } from "../../lib/imageKeys.ts";
 import { pickImage, processImage } from "../../lib/pickImage.ts";
+import { forgetSeatHoldGroupNames } from "../../lib/seatHolds.ts";
 import { requestTrackingSync } from "../../lib/trackingEvents.ts";
 import { useSingleFlight } from "../../lib/useSingleFlight.ts";
 import { Button } from "../ui/Button.tsx";
@@ -67,6 +68,7 @@ export const CreateGroupDialog = ({
             return [createdGroup.newGroup, ...previous];
           });
           void tryCatch(storeOwnImageKeyInGroup(createdGroup.newGroup.id));
+          forgetSeatHoldGroupNames();
           requestTrackingSync();
           setOpen(false);
           form.reset();

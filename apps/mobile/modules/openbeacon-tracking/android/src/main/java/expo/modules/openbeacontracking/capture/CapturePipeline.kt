@@ -167,6 +167,15 @@ class CapturePipeline(
     }
   }
 
+  fun forgetGroups(groupIds: Collection<String>) {
+    if (groupIds.isEmpty()) return
+    synchronized(captureLock) {
+      filters.keys.removeAll { it.groupId in groupIds }
+      lastFixByKey.keys.removeAll { it.groupId in groupIds }
+      previousStreams = previousStreams.filterKeys { it.groupId !in groupIds }
+    }
+  }
+
   private fun takeAllowance(
     group: List<String>,
     now: Long,

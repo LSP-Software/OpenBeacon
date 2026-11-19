@@ -186,7 +186,7 @@ export const groupTrackingRouter = {
       const heldGroupIds =
         input.placeAlertsCursor === undefined && input.noticesCursor === undefined
           ? []
-          : await ctx.seatHolds.heldGroupIds({ deviceId: ctx.deviceId, userId });
+          : await ctx.seatHolds.heldGroupIds(ctx.deviceId);
       const [placeUpdates, imageKeysNeedCatchUp, notices] = await Promise.all([
         input.placeAlertsCursor === undefined
           ? null

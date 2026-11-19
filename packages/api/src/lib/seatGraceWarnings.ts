@@ -1,10 +1,58 @@
 import { AccountNoticeType, Prisma, type PrismaClient } from "@openbeacon/database";
 import { errorCode, tryCatch } from "@openbeacon/shared";
 import { limits } from "./limits.ts";
-import { lockAccounts, seatAccountSelect, seatPeriod, seatsEndingHolds } from "./seats.ts";
+import {
+  earnedGrace,
+  lockAccounts,
+  seatAccountSelect,
+  seatPeriod,
+  seatsEndingHolds,
+} from "./seats.ts";
 
 const dayMs = 86_400_000;
 const pageSize = 500;
+
+export const changePaidPeriod = ({
+  db,
+  now,
+  paidPeriodEndsAt,
+  userId,
+}: {
+  db: PrismaClient;
+  now: Date;
+  paidPeriodEndsAt: Date | null;
+  userId: string;
+}) =>
+  db.$transaction(async (tx) => {
+    await lockAccounts(tx, [userId]);
+    const account = await tx.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: seatAccountSelect,
+    });
+    const grace = earnedGrace(account);
+    const changed = await tx.user.update({
+      where: { id: userId },
+      data: {
+        paidPeriodEndsAt,
+        ...(grace && grace.startedAt <= now ? { lastGracePeriodStartedAt: grace.startedAt } : {}),
+      },
+      select: seatAccountSelect,
+    });
+    const holdsFrom = seatPeriod(changed, now).grace?.endsAt;
+    await tx.accountNotice.deleteMany({
+      where: {
+        holdsFrom: { gt: now, ...(holdsFrom ? { not: holdsFrom } : {}) },
+        OR: [
+          {
+            userId,
+            type: { in: [AccountNoticeType.SEATS_ENDING, AccountNoticeType.SEATS_ENDING_SOON] },
+          },
+          { type: AccountNoticeType.SEAT_HOLD_COMING, group: { ownerId: userId } },
+        ],
+      },
+    });
+    return changed;
+  });
 
 export const sendSeatGraceWarnings = async ({
   db,
@@ -26,39 +74,17 @@ export const sendSeatGraceWarnings = async ({
 }) => {
   const at = (offsetMs: number) =>
     Prisma.sql`(${new Date(now.getTime() + offsetMs).toISOString()}::timestamptz AT TIME ZONE 'UTC')`;
-  const graceMs = limits.gracePeriodDays * dayMs;
   await eachAccount(
     db,
     Prisma.sql`
       "user"."paidPeriodEndsAt" <= ${at(0)}
-      AND "user"."paidPeriodEndsAt" > ${at(-graceMs)}
-      AND (
-        "user"."lastGracePeriodStartedAt" IS NULL
-        OR "user"."lastGracePeriodStartedAt" = "user"."paidPeriodEndsAt"
-        OR "user"."lastGracePeriodStartedAt" <= "user"."paidPeriodEndsAt" - make_interval(months => ${limits.graceCooldownMonths}::int)
-      )
-      AND (
-        "user"."lastGracePeriodStartedAt" IS DISTINCT FROM "user"."paidPeriodEndsAt"
-        OR (
-          "user"."paidPeriodEndsAt" <= ${at(dayMs - graceMs)}
-          AND NOT EXISTS (
-            SELECT 1 FROM "AccountNotice" AS "notice"
-            WHERE "notice"."userId" = "user"."id"
-              AND (
-                ("notice"."type" = 'SEATS_ENDING_SOON' AND "notice"."createdAt" >= "user"."paidPeriodEndsAt")
-                OR ("notice"."type" = 'SEATS_ENDING' AND "notice"."createdAt" > ${at(-dayMs)})
-              )
-          )
-        )
-      )`,
+      AND "user"."paidPeriodEndsAt" > ${at(-limits.gracePeriodDays * dayMs)}`,
     (userId) => warnAccount({ db, now, userId }),
   );
   await eachAccount(
     db,
     Prisma.sql`
       "user"."paidPeriodEndsAt" <= ${at(0)}
-      AND "user"."lastGracePeriodStartedAt" <> "user"."paidPeriodEndsAt"
-      AND "user"."lastGracePeriodStartedAt" > "user"."paidPeriodEndsAt" - make_interval(months => ${limits.graceCooldownMonths}::int)
       AND "user"."seatsEndedNoticeFor" IS DISTINCT FROM "user"."paidPeriodEndsAt"`,
     (userId) => noticeSeatsEnded({ db, now, userId }),
   );
@@ -80,7 +106,12 @@ const eachAccount = async (
       ORDER BY "user"."paidPeriodEndsAt", "user"."id"
       LIMIT ${pageSize}
     `);
-    for (const { id } of page) await run(id);
+    for (const { id } of page) {
+      const result = await tryCatch(run(id));
+      if (!result.error) continue;
+      const code = errorCode(result.error);
+      console.error(`Seat grace check failed for an account${code ? ` (${code})` : ""}`);
+    }
     const last = page.at(-1);
     if (!last || page.length < pageSize) return;
     after = last;
@@ -96,14 +127,11 @@ const warnAccount = async ({
   now: Date;
   userId: string;
 }) => {
-  const account = await db.user.findUniqueOrThrow({
-    where: { id: userId },
-    select: seatAccountSelect,
-  });
+  const account = await db.user.findUnique({ where: { id: userId }, select: seatAccountSelect });
+  if (!account) return;
   const { grace } = seatPeriod(account, now);
   if (!grace) return;
   const firstWarning = account.lastGracePeriodStartedAt?.getTime() !== grace.startedAt.getTime();
-  if (!firstWarning && now.getTime() < grace.endsAt.getTime() - dayMs) return;
   const holds = await seatsEndingHolds({ db, now, ownerId: userId });
   await db.$transaction(async (tx) => {
     if (firstWarning) {
@@ -121,7 +149,17 @@ const warnAccount = async ({
       if (stamped.count === 0) return;
     } else {
       await lockAccounts(tx, [userId]);
-      const recent = await tx.accountNotice.count({
+      const current = await tx.user.findUnique({
+        where: { id: userId },
+        select: { paidPeriodEndsAt: true },
+      });
+      if (current?.paidPeriodEndsAt?.getTime() !== grace.startedAt.getTime()) return;
+    }
+    if (holds.length === 0) return;
+    const reminderDue =
+      !firstWarning &&
+      now.getTime() >= grace.endsAt.getTime() - dayMs &&
+      (await tx.accountNotice.count({
         where: {
           userId,
           OR: [
@@ -132,49 +170,61 @@ const warnAccount = async ({
             },
           ],
         },
-      });
-      if (recent > 0) return;
-    }
-    if (holds.length === 0) return;
+      })) === 0;
+    const atRisk = holds.filter((hold) => hold.userId !== userId);
+    const told = firstWarning
+      ? []
+      : await tx.accountNotice.findMany({
+          where: {
+            type: AccountNoticeType.SEAT_HOLD_COMING,
+            holdsFrom: grace.endsAt,
+            userId: { in: atRisk.map((hold) => hold.userId) },
+            groupId: { in: atRisk.map((hold) => hold.groupId) },
+          },
+          select: { userId: true, groupId: true },
+        });
     const members = [
       ...new Map(
-        holds
-          .filter((hold) => hold.userId !== userId)
+        atRisk
+          .filter(
+            (hold) =>
+              !told.some(
+                (notice) => notice.userId === hold.userId && notice.groupId === hold.groupId,
+              ),
+          )
           .map((hold) => [
             `${hold.userId}\u0000${hold.groupId}`,
             { userId: hold.userId, groupId: hold.groupId },
           ]),
       ).values(),
     ];
-    await tx.accountNotice.createMany({
-      data: [
-        {
-          userId,
-          type: firstWarning ? AccountNoticeType.SEATS_ENDING : AccountNoticeType.SEATS_ENDING_SOON,
-          holdsFrom: grace.endsAt,
-        },
-        ...(firstWarning
-          ? members.map((member) => ({
-              userId: member.userId,
-              groupId: member.groupId,
-              type: AccountNoticeType.SEAT_HOLD_COMING,
-              holdsFrom: grace.endsAt,
-            }))
-          : []),
-      ],
-    });
+    const ownerNotice = firstWarning
+      ? AccountNoticeType.SEATS_ENDING
+      : reminderDue
+        ? AccountNoticeType.SEATS_ENDING_SOON
+        : null;
+    const data = [
+      ...(ownerNotice ? [{ userId, type: ownerNotice, holdsFrom: grace.endsAt }] : []),
+      ...members.map((member) => ({
+        userId: member.userId,
+        groupId: member.groupId,
+        type: AccountNoticeType.SEAT_HOLD_COMING,
+        holdsFrom: grace.endsAt,
+      })),
+    ];
+    if (data.length > 0) await tx.accountNotice.createMany({ data });
   });
 };
 
 const endedHolds = ({
   db,
-  endedAt,
+  holdsFrom,
   ownerId,
 }: {
   db: PrismaClient;
-  endedAt: Date;
+  holdsFrom: Date;
   ownerId: string;
-}) => seatsEndingHolds({ db, now: new Date(endedAt.getTime() - 1), ownerId });
+}) => seatsEndingHolds({ db, now: new Date(holdsFrom.getTime() - 1), ownerId });
 
 const noticeSeatsEnded = async ({
   db,
@@ -185,25 +235,30 @@ const noticeSeatsEnded = async ({
   now: Date;
   userId: string;
 }) => {
-  const account = await db.user.findUniqueOrThrow({
-    where: { id: userId },
-    select: seatAccountSelect,
-  });
-  const endedAt = account.paidPeriodEndsAt;
-  if (!endedAt || seatPeriod(account, now).seats > 0) return;
-  const holds = await endedHolds({ db, endedAt, ownerId: userId });
+  const account = await db.user.findUnique({ where: { id: userId }, select: seatAccountSelect });
+  const endedAt = account?.paidPeriodEndsAt;
+  if (!account || !endedAt || seatPeriod(account, now).seats > 0) return;
+  const grace = earnedGrace(account);
+  const warned =
+    grace !== null && account.lastGracePeriodStartedAt?.getTime() === endedAt.getTime();
+  const holdsFrom = grace?.endsAt ?? endedAt;
+  const holds = warned ? [] : await endedHolds({ db, holdsFrom, ownerId: userId });
   await db.$transaction(async (tx) => {
     const stamped = await tx.user.updateMany({
       where: {
         id: userId,
         paidPeriodEndsAt: endedAt,
+        lastGracePeriodStartedAt: account.lastGracePeriodStartedAt,
         OR: [{ seatsEndedNoticeFor: null }, { seatsEndedNoticeFor: { not: endedAt } }],
       },
-      data: { seatsEndedNoticeFor: endedAt },
+      data: {
+        seatsEndedNoticeFor: endedAt,
+        ...(grace ? { lastGracePeriodStartedAt: endedAt } : {}),
+      },
     });
     if (stamped.count === 0 || holds.length === 0) return;
     await tx.accountNotice.create({
-      data: { userId, type: AccountNoticeType.SEATS_ENDED, holdsFrom: endedAt },
+      data: { userId, type: AccountNoticeType.SEATS_ENDED, holdsFrom },
     });
   });
 };
@@ -245,7 +300,9 @@ const sendPendingEmails = async ({
     if (claimed.count === 0) continue;
     const ended = notice.type === AccountNoticeType.SEATS_ENDED;
     const period = seatPeriod(notice.user, now);
-    const holdsFrom = ended ? notice.user.paidPeriodEndsAt : (period.grace?.endsAt ?? null);
+    const holdsFrom = ended
+      ? (earnedGrace(notice.user)?.endsAt ?? notice.user.paidPeriodEndsAt)
+      : (period.grace?.endsAt ?? null);
     if (
       !holdsFrom ||
       holdsFrom.getTime() !== notice.holdsFrom?.getTime() ||
@@ -254,7 +311,7 @@ const sendPendingEmails = async ({
       continue;
     }
     const holds = ended
-      ? await endedHolds({ db, endedAt: holdsFrom, ownerId: notice.user.id })
+      ? await endedHolds({ db, holdsFrom, ownerId: notice.user.id })
       : await seatsEndingHolds({ db, now, ownerId: notice.user.id });
     if (holds.length === 0) continue;
     const sent = await tryCatch(

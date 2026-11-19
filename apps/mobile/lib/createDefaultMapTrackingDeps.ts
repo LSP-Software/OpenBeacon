@@ -4,7 +4,7 @@ import { isCursorAfter } from "./mapTracking.ts";
 import { createMapTrackingDecryptPoint } from "./mapTrackingDecrypt.ts";
 import type { MapTrackingDeps, MapTrackingEncryptedPoint } from "./mapTrackingTypes.ts";
 import { notifyGroupEpochChange } from "./trackingEvents.ts";
-import { markTrackingKeysStale, noteGroupMembership } from "./trackingKeyCheck.ts";
+import { markTrackingKeysStale, noteGroupMembership, noteGroupNames } from "./trackingKeyCheck.ts";
 
 export const createDefaultMapTrackingDeps = (): MapTrackingDeps => {
   const observedEpochs = new Map<string, MapTrackingEncryptedPoint>();
@@ -39,6 +39,7 @@ export const createDefaultMapTrackingDeps = (): MapTrackingDeps => {
       const groups = await trpcClient.groupMembership.list.query(undefined, { signal });
       queryClient.setQueryData(trpc.groupMembership.list.queryKey(), groups);
       noteGroupMembership(groups);
+      noteGroupNames(groups);
       return groups.filter((group) => !group.onHold);
     },
     now: () => Date.now(),

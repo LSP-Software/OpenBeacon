@@ -23,6 +23,11 @@ export const groupHistoryRouter = {
   latest: protectedProcedure
     .meta({ rateLimit: { limit: 120, windowMs: 60_000 } })
     .query(async ({ ctx }) =>
-      readGroupHistoryLatest({ db: ctx.db, now: new Date(), userId: ctx.session.user.id }),
+      readGroupHistoryLatest({
+        db: ctx.db,
+        heldGroupIds: await ctx.seatHolds.heldGroupIds(ctx.deviceId),
+        now: new Date(),
+        userId: ctx.session.user.id,
+      }),
     ),
 } satisfies TRPCRouterRecord;

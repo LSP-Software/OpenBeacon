@@ -11,7 +11,7 @@ import {
 import { activateDevice } from "../../lib/deviceActivation.ts";
 import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
 import { sendSeatGraceWarnings } from "../../lib/seatGraceWarnings.ts";
-import { createSeatHolds, seatsUsed } from "../../lib/seats.ts";
+import { freeSeats, heldSeatDevices, seatsUsed } from "../../lib/seats.ts";
 import { encryptedTrackingPoint, testClientPointId } from "../../lib/trackingPoints.testUtil.ts";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
 import { accountNoticesRouter } from "../accountNoticesRouter.ts";
@@ -42,8 +42,12 @@ let userCount = 0;
 
 type TestUser = { id: string; deviceIds: string[] };
 
-const heldDeviceIds = ({ groupId, selfHosted }: { groupId: string; selfHosted: boolean }) =>
-  createSeatHolds({ db: prisma, selfHosted }).heldIn(groupId);
+const heldDeviceIds = async ({ groupId, selfHosted }: { groupId: string; selfHosted: boolean }) =>
+  new Set(
+    (await heldSeatDevices({ db: prisma, groupIds: [groupId], selfHosted })).map(
+      ({ deviceId }) => deviceId,
+    ),
+  );
 
 const noFreeSeats = { code: "PRECONDITION_FAILED", cause: { reason: "NO_FREE_SEATS" } };
 const groupFull = { code: "PRECONDITION_FAILED", cause: { reason: "GROUP_FULL" } };
@@ -254,7 +258,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       ).rejects.toMatchObject({
         ...noFreeSeats,
         message:
-          "Creating a group needs 2 seats, one for each of your phones, and you have 1 free.",
+          "Creating a group needs 2 seats, one for each of your phones, and you have 1 free seat.",
       });
       expect(
         await prisma.group.count({ where: { ownerId: { in: [noSeats.id, twoPhones.id] } } }),
@@ -481,10 +485,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: { role: "ADMIN" },
       });
       await caller(owner).groupOwnership.offer({ groupId, memberId: membership.id });
+      expect((await caller(admin).groupOwnership.offers())[0]?.seats).toBe(2);
 
       await expect(caller(admin).groupOwnership.accept({ groupId })).rejects.toMatchObject({
         ...noFreeSeats,
-        message: "Taking over this group needs 2 seats and you have 1 free. Add seats first.",
+        message: "Taking over this group needs 2 seats and you have 1 free seat. Add seats first.",
       });
       await prisma.user.update({ where: { id: admin.id }, data: { seats: 2 } });
       await caller(admin).groupOwnership.accept({ groupId });
@@ -541,6 +546,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: { role: "ADMIN" },
       });
       await caller(owner, selfHosted).groupOwnership.offer({ groupId, memberId: membership.id });
+      expect((await caller(joiner, selfHosted).groupOwnership.offers())[0]?.seats).toBeNull();
       await caller(joiner, selfHosted).groupOwnership.accept({ groupId });
     });
 
@@ -552,10 +558,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await joinWithCode(first, await invite(owner, family));
       await joinWithCode(second, await invite(owner, friends));
       await joinWithCode(third, await invite(owner, family));
-      const held = async () => {
-        const holds = createSeatHolds({ db: prisma, selfHosted: false });
-        return [...(await holds.heldIn(family)), ...(await holds.heldIn(friends))].toSorted();
-      };
+      const held = async () =>
+        (await heldSeatDevices({ db: prisma, groupIds: [family, friends], selfHosted: false }))
+          .map(({ deviceId }) => deviceId)
+          .toSorted();
       expect(await held()).toEqual([]);
 
       await setSeats(owner, 3);
@@ -609,6 +615,21 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       ]) {
         await expect(read()).rejects.toMatchObject(onHold);
       }
+
+      await prisma.groupEvent.create({
+        data: { groupId: family, type: "GROUP_RENAMED", actorUserId: owner.id, name: "Family" },
+      });
+      await prisma.groupEvent.create({
+        data: {
+          groupId: friends,
+          type: "GROUP_RENAMED",
+          actorUserId: otherOwner.id,
+          name: "Friends",
+        },
+      });
+      expect((await member_.groupHistory.latest()).map(({ groupId }) => groupId)).toEqual([
+        friends,
+      ]);
 
       const shared = await upload(member, friends, "shared");
       expect(shared.result).toMatchObject({ accepted: [shared.clientPointId] });
@@ -1008,6 +1029,197 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         paidPeriodEndsAt: null,
         seats: 2,
       });
+    });
+
+    const graceWarnings = (
+      now: Date,
+      sendEmail: Parameters<typeof sendSeatGraceWarnings>[0]["sendEmail"] = null,
+      db = prisma,
+    ) => sendSeatGraceWarnings({ db, now, sendEmail });
+
+    test("renewing before the grace job runs still uses up the grace period", async () => {
+      const owner = await createUser({ seats: 2 });
+      const self = caller(owner, { allowSelfSetSeats: true });
+      await self.account.setPaidPeriodEnded({ ended: true });
+      const graceStartedAt = (await prisma.user.findUniqueOrThrow({ where: { id: owner.id } }))
+        .paidPeriodEndsAt;
+      expect((await self.account.seats()).grace).not.toBeNull();
+
+      await self.account.setPaidPeriodEnded({ ended: false });
+      expect(
+        (await prisma.user.findUniqueOrThrow({ where: { id: owner.id } })).lastGracePeriodStartedAt,
+      ).toEqual(graceStartedAt);
+
+      await self.account.setPaidPeriodEnded({ ended: true });
+      expect(await self.account.seats()).toEqual({ grace: null });
+      expect((await self.account.usage()).seats?.seats).toBe(0);
+    });
+
+    test("a grace period that ran out without a warning still tells the owner their seats have ended", async () => {
+      const owner = await createUser({ seats: 2 });
+      const member = await createUser();
+      const groupId = await createGroup(owner);
+      await joinWithCode(member, await invite(owner, groupId));
+      const endedAt = new Date(Date.now() - 8 * 86_400_000);
+      const holdsFrom = new Date(endedAt.getTime() + 7 * 86_400_000);
+      await prisma.user.update({ where: { id: owner.id }, data: { paidPeriodEndsAt: endedAt } });
+      const emails: Array<{ kind: string; holdsFrom: Date }> = [];
+      const sendEmail = async (email: { kind: string; holdsFrom: Date; userId: string }) => {
+        if (email.userId === owner.id) emails.push(email);
+      };
+
+      await graceWarnings(new Date(), sendEmail);
+      await graceWarnings(new Date(), sendEmail);
+
+      expect(
+        await prisma.accountNotice.findMany({
+          where: { userId: { in: [owner.id, member.id] } },
+          select: { userId: true, type: true, holdsFrom: true },
+        }),
+      ).toEqual([{ userId: owner.id, type: "SEATS_ENDED", holdsFrom }]);
+      expect(emails).toEqual([expect.objectContaining({ kind: "ended", holdsFrom })]);
+      expect(await prisma.user.findUniqueOrThrow({ where: { id: owner.id } })).toMatchObject({
+        lastGracePeriodStartedAt: endedAt,
+        seatsEndedNoticeFor: endedAt,
+      });
+    });
+
+    test("one account failing doesn't stop the others being warned or emailed", async () => {
+      const [failing, working] = [await createUser(), await createUser()];
+      const endedAt = new Date(Date.now() - 3_600_000);
+      for (const owner of [failing, working]) {
+        await createGroup(owner);
+        await prisma.user.update({ where: { id: owner.id }, data: { paidPeriodEndsAt: endedAt } });
+      }
+      const db = new Proxy(prisma, {
+        get: (target, property) =>
+          property === "user"
+            ? new Proxy(target.user, {
+                get: (users, method) =>
+                  method === "findUnique"
+                    ? (args: { where: { id?: string } }) =>
+                        args.where.id === failing.id
+                          ? Promise.reject(new Error("Database unavailable"))
+                          : users.findUnique(args as Parameters<typeof users.findUnique>[0])
+                    : Reflect.get(users, method),
+              })
+            : Reflect.get(target, property),
+      });
+      const emailed: string[] = [];
+      const consoleError = spyOn(console, "error").mockImplementation(() => {});
+      await graceWarnings(
+        new Date(),
+        async (email) => {
+          emailed.push(email.userId);
+        },
+        db,
+      );
+      expect(consoleError).toHaveBeenCalledWith("Seat grace check failed for an account");
+      consoleError.mockRestore();
+      expect(
+        (
+          await prisma.accountNotice.findMany({
+            where: { userId: { in: [failing.id, working.id] } },
+            select: { userId: true },
+          })
+        ).map(({ userId }) => userId),
+      ).toEqual([working.id]);
+      expect(emailed).toContain(working.id);
+      expect(emailed).not.toContain(failing.id);
+    });
+
+    test("renewing clears the seat warnings that no longer apply, for the owner and their members", async () => {
+      const owner = await createUser({ seats: 2 });
+      const member = await createUser();
+      const groupId = await createGroup(owner);
+      await joinWithCode(member, await invite(owner, groupId));
+      await prisma.user.update({
+        where: { id: owner.id },
+        data: { paidPeriodEndsAt: new Date(Date.now() - 3_600_000) },
+      });
+      await graceWarnings(new Date());
+      const notices = () =>
+        prisma.accountNotice.findMany({
+          where: { userId: { in: [owner.id, member.id] } },
+          select: { type: true },
+          orderBy: { type: "asc" },
+        });
+      expect(await notices()).toEqual([{ type: "SEATS_ENDING" }, { type: "SEAT_HOLD_COMING" }]);
+
+      await caller(owner, { allowSelfSetSeats: true }).account.setPaidPeriodEnded({
+        ended: false,
+      });
+      expect(await notices()).toEqual([]);
+    });
+
+    test("members whose phones join during a grace period are told their phones will go on hold", async () => {
+      const owner = await createUser({ seats: 4 });
+      const [first, later] = [await createUser(), await createUser()];
+      const groupId = await createGroup(owner);
+      await joinWithCode(first, await invite(owner, groupId));
+      const endedAt = new Date(Date.now() - 3_600_000);
+      await prisma.user.update({ where: { id: owner.id }, data: { paidPeriodEndsAt: endedAt } });
+      await graceWarnings(new Date());
+      await joinWithCode(later, await invite(owner, groupId));
+
+      await graceWarnings(new Date(Date.now() + 3_600_000));
+      await graceWarnings(new Date(Date.now() + 2 * 3_600_000));
+
+      expect(
+        (
+          await prisma.accountNotice.findMany({
+            where: { userId: { in: [owner.id, first.id, later.id] } },
+            select: { userId: true, type: true, groupId: true },
+          })
+        ).toSorted((a, b) => a.userId.localeCompare(b.userId) || a.type.localeCompare(b.type)),
+      ).toEqual(
+        [
+          { userId: owner.id, type: "SEATS_ENDING", groupId: null },
+          { userId: first.id, type: "SEAT_HOLD_COMING", groupId },
+          { userId: later.id, type: "SEAT_HOLD_COMING", groupId },
+        ].toSorted((a, b) => a.userId.localeCompare(b.userId) || a.type.localeCompare(b.type)),
+      );
+    });
+
+    test("a phone beyond 64 in a group is held there without taking one of the owner's seats", async () => {
+      const owner = await createUser({ seats: 100 });
+      const member = await createUser();
+      const groupId = await createGroup(owner);
+      await joinWithCode(member, await invite(owner, groupId));
+      await addMembers(groupId, 62);
+      const newDeviceId = `${member.id}-device-65th`;
+      await prisma.userDevice.create({
+        data: {
+          id: newDeviceId,
+          userId: member.id,
+          publicKey: createDeviceKeyPair().publicKey,
+          publicKeyAlgorithm: "X25519",
+          name: "Tablet",
+          icon: "tablet",
+        },
+      });
+      await prisma.$transaction((tx) =>
+        activateDevice({ activatedBy: "phrase", db: tx, deviceId: newDeviceId, userId: member.id }),
+      );
+
+      for (const selfHosted of [false, true]) {
+        expect(await heldDeviceIds({ groupId, selfHosted })).toEqual(new Set([newDeviceId]));
+      }
+      expect(await seatsUsed(prisma, owner.id)).toBe(64);
+      expect(await freeSeats(prisma, owner.id)).toEqual({ seats: 100, used: 64, free: 36 });
+      const usage = await caller(owner).account.usage();
+      expect(usage.gauges[0]).toMatchObject({ id: "seats", used: 64, onHold: 0 });
+      expect(usage.seats).toMatchObject({ used: 64, onHold: 0 });
+      expect(usage.groups[0]?.seats).toMatchObject({ used: 64, onHold: 1 });
+      expect(usage.groups[0]?.seats?.phones).toHaveLength(65);
+      expect(
+        (await caller(member, { deviceId: newDeviceId }).groupMembership.list())[0]?.onHold,
+      ).toBe(true);
+      expect(
+        (
+          await caller(member, { deviceId: newDeviceId, selfHosted: true }).groupMembership.list()
+        )[0]?.onHold,
+      ).toBe(true);
     });
   },
 );

@@ -9,6 +9,7 @@ import {
   activatedDevices,
   freeSeats,
   noFreeSeatsError,
+  freeSeatCount,
   seatCount,
   seatsEnforced,
 } from "../../lib/seats.ts";
@@ -90,7 +91,7 @@ export const groupLifecycleRouter = {
           }
           if (needed > free) {
             throw noFreeSeatsError(
-              `Creating a group needs ${seatCount(needed)}, one for each of your phones, and you have ${free} free.`,
+              `Creating a group needs ${needed === 1 ? "a seat for your phone" : `${seatCount(needed)}, one for each of your phones,`} and you have ${freeSeatCount(free)}.`,
             );
           }
         }

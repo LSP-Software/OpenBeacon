@@ -54,6 +54,7 @@ import {
   hasMembershipChanged,
   isTrackingKeyCheckDue,
   markTrackingKeysStale,
+  noteGroupNames,
   noteTrackingKeyState,
   recordTrackingKeyCheck,
 } from "./trackingKeyCheck.ts";
@@ -278,6 +279,7 @@ const reconcileTrackingKeysInternal = async ({
       await resealPersonalData(device.data.userId);
     }
     const membership = getMembershipSignature(groups);
+    noteGroupNames(groups);
     const changed =
       hasMembershipChanged(membership) ||
       results.some(([rotation, backfill]) => rotation?.data === true || Boolean(backfill?.data));

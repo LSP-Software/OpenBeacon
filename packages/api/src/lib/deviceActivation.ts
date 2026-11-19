@@ -42,7 +42,6 @@ export const activateDevice = async ({
   deviceId: string;
   userId: string;
 }) => {
-  await lockActivatingAccount(db, userId);
   await lockUserGroups(db, userId);
   const activated = await db.userDevice.updateMany({
     data: { activatedAt: new Date(), activatedBy },

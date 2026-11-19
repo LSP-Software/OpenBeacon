@@ -7,6 +7,7 @@ const WATCHED_KEY_CHECK_INTERVAL_MS = 30 * 60 * 1000;
 const KEY_STATE_FRESH_MS = 10 * 60 * 1000;
 
 let checkedMembership: string | null = null;
+let checkedGroupNames: string | null = null;
 let staleGeneration = 0;
 
 type GroupMembers = { id: string; members: { id: string }[] }[];
@@ -72,6 +73,17 @@ export const recordTrackingKeyCheck = ({
 
 export const getCheckedMembership = () => checkedMembership;
 
+export const getGroupNamesSignature = (groups: readonly { id: string; name: string }[]) =>
+  JSON.stringify(
+    [...groups].sort((a, b) => (a.id < b.id ? -1 : 1)).map(({ id, name }) => [id, name]),
+  );
+
+export const noteGroupNames = (groups: readonly { id: string; name: string }[]) => {
+  checkedGroupNames = getGroupNamesSignature(groups);
+};
+
+export const getCheckedGroupNames = () => checkedGroupNames;
+
 export const hasMembershipChanged = (membership: string) =>
   checkedMembership !== null && checkedMembership !== membership;
 
@@ -85,6 +97,7 @@ export const clearTrackingKeyCheck = () => {
   storage.remove(KEY_CHECK_KEY);
   storage.remove(KEY_STATE_KEY);
   checkedMembership = null;
+  checkedGroupNames = null;
 };
 
 export const noteGroupMembership = (groups: GroupMembers) => {

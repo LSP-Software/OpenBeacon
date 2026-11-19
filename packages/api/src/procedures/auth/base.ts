@@ -38,7 +38,11 @@ export const createAuthProcedures = ({
     return next({
       ctx: {
         deviceId: ctx.deviceId,
-        seatHolds: createSeatHolds({ db: ctx.db, selfHosted: ctx.selfHosted }),
+        seatHolds: createSeatHolds({
+          db: ctx.db,
+          selfHosted: ctx.selfHosted,
+          userId: ctx.session.user.id,
+        }),
       },
     });
   });

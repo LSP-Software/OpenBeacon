@@ -17,12 +17,12 @@ export const seatAccountSelect = {
   lastGracePeriodStartedAt: true,
 } as const;
 
-export const seatPeriod = (
-  account: { seats: number; paidPeriodEndsAt: Date | null; lastGracePeriodStartedAt: Date | null },
-  now: Date,
-) => {
+export const earnedGrace = (account: {
+  paidPeriodEndsAt: Date | null;
+  lastGracePeriodStartedAt: Date | null;
+}) => {
   const endedAt = account.paidPeriodEndsAt;
-  if (!endedAt || now < endedAt) return { seats: account.seats, grace: null };
+  if (!endedAt) return null;
   const lastGrace = account.lastGracePeriodStartedAt;
   const cooldownMonth = new Date(
     Date.UTC(endedAt.getUTCFullYear(), endedAt.getUTCMonth() - limits.graceCooldownMonths, 1),
@@ -38,25 +38,43 @@ export const seatPeriod = (
       ).getUTCDate(),
     ),
   );
-  const graceGiven =
+  const given =
     !lastGrace || lastGrace.getTime() === endedAt.getTime() || lastGrace <= cooldownStart;
-  const endsAt = new Date(endedAt.getTime() + limits.gracePeriodDays * 86_400_000);
-  return graceGiven && now < endsAt
-    ? { seats: account.seats, grace: { startedAt: endedAt, endsAt } }
-    : { seats: 0, grace: null };
+  return given
+    ? {
+        startedAt: endedAt,
+        endsAt: new Date(endedAt.getTime() + limits.gracePeriodDays * 86_400_000),
+      }
+    : null;
 };
+
+export const seatPeriod = (
+  account: { seats: number; paidPeriodEndsAt: Date | null; lastGracePeriodStartedAt: Date | null },
+  now: Date,
+) => {
+  const endedAt = account.paidPeriodEndsAt;
+  if (!endedAt || now < endedAt) return { seats: account.seats, grace: null };
+  const grace = earnedGrace(account);
+  return grace && now < grace.endsAt ? { seats: account.seats, grace } : { seats: 0, grace: null };
+};
+
+const perGroup = Prisma.raw(String(limits.seatsPerGroup));
 
 const countSeats = async (db: RawDb, groupIds: Prisma.Sql) => {
   const [row] = await db.$queryRaw<[{ used: number }]>(Prisma.sql`
-    SELECT count(*)::int AS "used"
-    FROM "GroupMember" AS "member"
-    ${activeDeviceJoin}
-    WHERE "member"."groupId" IN (${groupIds})
+    SELECT coalesce(sum(least("inGroup"."count", ${perGroup})), 0)::int AS "used"
+    FROM (
+      SELECT count(*) AS "count"
+      FROM "GroupMember" AS "member"
+      ${activeDeviceJoin}
+      WHERE "member"."groupId" IN (${groupIds})
+      GROUP BY "member"."groupId"
+    ) AS "inGroup"
   `);
   return row.used;
 };
 
-export const accountSeats = async (db: Pick<Prisma.TransactionClient, "user">, userId: string) =>
+const accountSeats = async (db: Pick<Prisma.TransactionClient, "user">, userId: string) =>
   seatPeriod(
     await db.user.findUniqueOrThrow({ where: { id: userId }, select: seatAccountSelect }),
     new Date(),
@@ -83,6 +101,9 @@ export const activatedDevices = (
 export const seatsEnforced = ({ selfHosted }: { selfHosted: boolean }) => !selfHosted;
 
 export const seatCount = (count: number) => `${count} ${count === 1 ? "seat" : "seats"}`;
+
+export const freeSeatCount = (free: number) =>
+  free === 0 ? "no free seats" : `${free} free ${free === 1 ? "seat" : "seats"}`;
 
 export const lockAccounts = async (db: RawDb, userIds: string[]) => {
   const ids = [...new Set(userIds)].sort();
@@ -215,6 +236,7 @@ export const lockOwnerThenGroup = async ({
     throw new TRPCError({
       code: "CONFLICT",
       message: "This group's owner has just changed. Try again.",
+      cause: new ReasonError("GROUP_OWNER_CHANGED"),
     });
   }
   return group.ownerId;
@@ -257,7 +279,6 @@ const rankSeats = async ({
   owners: Prisma.Sql;
   where?: Prisma.Sql;
 }) => {
-  const perGroup = Prisma.raw(String(limits.seatsPerGroup));
   const rows = await db.$queryRaw<
     Array<{
       ownerId: string;
@@ -302,10 +323,65 @@ const rankSeats = async ({
       groupId,
       userId,
       deviceId,
+      overGroupLimit: ownerRank === null,
       held: ownerRank === null || (seats !== null && ownerRank > seats),
     };
   });
 };
+
+const rankGroups = async ({
+  db,
+  enforced,
+  groupIds,
+  now,
+}: {
+  db: RawDb;
+  enforced: boolean;
+  groupIds: Prisma.Sql;
+  now: Date;
+}) => {
+  const full = enforced
+    ? null
+    : await db.$queryRaw<Array<{ groupId: string }>>(Prisma.sql`
+        SELECT "member"."groupId"
+        FROM "GroupMember" AS "member"
+        ${activeDeviceJoin}
+        WHERE "member"."groupId" IN (${groupIds})
+        GROUP BY "member"."groupId"
+        HAVING count(*) > ${perGroup}
+      `);
+  if (full?.length === 0) return [];
+  const groups = full ? Prisma.join(full.map(({ groupId }) => groupId)) : groupIds;
+  return rankSeats({
+    db,
+    enforced,
+    now,
+    owners: Prisma.sql`SELECT "ownerId" FROM "Group" WHERE "id" IN (${groups})`,
+    where: Prisma.sql`"ranked"."groupId" IN (${groups})`,
+  });
+};
+
+export const heldSeatDevices = async ({
+  db,
+  groupIds,
+  selfHosted,
+}: {
+  db: RawDb;
+  groupIds: string[];
+  selfHosted: boolean;
+}) =>
+  groupIds.length === 0
+    ? []
+    : (
+        await rankGroups({
+          db,
+          enforced: seatsEnforced({ selfHosted }),
+          groupIds: Prisma.join([...new Set(groupIds)]),
+          now: new Date(),
+        })
+      )
+        .filter(({ held }) => held)
+        .map(({ groupId, deviceId }) => ({ groupId, deviceId }));
 
 export const seatsEndingHolds = async ({
   db,
@@ -316,21 +392,21 @@ export const seatsEndingHolds = async ({
   now: Date;
   ownerId: string;
 }) => {
-  const holds = (
+  const seated = (
     await rankSeats({ db, enforced: true, now, owners: Prisma.sql`${ownerId}` })
   ).filter(({ held }) => !held);
-  if (holds.length === 0) return [];
+  if (seated.length === 0) return [];
   const [groups, devices] = await Promise.all([
     db.group.findMany({
-      where: { id: { in: [...new Set(holds.map(({ groupId }) => groupId))] } },
+      where: { id: { in: [...new Set(seated.map(({ groupId }) => groupId))] } },
       select: { id: true, name: true },
     }),
     db.userDevice.findMany({
-      where: { id: { in: holds.map(({ deviceId }) => deviceId) } },
+      where: { id: { in: seated.map(({ deviceId }) => deviceId) } },
       select: { id: true, name: true, user: { select: { id: true, name: true } } },
     }),
   ]);
-  return holds
+  return seated
     .flatMap(({ groupId, deviceId }) => {
       const group = groups.find(({ id }) => id === groupId);
       const device = devices.find(({ id }) => id === deviceId);
@@ -350,6 +426,7 @@ export const seatsEndingHolds = async ({
     .sort(
       (a, b) =>
         a.groupName.localeCompare(b.groupName) ||
+        a.groupId.localeCompare(b.groupId) ||
         a.memberName.localeCompare(b.memberName) ||
         a.deviceName.localeCompare(b.deviceName),
     );
@@ -358,53 +435,35 @@ export const seatsEndingHolds = async ({
 export const createSeatHolds = ({
   db,
   selfHosted,
+  userId,
 }: {
-  db: RawDb & Pick<Prisma.TransactionClient, "group">;
+  db: RawDb;
   selfHosted: boolean;
+  userId: string;
 }) => {
-  const enforced = seatsEnforced({ selfHosted });
-  const owners = new Map<string, ReturnType<typeof rankSeats>>();
-  const groupOwners = new Map<string, Promise<string | null>>();
-  const seatsOf = (ownerId: string) => {
-    const cached = owners.get(ownerId);
-    if (cached) return cached;
-    const ranked = rankSeats({ db, enforced, now: new Date(), owners: Prisma.sql`${ownerId}` });
-    owners.set(ownerId, ranked);
-    return ranked;
+  let ranking: ReturnType<typeof rankGroups> | null = null;
+  const seats = () => {
+    ranking ??= rankGroups({
+      db,
+      enforced: seatsEnforced({ selfHosted }),
+      groupIds: Prisma.sql`SELECT "groupId" FROM "GroupMember" WHERE "userId" = ${userId}`,
+      now: new Date(),
+    });
+    return ranking;
   };
-  const ownerOf = (groupId: string) => {
-    const cached = groupOwners.get(groupId);
-    if (cached) return cached;
-    const owner = db.group
-      .findUnique({ where: { id: groupId }, select: { ownerId: true } })
-      .then((group) => group?.ownerId ?? null);
-    groupOwners.set(groupId, owner);
-    return owner;
-  };
-  const heldIn = async (groupId: string, knownOwnerId?: string) => {
-    const ownerId = knownOwnerId ?? (await ownerOf(groupId));
-    if (!ownerId) return new Set<string>();
-    return new Set(
-      (await seatsOf(ownerId))
+  const heldIn = async (groupId: string) =>
+    new Set(
+      (await seats())
         .filter((seat) => seat.groupId === groupId && seat.held)
         .map(({ deviceId }) => deviceId),
     );
-  };
   return {
-    seatsOf,
+    ownSeats: async () => (await seats()).filter((seat) => seat.ownerId === userId),
     heldIn,
     isHeld: async (groupId: string, deviceId: string) => (await heldIn(groupId)).has(deviceId),
-    heldGroupIds: async ({ deviceId, userId }: { deviceId: string; userId: string }) =>
-      (
-        await rankSeats({
-          db,
-          enforced,
-          now: new Date(),
-          owners: Prisma.sql`SELECT "ownerId" FROM "Group" WHERE "id" IN (SELECT "groupId" FROM "GroupMember" WHERE "userId" = ${userId})`,
-          where: Prisma.sql`"ranked"."deviceId" = ${deviceId}`,
-        })
-      )
-        .filter(({ held }) => held)
+    heldGroupIds: async (deviceId: string) =>
+      (await seats())
+        .filter((seat) => seat.deviceId === deviceId && seat.held)
         .map(({ groupId }) => groupId),
   };
 };

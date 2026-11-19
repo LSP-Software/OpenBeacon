@@ -404,4 +404,24 @@ describe("group encryption helpers", () => {
     expect(await submitEpochChange({ build, submit })).toBe("done");
     expect(build).toHaveBeenCalledTimes(2);
   });
+  test("tries once more when the group's owner changed mid-join", async () => {
+    const { submitEpochChange } = await importGroupEncryptionModule();
+    const build = mock(async () => "input");
+    let calls = 0;
+    const submit = mock(async (_input: string) => {
+      calls += 1;
+      if (calls === 1) {
+        throw TRPCClientError.from({
+          error: {
+            code: -32009,
+            data: { code: "CONFLICT", reason: "GROUP_OWNER_CHANGED" },
+            message: "This group's owner has just changed. Try again.",
+          },
+        });
+      }
+      return "done";
+    });
+    expect(await submitEpochChange({ build, submit })).toBe("done");
+    expect(build).toHaveBeenCalledTimes(2);
+  });
 });

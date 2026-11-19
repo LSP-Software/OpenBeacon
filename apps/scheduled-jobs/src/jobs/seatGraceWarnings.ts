@@ -11,7 +11,8 @@ export const runSeatGraceWarnings = async () =>
       ? ({ holds, ...email }) =>
           sendSeatsEndingEmail({
             ...email,
-            holds: holds.map(({ groupName, memberName, deviceName }) => ({
+            holds: holds.map(({ groupId, groupName, memberName, deviceName }) => ({
+              groupId,
               groupName,
               memberName,
               deviceName,

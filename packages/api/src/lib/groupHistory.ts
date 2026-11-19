@@ -132,10 +132,12 @@ export const readGroupHistory = async ({
 
 export const readGroupHistoryLatest = async ({
   db,
+  heldGroupIds,
   now,
   userId,
 }: {
   db: PrismaClient;
+  heldGroupIds: string[];
   now: Date;
   userId: string;
 }) =>
@@ -149,5 +151,6 @@ export const readGroupHistoryLatest = async ({
     ) AS "latestAt"
     FROM "GroupMember" m
     WHERE m."userId" = ${userId}
+      AND m."groupId" <> ALL(${heldGroupIds}::text[])
     ORDER BY m."groupId"
   `;

@@ -453,7 +453,10 @@ const MapScreen = () => {
           subscribed={isFocused}
           userId={selfUserId}
         />
-        <SeatsEndingBanner subscribed={isFocused} />
+        <SeatsEndingBanner
+          ownsAGroup={allGroups?.some((group) => group.ownerId === selfUserId) === true}
+          subscribed={isFocused}
+        />
         <SeatHoldBanner groups={allGroups ?? []} linkToGroup userId={selfUserId} />
         {queueEviction && (
           <View className="mb-2 gap-2 rounded-2xl border border-warning-accent bg-card p-4">

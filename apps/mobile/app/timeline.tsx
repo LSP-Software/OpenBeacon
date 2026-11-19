@@ -41,6 +41,7 @@ import { authClient } from "../lib/auth-client.ts";
 import { initialsFromName } from "../lib/buildLiveMapMarkers.ts";
 import { historyShareNote } from "../lib/historyShare.ts";
 import { cn } from "../lib/cn.ts";
+import { errorReason } from "../lib/errorReason.ts";
 import { GROUP_COLOR_PALETTE, getGroupColor } from "../lib/groupColor.ts";
 import { loadPersonalNicknames } from "../lib/personalNicknames.ts";
 import { groupPlacesQueryOptions } from "../lib/placeSync.ts";
@@ -87,6 +88,19 @@ const TimelineScreen = () => {
       <View className="flex-1 items-center justify-center gap-4 bg-background px-8">
         <Text className="text-center text-foreground">
           This group isn’t available on this phone.
+        </Text>
+        <Button variant="secondary" onPress={close}>
+          <Text>Go back</Text>
+        </Button>
+      </View>
+    );
+  }
+
+  if (group.onHold) {
+    return (
+      <View className="flex-1 items-center justify-center gap-4 bg-background px-8">
+        <Text className="text-center text-foreground">
+          This phone is on hold in {group.name}, so it can’t show its Timeline.
         </Text>
         <Button variant="secondary" onPress={close}>
           <Text>Go back</Text>
@@ -156,7 +170,8 @@ const TimelineView = ({
   const { data: groups } = useQuery({
     ...trpc.groupMembership.list.queryOptions(),
     staleTime: Number.POSITIVE_INFINITY,
-    select: (items) => items.map((item) => ({ id: item.id, name: item.name })),
+    select: (items) =>
+      items.filter((item) => !item.onHold).map((item) => ({ id: item.id, name: item.name })),
   });
   const nicknames = useQuery({
     queryKey: ["personalNicknames", group.id, selfUserId],
@@ -870,7 +885,12 @@ const TimelineView = ({
         style={{ bottom: insets.bottom + 8 }}
         onLayout={(event) => setPanelHeight(event.nativeEvent.layout.height + insets.bottom + 8)}
       >
-        {daysQuery.isError ? (
+        {errorReason(daysQuery.error) === "SEAT_ON_HOLD" ||
+        errorReason(dayQuery.error) === "SEAT_ON_HOLD" ? (
+          <Text className="py-4 text-center text-secondary">
+            This phone is on hold in {group.name}, so it can’t show its Timeline.
+          </Text>
+        ) : daysQuery.isError ? (
           <ProblemNote
             message={`Couldn’t load the Timeline for ${group.name}. Check your connection and try again.`}
             loading={daysQuery.isFetching}

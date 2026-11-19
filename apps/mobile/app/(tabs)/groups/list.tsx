@@ -11,7 +11,7 @@ import {
   QrCodeIcon,
   UsersIcon,
 } from "lucide-react-native";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AnnouncementBanner } from "../../../components/AnnouncementBanner.tsx";
@@ -33,6 +33,7 @@ import { cn } from "../../../lib/cn.ts";
 import { getGroupColor } from "../../../lib/groupColor.ts";
 import { initials } from "../../../lib/initials.ts";
 import { pluralize } from "../../../lib/pluralize.ts";
+import { subscribeToOwnershipOffers } from "../../../lib/trackingEvents.ts";
 
 export default function GroupsScreen() {
   const [createGroupDialogOpen, setCreateGroupDialogOpen] = useState(false);
@@ -50,13 +51,17 @@ export default function GroupsScreen() {
     ...trpc.groupOwnership.offers.queryOptions(),
     subscribed: isFocused,
   });
+  const queryClient = useQueryClient();
   useRefetchWhileFocused(
-    [
-      trpc.groupMembership.list.queryKey(),
-      trpc.groupInvites.list.queryKey(),
-      trpc.groupOwnership.offers.queryKey(),
-    ],
+    [trpc.groupMembership.list.queryKey(), trpc.groupInvites.list.queryKey()],
     30_000,
+  );
+  useEffect(
+    () =>
+      subscribeToOwnershipOffers(() => {
+        void queryClient.invalidateQueries({ queryKey: trpc.groupOwnership.offers.queryKey() });
+      }),
+    [queryClient],
   );
 
   if (groups.isPending || invites.isPending) {
@@ -162,7 +167,7 @@ const OwnershipOffers = ({ offers }: { offers: RouterOutputs["groupOwnership"]["
           icon={CrownIcon}
           tone="primary"
           title={`Become the owner of ${offer.groupName}?`}
-          description={`${offer.owner.name} asked you to take over ${offer.groupName}. The owner’s account pays for every seat in the group, so it will use ${pluralize(offer.seats, "seat")} of yours (one for each phone or tablet in it). Only the owner can delete the group or hand it on. ${offer.owner.name} stays an Admin.`}
+          description={`${offer.owner.name} asked you to take over ${offer.groupName}.${offer.seats === null ? "" : ` The owner’s account pays for every seat in the group, so it will use ${pluralize(offer.seats, "seat")} of yours (one for each phone in it).`} Only the owner can delete the group or hand it on. ${offer.owner.name} stays an Admin.`}
         >
           <Button
             className="flex-1"
