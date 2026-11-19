@@ -22,6 +22,7 @@ import android.text.format.DateFormat
 import android.text.format.DateUtils
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.CurrentLocationRequest
@@ -72,6 +73,12 @@ class TrackingCaptureService : Service() {
     }, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
   }
 
+  private val showNoticeIntent by lazy {
+    PendingIntent.getService(this, 7262, Intent(this, TrackingCaptureService::class.java).apply {
+      action = ACTION_SHOW_NOTICE
+    }, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+  }
+
   private val openAppIntent by lazy {
     packageManager.getLaunchIntentForPackage(packageName)?.let { intent ->
       PendingIntent.getActivity(this, NOTIFICATION_ID, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
@@ -109,6 +116,13 @@ class TrackingCaptureService : Service() {
           stopAfterFailedStart()
           return START_NOT_STICKY
         }
+      }
+      ACTION_SHOW_NOTICE -> {
+        if (!TrackingRuntime.isCaptureRunning) {
+          stopSelf()
+          return START_NOT_STICKY
+        }
+        showNotice()
       }
       ACTION_STOP -> {
         stopCapture()
@@ -418,6 +432,10 @@ class TrackingCaptureService : Service() {
         return
       }
     }
+    showNotice()
+  }
+
+  private fun showNotice() {
     getSystemService(NotificationManager::class.java)?.notify(NOTIFICATION_ID, buildNotification())
   }
 
@@ -638,6 +656,7 @@ class TrackingCaptureService : Service() {
       .setSmallIcon(R.drawable.openbeacon_notification_icon)
       .setColor(ContextCompat.getColor(this, R.color.openbeacon_notification_color))
       .setContentIntent(openAppIntent)
+      .setDeleteIntent(showNoticeIntent)
       .setShowWhen(false)
       .setOngoing(true)
       .setOnlyAlertOnce(true)
@@ -667,6 +686,7 @@ class TrackingCaptureService : Service() {
     const val ACTION_SHARING_CHANGED = "expo.modules.openbeacontracking.action.SHARING_CHANGED"
     const val ACTION_CHECK_SHARING = "expo.modules.openbeacontracking.action.CHECK_SHARING"
     const val ACTION_STOP = "expo.modules.openbeacontracking.action.STOP"
+    const val ACTION_SHOW_NOTICE = "expo.modules.openbeacontracking.action.SHOW_NOTICE"
     const val EXTRA_INTERVAL_MS = "intervalMs"
     const val EXTRA_COMMAND_GENERATION = "captureCommandGeneration"
     const val EXTRA_RESUMING_SHARING = "resumingSharing"
@@ -678,6 +698,23 @@ class TrackingCaptureService : Service() {
     private const val NOTIFICATION_ID = 7260
     private const val LOCATE_TIMEOUT_MS = 20_000L
     private var locateWakes = LocateWakePolicy { SystemClock.elapsedRealtime() }
+
+    fun isNoticeMissing(context: Context): Boolean {
+      val manager = context.getSystemService(NotificationManager::class.java) ?: return false
+      val canShow =
+        NotificationManagerCompat.from(context).areNotificationsEnabled() &&
+          NotificationManagerCompat.from(context).getNotificationChannelCompat(CHANNEL_ID)?.importance != NotificationManagerCompat.IMPORTANCE_NONE
+      return canShow && manager.activeNotifications.none { it.id == NOTIFICATION_ID }
+    }
+
+    fun showNoticeIfMissing(context: Context) {
+      if (!TrackingRuntime.isCaptureRunning || !isNoticeMissing(context)) return
+      try {
+        context.startService(Intent(context, TrackingCaptureService::class.java).apply { action = ACTION_SHOW_NOTICE })
+      } catch (error: IllegalStateException) {
+        Log.w(TAG, "Android didn't allow the sharing notice to be shown again.", error)
+      }
+    }
 
     fun locateNow(context: Context) {
       TrackingUploadService.start(context, TrackingUploadService.REASON_PUSH)

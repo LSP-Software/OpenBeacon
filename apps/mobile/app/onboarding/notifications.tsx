@@ -78,7 +78,7 @@ const NotificationsStepScreen = () => {
         </View>
       }
       title="Turn on notifications"
-      description={`OpenBeacon shares nothing until it has notifications, precise location and location all the time. Notifications let this ${noun} show that it’s sharing, warn you if sharing stops and tell you when people arrive at places.`}
+      description={`Notifications let this ${noun} show that it’s sharing your location, warn you if sharing stops and tell you when people arrive at places.`}
       primary={{
         label: blocked ? "Open settings" : "Turn on notifications",
         onPress: turnOn,
