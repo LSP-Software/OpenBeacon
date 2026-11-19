@@ -2,10 +2,11 @@ import { Link } from "expo-router";
 import { HistoryIcon } from "lucide-react-native";
 import { Pressable, View } from "react-native";
 import { useTimeSince } from "../../hooks/useTimeSince.ts";
+import { shortTimeSince } from "../../lib/timeSince.ts";
 import { getBatteryVisual } from "../../lib/batteryVisual.ts";
 import { type DeviceIcon, deviceIconFor } from "../../lib/deviceIcons.ts";
 import { locationStaleAt } from "../../lib/locationStaleAt.ts";
-import { lowBatteryWhenLastSeen } from "../../lib/lowBatteryWhenLastSeen.ts";
+import { mayBeOutOfBattery } from "../../lib/mayBeOutOfBattery.ts";
 import { DecryptedAvatarImage } from "../image/DecryptedAvatarImage.tsx";
 import { Avatar, AvatarFallback } from "../ui/Avatar.tsx";
 import { Button } from "../ui/Button.tsx";
@@ -58,9 +59,6 @@ export const LiveMapPersonSheet = ({
   const updatedAge = useTimeSince(timestamp);
   const isMultiDevice = devices !== undefined && devices.length >= 2;
   const isOutOfDate = !isSelf && timestamp !== null && Date.now() >= locationStaleAt(timestamp);
-  const lastLowBattery = isSelf
-    ? null
-    : lowBatteryWhenLastSeen({ battery, now: Date.now(), timestamp });
   const batteryVisual = battery
     ? getBatteryVisual({
         batteryLevel: battery.level,
@@ -99,6 +97,7 @@ export const LiveMapPersonSheet = ({
                 <PersonDeviceRow
                   key={device.deviceId}
                   device={device}
+                  isSelf={isSelf}
                   onPress={() => onSelectDevice?.(device.deviceId)}
                 />
               ))}
@@ -107,9 +106,9 @@ export const LiveMapPersonSheet = ({
           {!isMultiDevice && isOutOfDate && !unreadableGroup ? (
             <View className="mt-3 rounded-xl bg-secondary p-3">
               <Text className="text-sm">
-                {lastLowBattery === null
-                  ? `${name}’s phone hasn’t sent a location since then. It might be offline, out of battery, or have location turned off.`
-                  : `Battery was at ${lastLowBattery}%. ${name}’s phone may have run out.`}
+                {mayBeOutOfBattery({ battery, timestamp })
+                  ? `Battery was at ${battery?.level}%. ${name}’s phone may have run out.`
+                  : `${name}’s phone hasn’t sent a location since then. It might be offline, out of battery, or have location turned off.`}
               </Text>
             </View>
           ) : null}
@@ -167,27 +166,28 @@ export const LiveMapPersonSheet = ({
   );
 };
 
-const PersonDeviceRow = ({ device, onPress }: { device: PersonDevice; onPress: () => void }) => {
+const PersonDeviceRow = ({
+  device,
+  isSelf,
+  onPress,
+}: {
+  device: PersonDevice;
+  isSelf: boolean;
+  onPress: () => void;
+}) => {
   const updatedAge = useTimeSince(device.timestamp);
   const batteryVisual = device.battery
     ? getBatteryVisual({ batteryLevel: device.battery.level, charging: device.battery.charging })
     : null;
   const label = device.isThisDevice ? `${device.name} (this ${thisDeviceNoun()})` : device.name;
-  const lastLowBattery = device.isThisDevice
-    ? null
-    : lowBatteryWhenLastSeen({
-        battery: device.battery,
-        now: Date.now(),
-        timestamp: device.timestamp,
-      });
   const updated = device.paused
     ? "Location sharing paused"
     : device.unreadable
       ? "Newer location can’t be read"
       : updatedAge === null
         ? "No location sent yet"
-        : lastLowBattery !== null
-          ? `May be out of battery, updated ${updatedAge}`
+        : !isSelf && mayBeOutOfBattery(device)
+          ? `May be out of battery, ${shortTimeSince(device.timestamp ?? "")} ago`
           : `${device.isThisDevice ? "Location sent" : "Updated"} ${updatedAge}`;
   const batteryLevel = batteryVisual?.label ?? null;
 

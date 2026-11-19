@@ -37,8 +37,8 @@ import { deviceIconFor } from "../../lib/deviceIcons.ts";
 import { buildRemoveGroupMemberInput, submitEpochChange } from "../../lib/groupEncryption.ts";
 import { forgetHiddenMapGroup } from "../../lib/hiddenMapGroups.ts";
 import { initials } from "../../lib/initials.ts";
-import { lowBatteryWhenLastSeen } from "../../lib/lowBatteryWhenLastSeen.ts";
-import { timeSince } from "../../lib/timeSince.ts";
+import { mayBeOutOfBattery } from "../../lib/mayBeOutOfBattery.ts";
+import { shortTimeSince, timeSince } from "../../lib/timeSince.ts";
 import { requestTrackingSync } from "../../lib/trackingEvents.ts";
 import { useSingleFlight } from "../../lib/useSingleFlight.ts";
 import { userMessage } from "../../lib/userMessage.ts";
@@ -374,6 +374,9 @@ const MembersTab = ({
               <MemberStatus
                 arrivalsOff={arrivalsOffLabel(member.user.id)}
                 isSelf={member.id === self?.id}
+                unreadableDeviceIds={liveStatus.undecryptable
+                  .filter((device) => device.groupId === groupId)
+                  .map((device) => device.deviceId)}
                 member={member}
                 sharingPaused={
                   liveStatus.sharing?.some((device) => device.userId === member.user.id) === true &&
@@ -537,12 +540,16 @@ const MemberStatus = ({
   isSelf,
   member,
   sharingPaused,
+  unreadableDeviceIds,
 }: {
   arrivalsOff: string | null;
   isSelf: boolean;
+  unreadableDeviceIds: readonly string[];
   member: ReturnType<typeof buildMemberLiveStatuses>[number];
   sharingPaused: boolean;
 }) => {
+  const mayWarn = (device: (typeof member.devices)[number]) =>
+    !isSelf && !unreadableDeviceIds.includes(device.deviceId) && mayBeOutOfBattery(device);
   const batteryVisual = member.battery
     ? getBatteryVisual({
         batteryLevel: member.battery.level,
@@ -563,21 +570,15 @@ const MemberStatus = ({
             batteryLevel: device.battery.level,
             charging: device.battery.charging,
           });
-          const mayBeOutOfBattery =
-            !isSelf &&
-            lowBatteryWhenLastSeen({
-              battery: device.battery,
-              now: Date.now(),
-              timestamp: device.timestamp,
-            }) !== null;
           const updated = timeSince(device.timestamp);
+          const lowBattery = mayWarn(device);
           return (
             <View
               key={device.deviceId}
               accessible
               accessibilityLabel={[
                 device.name ?? "Device",
-                mayBeOutOfBattery && "may be out of battery",
+                lowBattery && "may be out of battery",
                 `updated ${updated}`,
                 deviceBattery.label && `battery ${deviceBattery.label}`,
               ]
@@ -590,8 +591,10 @@ const MemberStatus = ({
                 className="text-tertiary size-4"
               />
               <Text className="text-secondary flex-1 text-sm" numberOfLines={1}>
-                {device.name ?? "Device"}, {mayBeOutOfBattery ? "may be out of battery, " : ""}
-                {updated}
+                {device.name ?? "Device"},{" "}
+                {lowBattery
+                  ? `may be out of battery, ${shortTimeSince(device.timestamp)} ago`
+                  : updated}
               </Text>
               <Icon as={deviceBattery.icon} className={`${deviceBattery.colorClass} size-4`} />
               {deviceBattery.label ? (
@@ -607,13 +610,8 @@ const MemberStatus = ({
             <Text className="text-secondary text-sm">
               {member.timestamp === null
                 ? "Location unavailable"
-                : !isSelf &&
-                    lowBatteryWhenLastSeen({
-                      battery: member.battery,
-                      now: Date.now(),
-                      timestamp: member.timestamp,
-                    }) !== null
-                  ? `May be out of battery, updated ${timeSince(member.timestamp)}`
+                : member.devices[0] && mayWarn(member.devices[0])
+                  ? `May be out of battery, ${shortTimeSince(member.timestamp)} ago`
                   : `Updated ${timeSince(member.timestamp)}`}
             </Text>
           </View>

@@ -1,12 +1,10 @@
-import { locationStaleAt } from "./locationStaleAt.ts";
-
-export const lowBatteryWhenLastSeen = ({
+export const mayBeOutOfBattery = ({
   battery,
-  now,
+  now = Date.now(),
   timestamp,
 }: {
   battery: { charging: boolean; level: number | null } | null;
-  now: number;
+  now?: number;
   timestamp: string | null;
 }) =>
   battery !== null &&
@@ -14,6 +12,4 @@ export const lowBatteryWhenLastSeen = ({
   battery.level !== null &&
   battery.level <= 10 &&
   timestamp !== null &&
-  now >= locationStaleAt(timestamp)
-    ? battery.level
-    : null;
+  now - Date.parse(timestamp) > 30 * 60_000;
