@@ -12,6 +12,7 @@ import { KeyboardFormScrollView } from "../components/KeyboardFormScrollView.tsx
 import { LoadingIndicator } from "../components/LoadingIndicator.tsx";
 import { HeldKeysNotice } from "../components/HeldKeysNotice.tsx";
 import { ReturnToHomeHeader } from "../components/headers/ReturnToHomeHeader.tsx";
+import { ServerNotice } from "../components/ServerNotice.tsx";
 import { Button } from "../components/ui/Button.tsx";
 import { Input } from "../components/ui/Input.tsx";
 import { Text } from "../components/ui/Text.tsx";
@@ -183,6 +184,7 @@ const SignUp = () => {
               </Text>
             </View>
 
+            <ServerNotice />
             <View className="gap-4" {...formProps}>
               {verifiesEmail && step.name === "code" ? (
                 <>

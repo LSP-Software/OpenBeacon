@@ -110,10 +110,15 @@ export const groupInvitesRouter = {
     .mutation(() => {}),
   createShared: groupAdminProcedure
     .meta({ rateLimit: { limit: 32, windowMs: 60_000 } })
-    .input(z.object({ groupId: z.string().min(1).max(128) }))
+    .input(
+      z.object({
+        groupId: z.string().min(1).max(128),
+        kind: z.enum(["link", "qr"]).default("qr"),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       const code = randomBytes(16).toString("hex").toUpperCase();
-      const expiresAt = new Date(Date.now() + 300_000);
+      const expiresAt = new Date(Date.now() + (input.kind === "link" ? 30 : 5) * 60_000);
       const invite = await ctx.db.$transaction(async (tx) => {
         await tx.$queryRaw(
           Prisma.sql`SELECT id FROM "Group" WHERE id = ${input.groupId} FOR UPDATE`,

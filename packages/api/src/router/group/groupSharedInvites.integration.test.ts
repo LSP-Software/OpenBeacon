@@ -142,6 +142,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(created.expiresAt.getTime() - Date.now()).toBeGreaterThan(295_000);
       expect(created.expiresInMs).toBeGreaterThan(295_000);
       expect(created.expiresInMs).toBeLessThanOrEqual(300_000);
+      const link = await caller(users[0]!).groupInvites.createShared({ groupId, kind: "link" });
+      expect(link.expiresInMs).toBeGreaterThan(1_795_000);
+      expect(link.expiresInMs).toBeLessThanOrEqual(1_800_000);
       expect(
         await caller(users[0]!).groupInvites.sharedStatuses({ groupId, inviteIds: [created.id] }),
       ).toEqual([{ id: created.id, status: "active" }]);

@@ -385,6 +385,7 @@ test("a code the server can't find offers another try", async () => {
   failPreview(refusal("NOT_FOUND"));
   const root = await render(code);
   expect(output(root)).toContain("This code is wrong, has expired or was already used.");
+  expect(output(root)).toContain("If the group is on a different server, ask for an invite link");
   expect(labels(root)).toEqual(["Try another code", "Back to groups"]);
   await press(root, "Try another code");
   expect(triedAnotherCode).toBe(true);
@@ -394,6 +395,7 @@ test("an email invite the server can't find only goes back", async () => {
   failPreview(refusal("NOT_FOUND"));
   const root = await render(email);
   expect(output(root)).toContain("This invite has expired");
+  expect(output(root)).not.toContain("different server");
   expect(labels(root)).toEqual(["Back to groups"]);
 });
 

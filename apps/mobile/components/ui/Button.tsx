@@ -67,6 +67,7 @@ function Button({ className, variant, size, loading, disabled, ...props }: Butto
   return (
     <TextClassContext.Provider value={buttonTextVariants({ variant, size })}>
       <Pressable
+        key={loading ? "loading" : "idle"}
         className={cn(
           (disabled || loading) && "opacity-50",
           buttonVariants({ variant, size }),
@@ -74,7 +75,7 @@ function Button({ className, variant, size, loading, disabled, ...props }: Butto
         )}
         role="button"
         disabled={loading || disabled}
-        accessibilityState={{ disabled: !!(loading || disabled), busy: !!loading }}
+        accessibilityState={loading ? { disabled: true, busy: true } : { disabled: !!disabled }}
         {...props}
       >
         {loading ? (

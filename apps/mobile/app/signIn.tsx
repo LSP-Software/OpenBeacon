@@ -14,6 +14,7 @@ import { EmailCodeEntry } from "../components/EmailCodeEntry.tsx";
 import { KeyboardFormScrollView } from "../components/KeyboardFormScrollView.tsx";
 import { HeldKeysNotice } from "../components/HeldKeysNotice.tsx";
 import { ReturnToHomeHeader } from "../components/headers/ReturnToHomeHeader.tsx";
+import { ServerNotice } from "../components/ServerNotice.tsx";
 import { Button } from "../components/ui/Button.tsx";
 import { Input } from "../components/ui/Input.tsx";
 import { Text } from "../components/ui/Text.tsx";
@@ -166,6 +167,7 @@ const SignIn = () => {
                     : "Sign in to your account"}
               </Text>
             </View>
+            <ServerNotice />
             {signInCode ? (
               <View className="gap-4" {...formProps}>
                 <EmailCodeEntry

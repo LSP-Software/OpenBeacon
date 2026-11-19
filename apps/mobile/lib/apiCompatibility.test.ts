@@ -18,7 +18,8 @@ mock.module("./storage.ts", () => ({
   },
 }));
 
-mock.module("./currentServer.ts", () => ({ getBaseUrl: () => "https://api.example.test" }));
+let baseUrl = "https://api.example.test";
+mock.module("./currentServer.ts", () => ({ getBaseUrl: () => baseUrl }));
 
 const {
   apiCompatibilityFetch,
@@ -56,6 +57,7 @@ const health = (level: number, minClient: number, version = "9.9.9") =>
   });
 
 beforeEach(async () => {
+  baseUrl = "https://api.example.test";
   requests = [];
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
@@ -571,6 +573,28 @@ describe("out of sync", () => {
     await goOutOfSync();
     respond = () => health(apiCompatibilityLevel, apiCompatibilityLevel, "10.0.0");
     await refreshApiCompatibility({ userRequested: false });
+    expect(getApiCompatibility()).toBeNull();
+  });
+});
+
+describe("changing server mid-request", () => {
+  test("ignores a response from the old server that answers after the change", async () => {
+    let answer: (response: Response) => void = () => {};
+    respond = () => new Promise<Response>((resolve) => (answer = resolve));
+    const pending = apiCompatibilityFetch("https://api.example.test/api/trpc/a");
+    baseUrl = "https://family.example.test";
+    answer(json({}, 200, levelHeaders(minServerApiCompatibilityLevel - 1, 0)));
+    await pending;
+    expect(getApiCompatibility()).toBeNull();
+  });
+
+  test("ignores a /health result from the old server that answers after the change", async () => {
+    let answer: (response: Response) => void = () => {};
+    respond = () => new Promise<Response>((resolve) => (answer = resolve));
+    const pending = refreshApiCompatibility({ userRequested: false });
+    baseUrl = "https://family.example.test";
+    answer(health(minServerApiCompatibilityLevel - 1, 0, "0.1.0"));
+    await pending;
     expect(getApiCompatibility()).toBeNull();
   });
 });

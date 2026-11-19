@@ -293,8 +293,9 @@ export const refreshApiCompatibility = async ({ userRequested }: { userRequested
   const startedAt = revision;
   latestHealthCheck += 1;
   const healthCheck = latestHealthCheck;
-  const { verdict, serverVersion, message, announcements } =
-    await checkServerCompatibility(getBaseUrl());
+  const server = getBaseUrl();
+  const { verdict, serverVersion, message, announcements } = await checkServerCompatibility(server);
+  if (getBaseUrl() !== server) return verdict;
   if (announcements && healthCheck === latestHealthCheck) saveAnnouncements(announcements);
   if (revision === startedAt) {
     applyVerdict({ verdict, serverVersion, message, sticky: false, userRequested });
@@ -309,7 +310,9 @@ export const refreshApiCompatibilityInBackground = async (now = Date.now()) => {
 };
 
 export const apiCompatibilityFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+  const server = getBaseUrl();
   const response = await fetch(input, withApiCompatibilityHeader({ ...init, credentials: "omit" }));
+  if (getBaseUrl() !== server) return response;
   const { verdict, message, sticky } = await readApiCompatibilityResponse(response);
   if (verdict !== null && verdict !== "ok") revision += 1;
   applyVerdict({ verdict, serverVersion: null, message, sticky, userRequested: false });

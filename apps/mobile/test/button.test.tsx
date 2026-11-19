@@ -40,3 +40,43 @@ test("a loading button keeps its label for screen readers and says it is busy", 
     disabled: true,
   });
 });
+
+test.each([
+  [false, { disabled: false }],
+  [true, { disabled: true }],
+])("a button that isn't loading never says it is busy (disabled: %p)", async (disabled, state) => {
+  const root = createRoot();
+  await act(async () =>
+    root.render(
+      <Button disabled={disabled}>
+        <Text>Save name</Text>
+      </Button>,
+    ),
+  );
+  const [button] = root.container.queryAll((item) => item.type === "button");
+  await act(async () => root.unmount());
+
+  expect((button!.props as { accessibilityState?: object }).accessibilityState).toEqual(state);
+});
+
+test("a button that stops loading is replaced, so Android drops its busy state", async () => {
+  const root = createRoot();
+  const render = (loading: boolean) =>
+    act(async () =>
+      root.render(
+        <Button loading={loading}>
+          <Text>Change server</Text>
+        </Button>,
+      ),
+    );
+  await render(true);
+  const [loadingButton] = root.container.queryAll((item) => item.type === "button");
+  await render(false);
+  const [idleButton] = root.container.queryAll((item) => item.type === "button");
+  await act(async () => root.unmount());
+
+  expect(idleButton).not.toBe(loadingButton);
+  expect((idleButton!.props as { accessibilityState?: object }).accessibilityState).toEqual({
+    disabled: false,
+  });
+});

@@ -12,12 +12,25 @@ let statusRequests: string[][];
 let created: number;
 const setOpen = mock((_open: boolean) => {});
 const copied: string[] = [];
+const shared: string[] = [];
+const requestedKinds: string[] = [];
+let baseUrl = "https://api.openbeacon.net";
 const focusListeners = new Set<(focused: boolean) => void>();
 
 mock.module("react-native", () => ({
   ...createReactNativeTestModule(),
   Alert: { alert: () => {} },
-  Share: { share: async () => ({}) },
+  Share: {
+    share: async ({ message }: { message: string }) => {
+      shared.push(message);
+      return {};
+    },
+  },
+}));
+mock.module("../../lib/currentServer.ts", () => ({
+  getBaseUrl: () => baseUrl,
+  isHostedServer: (url: string) => url === "https://api.openbeacon.net",
+  normaliseServerUrl: (url: string) => ({ url, error: null }),
 }));
 mock.module("expo-clipboard", () => ({
   setStringAsync: async (text: string) => {
@@ -50,12 +63,13 @@ mock.module("@tanstack/react-query", () => ({
       data,
       reset,
       isPending: false,
-      mutateAsync: async () => {
+      mutateAsync: async ({ kind }: { kind: "link" | "qr" }) => {
         created += 1;
+        requestedKinds.push(kind);
         const invite = {
           id: `invite-${created}`,
           code: String(created).repeat(32),
-          expiresInMs: 300_000,
+          expiresInMs: kind === "link" ? 1_800_000 : 300_000,
         };
         setData(invite);
         return invite;
@@ -111,6 +125,17 @@ const createInvite = async (root: Root) => {
   });
 };
 
+const shareLink = async (root: Root) => {
+  const share = root.container
+    .queryAll((item) => item.type === "button")
+    .find((item) => JSON.stringify(item.children).includes("Share link"));
+  if (!share) throw new Error("Share link button not found");
+  await act(async () => {
+    (share.props as { onClick?: () => void }).onClick?.();
+    await Promise.resolve();
+  });
+};
+
 const render = async (root: Root, value: "link" | "qr" = "qr") => {
   await act(async () => {
     root.render(<SharedInvite groupId="group-1" open setOpen={setOpen} value={value} />);
@@ -126,6 +151,8 @@ describe("shared invitation dialog", () => {
     created = 0;
     setOpen.mockClear();
     copied.length = 0;
+    shared.length = 0;
+    baseUrl = "https://api.openbeacon.net";
   });
   test("copies just the code and resets the copied label for a new invite", async () => {
     const root = createRoot();
@@ -155,7 +182,7 @@ describe("shared invitation dialog", () => {
     expect(JSON.stringify(root.container.toJSON())).toContain("1".repeat(32));
     await render(root);
     expect(root.container.queryAll((item) => item.type === "qr")[0]?.props["value"]).toBe(
-      "1".repeat(32),
+      `openbeacon://join?code=${"1".repeat(32)}&server=https%3A%2F%2Fapi.openbeacon.net`,
     );
     expect(statusRequests).toEqual([]);
 
@@ -232,6 +259,43 @@ describe("shared invitation dialog", () => {
     await render(root);
     await render(root);
     expect(setOpen).not.toHaveBeenCalled();
+    await act(async () => root.unmount());
+  });
+  test("a link invite lasts 30 minutes and a QR invite 5, as the server says", async () => {
+    requestedKinds.length = 0;
+    const root = createRoot();
+    await render(root, "link");
+    await createInvite(root);
+    expect(JSON.stringify(root.container.toJSON())).toContain("Valid for 30 minutes and one use.");
+    await render(root, "qr");
+    await createInvite(root);
+    expect(JSON.stringify(root.container.toJSON())).toContain("Valid for 5 minutes and one use.");
+    expect(requestedKinds).toEqual(["link", "qr"]);
+    await act(async () => root.unmount());
+  });
+  test("a hosted invite's message names no host but its link still names the server", async () => {
+    const root = createRoot();
+    await render(root, "link");
+    await createInvite(root);
+    await shareLink(root);
+    expect(shared).toEqual([
+      `Join my OpenBeacon group. Install OpenBeacon, then open this link: openbeacon://join?code=${"1".repeat(32)}&server=https%3A%2F%2Fapi.openbeacon.net`,
+    ]);
+    await act(async () => root.unmount());
+  });
+  test("a self-hosted invite's QR code and shared link name the server", async () => {
+    baseUrl = "https://beacon.example.com";
+    const root = createRoot();
+    await render(root);
+    await createInvite(root);
+    const link = `openbeacon://join?code=${"1".repeat(32)}&server=https%3A%2F%2Fbeacon.example.com`;
+    expect(root.container.queryAll((item) => item.type === "qr")[0]?.props["value"]).toBe(link);
+
+    await render(root, "link");
+    await shareLink(root);
+    expect(shared).toEqual([
+      `Join my OpenBeacon group on beacon.example.com. Install OpenBeacon, then open this link: ${link}`,
+    ]);
     await act(async () => root.unmount());
   });
 });

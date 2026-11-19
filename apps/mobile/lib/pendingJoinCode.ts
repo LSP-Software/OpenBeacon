@@ -1,11 +1,20 @@
 import { router } from "expo-router";
+import z from "zod";
 import { readThisDeviceState } from "./deviceActivation.ts";
+import { JOIN_CODE, joinInviteFromLink } from "./inviteLink.ts";
+import type { JoinInvite } from "./inviteTypes.ts";
 import { hasPendingOnboarding } from "./onboardingStorage.ts";
+import { parseJson } from "./parseJson.ts";
 import { readRegisteredDeviceNow } from "./registeredDevice.ts";
 import { storage } from "./storage.ts";
 
 const STORAGE_PREFIX = "pendingJoinCode.";
-const JOIN_CODE = /^[A-Fa-f0-9]{32}$/;
+
+const savedInviteSchema = z.object({
+  savedAt: z.number(),
+  code: z.string().regex(JOIN_CODE),
+  server: z.string().nullable(),
+});
 
 export const clearPendingJoinCodes = () => {
   for (const key of storage.getAllKeys()) {
@@ -13,50 +22,74 @@ export const clearPendingJoinCodes = () => {
   }
 };
 
-export const savePendingJoinCode = ({ code, userId }: { code: string; userId: string }) => {
+export const savePendingJoinCode = ({
+  code,
+  server = null,
+  userId,
+}: {
+  code: string;
+  server?: string | null;
+  userId: string;
+}) => {
   clearPendingJoinCodes();
-  storage.set(`${STORAGE_PREFIX}${userId}`, `${Date.now()}:${code}`);
+  storage.set(
+    `${STORAGE_PREFIX}${userId}`,
+    JSON.stringify({ savedAt: Date.now(), code, server } satisfies z.infer<
+      typeof savedInviteSchema
+    >),
+  );
 };
 
-export const takePendingJoinCode = (userId: string) => {
+export const takePendingInvite = (userId: string): JoinInvite | null => {
   const stored = storage.getString(`${STORAGE_PREFIX}${userId}`);
   clearPendingJoinCodes();
   if (!stored) return null;
-  const separator = stored.indexOf(":");
-  const age = Date.now() - Number(stored.slice(0, separator));
-  const code = stored.slice(separator + 1);
-  return separator > 0 && age >= 0 && age < 24 * 60 * 60 * 1000 && code ? code : null;
+  const saved = savedInviteSchema.safeParse(parseJson(stored));
+  if (!saved.success) return null;
+  const age = Date.now() - saved.data.savedAt;
+  return age >= 0 && age < 24 * 60 * 60 * 1000
+    ? { code: saved.data.code, server: saved.data.server }
+    : null;
 };
 
-export const joinCodeFromLink = (link: string) => {
-  const [location = "", query = ""] = link.split("#")[0]?.split("?") ?? [];
-  const route = location.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").replace(/\/+$/, "");
-  if (route !== "join" && !route.endsWith("/join")) return null;
-  const code = query
-    .split("&")
-    .find((pair) => pair.startsWith("code="))
-    ?.slice("code=".length);
-  return code && JOIN_CODE.test(code) ? code.toUpperCase() : null;
-};
+const INVITE_FOR_SIGN_IN_KEY = "inviteForSignIn";
 
-export const joinCodeFromInput = (input: string) => {
-  const trimmed = input.trim();
-  if (JOIN_CODE.test(trimmed)) return trimmed.toUpperCase();
-  return joinCodeFromLink(trimmed);
+export const saveInviteForSignIn = (code: string) =>
+  storage.set(INVITE_FOR_SIGN_IN_KEY, JSON.stringify({ savedAt: Date.now(), code }));
+
+export const clearInviteForSignIn = () => storage.remove(INVITE_FOR_SIGN_IN_KEY);
+
+export const takeInviteForSignIn = () => {
+  const stored = storage.getString(INVITE_FOR_SIGN_IN_KEY);
+  clearInviteForSignIn();
+  if (!stored) return null;
+  const saved = savedInviteSchema.omit({ server: true }).safeParse(parseJson(stored));
+  if (!saved.success) return null;
+  const age = Date.now() - saved.data.savedAt;
+  return age >= 0 && age < 30 * 60 * 1000 ? saved.data.code : null;
 };
 
 export const saveJoinLinkForAfterSetup = (link: string) => {
-  const code = joinCodeFromLink(link);
+  const invite = joinInviteFromLink(link)?.invite;
   const device = readRegisteredDeviceNow();
-  if (!code || !device) return false;
+  if (!invite || !device) return false;
   if (readThisDeviceState() === "active" && !hasPendingOnboarding(device.userId)) return false;
-  savePendingJoinCode({ code, userId: device.userId });
+  savePendingJoinCode({ ...invite, userId: device.userId });
   return true;
 };
 
 export const openAppAfterSetup = (home: "/" | "/(tabs)/map") => {
   const userId = readRegisteredDeviceNow()?.userId;
-  const code = userId ? takePendingJoinCode(userId) : null;
+  const invite = userId ? takePendingInvite(userId) : null;
   if (!userId) clearPendingJoinCodes();
-  router.replace(code ? { pathname: "/join", params: { code } } : home);
+  router.replace(
+    invite
+      ? {
+          pathname: "/join",
+          params: invite.server
+            ? { code: invite.code, server: invite.server }
+            : { code: invite.code },
+        }
+      : home,
+  );
 };

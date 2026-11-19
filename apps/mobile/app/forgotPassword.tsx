@@ -12,6 +12,7 @@ import { z } from "zod";
 import { EmailCodeEntry } from "../components/EmailCodeEntry.tsx";
 import { KeyboardFormScrollView } from "../components/KeyboardFormScrollView.tsx";
 import { ReturnToHomeHeader } from "../components/headers/ReturnToHomeHeader.tsx";
+import { ServerNotice } from "../components/ServerNotice.tsx";
 import { Button } from "../components/ui/Button.tsx";
 import { Input } from "../components/ui/Input.tsx";
 import { Text } from "../components/ui/Text.tsx";
@@ -171,6 +172,7 @@ const ForgotPassword = () => {
               </Text>
             </View>
 
+            <ServerNotice />
             <View className="gap-4" {...formProps}>
               {step.name === "email" ? (
                 <>

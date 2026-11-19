@@ -17,6 +17,14 @@ mock.module("./endSession.ts", () => ({
   },
 }));
 
+mock.module("./apiCompatibility.ts", () => ({
+  clearApiCompatibility: () => events.push("clearCompatibility"),
+  refreshApiCompatibility: async () => {
+    events.push(`checkCompatibility:${savedUrl}`);
+    return "ok";
+  },
+}));
+
 const { changeServer } = await import("./changeServer.ts");
 
 beforeEach(() => {
@@ -24,14 +32,24 @@ beforeEach(() => {
   savedUrl = "https://old.example.com";
 });
 
-test("ends the session on the old server before saving the new one", async () => {
+test("ends the session on the old server, saves the new one, then checks the new server", async () => {
   await changeServer("https://new.example.com");
-  expect(events).toEqual(["endSession:serverChanged", "save:https://new.example.com"]);
+  expect(events).toEqual([
+    "endSession:serverChanged",
+    "save:https://new.example.com",
+    "clearCompatibility",
+    "checkCompatibility:https://new.example.com",
+  ]);
 });
 
 test("going back to the hosted server also ends the session first", async () => {
   await changeServer("");
-  expect(events).toEqual(["endSession:serverChanged", "save:"]);
+  expect(events).toEqual([
+    "endSession:serverChanged",
+    "save:",
+    "clearCompatibility",
+    "checkCompatibility:",
+  ]);
 });
 
 test("saving the same server again keeps the session", async () => {

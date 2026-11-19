@@ -8,10 +8,12 @@ import { createRoot, type Root } from "test-renderer";
 
 let focused = true;
 let session: { user: { id: string; name: string }; session?: { token: string } } | null = null;
+let isPending = false;
+let inviteForSignIn: string | null = null;
 const tokensToRevoke: string[] = [];
 let deviceActive: boolean | Error = true;
 let savedLink: { linkId: string; psk: Uint8Array } | null | Error = null;
-const replace = mock((_route: string) => {});
+const replace = mock((_route: string | { pathname: string; params: Record<string, string> }) => {});
 const View = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
 mock.module("../components/AnnouncementBanner.tsx", () => ({ AnnouncementBanner: () => null }));
 mock.module("expo-router", () => ({
@@ -44,7 +46,7 @@ mock.module("../components/ui/Button.tsx", () => ({
 mock.module("../components/ui/Text.tsx", () => ({ Text: View }));
 mock.module("../lib/theme.ts", () => ({ useColors: () => ({ primary: "blue" }) }));
 mock.module("../lib/auth-client.ts", () => ({
-  authClient: { useSession: () => ({ data: session, isPending: false }) },
+  authClient: { useSession: () => ({ data: session, isPending }) },
   saveSessionTokenToRevoke: async (token: string) => {
     tokensToRevoke.push(token);
   },
@@ -106,12 +108,22 @@ mock.module("../lib/onboarding.ts", () => ({
   startOnboarding: (userId: string, kind: string) => startedOnboarding.push(`${userId}:${kind}`),
 }));
 
+mock.module("../lib/pendingJoinCode.ts", () => ({
+  takeInviteForSignIn: () => {
+    const code = inviteForSignIn;
+    inviteForSignIn = null;
+    return code;
+  },
+}));
+
 const { default: HomeScreen } = await import("../app/index.tsx");
 let root: Root | null = null;
 afterEach(async () => {
   if (root) await act(() => root?.unmount());
   root = null;
   replace.mockClear();
+  isPending = false;
+  inviteForSignIn = null;
   deviceActive = true;
   savedLink = null;
   onboarding = null;
@@ -289,4 +301,40 @@ test("signing out while the server can't be reached keeps the session to revoke 
   if (!signOut) throw new Error("Missing Sign out");
   await act(async () => (signOut.props as { onPress: () => Promise<void> }).onPress());
   expect(tokensToRevoke).toEqual(["session-token"]);
+});
+
+const code = "0123456789ABCDEF0123456789ABCDEF";
+
+const renderSignedOut = async () => {
+  focused = true;
+  session = null;
+  root = createRoot();
+  await act(() => root?.render(<HomeScreen />));
+};
+
+test("a signed-out phone with an invite kept from changing server reopens it", async () => {
+  inviteForSignIn = code;
+  await renderSignedOut();
+  expect(replace.mock.calls).toEqual([[{ pathname: "/join", params: { code } }]]);
+  expect(inviteForSignIn).toBeNull();
+});
+
+test("a signed-out phone without a kept invite stays on the home screen", async () => {
+  await renderSignedOut();
+  expect(replace).not.toHaveBeenCalled();
+});
+
+test("a kept invite waits while the session is still loading", async () => {
+  inviteForSignIn = code;
+  isPending = true;
+  await renderSignedOut();
+  expect(replace).not.toHaveBeenCalled();
+  expect(inviteForSignIn).toBe(code);
+});
+
+test("a signed-in phone leaves a kept invite alone", async () => {
+  inviteForSignIn = code;
+  await renderSignedIn();
+  expect(replace.mock.calls).toEqual([["/(tabs)/map"]]);
+  expect(inviteForSignIn).toBe(code);
 });
