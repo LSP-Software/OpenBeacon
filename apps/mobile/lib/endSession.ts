@@ -1,6 +1,7 @@
 import { tryCatch } from "@openbeacon/shared";
 import { z } from "zod";
 import { queryClient, trpc, trpcClient } from "./api.ts";
+import { refuseStartedRounds } from "./accountSession.ts";
 import { clearApiCompatibility } from "./apiCompatibility.ts";
 import { authClient, forgetSessionTokenToRevoke } from "./auth-client.ts";
 import {
@@ -38,6 +39,7 @@ export const endSessionClears = {
     pendingJoinCodes: true,
     keyMaterial: "keep",
     compatibility: false,
+    securityAlerts: "keep",
   },
   phoneRemoved: {
     credentials: "signOut",
@@ -46,6 +48,7 @@ export const endSessionClears = {
     pendingJoinCodes: true,
     keyMaterial: "wipe",
     compatibility: false,
+    securityAlerts: "clear",
   },
   accountDeleted: {
     credentials: "signOut",
@@ -54,6 +57,7 @@ export const endSessionClears = {
     pendingJoinCodes: true,
     keyMaterial: "wipe",
     compatibility: false,
+    securityAlerts: "clear",
   },
   serverChanged: {
     credentials: "signOutAndDropRevokeToken",
@@ -62,6 +66,7 @@ export const endSessionClears = {
     pendingJoinCodes: true,
     keyMaterial: "keepUntilExpiry",
     compatibility: true,
+    securityAlerts: "keep",
   },
   sessionLost: {
     credentials: "keep",
@@ -70,6 +75,7 @@ export const endSessionClears = {
     pendingJoinCodes: true,
     keyMaterial: "keepUntilExpiry",
     compatibility: false,
+    securityAlerts: "keep",
   },
 } as const satisfies Record<
   EndSessionReason,
@@ -80,6 +86,7 @@ export const endSessionClears = {
     pendingJoinCodes: boolean;
     keyMaterial: "wipe" | "keepUntilExpiry" | "keep";
     compatibility: boolean;
+    securityAlerts: "keep" | "clear";
   }
 >;
 
@@ -200,6 +207,12 @@ export const endSession = async ({
   if (!keepPendingSharingChanges) clearPendingSharingChanges();
 
   forgetDeviceKeyRegistration();
+  refuseStartedRounds();
+  await tryCatch(
+    import("./notifications.ts").then((notices) =>
+      notices.clearEventNotices({ keepSecurityAlerts: clears.securityAlerts === "keep" }),
+    ),
+  );
   let signedOut = false;
   if (clears.credentials !== "keep") {
     const result = await settleBy(tryCatch(authClient.signOut()), serverDeadline, null);

@@ -142,11 +142,30 @@ class NoticesTest {
   }
 
   @Test
+  fun clearingAlertsAboutOthersKeepsSecurityAlertsAndSharingNotices() {
+    Notices.show(application, Notice.SIGNED_OUT)
+    Notices.showEvent(application, EventNoticeKind.ACCOUNT_ALERT, "notice-1", "New sign-in", null, null, "openbeacon:///account/devices")
+    Notices.showEvent(application, EventNoticeKind.ALERT, "alert-1", "Mum arrived at Home", null, "Family", "openbeacon:///map")
+    Notices.showEvent(application, EventNoticeKind.GROUP_ACTIVITY, "event-1", "Dad joined", null, "Family", "openbeacon:///groups/family")
+    Notices.showEvent(application, EventNoticeKind.PLACES_CHANGED, "places-1", "Places changed", null, "Family", "openbeacon:///place-alerts")
+
+    Notices.clearEvents(application, keepSecurityAlerts = true)
+
+    assertEquals(listOf("New sign-in", "Security alerts", application.getString(R.string.openbeacon_notice_signed_out_title)), titles())
+
+    Notices.clearEvents(application, keepSecurityAlerts = false)
+
+    assertEquals(listOf(application.getString(R.string.openbeacon_notice_signed_out_title)), titles())
+  }
+
+  @Test
   fun theAccountChannelIsNamedSecurityAlerts() {
     Notices.showEvent(application, EventNoticeKind.ACCOUNT_ALERT, "notice-1", "Your password was reset", null, null, "openbeacon:///account/password")
 
     assertEquals("Security alerts", manager.getNotificationChannel("openbeacon_account_alerts").name)
   }
+
+  private fun titles() = shadowOf(manager).allNotifications.map { it.extras.getCharSequence(Notification.EXTRA_TITLE).toString() }.sorted()
 
   private fun texts() =
     shadowOf(manager).allNotifications.map { it.extras.getCharSequence(Notification.EXTRA_TEXT).toString() }

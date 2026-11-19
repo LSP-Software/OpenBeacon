@@ -117,7 +117,7 @@ The terms are defined in the [encryption glossary](../contexts/encryption/CONTEX
 
 A session ends when the user signs out, deletes their account, or the server revokes the session. Account deletion revokes every session.
 
-The app notices a server revocation when it returns to the foreground, reconnects, or the API rejects a request as `UNAUTHORIZED`. A background upload rejected as `UNAUTHORIZED` stops capture and removes epoch keys without the app being opened.
+The app notices a server revocation when it returns to the foreground, reconnects, or the API rejects a request as `UNAUTHORIZED`. A background upload rejected as `UNAUTHORIZED` stops capture, removes epoch keys and removes alerts about other members without the app being opened. A sync that was already running for that account sends no more requests and posts no more alerts, and a rejection that arrives after another account has signed in is ignored.
 
 When the session ends, or another account signs in, the app:
 
@@ -128,6 +128,7 @@ When the session ends, or another account signs in, the app:
 - Deletes the saved map: the map data cached on the phone, which shows which areas were viewed, and the address of the last map.
 - Deletes decrypted pictures from the app's private cache, at the start and again at the end of the cleanup. The cache belongs to one account on one server and is wiped when either changes, and an upload that finishes after sign-out can't write to it (`apps/mobile/lib/imageCache.ts`).
 - Deletes the account's own profile picture key from SecureStore, unless the server revoked the session. Then it stays, like the Device key, until the phone is wiped.
+- Removes its alerts about other members from the notification shade and the in-app banners: place alerts, place changes and group activity. Alerts that arrive after sign-out are dropped. Security alerts stay after a sign-out, so the owner can see why it happened, and are removed too when the phone is removed or the account is deleted immediately (`apps/mobile/lib/notifications.ts`).
 
 If the app starts signed out, it runs the cleanup again, in case it was closed before cleanup finished. The cleanup is in `apps/mobile/providers/SessionDataCleanup.tsx`, `apps/mobile/lib/mapCache.ts` and `apps/mobile/lib/tracking.ts`.
 

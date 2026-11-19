@@ -3,6 +3,12 @@ import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 import { alertsCursorSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import z from "zod";
+import {
+  accountRequest,
+  type AccountRound,
+  isRoundCurrent,
+  startAccountRound,
+} from "./accountSession.ts";
 import { queryClient, type RouterOutputs, trpc, trpcClient } from "./api.ts";
 import { getBaseUrl } from "./currentServer.ts";
 import { getRegisteredDeviceKey } from "./deviceKeys.ts";
@@ -115,30 +121,35 @@ export const syncGroupPlaces = async ({
   groupId,
   groups = () => trpcClient.groupMembership.list.query(),
   quietPlaceIds,
+  round,
   sharingOff = false,
   userId,
 }: {
   groupId: string;
   groups?: Groups;
   quietPlaceIds: readonly string[] | "all";
+  round?: AccountRound;
   sharingOff?: boolean;
   userId: string;
 }) => {
+  const account = round ?? startAccountRound(userId);
   const device = await getRegisteredDeviceKey();
   if (!device || device.userId !== userId) return false;
   const trackingModule = await loadTrackingModule();
   if (sharingOff) {
+    if (!isRoundCurrent(account)) return false;
     return trackingModule
       ? trackingModule.setGroupPlaces(placeOwner(userId), device.deviceId, groupId, [])
       : true;
   }
   const [places, sharing] = await Promise.all([
-    loadGroupPlaces(groupId),
-    trpcClient.placeSharing.get.query({ groupId }),
+    loadGroupPlaces(groupId, accountRequest(account)),
+    trpcClient.placeSharing.get.query({ groupId }, accountRequest(account)),
   ]);
   const ready = places.flatMap((place) =>
     place.geometry ? [{ ...place, geometry: place.geometry }] : [],
   );
+  if (!isRoundCurrent(account)) return false;
   if (trackingModule) {
     const applied = await trackingModule.setGroupPlaces(
       placeOwner(userId),
@@ -176,6 +187,7 @@ export const syncGroupPlaces = async ({
     key: groupId,
     kind: "placesChanged",
     link: placesTabLink(groupId),
+    round: account,
   });
   return true;
 };
@@ -183,13 +195,13 @@ export const syncGroupPlaces = async ({
 const showPlaceAlerts = async ({
   alerts,
   groups,
-  userId,
+  round,
 }: {
   alerts: readonly PlaceAlert[];
   groups: Groups;
-  userId: string;
+  round: AccountRound;
 }) => {
-  const nicknamesFor = nicknamesByGroup(userId);
+  const nicknamesFor = nicknamesByGroup(round.userId);
   for (const alert of alerts) {
     const group = (await groups()).find(({ id }) => id === alert.groupId);
     if (!group) continue;
@@ -204,6 +216,7 @@ const showPlaceAlerts = async ({
       key: alert.id,
       kind: "alert",
       link: placeOnMapLink(alert.placeId),
+      round,
     });
   }
 };
@@ -236,13 +249,14 @@ const catchUpImageKeys = async ({
   epochOf,
   groupIds,
   groups,
-  userId,
+  round,
 }: {
   epochOf: (groupId: string) => string | undefined;
   groupIds: readonly string[];
   groups: Groups;
-  userId: string;
+  round: AccountRound;
 }) => {
+  const { userId } = round;
   const missesKey = storageKey(userId, "imageKeysCatchUpMisses");
   const readMisses = () => imageKeyMissesSchema.catch({}).parse(readStoredJson(missesKey));
   const saveMisses = (misses: z.infer<typeof imageKeyMissesSchema>) => {
@@ -267,6 +281,7 @@ const catchUpImageKeys = async ({
   });
   let imageKeysMoved = false;
   for (const groupId of due) {
+    if (!isRoundCurrent(round)) return;
     const moved = await tryCatch(catchUpGroupImageKeys({ groupId, groups, userId }));
     imageKeysMoved ||= Boolean(moved.data);
     const latest = readMisses();
@@ -289,14 +304,15 @@ export const settleImageKeyCatchUps = async () => {
 
 export const applyPlaceUpdates = async ({
   updates,
-  userId,
+  round,
 }: {
   updates: PlaceUpdates;
-  userId: string;
+  round: AccountRound;
 }) => {
+  const { userId } = round;
   let groupList: ReturnType<Groups> | null = null;
   const groups: Groups = () => {
-    groupList ??= trpcClient.groupMembership.list.query();
+    groupList ??= trpcClient.groupMembership.list.query(undefined, accountRequest(round));
     return groupList;
   };
   hashStoredPlaceGeometry();
@@ -309,7 +325,7 @@ export const applyPlaceUpdates = async ({
       (detectedGroups !== null && !detectedGroups.has(summary.groupId))
     ) {
       const synced = await tryCatch(
-        syncGroupPlaces({ groupId: summary.groupId, groups, quietPlaceIds: [], userId }),
+        syncGroupPlaces({ groupId: summary.groupId, groups, quietPlaceIds: [], round, userId }),
       );
       if (synced.data) {
         storage.set(revisionKey, summary.revision);
@@ -327,12 +343,13 @@ export const applyPlaceUpdates = async ({
   }
   if (updates.placeAlerts) {
     const shown = await tryCatch(
-      showPlaceAlerts({ alerts: updates.placeAlerts.alerts, groups, userId }),
+      showPlaceAlerts({ alerts: updates.placeAlerts.alerts, groups, round }),
     );
-    if (!shown.error) storage.set(storageKey(userId, "alertsCursor"), updates.placeAlerts.cursor);
+    if (!shown.error && isRoundCurrent(round))
+      storage.set(storageKey(userId, "alertsCursor"), updates.placeAlerts.cursor);
   }
   if (updates.notices) {
-    await tryCatch(showNotices({ notices: updates.notices, groups, userId }));
+    await tryCatch(showNotices({ notices: updates.notices, groups, round }));
   }
   if (updates.imageKeysNeedCatchUp) {
     const catchUp = tryCatch(
@@ -340,7 +357,7 @@ export const applyPlaceUpdates = async ({
         epochOf: nativeGroups?.epochOf ?? (() => undefined),
         groupIds: updates.imageKeysNeedCatchUp,
         groups,
-        userId,
+        round,
       }),
     ).then(() => {
       imageKeyCatchUps.delete(catchUp);

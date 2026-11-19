@@ -112,6 +112,10 @@ public class OpenBeaconTrackingModule: Module {
       Notices.showEvent(kind: kind, key: key, title: title, body: body, groupName: groupName, link: link)
     }
 
+    AsyncFunction("clearEventNotices") { (keepSecurityAlerts: Bool, promise: Promise) in
+      Notices.clearEvents(keepSecurityAlerts: keepSecurityAlerts) { promise.resolve() }
+    }
+
     Function("pendingPushToken") { (_: String) -> String? in
       nil
     }

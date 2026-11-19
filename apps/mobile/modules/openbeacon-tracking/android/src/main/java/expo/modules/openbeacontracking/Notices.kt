@@ -67,11 +67,12 @@ enum class EventNoticeKind(
   val kind: String,
   val tag: String,
   val channel: EventChannel?,
+  val aboutOthers: Boolean,
 ) {
-  ALERT("alert", "openbeacon_place_alert", EventChannel.PLACE_ALERTS),
-  PLACES_CHANGED("placesChanged", "openbeacon_places_changed", null),
-  GROUP_ACTIVITY("groupActivity", "openbeacon_group_activity", EventChannel.GROUP_ACTIVITY),
-  ACCOUNT_ALERT("accountAlert", "openbeacon_account_alert", EventChannel.ACCOUNT_ALERTS),
+  ALERT("alert", "openbeacon_place_alert", EventChannel.PLACE_ALERTS, true),
+  PLACES_CHANGED("placesChanged", "openbeacon_places_changed", null, true),
+  GROUP_ACTIVITY("groupActivity", "openbeacon_group_activity", EventChannel.GROUP_ACTIVITY, true),
+  ACCOUNT_ALERT("accountAlert", "openbeacon_account_alert", EventChannel.ACCOUNT_ALERTS, false),
   ;
 
   companion object {
@@ -177,20 +178,19 @@ object Notices {
   ): Boolean {
     val manager = NotificationManagerCompat.from(context)
     val channelName = context.getString(kind.channel?.title ?: R.string.openbeacon_notice_channel)
-    val channelId =
-      kind.channel?.let { channel ->
-        manager.createNotificationChannel(
-          NotificationChannelCompat
-            .Builder(channel.id, channel.importance)
-            .setName(channelName)
-            .setDescription(context.getString(channel.description))
-            .build(),
-        )
-        channel.id
-      } ?: run {
-        createSharingChannel(context)
-        CHANNEL_ID
-      }
+    val channel = kind.channel
+    if (channel != null) {
+      manager.createNotificationChannel(
+        NotificationChannelCompat
+          .Builder(channel.id, channel.importance)
+          .setName(channelName)
+          .setDescription(context.getString(channel.description))
+          .build(),
+      )
+    } else {
+      createSharingChannel(context)
+    }
+    val channelId = channelId(kind)
     if (!isChannelEnabled(context, channelId)) return false
     val id = key.hashCode()
     val intent =
@@ -218,7 +218,7 @@ object Notices {
     manager.notify(kind.tag, id, builder.build())
     manager.notify(
       SUMMARY_TAG,
-      channelId.hashCode(),
+      summaryId(channelId),
       NotificationCompat
         .Builder(context, channelId)
         .setGroup(group)
@@ -237,6 +237,22 @@ object Notices {
     )
     return true
   }
+
+  fun clearEvents(
+    context: Context,
+    keepSecurityAlerts: Boolean,
+  ) {
+    val manager = NotificationManagerCompat.from(context)
+    val cleared = EventNoticeKind.entries.filter { it.aboutOthers || !keepSecurityAlerts }
+    manager.activeNotifications
+      .filter { active -> cleared.any { it.tag == active.tag } }
+      .forEach { manager.cancel(it.tag, it.id) }
+    cleared.map(::channelId).distinct().forEach { manager.cancel(SUMMARY_TAG, summaryId(it)) }
+  }
+
+  private fun channelId(kind: EventNoticeKind) = kind.channel?.id ?: CHANNEL_ID
+
+  private fun summaryId(channelId: String) = channelId.hashCode()
 
   private fun createSharingChannel(context: Context) {
     NotificationManagerCompat.from(context).createNotificationChannel(

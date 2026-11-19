@@ -12,6 +12,7 @@ import { devicePendingCause, deviceIdHeader, deviceUnverifiedCause } from "@open
 import { observable } from "@trpc/server/observable";
 import { AppState } from "react-native";
 import superjson from "superjson";
+import { isAccountRound, isRoundCurrent } from "./accountSession.ts";
 import {
   apiCompatibilityFetch,
   getApiCompatibility,
@@ -48,6 +49,18 @@ export const queryClient = new QueryClient({
   },
 });
 
+const accountLink: TRPCLink<AppRouter> =
+  () =>
+  ({ op, next }) =>
+    observable((observer) => {
+      const { accountRound } = op.context;
+      if (isAccountRound(accountRound) && !isRoundCurrent(accountRound)) {
+        observer.error(new TRPCClientError("Signed out of the account this request was for."));
+        return;
+      }
+      return next(op).subscribe(observer);
+    });
+
 const deviceRemovedLink: TRPCLink<AppRouter> =
   () =>
   ({ op, next }) =>
@@ -82,6 +95,7 @@ const deviceRemovedLink: TRPCLink<AppRouter> =
 
 export const trpcClient = createTRPCClient<AppRouter>({
   links: [
+    accountLink,
     deviceRemovedLink,
     loggerLink({
       enabled: (opts) =>

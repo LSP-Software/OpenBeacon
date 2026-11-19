@@ -37,7 +37,7 @@ describe("expectNoSecretsIn", () => {
     ["the phrase joined by underscores", { phrase: words.join("_") }],
     ["the phrase joined by nothing", { phrase: words.join("") }],
     ["the phrase as an array", { phrase: words }],
-    ["the phrase words as object keys", Object.fromEntries(words.map((word) => [word, true]))],
+    ["the phrase words as object keys", words.map((word) => ({ [word]: true }))],
     ["a redacted key object", { privateKey: "[REDACTED]" }],
   ])("catches %s", (_name, leak) => {
     expect(() => expectNoSecretsIn(leak, { secrets: [key], phrases: [phrase] })).toThrow();

@@ -121,6 +121,10 @@ class OpenBeaconTrackingModule : Module() {
         Notices.showEvent(requireContext(), EventNoticeKind.of(kind), key, title, body, groupName, link)
       }
 
+      AsyncFunction("clearEventNotices") { keepSecurityAlerts: Boolean ->
+        Notices.clearEvents(requireContext(), keepSecurityAlerts)
+      }
+
       Function("pendingPushToken") { scope: String ->
         PushRuntime.tokens(requireContext()).pending(scope)
       }

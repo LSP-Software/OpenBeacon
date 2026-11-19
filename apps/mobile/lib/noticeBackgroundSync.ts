@@ -1,4 +1,5 @@
 import { alertsCursorSchema, notificationTypes } from "@openbeacon/schemas";
+import { type AccountRound, isRoundCurrent } from "./accountSession.ts";
 import type { RouterOutputs } from "./api.ts";
 import { getBaseUrl } from "./currentServer.ts";
 import { describeGroupEvent } from "./groupHistory.ts";
@@ -114,10 +115,10 @@ export const describeAccountNotice = (notice: AccountNotices["notices"][number])
 
 export const showAccountNotices = async ({
   notices,
-  userId,
+  round,
 }: {
   notices: Pick<AccountNotices, "cursor" | "notices">;
-  userId: string;
+  round: AccountRound;
 }) => {
   for (const notice of notices.notices) {
     const described = describeAccountNotice(notice);
@@ -127,20 +128,22 @@ export const showAccountNotices = async ({
       groupName: null,
       key: notice.id,
       kind: "accountAlert",
+      round,
     });
   }
-  storage.set(accountCursorKey(userId), notices.cursor);
+  if (isRoundCurrent(round)) storage.set(accountCursorKey(round.userId), notices.cursor);
 };
 
 export const showNotices = async ({
   notices,
   groups,
-  userId,
+  round,
 }: {
   notices: Notices;
   groups: () => Promise<RouterOutputs["groupMembership"]["list"]>;
-  userId: string;
+  round: AccountRound;
 }) => {
+  const { userId } = round;
   const nicknamesFor = nicknamesByGroup(userId);
   for (const notice of notices.notices) {
     const group = (await groups()).find(({ id }) => id === notice.groupId);
@@ -168,7 +171,8 @@ export const showNotices = async ({
         },
         url: `openbeacon:///groups/${encodeURIComponent(notice.groupId)}?tab=history`,
       },
+      round,
     });
   }
-  storage.set(cursorKey(userId), notices.cursor);
+  if (isRoundCurrent(round)) storage.set(cursorKey(userId), notices.cursor);
 };

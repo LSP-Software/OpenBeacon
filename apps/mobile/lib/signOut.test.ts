@@ -140,6 +140,8 @@ mock.module("./auth-client.ts", () => ({
   },
 }));
 
+mock.module("./notifications.ts", () => ({ clearEventNotices: async () => {} }));
+
 mock.module("./tracking.ts", () => ({
   deleteQueuedTrackingPoints: async () => {
     events.push("deleteQueue");
