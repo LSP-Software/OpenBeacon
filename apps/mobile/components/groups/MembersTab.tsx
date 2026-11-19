@@ -590,7 +590,7 @@ const MemberStatus = ({
                 as={deviceIconFor(device.icon ?? "phone", device.platform).icon}
                 className="text-tertiary size-4"
               />
-              <Text className="text-secondary flex-1 text-sm" numberOfLines={1}>
+              <Text className="text-secondary flex-1 text-sm" numberOfLines={lowBattery ? 2 : 1}>
                 {device.name ?? "Device"},{" "}
                 {lowBattery
                   ? `may be out of battery, ${shortTimeSince(device.timestamp)} ago`
