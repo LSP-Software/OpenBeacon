@@ -13,6 +13,8 @@ let trackingRevocations = 0;
 let pushTokenForgets = 0;
 let eventNoticeClears: { keepSecurityAlerts: boolean }[] = [];
 const registeredAtEventNoticeClears: boolean[] = [];
+let googleSignInForgets = 0;
+let googleSignOut: () => Promise<void> = async () => {};
 let sessionUserId: string | null = "user-a";
 let registerError: Error | null = null;
 let stalledDelete: string | null = null;
@@ -121,6 +123,13 @@ mock.module("./auth-client.ts", () => ({
       ).length;
       return { error: null };
     },
+  },
+}));
+
+mock.module("./auth.ts", () => ({
+  forgetGoogleSignIn: async () => {
+    googleSignInForgets += 1;
+    await googleSignOut();
   },
 }));
 
@@ -255,6 +264,8 @@ describe("wiping a removed phone", () => {
     navigations.length = 0;
     queueDeletions.length = 0;
     signOuts = 0;
+    googleSignInForgets = 0;
+    googleSignOut = async () => {};
     sessionUserId = "user-a";
     registerError = null;
     stalledDelete = null;
@@ -457,6 +468,36 @@ describe("wiping a removed phone", () => {
     expect(secureStoreValues.has("encryption.device.privateKey.user-a")).toBe(true);
     expect(storageValues.get("encryption.device.id.user-a")).toBe(device.deviceId);
     expect(navigations).toEqual([]);
+  });
+
+  test("signing out forgets the Google account the phone signed in with", async () => {
+    await ensureDeviceKeyRegistration();
+
+    await endSession({ reason: "signedOut" });
+
+    expect(googleSignInForgets).toBe(1);
+  });
+
+  test("a Google sign-out that fails still signs out", async () => {
+    await ensureDeviceKeyRegistration();
+    googleSignOut = async () => {
+      throw new Error("[SIGN_OUT_FAILED] Credential Manager failed");
+    };
+
+    const result = await endSession({ reason: "signedOut" });
+
+    expect(googleSignInForgets).toBe(1);
+    expect(signOuts).toBe(1);
+    expect(result.signedOut).toBe(true);
+  });
+
+  test("a lost session keeps the Google account until the person signs out", async () => {
+    await ensureDeviceKeyRegistration();
+    sessionUserId = null;
+
+    await endSession({ reason: "sessionLost" });
+
+    expect(googleSignInForgets).toBe(0);
   });
 
   test("a lost session without a registration sends nothing", async () => {

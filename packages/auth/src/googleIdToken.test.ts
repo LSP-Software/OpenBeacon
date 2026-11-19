@@ -26,6 +26,7 @@ const idToken = (claims: Record<string, unknown>) => {
     sub: "google-subject",
     iat: now,
     exp: now + 300,
+    nonce: "nonce",
     ...claims,
   })}`;
   return `${message}.${sign("RSA-SHA256", Buffer.from(message), privateKey).toString("base64url")}`;
@@ -38,39 +39,68 @@ describe("Google ID token verification", () => {
   });
 
   test("accepts a token Google signed for this client", async () => {
-    expect(await verify({ token: idToken({}), audience: "client-id" })).toMatchObject({
+    expect(
+      await verify({ token: idToken({}), audience: "client-id", nonce: "nonce" }),
+    ).toMatchObject({
       sub: "google-subject",
     });
     expect(
-      await verify({ token: idToken({ iss: "accounts.google.com" }), audience: "client-id" }),
+      await verify({
+        token: idToken({ iss: "accounts.google.com" }),
+        audience: "client-id",
+        nonce: "nonce",
+      }),
     ).toMatchObject({ sub: "google-subject" });
   });
 
   test("rejects a token for another client or issuer", async () => {
-    expect(await verify({ token: idToken({ aud: "other" }), audience: "client-id" })).toBeNull();
     expect(
-      await verify({ token: idToken({ iss: "https://evil.example" }), audience: "client-id" }),
+      await verify({ token: idToken({ aud: "other" }), audience: "client-id", nonce: "nonce" }),
+    ).toBeNull();
+    expect(
+      await verify({
+        token: idToken({ iss: "https://evil.example" }),
+        audience: "client-id",
+        nonce: "nonce",
+      }),
     ).toBeNull();
   });
 
   test("rejects an expired token or one issued over an hour ago", async () => {
     const now = Math.floor(Date.now() / 1000);
     expect(
-      await verify({ token: idToken({ iat: now - 600, exp: now - 300 }), audience: "client-id" }),
+      await verify({
+        token: idToken({ iat: now - 600, exp: now - 300 }),
+        audience: "client-id",
+        nonce: "nonce",
+      }),
     ).toBeNull();
     expect(
-      await verify({ token: idToken({ iat: now - 3_700, exp: now + 300 }), audience: "client-id" }),
+      await verify({
+        token: idToken({ iat: now - 3_700, exp: now + 300 }),
+        audience: "client-id",
+        nonce: "nonce",
+      }),
     ).toBeNull();
   });
 
-  test("checks the nonce when one is expected", async () => {
-    expect(
-      await verify({ token: idToken({ nonce: "nonce" }), audience: "client-id", nonce: "nonce" }),
-    ).toMatchObject({ sub: "google-subject" });
+  test("rejects a token without the expected nonce, saying when it carries another one", async () => {
     expect(
       await verify({ token: idToken({ nonce: "other" }), audience: "client-id", nonce: "nonce" }),
+    ).toBe("wrong-nonce");
+    expect(
+      await verify({
+        token: idToken({ aud: "other", nonce: "other" }),
+        audience: "client-id",
+        nonce: "nonce",
+      }),
     ).toBeNull();
-    expect(await verify({ token: idToken({}), audience: "client-id", nonce: "nonce" })).toBeNull();
+    expect(
+      await verify({ token: idToken({ nonce: undefined }), audience: "client-id", nonce: "nonce" }),
+    ).toBeNull();
+    expect(
+      await verify({ token: idToken({ nonce: "" }), audience: "client-id", nonce: "" }),
+    ).toBeNull();
   });
 
   test("rejects a token signed with another key", async () => {
@@ -80,7 +110,7 @@ describe("Google ID token verification", () => {
       Buffer.from(`${token[0]}.${token[1]}`),
       generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey,
     ).toString("base64url")}`;
-    expect(await verify({ token: forged, audience: "client-id" })).toBeNull();
+    expect(await verify({ token: forged, audience: "client-id", nonce: "nonce" })).toBeNull();
   });
 });
 
@@ -91,6 +121,6 @@ test("gives up on a Google certs endpoint that never answers", async () => {
   });
   const start = performance.now();
 
-  expect(await verify({ token: idToken({}), audience: "client-id" })).toBeNull();
+  expect(await verify({ token: idToken({}), audience: "client-id", nonce: "nonce" })).toBeNull();
   expect(performance.now() - start).toBeLessThan(2_000);
 });

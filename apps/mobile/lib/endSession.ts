@@ -217,6 +217,11 @@ export const endSession = async ({
   if (clears.credentials !== "keep") {
     const result = await settleBy(tryCatch(authClient.signOut()), serverDeadline, null);
     signedOut = !!result && !result.error && !result.data.error;
+    await settleBy(
+      tryCatch(import("./auth.ts").then(({ forgetGoogleSignIn }) => forgetGoogleSignIn())),
+      Math.min(serverDeadline ?? Number.POSITIVE_INFINITY, Date.now() + 3_000),
+      null,
+    );
   }
   if (clears.credentials === "signOutAndDropRevokeToken") {
     await tryCatch(forgetSessionTokenToRevoke());

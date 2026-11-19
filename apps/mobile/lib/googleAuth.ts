@@ -1,6 +1,21 @@
 import { completeAuthenticatedSessionSetup, signInWithGoogle } from "./auth.ts";
 
-export const performGoogleAuth = async ({
+let googleAuthInFlight = false;
+
+export const performGoogleAuth = async (options: {
+  setLoading: (loading: boolean) => void;
+  failureTitle: string;
+  onSuccess: () => void | Promise<void>;
+  alert: (title: string, message: string) => void;
+}) => {
+  if (googleAuthInFlight) return;
+  googleAuthInFlight = true;
+  await runGoogleAuth(options).finally(() => {
+    googleAuthInFlight = false;
+  });
+};
+
+const runGoogleAuth = async ({
   setLoading,
   failureTitle,
   onSuccess,
