@@ -12,7 +12,6 @@ import { AppState, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LocationSharingPausedBanner } from "../../../components/map/LocationSharingPausedBanner.tsx";
 import { SeatHoldBanner } from "../../../components/SeatHoldBanner.tsx";
-import { SeatsEndingBanner } from "../../../components/SeatsEndingBanner.tsx";
 import { NativeMap } from "../../../components/map/NativeMap.tsx";
 import { AnnouncementBanner } from "../../../components/AnnouncementBanner.tsx";
 import { NewSignInBanner } from "../../../components/NewSignInBanner.tsx";
@@ -452,10 +451,6 @@ const MapScreen = () => {
           polled={trackingStatus.sharing?.find((state) => state.deviceId === selfDeviceId) ?? null}
           subscribed={isFocused}
           userId={selfUserId}
-        />
-        <SeatsEndingBanner
-          ownsAGroup={allGroups?.some((group) => group.ownerId === selfUserId) === true}
-          subscribed={isFocused}
         />
         <SeatHoldBanner groups={allGroups ?? []} linkToGroup userId={selfUserId} />
         {queueEviction && (

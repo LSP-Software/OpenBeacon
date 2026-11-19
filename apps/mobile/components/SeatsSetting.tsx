@@ -20,7 +20,6 @@ export const SeatsSetting = ({
     used: number;
     max: number;
     paidPeriodEndsAt: Date | null;
-    graceEndsAt: Date | null;
   };
   onChanged: () => Promise<unknown>;
 }) => {
@@ -28,12 +27,11 @@ export const SeatsSetting = ({
   const setSeats = useMutation(trpc.account.setSeats.mutationOptions());
   const setPaidPeriodEnded = useMutation(trpc.account.setPaidPeriodEnded.mutationOptions());
   const [draft, setDraft] = useState<number | null>(null);
-  const { graceEndsAt, max, paidPeriodEndsAt, paidSeats, used } = seats;
+  const { max, paidPeriodEndsAt, paidSeats, used } = seats;
   const value = draft ?? paidSeats;
   const refresh = () =>
     Promise.all([
       onChanged(),
-      queryClient.invalidateQueries({ queryKey: trpc.account.seats.queryKey() }),
       queryClient.invalidateQueries({ queryKey: trpc.groupMembership.list.queryKey() }),
     ]);
   const save = async () => {
@@ -108,10 +106,8 @@ export const SeatsSetting = ({
         <View className="gap-2 border-t border-border pt-3">
           <Text className="text-sm text-tertiary">
             {paidPeriodEndsAt === null
-              ? "Ending the paid period starts a 7-day grace period, at most once every 6 months. After it, this account has no seats, so every phone in the groups you own goes on hold."
-              : graceEndsAt
-                ? `Your paid period ended ${formatDate(paidPeriodEndsAt)}. You keep your seats until ${formatDate(graceEndsAt)}.`
-                : `Your paid period ended ${formatDate(paidPeriodEndsAt)} with no grace period left, so you have no seats.`}
+              ? "Ending the paid period leaves this account with no seats, so every phone in the groups you own goes on hold straight away."
+              : `Your paid period ended ${formatDate(paidPeriodEndsAt)}, so you have no seats. Renew to lift the holds.`}
           </Text>
           <Button
             size="sm"
@@ -123,7 +119,7 @@ export const SeatsSetting = ({
               }
               Alert.alert(
                 "End the paid period now?",
-                "This starts your 7-day grace period, which you can only use once every 6 months. When it ends, this account has no seats, so every phone in the groups you own goes on hold.",
+                "This account will have no seats, so every phone in the groups you own goes on hold straight away. Renewing lifts the holds.",
                 [
                   { text: "Cancel", style: "cancel" },
                   {

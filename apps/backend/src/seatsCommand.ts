@@ -1,4 +1,4 @@
-import { limits, maxAccountSeats } from "@openbeacon/api/limits.ts";
+import { maxAccountSeats } from "@openbeacon/api/limits.ts";
 import { z } from "zod";
 
 const maxHoursAgo = 24 * 366;
@@ -8,13 +8,11 @@ export const seatsUsage = `Usage:
   seats set <email> <seats>
   seats end-period <email> [hours-ago]
   seats renew <email>
-  seats reset-grace <email>
 
 <seats> is a whole number from 0 to ${maxAccountSeats}.
 end-period ends the account's paid period now, or [hours-ago] hours ago (up to ${maxHoursAgo}).
-The account keeps its seats for a ${limits.gracePeriodDays}-day grace period, at most once every ${limits.graceCooldownMonths} months, then has 0.
-renew clears the paid period's end. Ending or renewing after a paid period has ended still counts
-its grace period. reset-grace forgets the last grace period, so the next end-period gets one again.`;
+The account then has 0 seats, so every phone in the groups it owns goes on hold.
+renew clears the paid period's end, which lifts those holds.`;
 
 const wholeNumber = (max: number) =>
   z
@@ -26,7 +24,7 @@ const wholeNumber = (max: number) =>
 export const parseSeatsCommand = (
   args: string[],
 ):
-  | { command: "show" | "renew" | "reset-grace"; email: string }
+  | { command: "show" | "renew"; email: string }
   | { command: "set"; email: string; seats: number }
   | { command: "end-period"; email: string; hoursAgo: number }
   | { command: "help" }
@@ -35,7 +33,7 @@ export const parseSeatsCommand = (
   if (command === undefined || command === "help") return { command: "help" };
   const unknown = { command: "error" as const, message: `Unknown command: ${args.join(" ")}` };
   if (!email || rest.length > 0) return unknown;
-  if ((command === "show" || command === "renew" || command === "reset-grace") && !value) {
+  if ((command === "show" || command === "renew") && !value) {
     return value === undefined ? { command, email } : unknown;
   }
   if (command === "end-period") {

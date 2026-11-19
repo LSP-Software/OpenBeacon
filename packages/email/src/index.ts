@@ -5,7 +5,7 @@ import { renderCodeEmail } from "./codeEmail.tsx";
 import { loadEmailSettings } from "./config.ts";
 import { renderGoogleSignInEmail } from "./googleSignInEmail.tsx";
 import { renderEmailLayout } from "./layout.tsx";
-import { renderSeatsEndingEmail } from "./seatsEndingEmail.tsx";
+import { renderSeatsEndedEmail } from "./seatsEndedEmail.tsx";
 import { createSendSecurityAlertEmail } from "./securityAlertEmail.tsx";
 import { createSendEmail } from "./sender.ts";
 import { createEmailTransport } from "./transport.ts";
@@ -89,17 +89,17 @@ export const sendGoogleSignInEmail = async ({ to, userId }: { to: string; userId
 
 export const sendSecurityAlertEmail = createSendSecurityAlertEmail({ sendEmail, serverName });
 
-export const sendSeatsEndingEmail = async ({
+export const sendSeatsEndedEmail = async ({
   to,
   userId,
   ...email
-}: Omit<Parameters<typeof renderSeatsEndingEmail>[0], "serverName"> & {
+}: Omit<Parameters<typeof renderSeatsEndedEmail>[0], "serverName"> & {
   to: string;
   userId: string;
 }) =>
   sendEmail({
     to,
-    ...(await renderSeatsEndingEmail({ ...email, serverName })),
+    ...(await renderSeatsEndedEmail({ ...email, serverName })),
     userId,
     optional: false,
   });

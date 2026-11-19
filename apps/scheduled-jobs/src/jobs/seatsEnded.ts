@@ -1,15 +1,15 @@
-import { sendSeatGraceWarnings } from "@openbeacon/api/seatGraceWarnings.ts";
-import { emailEnabled, sendSeatsEndingEmail } from "@openbeacon/email";
+import { sendSeatsEndedNotices } from "@openbeacon/api/seatsEnded.ts";
+import { emailEnabled, sendSeatsEndedEmail } from "@openbeacon/email";
 import { getDatabaseTime } from "../databaseTime.ts";
 import { services } from "../services.ts";
 
-export const runSeatGraceWarnings = async () =>
-  sendSeatGraceWarnings({
+export const runSeatsEnded = async () =>
+  sendSeatsEndedNotices({
     db: services.db,
     now: await getDatabaseTime(),
     sendEmail: emailEnabled
       ? ({ holds, ...email }) =>
-          sendSeatsEndingEmail({
+          sendSeatsEndedEmail({
             ...email,
             holds: holds.map(({ groupId, groupName, memberName, deviceName }) => ({
               groupId,

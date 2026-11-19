@@ -36,8 +36,6 @@ import { deviceRemovedError } from "../lib/deviceRemoved.ts";
 import { deviceUnverifiedError } from "../lib/deviceUnverified.ts";
 import { removeUserDevice, toAlertDevice } from "../lib/removeDevice.ts";
 import { limits, maxAccountSeats } from "../lib/limits.ts";
-import { changePaidPeriod } from "../lib/seatGraceWarnings.ts";
-import { seatAccountSelect, seatPeriod, seatsEndingHolds, seatsEnforced } from "../lib/seats.ts";
 import {
   freshSessionProcedure,
   protectedProcedure,
@@ -455,23 +453,6 @@ export const accountRouter = {
         select: { name: true },
       });
     }),
-  seats: protectedProcedure.query(async ({ ctx }) => {
-    const userId = ctx.session.user.id;
-    const now = new Date();
-    const period = seatPeriod(
-      await ctx.db.user.findUniqueOrThrow({ where: { id: userId }, select: seatAccountSelect }),
-      now,
-    );
-    return {
-      grace:
-        seatsEnforced(ctx) && period.grace
-          ? {
-              endsAt: period.grace.endsAt,
-              holds: await seatsEndingHolds({ db: ctx.db, now, ownerId: userId }),
-            }
-          : null,
-    };
-  }),
   usage: protectedProcedure.meta({ rateLimit: { limit: 60, windowMs: 60_000 } }).query(({ ctx }) =>
     readAccountUsage({
       allowSelfSetSeats: selfSetSeatsAllowed(ctx),
@@ -500,12 +481,10 @@ export const accountRouter = {
     .input(z.object({ ended: z.boolean() }))
     .mutation(async ({ ctx, input }) => {
       assertSelfSetSeats(ctx);
-      const now = new Date();
-      const user = await changePaidPeriod({
-        db: ctx.db,
-        now,
-        paidPeriodEndsAt: input.ended ? now : null,
-        userId: ctx.session.user.id,
+      const user = await ctx.db.user.update({
+        where: { id: ctx.session.user.id },
+        data: { paidPeriodEndsAt: input.ended ? new Date() : null },
+        select: { paidPeriodEndsAt: true },
       });
       return { paidPeriodEndsAt: user.paidPeriodEndsAt };
     }),

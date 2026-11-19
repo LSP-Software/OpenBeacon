@@ -145,10 +145,7 @@ const OwnershipOffers = ({ offers }: { offers: RouterOutputs["groupOwnership"]["
       queryClient.invalidateQueries({ queryKey: trpc.groupOwnership.offers.queryKey() }),
       queryClient.invalidateQueries({ queryKey: trpc.groupMembership.list.queryKey() }),
       ...(answer === "accept"
-        ? [
-            queryClient.invalidateQueries({ queryKey: trpc.account.usage.queryKey() }),
-            queryClient.invalidateQueries({ queryKey: trpc.account.seats.queryKey() }),
-          ]
+        ? [queryClient.invalidateQueries({ queryKey: trpc.account.usage.queryKey() })]
         : []),
     ]);
     if (result.error) {

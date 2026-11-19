@@ -56,7 +56,6 @@ const createCaller = (
       findUniqueOrThrow: mock(async () => ({
         seats: 2,
         paidPeriodEndsAt: null,
-        lastGracePeriodStartedAt: null,
       })),
       findMany: mock(async () => [
         { id: "target-user", email: "target@example.test", receivedGroupMemberInvites: [] },

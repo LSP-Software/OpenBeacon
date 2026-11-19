@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@openbeacon/database";
 import { limits, maxAccountSeats } from "./limits.ts";
-import { seatAccountSelect, seatPeriod, seatsEnforced, type SeatHolds } from "./seats.ts";
+import { currentSeats, seatAccountSelect, seatsEnforced, type SeatHolds } from "./seats.ts";
 
 type Unit = { one: string; other: string };
 
@@ -38,7 +38,7 @@ export const readAccountUsage = async ({
     }),
     enforced ? seatHolds.ownSeats() : Promise.resolve([]),
   ]);
-  const period = seatPeriod(account, now);
+  const seats = currentSeats(account, now);
   const seatDevices = await db.userDevice.findMany({
     where: { id: { in: ownSeats.map(({ deviceId }) => deviceId) } },
     select: { id: true, name: true, user: { select: { name: true } } },
@@ -63,7 +63,6 @@ export const readAccountUsage = async ({
                         memberName: device.user.name,
                         isThisPhone: seat.deviceId === deviceId,
                         onHold: seat.held,
-                        holdsFrom: period.grace && !seat.held ? period.grace.endsAt : null,
                       },
                     ]
                   : [];
@@ -108,7 +107,7 @@ export const readAccountUsage = async ({
             id: "seats",
             label: "Seats",
             used: seatsUsed,
-            max: period.seats,
+            max: seats,
             onHold: seatsOnHold,
             unit: { one: "seat", other: "seats" },
           },
@@ -151,14 +150,13 @@ export const readAccountUsage = async ({
     limits: usageLimits,
     seats: enforced
       ? {
-          seats: period.seats,
+          seats,
           paidSeats: account.seats,
           used: seatsUsed,
           onHold: seatsOnHold,
           max: maxAccountSeats,
           selfSetAllowed: allowSelfSetSeats,
           paidPeriodEndsAt: account.paidPeriodEndsAt,
-          graceEndsAt: period.grace?.endsAt ?? null,
         }
       : null,
     groups,

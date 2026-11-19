@@ -83,7 +83,6 @@ export const readAccountNotices = ({
             deviceModel: true,
             devicePlatform: true,
             deletionDate: true,
-            holdsFrom: true,
             turnedOffEmail: true,
             turnedOffPhone: true,
             group: { select: { id: true, name: true } },
@@ -106,7 +105,6 @@ export const readAccountNotices = ({
                 platform: notice.devicePlatform,
               },
         deletionDate: notice.deletionDate,
-        holdsFrom: notice.holdsFrom,
         turnedOff: [
           ...notice.turnedOffPhone.map((type) => ({ type, channel: "phone" as const })),
           ...notice.turnedOffEmail.map((type) => ({ type, channel: "email" as const })),

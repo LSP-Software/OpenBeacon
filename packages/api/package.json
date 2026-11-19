@@ -13,7 +13,7 @@
     "./historyShare.ts": "./src/lib/historyShare.ts",
     "./limits.ts": "./src/lib/limits.ts",
     "./seats.ts": "./src/lib/seats.ts",
-    "./seatGraceWarnings.ts": "./src/lib/seatGraceWarnings.ts",
+    "./seatsEnded.ts": "./src/lib/seatsEnded.ts",
     "./trackingCleanup.ts": "./src/lib/trackingCleanup.ts",
     "./storage.ts": "./src/lib/storage.ts",
     "./image-upload.ts": "./src/lib/image-upload.ts",

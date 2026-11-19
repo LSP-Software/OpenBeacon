@@ -62,7 +62,6 @@ const account = (
   type,
   device: null,
   deletionDate: null,
-  holdsFrom: null,
   turnedOff: [],
   group: null,
   ...extra,
@@ -164,34 +163,12 @@ describe("account notices", () => {
     ]);
   });
 
-  test("say when seats end and which group a member's phones go on hold in", () => {
-    const holdsFrom = new Date(2026, 10, 25, 12);
-    const date = holdsFrom.toLocaleDateString(undefined, { day: "numeric", month: "short" });
-    expect(describeAccountNotice(account("SEATS_ENDING", { holdsFrom }))).toMatchObject({
-      title: "Your seats have ended",
-      body: `From ${date}, phones in the groups you own go on hold until you renew your seats. Open Account › Usage to see which.`,
-      link: { url: "openbeacon:///account/usage" },
-    });
-    expect(describeAccountNotice(account("SEATS_ENDED", { holdsFrom }))).toMatchObject({
+  test("tell the owner their seats have ended and where to see the phones on hold", () => {
+    expect(describeAccountNotice(account("SEATS_ENDED"))).toMatchObject({
       title: "Phones in your groups are on hold",
       body: "Your seats have ended, so phones in the groups you own are on hold until you renew your seats. Open Account › Usage to see which.",
       link: { url: "openbeacon:///account/usage" },
     });
-    expect(describeAccountNotice(account("SEATS_ENDING_SOON", { holdsFrom })).title).toBe(
-      "Phones in your groups go on hold tomorrow",
-    );
-    expect(
-      describeAccountNotice(
-        account("SEAT_HOLD_COMING", { group: { id: "g1", name: "Family" }, holdsFrom }),
-      ),
-    ).toMatchObject({
-      title: `Sharing with Family goes on hold on ${date}`,
-      body: "The group’s owner won’t have a seat for every phone of yours after then. A phone without a seat stops sharing your location there until they add seats. You can leave the group at any time.",
-      link: { url: "openbeacon:///groups/g1" },
-    });
-    expect(describeAccountNotice(account("SEAT_HOLD_COMING")).link.url).toBe(
-      "openbeacon:///groups/list",
-    );
   });
 
   test("name the group a request to become its owner is about", () => {

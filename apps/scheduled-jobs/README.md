@@ -82,9 +82,9 @@ It checks each listed page of versions against users, groups and pending uploads
 
 Logs the 10 accounts that stored the most location history points in the last 24 hours (live-only uploads aren't stored, so they don't count), with how many groups each is in. It logs nothing when there were no uploads.
 
-### `seat-grace-warnings` (every hour)
+### `seats-ended` (every hour)
 
-Finds accounts whose paid period ended in the last 7 days and that are in their grace period. The first run after a paid period ends records the start of the grace period in `lastGracePeriodStartedAt`, then sends the owner an email and a `SEATS_ENDING` account notice, and gives every member whose phones will go on hold a `SEAT_HOLD_COMING` notice for that group. From 1 day before the grace period ends it sends a reminder (`SEATS_ENDING_SOON` and a second email), once. Nothing is sent when no phone would go on hold. When a paid period ends and no grace is given (a second lapse within 6 months), every phone goes on hold at once: the job sends the owner one `SEATS_ENDED` notice and an email listing the phones now on hold, and records the paid-period end in `seatsEndedNoticeFor` so it isn't sent again, even after the cleanup job deletes the notice. Holds themselves are worked out live by the backend, so this job only warns.
+Finds accounts whose paid period has ended and that haven't been told about that end yet. An account has no seats from the moment its paid period ends, so every phone in the groups it owns goes on hold straight away. If any phones had seats just before the end, the job sends the owner one `SEATS_ENDED` account notice and an email listing the phones now on hold. It records the paid-period end in `seatsEndedNoticeFor` so the owner isn't told again, even after the cleanup job deletes the notice. A failed email is retried on the next run. Holds themselves are worked out live by the backend, and renewing lifts them, so this job only tells the owner.
 
 Self-hosted servers never set `paidPeriodEndsAt`, so the job finds nothing to do there.
 

@@ -110,26 +110,17 @@ const UsageScreen = () => {
             })}
           </View>
 
-          {seats?.graceEndsAt && seats.paidPeriodEndsAt && (
-            <View className="gap-2 rounded-2xl border border-warning-accent bg-card p-5">
-              <Text className="text-foreground font-semibold">Your seats have ended</Text>
-              <Text className="text-tertiary text-sm leading-5">
-                Your paid period ended on {formatDate(seats.paidPeriodEndsAt)}. Your groups keep
-                working until {formatDate(seats.graceEndsAt)}. Then the phones marked below go on
-                hold until you renew.
-              </Text>
-            </View>
-          )}
-
           {seats && seats.onHold > 0 && (
             <View className="gap-2 rounded-2xl border border-warning-accent bg-card p-5">
               <Text className="text-foreground font-semibold">
                 {pluralize(seats.onHold, "phone")} {seats.onHold === 1 ? "is" : "are"} on hold
               </Text>
               <Text className="text-tertiary text-sm leading-5">
-                {seats.seats === 0
-                  ? "Your account has no seats, so every phone in the groups you own is on hold."
-                  : `You’re using more phones than your ${pluralize(seats.seats, "seat")}. The phones that took a seat last are on hold.`}{" "}
+                {seats.seats === 0 && seats.paidPeriodEndsAt
+                  ? `Your seats ended on ${formatDate(seats.paidPeriodEndsAt)}, so every phone in the groups you own is on hold until you renew.`
+                  : seats.seats === 0
+                    ? "Your account has no seats, so every phone in the groups you own is on hold."
+                    : `You’re using more phones than your ${pluralize(seats.seats, "seat")}. The phones that took a seat last are on hold.`}{" "}
                 A phone on hold doesn’t share its location in that group and can’t see anyone in it.
                 To free a seat, remove someone from a group or remove one of your phones.
               </Text>
@@ -161,11 +152,7 @@ const UsageScreen = () => {
                       accessibilityLabel={[
                         `${phone.memberName}${phone.isThisPhone ? " (this phone)" : ""}`,
                         phone.deviceName,
-                        phone.onHold
-                          ? "On hold"
-                          : phone.holdsFrom
-                            ? `On hold from ${formatDate(phone.holdsFrom)}`
-                            : null,
+                        phone.onHold ? "On hold" : null,
                       ]
                         .filter(Boolean)
                         .join(", ")}
@@ -183,13 +170,9 @@ const UsageScreen = () => {
                         </Text>
                         <Text className="text-tertiary text-sm">{phone.deviceName}</Text>
                       </View>
-                      {phone.onHold ? (
+                      {phone.onHold && (
                         <Text className="text-warning-text text-sm font-medium">On hold</Text>
-                      ) : phone.holdsFrom ? (
-                        <Text className="text-warning-text text-sm">
-                          On hold from {formatDate(phone.holdsFrom)}
-                        </Text>
-                      ) : null}
+                      )}
                       <Icon as={ChevronRightIcon} className="size-4 text-tertiary" />
                     </Pressable>
                   ))}
@@ -291,23 +274,15 @@ const UsageScreen = () => {
               <Text
                 className={cn(
                   "text-base font-semibold",
-                  selectedPhone.onHold || selectedPhone.holdsFrom
-                    ? "text-warning-text"
-                    : "text-foreground",
+                  selectedPhone.onHold ? "text-warning-text" : "text-foreground",
                 )}
               >
-                {selectedPhone.onHold
-                  ? "On hold"
-                  : selectedPhone.holdsFrom
-                    ? `On hold from ${formatDate(selectedPhone.holdsFrom)}`
-                    : "Has a seat"}
+                {selectedPhone.onHold ? "On hold" : "Has a seat"}
               </Text>
               <Text className="text-tertiary text-sm leading-5">
                 {selectedPhone.onHold
                   ? `This phone doesn’t share its location in ${selectedGroup.name} and can’t see anyone in it. To free a seat, remove someone from one of your groups or remove one of your own phones.`
-                  : selectedPhone.holdsFrom
-                    ? `Your seats have ended. This phone goes on hold in ${selectedGroup.name} on ${formatDate(selectedPhone.holdsFrom)} unless you renew. Removing someone from one of your groups or one of your own phones also frees a seat.`
-                    : `This phone uses one of your seats in ${selectedGroup.name}.`}
+                  : `This phone uses one of your seats in ${selectedGroup.name}.`}
               </Text>
             </View>
             <View className="gap-2">

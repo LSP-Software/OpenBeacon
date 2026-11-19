@@ -10,8 +10,8 @@ import {
 } from "@openbeacon/encryption";
 import { activateDevice } from "../../lib/deviceActivation.ts";
 import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
-import { sendSeatGraceWarnings } from "../../lib/seatGraceWarnings.ts";
 import { freeSeats, heldSeatDevices, seatsUsed } from "../../lib/seats.ts";
+import { sendSeatsEndedNotices } from "../../lib/seatsEnded.ts";
 import { encryptedTrackingPoint, testClientPointId } from "../../lib/trackingPoints.testUtil.ts";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
 import { accountNoticesRouter } from "../accountNoticesRouter.ts";
@@ -537,7 +537,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         blockedBy: null,
         message: null,
       });
-      expect(await caller(owner, selfHosted).account.seats()).toEqual({ grace: null });
       expect((await caller(owner, selfHosted).account.usage()).seats).toBeNull();
       expect(await heldDeviceIds({ groupId, selfHosted: true })).toEqual(new Set());
 
@@ -679,102 +678,111 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       ).toBe(true);
     });
 
-    test("a paid period ending gives 7 days' grace with warnings, then puts the seats on hold", async () => {
+    const seatsEnded = (
+      now: Date,
+      sendEmail: Parameters<typeof sendSeatsEndedNotices>[0]["sendEmail"] = null,
+      db = prisma,
+    ) => sendSeatsEndedNotices({ db, now, sendEmail });
+
+    test("a paid period ending puts every phone in the owner's groups on hold at once, and renewing lifts the holds", async () => {
+      const owner = await createUser({ seats: 2 });
+      const member = await createUser();
+      const groupId = await createGroup(owner);
+      await joinWithCode(member, await invite(owner, groupId));
+      const bothPhones = new Set([owner.deviceIds[0], member.deviceIds[0]]);
+      const endedAt = new Date(Date.now() - 1_000);
+      await prisma.user.update({ where: { id: owner.id }, data: { paidPeriodEndsAt: endedAt } });
+
+      expect(await heldDeviceIds({ groupId, selfHosted: false })).toEqual(bothPhones);
+      expect((await caller(owner).account.usage()).seats).toMatchObject({
+        seats: 0,
+        paidSeats: 2,
+        onHold: 2,
+        paidPeriodEndsAt: endedAt,
+      });
+      await expect(
+        caller(owner).groupLifecycle.create(await createInput(owner)),
+      ).rejects.toMatchObject(noFreeSeats);
+
+      await prisma.user.update({
+        where: { id: owner.id },
+        data: { paidPeriodEndsAt: new Date(Date.now() + 30 * 86_400_000) },
+      });
+      expect(await heldDeviceIds({ groupId, selfHosted: false })).toEqual(new Set());
+      expect((await caller(owner).account.usage()).seats?.seats).toBe(2);
+
+      await prisma.user.update({ where: { id: owner.id }, data: { paidPeriodEndsAt: endedAt } });
+      expect(await heldDeviceIds({ groupId, selfHosted: false })).toEqual(bothPhones);
+      await prisma.user.update({ where: { id: owner.id }, data: { paidPeriodEndsAt: null } });
+      expect(await heldDeviceIds({ groupId, selfHosted: false })).toEqual(new Set());
+    });
+
+    test("the owner gets one notice and one email each time a paid period ends, and members get nothing", async () => {
       const owner = await createUser({ seats: 2 });
       const member = await createUser();
       const groupId = await createGroup(owner);
       await joinWithCode(member, await invite(owner, groupId));
       const endedAt = new Date(Date.now() - 3_600_000);
       await prisma.user.update({ where: { id: owner.id }, data: { paidPeriodEndsAt: endedAt } });
-      const graceEndsAt = new Date(endedAt.getTime() + 7 * 86_400_000);
-
-      const seats = await caller(owner).account.seats();
-      expect((await caller(owner).account.usage()).seats).toMatchObject({
-        seats: 2,
-        paidPeriodEndsAt: endedAt,
-      });
-      expect(seats.grace?.endsAt).toEqual(graceEndsAt);
-      expect(seats.grace?.holds.map(({ deviceId }) => deviceId).toSorted()).toEqual(
-        [owner.deviceIds[0], member.deviceIds[0]].toSorted(),
-      );
-      expect(await heldDeviceIds({ groupId, selfHosted: false })).toEqual(new Set());
-
-      const emails: Array<{ kind: string; to: string; holds: unknown[] }> = [];
-      const warn = (now: Date) =>
-        sendSeatGraceWarnings({
-          db: prisma,
-          now,
-          sendEmail: async (email) => {
-            if (email.userId === owner.id) emails.push(email);
-          },
+      const emails: Array<{ to: string; endedAt: Date; holds: Array<{ deviceId: string }> }> = [];
+      const run = (now: Date) =>
+        seatsEnded(now, async (email) => {
+          if (email.userId === owner.id) emails.push(email);
         });
       const notices = () =>
         prisma.accountNotice.findMany({
           where: { userId: { in: [owner.id, member.id] } },
-          select: { userId: true, type: true, groupId: true, holdsFrom: true },
-          orderBy: [{ createdAt: "asc" }, { type: "asc" }],
+          select: { userId: true, type: true, groupId: true },
         });
-      await warn(new Date());
-      await warn(new Date());
-      expect(await notices()).toEqual([
-        { userId: owner.id, type: "SEATS_ENDING", groupId: null, holdsFrom: graceEndsAt },
-        { userId: member.id, type: "SEAT_HOLD_COMING", groupId, holdsFrom: graceEndsAt },
-      ]);
-      expect(emails).toMatchObject([{ kind: "ending", to: `${owner.id}@example.test` }]);
-      expect(emails[0]?.holds).toHaveLength(2);
+
+      await run(new Date());
+      await run(new Date());
+      expect(await notices()).toEqual([{ userId: owner.id, type: "SEATS_ENDED", groupId: null }]);
+      expect(emails).toMatchObject([{ to: `${owner.id}@example.test`, endedAt }]);
+      expect(emails[0]?.holds.map(({ deviceId }) => deviceId).toSorted()).toEqual(
+        [owner.deviceIds[0], member.deviceIds[0]].toSorted(),
+      );
       expect(
-        (await prisma.user.findUniqueOrThrow({ where: { id: owner.id } })).lastGracePeriodStartedAt,
+        (await prisma.user.findUniqueOrThrow({ where: { id: owner.id } })).seatsEndedNoticeFor,
       ).toEqual(endedAt);
 
-      const dayBeforeEnd = new Date(graceEndsAt.getTime() - 12 * 3_600_000);
-      await warn(dayBeforeEnd);
-      await warn(dayBeforeEnd);
-      expect((await notices()).map(({ type }) => type)).toEqual([
-        "SEATS_ENDING",
-        "SEAT_HOLD_COMING",
-        "SEATS_ENDING_SOON",
-      ]);
-      expect(emails.map(({ kind }) => kind)).toEqual(["ending", "reminder"]);
+      await prisma.accountNotice.deleteMany({ where: { userId: owner.id } });
+      await run(new Date(Date.now() + 2 * 86_400_000));
+      expect(await notices()).toEqual([]);
+      expect(emails).toHaveLength(1);
 
       await prisma.user.update({
         where: { id: owner.id },
-        data: { paidPeriodEndsAt: new Date(Date.now() - 8 * 86_400_000) },
+        data: { paidPeriodEndsAt: new Date(Date.now() + 30 * 86_400_000) },
       });
-      expect(await heldDeviceIds({ groupId, selfHosted: false })).toEqual(
-        new Set([owner.deviceIds[0], member.deviceIds[0]]),
-      );
-      expect(await caller(owner).account.seats()).toEqual({ grace: null });
-      expect((await caller(owner).account.usage()).seats?.seats).toBe(0);
-    });
-
-    test("a first run inside a grace period's last day sends the warning without a reminder", async () => {
-      const owner = await createUser({ seats: 2 });
-      const member = await createUser();
-      const groupId = await createGroup(owner);
-      await joinWithCode(member, await invite(owner, groupId));
+      await run(new Date());
+      expect(await notices()).toEqual([]);
+      const endedAgain = new Date(Date.now() - 60_000);
       await prisma.user.update({
         where: { id: owner.id },
-        data: { paidPeriodEndsAt: new Date(Date.now() - 6.5 * 86_400_000) },
+        data: { paidPeriodEndsAt: endedAgain },
       });
-      const kinds: string[] = [];
-      for (const hoursLater of [0, 1, 2]) {
-        await sendSeatGraceWarnings({
-          db: prisma,
-          now: new Date(Date.now() + hoursLater * 3_600_000),
-          sendEmail: async (email) => {
-            if (email.userId === owner.id) kinds.push(email.kind);
-          },
-        });
-      }
-      expect(
-        (await prisma.accountNotice.findMany({ where: { userId: owner.id } })).map(
-          ({ type }) => type,
-        ),
-      ).toEqual(["SEATS_ENDING"]);
-      expect(kinds).toEqual(["ending"]);
+      await run(new Date());
+      await run(new Date());
+      expect(await notices()).toEqual([{ userId: owner.id, type: "SEATS_ENDED", groupId: null }]);
+      expect(emails.map((email) => email.endedAt)).toEqual([endedAt, endedAgain]);
     });
 
-    test("a seats ending email that fails is sent once on the next run", async () => {
+    test("nothing is sent when no phone had a seat before the paid period ended", async () => {
+      const owner = await createUser({ seats: 0 });
+      await prisma.user.update({
+        where: { id: owner.id },
+        data: { paidPeriodEndsAt: new Date(Date.now() - 3_600_000) },
+      });
+      const emailed: string[] = [];
+      await seatsEnded(new Date(), async (email) => {
+        emailed.push(email.userId);
+      });
+      expect(await prisma.accountNotice.findMany({ where: { userId: owner.id } })).toEqual([]);
+      expect(emailed).not.toContain(owner.id);
+    });
+
+    test("a seats ended email that fails is sent once on the next run", async () => {
       const owner = await createUser({ seats: 2 });
       const member = await createUser();
       const groupId = await createGroup(owner);
@@ -783,110 +791,74 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         where: { id: owner.id },
         data: { paidPeriodEndsAt: new Date(Date.now() - 3_600_000) },
       });
-      const kinds: string[] = [];
+      let sent = 0;
       let failing = true;
-      const warn = () =>
-        sendSeatGraceWarnings({
-          db: prisma,
-          now: new Date(),
-          sendEmail: async (email) => {
-            if (email.userId !== owner.id) return;
-            if (failing) throw new Error("Email provider unavailable");
-            kinds.push(email.kind);
-          },
+      const run = () =>
+        seatsEnded(new Date(), async (email) => {
+          if (email.userId !== owner.id) return;
+          if (failing) throw new Error("Email provider unavailable");
+          sent++;
         });
       const consoleError = spyOn(console, "error").mockImplementation(() => {});
-      await warn();
+      await run();
+      expect(consoleError).toHaveBeenCalledWith("Seats ended email failed");
       consoleError.mockRestore();
-      expect(kinds).toEqual([]);
+      expect(sent).toBe(0);
       expect(
         await prisma.accountNotice.findMany({
           where: { userId: owner.id },
           select: { type: true, emailedAt: true },
         }),
-      ).toEqual([{ type: "SEATS_ENDING", emailedAt: null }]);
+      ).toEqual([{ type: "SEATS_ENDED", emailedAt: null }]);
 
       failing = false;
-      await warn();
-      await warn();
-      expect(kinds).toEqual(["ending"]);
+      await run();
+      await run();
+      expect(sent).toBe(1);
     });
 
-    test("a second grace period within 6 months isn't given, and the owner is told once each time the seats end", async () => {
-      const owner = await createUser({ seats: 2 });
-      const member = await createUser();
-      const groupId = await createGroup(owner);
-      await joinWithCode(member, await invite(owner, groupId));
+    test("one account failing doesn't stop the others being told or emailed", async () => {
+      const [failing, working] = [await createUser(), await createUser()];
       const endedAt = new Date(Date.now() - 3_600_000);
-      await prisma.user.update({
-        where: { id: owner.id },
-        data: {
-          paidPeriodEndsAt: endedAt,
-          lastGracePeriodStartedAt: new Date(Date.now() - 60 * 86_400_000),
+      for (const owner of [failing, working]) {
+        await createGroup(owner);
+        await prisma.user.update({ where: { id: owner.id }, data: { paidPeriodEndsAt: endedAt } });
+      }
+      const db = new Proxy(prisma, {
+        get: (target, property) =>
+          property === "userDevice"
+            ? new Proxy(target.userDevice, {
+                get: (devices, method) =>
+                  method === "findMany"
+                    ? (args: Parameters<typeof devices.findMany>[0]) =>
+                        JSON.stringify(args?.where).includes(failing.deviceIds[0]!)
+                          ? Promise.reject(new Error("Database unavailable"))
+                          : devices.findMany(args)
+                    : Reflect.get(devices, method),
+              })
+            : Reflect.get(target, property),
+      });
+      const emailed: string[] = [];
+      const consoleError = spyOn(console, "error").mockImplementation(() => {});
+      await seatsEnded(
+        new Date(),
+        async (email) => {
+          emailed.push(email.userId);
         },
-      });
-
-      expect(await caller(owner).account.seats()).toEqual({ grace: null });
-      expect((await caller(owner).account.usage()).seats?.seats).toBe(0);
-      const bothPhones = [owner.deviceIds[0], member.deviceIds[0]];
-      expect(await heldDeviceIds({ groupId, selfHosted: false })).toEqual(new Set(bothPhones));
-      await expect(
-        caller(owner).groupLifecycle.create(await createInput(owner)),
-      ).rejects.toMatchObject(noFreeSeats);
-
-      const emails: Array<{ kind: string; holdsFrom: Date; holds: Array<{ deviceId: string }> }> =
-        [];
-      const warn = (now: Date) =>
-        sendSeatGraceWarnings({
-          db: prisma,
-          now,
-          sendEmail: async (email) => {
-            if (email.userId === owner.id) emails.push(email);
-          },
-        });
-      const notices = () =>
-        prisma.accountNotice.findMany({
-          where: { userId: { in: [owner.id, member.id] } },
-          select: { userId: true, type: true, holdsFrom: true },
-        });
-      await warn(new Date());
-      await warn(new Date());
-      expect(await notices()).toEqual([
-        { userId: owner.id, type: "SEATS_ENDED", holdsFrom: endedAt },
-      ]);
-      expect(emails).toMatchObject([{ kind: "ended", holdsFrom: endedAt }]);
-      expect(emails[0]?.holds.map(({ deviceId }) => deviceId).toSorted()).toEqual(
-        bothPhones.toSorted(),
+        db,
       );
+      expect(consoleError).toHaveBeenCalledWith("Seats ended check failed for an account");
+      consoleError.mockRestore();
       expect(
-        (await prisma.user.findUniqueOrThrow({ where: { id: owner.id } })).seatsEndedNoticeFor,
-      ).toEqual(endedAt);
-
-      await prisma.accountNotice.deleteMany({ where: { userId: owner.id } });
-      await warn(new Date(Date.now() + 2 * 86_400_000));
-      expect(await notices()).toEqual([]);
-      expect(emails).toHaveLength(1);
-
-      await prisma.user.update({
-        where: { id: owner.id },
-        data: { paidPeriodEndsAt: new Date(Date.now() + 30 * 86_400_000) },
-      });
-      await warn(new Date());
-      expect(await heldDeviceIds({ groupId, selfHosted: false })).toEqual(new Set());
-      const endedAgain = new Date(Date.now() - 60_000);
-      await prisma.user.update({
-        where: { id: owner.id },
-        data: { paidPeriodEndsAt: endedAgain },
-      });
-      await warn(new Date());
-      await warn(new Date());
-      expect(await notices()).toEqual([
-        { userId: owner.id, type: "SEATS_ENDED", holdsFrom: endedAgain },
-      ]);
-      expect(emails.map(({ kind, holdsFrom }) => ({ kind, holdsFrom }))).toEqual([
-        { kind: "ended", holdsFrom: endedAt },
-        { kind: "ended", holdsFrom: endedAgain },
-      ]);
+        (
+          await prisma.accountNotice.findMany({
+            where: { userId: { in: [failing.id, working.id] } },
+            select: { userId: true },
+          })
+        ).map(({ userId }) => userId),
+      ).toEqual([working.id]);
+      expect(emailed).toContain(working.id);
+      expect(emailed).not.toContain(failing.id);
     });
 
     test("usage shows seats per owned group in seat order with holds, and no seats for other owners' groups", async () => {
@@ -942,7 +914,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         max: 1_024,
         selfSetAllowed: true,
         paidPeriodEndsAt: null,
-        graceEndsAt: null,
       });
       const [familyUsage, theirsUsage] = usage.groups;
       expect(familyUsage).toMatchObject({ id: family, isOwner: true, yourPhonesOnHold: [] });
@@ -970,18 +941,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await setSeats(other, 1);
       expect((await caller(owner).account.usage()).groups[1]?.yourPhonesOnHold).toEqual([
         { deviceId: owner.deviceIds[0], deviceName: "Phone", isThisPhone: true },
-      ]);
-
-      await setSeats(owner, 3);
-      const endedAt = new Date(Date.now() - 3_600_000);
-      await prisma.user.update({ where: { id: owner.id }, data: { paidPeriodEndsAt: endedAt } });
-      const grace = await caller(owner).account.usage();
-      const graceEndsAt = new Date(endedAt.getTime() + 7 * 86_400_000);
-      expect(grace.seats).toMatchObject({ seats: 3, onHold: 0, graceEndsAt });
-      expect(grace.groups[0]?.seats?.phones.map(({ holdsFrom }) => holdsFrom)).toEqual([
-        graceEndsAt,
-        graceEndsAt,
-        graceEndsAt,
       ]);
     });
 
@@ -1030,163 +989,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         ended: true,
       });
       expect(ended.paidPeriodEndsAt).toBeInstanceOf(Date);
-      expect((await caller(owner).account.seats()).grace).not.toBeNull();
+      expect((await caller(owner).account.usage()).seats).toMatchObject({ seats: 0 });
       await caller(owner, { allowSelfSetSeats: true }).account.setPaidPeriodEnded({ ended: false });
-      expect(await caller(owner).account.seats()).toEqual({ grace: null });
       expect((await caller(owner).account.usage()).seats).toMatchObject({
         paidPeriodEndsAt: null,
         seats: 2,
       });
-    });
-
-    const graceWarnings = (
-      now: Date,
-      sendEmail: Parameters<typeof sendSeatGraceWarnings>[0]["sendEmail"] = null,
-      db = prisma,
-    ) => sendSeatGraceWarnings({ db, now, sendEmail });
-
-    test("renewing before the grace job runs still uses up the grace period", async () => {
-      const owner = await createUser({ seats: 2 });
-      const self = caller(owner, { allowSelfSetSeats: true });
-      await self.account.setPaidPeriodEnded({ ended: true });
-      const graceStartedAt = (await prisma.user.findUniqueOrThrow({ where: { id: owner.id } }))
-        .paidPeriodEndsAt;
-      expect((await self.account.seats()).grace).not.toBeNull();
-
-      await self.account.setPaidPeriodEnded({ ended: false });
-      expect(
-        (await prisma.user.findUniqueOrThrow({ where: { id: owner.id } })).lastGracePeriodStartedAt,
-      ).toEqual(graceStartedAt);
-
-      await self.account.setPaidPeriodEnded({ ended: true });
-      expect(await self.account.seats()).toEqual({ grace: null });
-      expect((await self.account.usage()).seats?.seats).toBe(0);
-    });
-
-    test("a grace period that ran out without a warning still tells the owner their seats have ended", async () => {
-      const owner = await createUser({ seats: 2 });
-      const member = await createUser();
-      const groupId = await createGroup(owner);
-      await joinWithCode(member, await invite(owner, groupId));
-      const endedAt = new Date(Date.now() - 8 * 86_400_000);
-      const holdsFrom = new Date(endedAt.getTime() + 7 * 86_400_000);
-      await prisma.user.update({ where: { id: owner.id }, data: { paidPeriodEndsAt: endedAt } });
-      const emails: Array<{ kind: string; holdsFrom: Date }> = [];
-      const sendEmail = async (email: { kind: string; holdsFrom: Date; userId: string }) => {
-        if (email.userId === owner.id) emails.push(email);
-      };
-
-      await graceWarnings(new Date(), sendEmail);
-      await graceWarnings(new Date(), sendEmail);
-
-      expect(
-        await prisma.accountNotice.findMany({
-          where: { userId: { in: [owner.id, member.id] } },
-          select: { userId: true, type: true, holdsFrom: true },
-        }),
-      ).toEqual([{ userId: owner.id, type: "SEATS_ENDED", holdsFrom }]);
-      expect(emails).toEqual([expect.objectContaining({ kind: "ended", holdsFrom })]);
-      expect(await prisma.user.findUniqueOrThrow({ where: { id: owner.id } })).toMatchObject({
-        lastGracePeriodStartedAt: endedAt,
-        seatsEndedNoticeFor: endedAt,
-      });
-    });
-
-    test("one account failing doesn't stop the others being warned or emailed", async () => {
-      const [failing, working] = [await createUser(), await createUser()];
-      const endedAt = new Date(Date.now() - 3_600_000);
-      for (const owner of [failing, working]) {
-        await createGroup(owner);
-        await prisma.user.update({ where: { id: owner.id }, data: { paidPeriodEndsAt: endedAt } });
-      }
-      const db = new Proxy(prisma, {
-        get: (target, property) =>
-          property === "user"
-            ? new Proxy(target.user, {
-                get: (users, method) =>
-                  method === "findUnique"
-                    ? (args: { where: { id?: string } }) =>
-                        args.where.id === failing.id
-                          ? Promise.reject(new Error("Database unavailable"))
-                          : users.findUnique(args as Parameters<typeof users.findUnique>[0])
-                    : Reflect.get(users, method),
-              })
-            : Reflect.get(target, property),
-      });
-      const emailed: string[] = [];
-      const consoleError = spyOn(console, "error").mockImplementation(() => {});
-      await graceWarnings(
-        new Date(),
-        async (email) => {
-          emailed.push(email.userId);
-        },
-        db,
-      );
-      expect(consoleError).toHaveBeenCalledWith("Seat grace check failed for an account");
-      consoleError.mockRestore();
-      expect(
-        (
-          await prisma.accountNotice.findMany({
-            where: { userId: { in: [failing.id, working.id] } },
-            select: { userId: true },
-          })
-        ).map(({ userId }) => userId),
-      ).toEqual([working.id]);
-      expect(emailed).toContain(working.id);
-      expect(emailed).not.toContain(failing.id);
-    });
-
-    test("renewing clears the seat warnings that no longer apply, for the owner and their members", async () => {
-      const owner = await createUser({ seats: 2 });
-      const member = await createUser();
-      const groupId = await createGroup(owner);
-      await joinWithCode(member, await invite(owner, groupId));
-      await prisma.user.update({
-        where: { id: owner.id },
-        data: { paidPeriodEndsAt: new Date(Date.now() - 3_600_000) },
-      });
-      await graceWarnings(new Date());
-      const notices = () =>
-        prisma.accountNotice.findMany({
-          where: { userId: { in: [owner.id, member.id] } },
-          select: { type: true },
-          orderBy: { type: "asc" },
-        });
-      expect(await notices()).toEqual([{ type: "SEATS_ENDING" }, { type: "SEAT_HOLD_COMING" }]);
-
-      await caller(owner, { allowSelfSetSeats: true }).account.setPaidPeriodEnded({
-        ended: false,
-      });
-      expect(await notices()).toEqual([]);
-    });
-
-    test("members whose phones join during a grace period are told their phones will go on hold", async () => {
-      const owner = await createUser({ seats: 4 });
-      const [first, later] = [await createUser(), await createUser()];
-      const groupId = await createGroup(owner);
-      await joinWithCode(first, await invite(owner, groupId));
-      const endedAt = new Date(Date.now() - 3_600_000);
-      await prisma.user.update({ where: { id: owner.id }, data: { paidPeriodEndsAt: endedAt } });
-      await graceWarnings(new Date());
-      await joinWithCode(later, await invite(owner, groupId));
-
-      await graceWarnings(new Date(Date.now() + 3_600_000));
-      await graceWarnings(new Date(Date.now() + 2 * 3_600_000));
-
-      expect(
-        (
-          await prisma.accountNotice.findMany({
-            where: { userId: { in: [owner.id, first.id, later.id] } },
-            select: { userId: true, type: true, groupId: true },
-          })
-        ).toSorted((a, b) => a.userId.localeCompare(b.userId) || a.type.localeCompare(b.type)),
-      ).toEqual(
-        [
-          { userId: owner.id, type: "SEATS_ENDING", groupId: null },
-          { userId: first.id, type: "SEAT_HOLD_COMING", groupId },
-          { userId: later.id, type: "SEAT_HOLD_COMING", groupId },
-        ].toSorted((a, b) => a.userId.localeCompare(b.userId) || a.type.localeCompare(b.type)),
-      );
     });
 
     test("a phone beyond 64 in a group is held there without taking one of the owner's seats", async () => {

@@ -11,52 +11,12 @@ const activeDeviceJoin = Prisma.sql`
     AND "device"."activatedAt" IS NOT NULL
     AND "device"."revokedAt" IS NULL`;
 
-export const seatAccountSelect = {
-  seats: true,
-  paidPeriodEndsAt: true,
-  lastGracePeriodStartedAt: true,
-} as const;
+export const seatAccountSelect = { seats: true, paidPeriodEndsAt: true } as const;
 
-export const earnedGrace = (account: {
-  paidPeriodEndsAt: Date | null;
-  lastGracePeriodStartedAt: Date | null;
-}) => {
-  const endedAt = account.paidPeriodEndsAt;
-  if (!endedAt) return null;
-  const lastGrace = account.lastGracePeriodStartedAt;
-  const cooldownMonth = new Date(
-    Date.UTC(endedAt.getUTCFullYear(), endedAt.getUTCMonth() - limits.graceCooldownMonths, 1),
-  );
-  const cooldownStart = new Date(endedAt);
-  cooldownStart.setUTCFullYear(
-    cooldownMonth.getUTCFullYear(),
-    cooldownMonth.getUTCMonth(),
-    Math.min(
-      endedAt.getUTCDate(),
-      new Date(
-        Date.UTC(cooldownMonth.getUTCFullYear(), cooldownMonth.getUTCMonth() + 1, 0),
-      ).getUTCDate(),
-    ),
-  );
-  const given =
-    !lastGrace || lastGrace.getTime() === endedAt.getTime() || lastGrace <= cooldownStart;
-  return given
-    ? {
-        startedAt: endedAt,
-        endsAt: new Date(endedAt.getTime() + limits.gracePeriodDays * 86_400_000),
-      }
-    : null;
-};
-
-export const seatPeriod = (
-  account: { seats: number; paidPeriodEndsAt: Date | null; lastGracePeriodStartedAt: Date | null },
+export const currentSeats = (
+  account: { seats: number; paidPeriodEndsAt: Date | null },
   now: Date,
-) => {
-  const endedAt = account.paidPeriodEndsAt;
-  if (!endedAt || now < endedAt) return { seats: account.seats, grace: null };
-  const grace = earnedGrace(account);
-  return grace && now < grace.endsAt ? { seats: account.seats, grace } : { seats: 0, grace: null };
-};
+) => (account.paidPeriodEndsAt && account.paidPeriodEndsAt <= now ? 0 : account.seats);
 
 const perGroup = Prisma.raw(String(limits.seatsPerGroup));
 
@@ -75,10 +35,10 @@ const countSeats = async (db: RawDb, groupIds: Prisma.Sql) => {
 };
 
 const accountSeats = async (db: Pick<Prisma.TransactionClient, "user">, userId: string) =>
-  seatPeriod(
+  currentSeats(
     await db.user.findUniqueOrThrow({ where: { id: userId }, select: seatAccountSelect }),
     new Date(),
-  ).seats;
+  );
 
 export const seatsUsed = (db: RawDb, userId: string) =>
   countSeats(db, Prisma.sql`SELECT "id" FROM "Group" WHERE "ownerId" = ${userId}`);
@@ -288,7 +248,6 @@ const rankSeats = async ({
       ownerRank: number | null;
       seats: number;
       paidPeriodEndsAt: Date | null;
-      lastGracePeriodStartedAt: Date | null;
     }>
   >(Prisma.sql`
     WITH "seat" AS (
@@ -309,15 +268,14 @@ const rankSeats = async ({
       FROM "inGroup"
     )
     SELECT "ranked"."ownerId", "ranked"."groupId", "ranked"."userId", "ranked"."deviceId",
-      "ranked"."ownerRank", "owner"."seats", "owner"."paidPeriodEndsAt",
-      "owner"."lastGracePeriodStartedAt"
+      "ranked"."ownerRank", "owner"."seats", "owner"."paidPeriodEndsAt"
     FROM "ranked"
     JOIN "User" AS "owner" ON "owner"."id" = "ranked"."ownerId"
     WHERE ${where}
     ORDER BY "ranked"."ownerId", "ranked"."groupId", "ranked"."groupRank"
   `);
   return rows.map(({ ownerId, groupId, userId, deviceId, ownerRank, ...owner }) => {
-    const seats = enforced ? seatPeriod(owner, now).seats : null;
+    const seats = enforced ? currentSeats(owner, now) : null;
     return {
       ownerId,
       groupId,
@@ -383,17 +341,22 @@ export const heldSeatDevices = async ({
         .filter(({ held }) => held)
         .map(({ groupId, deviceId }) => ({ groupId, deviceId }));
 
-export const seatsEndingHolds = async ({
+export const seatsEndedHolds = async ({
   db,
-  now,
+  endedAt,
   ownerId,
 }: {
   db: RawDb & Pick<Prisma.TransactionClient, "group" | "userDevice">;
-  now: Date;
+  endedAt: Date;
   ownerId: string;
 }) => {
   const seated = (
-    await rankSeats({ db, enforced: true, now, owners: Prisma.sql`${ownerId}` })
+    await rankSeats({
+      db,
+      enforced: true,
+      now: new Date(endedAt.getTime() - 1),
+      owners: Prisma.sql`${ownerId}`,
+    })
   ).filter(({ held }) => !held);
   if (seated.length === 0) return [];
   const [groups, devices] = await Promise.all([

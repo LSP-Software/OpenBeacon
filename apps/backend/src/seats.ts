@@ -12,8 +12,7 @@ if (parsed.command === "error") {
 }
 
 const { prisma } = await import("@openbeacon/database");
-const { seatAccountSelect, seatPeriod, seatsUsed } = await import("@openbeacon/api/seats.ts");
-const { changePaidPeriod } = await import("@openbeacon/api/seatGraceWarnings.ts");
+const { currentSeats, seatAccountSelect, seatsUsed } = await import("@openbeacon/api/seats.ts");
 const { envSchema } = await import("./envSchema.ts");
 
 const selfHosted = envSchema.SELF_HOSTED.safeParse(process.env["SELF_HOSTED"]).data !== false;
@@ -32,42 +31,25 @@ if (!user) {
   const data =
     parsed.command === "set"
       ? { seats: parsed.seats }
-      : parsed.command === "reset-grace"
-        ? { lastGracePeriodStartedAt: null }
-        : null;
-  const account =
-    parsed.command === "end-period" || parsed.command === "renew"
-      ? await changePaidPeriod({
-          db: prisma,
-          now,
-          paidPeriodEndsAt:
-            parsed.command === "end-period"
-              ? new Date(now.getTime() - parsed.hoursAgo * 3_600_000)
-              : null,
-          userId: user.id,
-        })
-      : data
-        ? await prisma.user.update({ where: { id: user.id }, data, select: seatAccountSelect })
-        : await prisma.user.findUniqueOrThrow({
-            where: { id: user.id },
-            select: seatAccountSelect,
-          });
-  const { grace, seats } = seatPeriod(account, now);
+      : parsed.command === "end-period"
+        ? { paidPeriodEndsAt: new Date(now.getTime() - parsed.hoursAgo * 3_600_000) }
+        : parsed.command === "renew"
+          ? { paidPeriodEndsAt: null }
+          : null;
+  const account = data
+    ? await prisma.user.update({ where: { id: user.id }, data, select: seatAccountSelect })
+    : await prisma.user.findUniqueOrThrow({ where: { id: user.id }, select: seatAccountSelect });
+  const seats = currentSeats(account, now);
   const used = await seatsUsed(prisma, user.id);
   console.log(
     `${parsed.command === "set" ? `Set ${account.seats} seats. ` : ""}Has ${seats} seats, using ${used}${used > seats ? `, which is ${used - seats} more than it has` : ""}.`,
   );
   if (account.paidPeriodEndsAt) {
     console.log(
-      grace
-        ? `The paid period ended at ${account.paidPeriodEndsAt.toISOString()}. Its grace period ends at ${grace.endsAt.toISOString()}, then it has 0 seats.`
-        : account.paidPeriodEndsAt > now
-          ? `The paid period ends at ${account.paidPeriodEndsAt.toISOString()}.`
-          : `The paid period ended at ${account.paidPeriodEndsAt.toISOString()} and its grace period is over or wasn't given.`,
+      account.paidPeriodEndsAt > now
+        ? `The paid period ends at ${account.paidPeriodEndsAt.toISOString()}.`
+        : `The paid period ended at ${account.paidPeriodEndsAt.toISOString()}, so it has 0 seats until it renews.`,
     );
-  }
-  if (account.lastGracePeriodStartedAt) {
-    console.log(`Last grace period started at ${account.lastGracePeriodStartedAt.toISOString()}.`);
   }
   if (selfHosted) console.log("This server is self-hosted, so seats aren't enforced.");
 }

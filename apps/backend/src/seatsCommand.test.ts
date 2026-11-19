@@ -27,7 +27,7 @@ describe("parseSeatsCommand", () => {
     }
   });
 
-  test("ends and renews the paid period and forgets the last grace period", () => {
+  test("ends and renews the paid period", () => {
     expect(parseSeatsCommand(["end-period", "sam@example.test"])).toEqual({
       command: "end-period",
       email: "sam@example.test",
@@ -42,15 +42,11 @@ describe("parseSeatsCommand", () => {
       command: "renew",
       email: "sam@example.test",
     });
-    expect(parseSeatsCommand(["reset-grace", "sam@example.test"])).toEqual({
-      command: "reset-grace",
-      email: "sam@example.test",
-    });
     for (const args of [
       ["end-period", "sam@example.test", "-1"],
       ["end-period", "sam@example.test", "9000"],
       ["renew", "sam@example.test", "1"],
-      ["reset-grace"],
+      ["reset-grace", "sam@example.test"],
     ]) {
       expect(parseSeatsCommand(args)).toMatchObject({ command: "error" });
     }

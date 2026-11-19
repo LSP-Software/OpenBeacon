@@ -31,7 +31,7 @@ test("deletes only rows that expired before the database time, not the runner's 
     [databaseNow.toISOString()],
     ["2000-12-31T00:00:00.000Z"],
     ["2000-12-02T00:00:00.000Z"],
-    ["2000-12-31T00:00:00.000Z", databaseNow.toISOString()],
+    ["2000-12-31T00:00:00.000Z"],
     ["2000-12-02T00:00:00.000Z"],
   ]);
 });
