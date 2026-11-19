@@ -29,6 +29,9 @@ export const SharedInvite = ({
   const inviteId = invite.data?.id;
   const expiresInMs = invite.data?.expiresInMs;
   const reset = invite.reset;
+  useEffect(() => {
+    if (value) reset();
+  }, [value, reset]);
   const { group } = useCachedGroup(groupId);
   const memberIdsKey = group?.members.map((member) => member.id).join(",");
   const statuses = useQuery({

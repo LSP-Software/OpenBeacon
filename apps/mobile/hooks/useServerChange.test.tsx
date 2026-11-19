@@ -17,7 +17,7 @@ const serverChanges: string[] = [];
 const events: string[] = [];
 const compatibility: {
   verdict: "ok" | "appTooOld" | "serverTooOld" | null;
-  problem?: { kind: "notOpenBeacon" };
+  problem?: { kind: "notOpenBeacon" } | { kind: "httpStatus"; status: number };
 }[] = [];
 let signedIn = false;
 
@@ -99,8 +99,11 @@ beforeEach(() => {
   signedIn = false;
 });
 
-test("an invite address that isn't an OpenBeacon server can only be acknowledged", async () => {
-  compatibility.push({ verdict: null, problem: { kind: "notOpenBeacon" } });
+test.each([
+  ["answers with something else", { kind: "notOpenBeacon" as const }],
+  ["has no OpenBeacon health page", { kind: "httpStatus" as const, status: 404 }],
+])("an invite address that %s can only be acknowledged", async (_, problem) => {
+  compatibility.push({ verdict: null, problem });
   const change = await startInviteChange();
 
   expect(alerts.map(({ title, buttons }) => [title, buttons.map((b) => b.text)])).toEqual([

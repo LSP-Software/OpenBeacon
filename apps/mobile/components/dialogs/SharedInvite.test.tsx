@@ -177,10 +177,8 @@ describe("shared invitation dialog", () => {
   });
   test("checks the latest invite only when someone joins, and closes once it is used", async () => {
     const root = createRoot();
-    await render(root, "link");
-    await createInvite(root);
-    expect(JSON.stringify(root.container.toJSON())).toContain("1".repeat(32));
     await render(root);
+    await createInvite(root);
     expect(root.container.queryAll((item) => item.type === "qr")[0]?.props["value"]).toBe(
       `openbeacon://join?code=${"1".repeat(32)}&server=https%3A%2F%2Fapi.openbeacon.net`,
     );
@@ -273,6 +271,18 @@ describe("shared invitation dialog", () => {
     expect(requestedKinds).toEqual(["link", "qr"]);
     await act(async () => root.unmount());
   });
+  test("each tab shows only an invite made for it", async () => {
+    const root = createRoot();
+    await render(root, "link");
+    await createInvite(root);
+    expect(JSON.stringify(root.container.toJSON())).toContain("Valid for 30 minutes");
+    await render(root, "qr");
+    const qrCodes = root.container.queryAll((item) => item.type === "qr").length;
+    const qrTab = JSON.stringify(root.container.toJSON());
+    await act(async () => root.unmount());
+    expect(qrCodes).toBe(0);
+    expect(qrTab).not.toContain("Valid for");
+  });
   test("a hosted invite's message names no host but its link still names the server", async () => {
     const root = createRoot();
     await render(root, "link");
@@ -288,13 +298,17 @@ describe("shared invitation dialog", () => {
     const root = createRoot();
     await render(root);
     await createInvite(root);
-    const link = `openbeacon://join?code=${"1".repeat(32)}&server=https%3A%2F%2Fbeacon.example.com`;
-    expect(root.container.queryAll((item) => item.type === "qr")[0]?.props["value"]).toBe(link);
+    const link = (code: string) =>
+      `openbeacon://join?code=${code.repeat(32)}&server=https%3A%2F%2Fbeacon.example.com`;
+    expect(root.container.queryAll((item) => item.type === "qr")[0]?.props["value"]).toBe(
+      link("1"),
+    );
 
     await render(root, "link");
+    await createInvite(root);
     await shareLink(root);
     expect(shared).toEqual([
-      `Join my OpenBeacon group on beacon.example.com. Install OpenBeacon, then open this link: ${link}`,
+      `Join my OpenBeacon group on beacon.example.com. Install OpenBeacon, then open this link: ${link("2")}`,
     ]);
     await act(async () => root.unmount());
   });

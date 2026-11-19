@@ -112,7 +112,11 @@ export const useServerChange = () => {
         style: "cancel" as const,
         onPress: () => resolve(false),
       };
-      if (checked.verdict === null && checked.problem.kind === "notOpenBeacon") {
+      if (
+        checked.verdict === null &&
+        (checked.problem.kind === "notOpenBeacon" ||
+          (checked.problem.kind === "httpStatus" && checked.problem.status === 404))
+      ) {
         Alert.alert(
           "This isn’t an OpenBeacon server",
           "The invite points to an address that isn’t an OpenBeacon server. Ask for a new invite.",
