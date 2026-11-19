@@ -159,7 +159,12 @@ const school: Place = {
 const syncing: Place = { emoji: "⚽", geometry: null, id: "football", name: "Football club" };
 
 const alert = (
-  overrides: Partial<{ id: string; userId: string; direction: "ARRIVE" | "LEAVE" }>,
+  overrides: Partial<{
+    id: string;
+    userId: string;
+    deviceName: string;
+    direction: "ARRIVE" | "LEAVE";
+  }>,
 ) => ({
   id: "alert-1",
   groupId: "family",
@@ -197,12 +202,15 @@ beforeEach(() => {
 
 describe("wording", () => {
   test("alerts name the person and device the way this phone does", () => {
-    expect(describePlaceAlert({ alert: alert({}), ownerName: "Sam" })).toBe(
+    expect(describePlaceAlert({ alert: alert({}), ownerNames: ["Sam"] })).toBe(
       "Sam’s Pixel 8 arrived at 🏠 Home",
     );
-    expect(describePlaceAlert({ alert: alert({ direction: "LEAVE" }), ownerName: null })).toBe(
+    expect(describePlaceAlert({ alert: alert({ direction: "LEAVE" }), ownerNames: [] })).toBe(
       "Someone’s Pixel 8 left 🏠 Home",
     );
+    expect(
+      describePlaceAlert({ alert: alert({ deviceName: "Sam's Pixel" }), ownerNames: ["Sam"] }),
+    ).toBe("Sam’s Pixel arrived at 🏠 Home");
   });
 
   test("a place notice says what changed and that this phone will share arrivals", () => {

@@ -4,7 +4,7 @@ import { authClient } from "../lib/auth-client.ts";
 import { loadPersonalNicknames } from "../lib/personalNicknames.ts";
 import { useCachedGroup } from "./useCachedGroup.ts";
 
-export const useMemberNames = (groupId: string) => {
+export const useMemberNameList = (groupId: string) => {
   const isFocused = useIsFocused();
   const { data: session } = authClient.useSession();
   const userId = session?.user.id;
@@ -16,7 +16,13 @@ export const useMemberNames = (groupId: string) => {
   });
   return (memberUserId: string) => {
     const member = group?.members.find((item) => item.userId === memberUserId);
-    if (!member) return null;
-    return nicknames.data?.[member.id]?.name ?? member.name;
+    if (!member) return [];
+    const nickname = nicknames.data?.[member.id]?.name;
+    return nickname ? [nickname, member.name] : [member.name];
   };
+};
+
+export const useMemberNames = (groupId: string) => {
+  const names = useMemberNameList(groupId);
+  return (memberUserId: string) => names(memberUserId)[0] ?? null;
 };

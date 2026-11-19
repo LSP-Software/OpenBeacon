@@ -46,7 +46,10 @@ mock.module("../components/ui/Accordion.tsx", () => ({
 mock.module("../components/ui/Button.tsx", () => ({ Button: passthrough }));
 mock.module("../components/ui/Switch.tsx", () => ({ Switch: () => null }));
 mock.module("../components/ui/Text.tsx", () => ({ Text: passthrough }));
-mock.module("../hooks/useMemberNames.ts", () => ({ useMemberNames: () => () => null }));
+mock.module("../hooks/useMemberNames.ts", () => ({
+  useMemberNameList: () => () => [],
+  useMemberNames: () => () => null,
+}));
 mock.module("../hooks/usePlaceAlertMutes.ts", () => ({
   usePlaceAlertMutes: () => ({
     mutes: { data: { mutes: [] }, isError: false, isPending: false, refetch: async () => {} },
