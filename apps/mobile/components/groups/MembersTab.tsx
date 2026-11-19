@@ -3,7 +3,6 @@ import { Alert } from "../../lib/alert.ts";
 import { accountNameSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import { skipToken, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "expo-router";
 import {
   CirclePauseIcon,
   EllipsisVerticalIcon,
@@ -14,7 +13,7 @@ import {
   UserPlusIcon,
 } from "lucide-react-native";
 import { useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, TextInput, View } from "react-native";
 import { InviteMemberToGroupDialog } from "../dialogs/InviteMemberToGroupDialog.tsx";
 import { LoadingIndicator } from "../LoadingIndicator.tsx";
 import { DecryptedAvatarImage } from "../image/DecryptedAvatarImage.tsx";
@@ -26,6 +25,7 @@ import { Icon } from "../ui/Icon.tsx";
 import { SegmentedControl } from "../ui/SegmentedControl.tsx";
 import { Text } from "../ui/Text.tsx";
 import { useCachedGroup } from "../../hooks/useCachedGroup.ts";
+import { useMemberRemoval } from "../../hooks/useMemberRemoval.tsx";
 import type { useLiveTrackingPositions } from "../../hooks/useLiveTrackingPositions.ts";
 import { trpc } from "../../lib/api.ts";
 import { loadPersonalNicknames, encryptPersonalNickname } from "../../lib/personalNicknames.ts";
@@ -34,12 +34,9 @@ import { cn } from "../../lib/cn.ts";
 import { getBatteryVisual } from "../../lib/batteryVisual.ts";
 import { buildMemberLiveStatuses } from "../../lib/buildMemberLiveStatuses.ts";
 import { deviceIconFor } from "../../lib/deviceIcons.ts";
-import { buildRemoveGroupMemberInput, submitEpochChange } from "../../lib/groupEncryption.ts";
-import { forgetHiddenMapGroup } from "../../lib/hiddenMapGroups.ts";
 import { initials } from "../../lib/initials.ts";
 import { mayBeOutOfBattery } from "../../lib/mayBeOutOfBattery.ts";
 import { shortTimeSince, timeSince } from "../../lib/timeSince.ts";
-import { requestTrackingSync } from "../../lib/trackingEvents.ts";
 import { useSingleFlight } from "../../lib/useSingleFlight.ts";
 import { userMessage } from "../../lib/userMessage.ts";
 import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
@@ -65,15 +62,10 @@ const MembersTab = ({
   } | null>(null);
   const [addMemberDialogOpen, setAddMemberDialogOpen] = useState(false);
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
-  const [successorDialogOpen, setSuccessorDialogOpen] = useState(false);
-  const [successorMemberId, setSuccessorMemberId] = useState<string | null>(null);
   const { data: session } = authClient.useSession();
   const isFocused = useIsFocused();
   const queryClient = useQueryClient();
-  const router = useRouter();
-  const removeMember = useMutation(trpc.groupMembership.remove.mutationOptions());
-  const removal = useSingleFlight<string>();
-  const deleteGroup = useMutation(trpc.groupLifecycle.delete.mutationOptions());
+  const removal = useMemberRemoval(groupId);
   const updateRole = useMutation(trpc.groupMembership.updateRole.mutationOptions());
   const { group, isPending: isFetchingMembers } = useCachedGroup(groupId);
   const members = useMemo(
@@ -121,82 +113,6 @@ const MembersTab = ({
   const self = members?.find((member) => member.user.id === session?.user.id);
   const selectedMember = memberStatuses.find((member) => member.id === selectedMemberId);
   const canManage = self?.role === "OWNER" || self?.role === "ADMIN";
-  const nameOf = (member: { id: string; user: { name: string } }) =>
-    nicknames[member.id]?.name ?? member.user.name;
-  const confirmRemoval = (
-    member: { id: string; user: { id: string; name: string } },
-    successor?: string,
-  ) => {
-    const isSelf = member.user.id === session?.user.id;
-    const isLastMember = isSelf && members?.length === 1;
-    const anotherOwner = members?.some(
-      (item) => item.role === "OWNER" && item.user.id !== session?.user.id,
-    );
-    if (isSelf && self?.role === "OWNER" && !successor && !isLastMember && !anotherOwner) {
-      setSuccessorMemberId(null);
-      setSuccessorDialogOpen(true);
-      return;
-    }
-    Alert.alert(
-      isSelf ? "Leave group?" : `Remove ${nameOf(member)}?`,
-      isSelf
-        ? isLastMember
-          ? "You are the last person in this group. Leaving will permanently delete the group and its location history."
-          : `${
-              successor
-                ? `${(() => {
-                    const chosen = members?.find((item) => item.id === successor);
-                    return chosen ? nameOf(chosen) : "The selected member";
-                  })()} will become an owner. `
-                : ""
-            }You will leave this group, and your location history in this group will be deleted.`
-        : `${nameOf(member)} will be removed from this group and their location history in this group will be deleted.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: isSelf ? "Leave" : "Remove",
-          style: "destructive",
-          onPress: async () => {
-            const result = await tryCatch(
-              removal.run(member.id, async () => {
-                if (isLastMember) {
-                  await deleteGroup.mutateAsync({
-                    groupId,
-                    onlyIfLastMember: true,
-                  });
-                } else {
-                  await submitEpochChange({
-                    build: () =>
-                      buildRemoveGroupMemberInput({
-                        groupId,
-                        memberId: member.id,
-                        leaving: isSelf,
-                      }),
-                    submit: (input) =>
-                      removeMember.mutateAsync({
-                        ...input,
-                        ...(successor ? { successorMemberId: successor } : {}),
-                      }),
-                  });
-                }
-                if (isSelf) {
-                  forgetHiddenMapGroup({ groupId, userId: member.user.id });
-                  router.replace("/(tabs)/groups/list");
-                }
-                await queryClient.invalidateQueries({
-                  queryKey: trpc.groupMembership.list.queryKey(),
-                });
-                requestTrackingSync();
-              }),
-            );
-            if (result.error) {
-              Alert.alert("Couldn’t update group", userMessage(result.error));
-            }
-          },
-        },
-      ],
-    );
-  };
 
   if (isFetchingMembers) {
     return <LoadingIndicator />;
@@ -286,43 +202,7 @@ const MembersTab = ({
           </Button>
         </DialogContent>
       </Dialog>
-      <Dialog open={successorDialogOpen} onOpenChange={setSuccessorDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Choose a new owner</DialogTitle>
-          </DialogHeader>
-          <Text>Select the person who will manage this group after you leave.</Text>
-          <ScrollView style={{ maxHeight: 280 }}>
-            {members
-              ?.filter((member) => member.id !== self?.id)
-              .map((member) => (
-                <Pressable
-                  key={member.id}
-                  accessibilityRole="radio"
-                  accessibilityState={{
-                    checked: successorMemberId === member.id,
-                  }}
-                  onPress={() => setSuccessorMemberId(member.id)}
-                  className="flex-row items-center gap-3 rounded-lg p-3"
-                >
-                  <View
-                    className={`size-5 rounded-full border-2 ${successorMemberId === member.id ? "border-primary bg-primary" : "border-border"}`}
-                  />
-                  <Text>{nameOf(member)}</Text>
-                </Pressable>
-              ))}
-          </ScrollView>
-          <Button
-            disabled={!successorMemberId}
-            onPress={() => {
-              setSuccessorDialogOpen(false);
-              if (self && successorMemberId) confirmRemoval(self, successorMemberId);
-            }}
-          >
-            <Text>Continue</Text>
-          </Button>
-        </DialogContent>
-      </Dialog>
+      {removal.successorDialog}
       <View className="flex-row items-center justify-between pb-3">
         <Text variant="label">
           {members?.length ?? 0} {members?.length === 1 ? "member" : "members"}
@@ -508,7 +388,11 @@ const MembersTab = ({
                   disabled={removal.isPending}
                   onPress={() => {
                     setSelectedMemberId(null);
-                    confirmRemoval(selectedMember);
+                    removal.confirmRemoval({
+                      id: selectedMember.id,
+                      userId: selectedMember.user.id,
+                      name: selectedMember.user.name,
+                    });
                   }}
                   className="min-h-[52px] flex-row items-center gap-3 border-t border-border/60 px-4 py-3 active:bg-secondary/60"
                 >
