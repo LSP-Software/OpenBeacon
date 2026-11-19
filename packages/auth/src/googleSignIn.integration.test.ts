@@ -98,6 +98,18 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       ).toEqual([{ providerId: "google" }]);
     });
 
+    test("a Google display name names refuse still signs up, with the name cleaned or replaced", async () => {
+      for (const [suffix, name, stored] of [
+        ["bidi-only", "\u202E\u2066\u2069", "OpenBeacon user"],
+        ["override", "Ali\u202Ece", "Alice"],
+        ["long", "b".repeat(120), "b".repeat(100)],
+      ] as const) {
+        const email = `${prefix}-${suffix}@example.test`;
+        expect((await signInWithGoogle(email, { name })).status).toBe(200);
+        expect((await prisma.user.findUniqueOrThrow({ where: { email } })).name).toBe(stored);
+      }
+    });
+
     test("Google sign-in never copies the Google photo and returns the sealed picture key", async () => {
       const email = `${prefix}-photo@example.test`;
       expect((await signInWithGoogle(email)).status).toBe(200);

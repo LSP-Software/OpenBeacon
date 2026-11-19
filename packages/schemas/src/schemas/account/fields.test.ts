@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { accountNameSchema, emailSchema, passwordSchema } from "./fields.ts";
+import {
+  accountNameFromProfile,
+  accountNameSchema,
+  emailSchema,
+  passwordSchema,
+} from "./fields.ts";
 
 describe("accountNameSchema", () => {
   test("trims names and accepts international names and punctuation", () => {
@@ -9,6 +14,49 @@ describe("accountNameSchema", () => {
   test("rejects blank, excessively long, and control character names", () => {
     for (const name of ["   ", "a".repeat(101), "Alice\nBob", "A\u0000B"]) {
       expect(accountNameSchema.safeParse(name).success).toBe(false);
+    }
+  });
+
+  test("refuses direction overrides and isolates, and names with nothing visible", () => {
+    for (const name of [
+      "Alice\u202Eevil",
+      "\u2066Bob\u2069",
+      "\u202A\u202B\u202C\u202D",
+      "\u200B",
+      "\u200B\u200D\u2060",
+    ]) {
+      expect(accountNameSchema.safeParse(name).success).toBe(false);
+    }
+  });
+
+  test("keeps the joiners and marks Persian, Arabic and Hebrew names use", () => {
+    for (const name of [
+      "\u0645\u06CC\u200C\u062E\u0648\u0627\u0645",
+      "\u05D3\u05E0\u05D4\u200F (Dana)",
+      "\u{1F468}\u200D\u{1F469}\u200D\u{1F467}",
+    ]) {
+      expect(accountNameSchema.parse(name)).toBe(name);
+    }
+  });
+});
+
+describe("accountNameFromProfile", () => {
+  test("keeps a valid profile name", () => {
+    expect(accountNameFromProfile("  Alice Smith ")).toBe("Alice Smith");
+  });
+
+  test("drops the characters names refuse and keeps the rest", () => {
+    expect(accountNameFromProfile("\u2066Ali\u202Ece\n\u2069")).toBe("Alice");
+  });
+
+  test("cuts long names to 100 characters without splitting an emoji", () => {
+    expect(accountNameFromProfile("a".repeat(150))).toBe("a".repeat(100));
+    expect(accountNameFromProfile(`${"a".repeat(99)}\u{1F600}`)).toBe("a".repeat(99));
+  });
+
+  test("falls back to a neutral name when nothing visible is left", () => {
+    for (const name of ["", "   ", "\u202E\u2066\u2069", "\u200B"]) {
+      expect(accountNameFromProfile(name)).toBe("OpenBeacon user");
     }
   });
 });

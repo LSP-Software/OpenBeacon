@@ -455,7 +455,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const second = await register(account.userId, "second");
       await prisma.userDevice.update({
         where: { id: second.deviceId },
-        data: { activatedAt: new Date(), activatedBy: "existing" },
+        data: { activatedAt: new Date(), activatedBy: "link" },
       });
       const { linkId } = await account.pending.api.deviceLink.create();
       await account.active.api.account.removeDevice({ deviceId: account.pending.deviceId });

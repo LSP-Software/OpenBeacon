@@ -34,7 +34,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("feedback with Po
     const records = await prisma.feedback.findMany({ where: { message: { startsWith: prefix } } });
     expect(records).toHaveLength(2);
     expect(records.find((record) => record.message === `${prefix}-private`)).toMatchObject({
-      userId: null,
       email: null,
       androidVersion: "17",
       appVersion: "1.0.0",
@@ -43,7 +42,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("feedback with Po
       serverVersion: "0.1.1",
     });
     expect(records.find((record) => record.message === `${prefix}-contact`)).toMatchObject({
-      userId: null,
       email: `${prefix}@example.test`,
       androidVersion: null,
       appVersion: null,

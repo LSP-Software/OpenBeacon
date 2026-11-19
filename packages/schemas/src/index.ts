@@ -27,7 +27,7 @@ import {
   setNotificationSettingSchema,
 } from "./schemas/account/notificationSettings.ts";
 import { emailCodeSchema } from "./schemas/account/emailCode.ts";
-import { accountNameSchema } from "./schemas/account/fields.ts";
+import { accountNameFromProfile, accountNameSchema } from "./schemas/account/fields.ts";
 import { signInSchema } from "./schemas/account/signIn.ts";
 import { signUpSchema } from "./schemas/account/signUp.ts";
 import {
@@ -115,6 +115,7 @@ export {
   notificationTypeSchema,
   notificationTypes,
   setNotificationSettingSchema,
+  accountNameFromProfile,
   accountNameSchema,
   addHistoryWrapsSchema,
   changePasswordSchema,

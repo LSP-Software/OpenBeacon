@@ -10,7 +10,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 @Database(
   entities = [CiphertextQueueEntity::class, CiphertextQueueEvictionEntity::class],
   version = 5,
-  exportSchema = false,
+  exportSchema = true,
 )
 abstract class CiphertextQueueDatabase : RoomDatabase() {
   abstract fun ciphertextQueueDao(): CiphertextQueueDao

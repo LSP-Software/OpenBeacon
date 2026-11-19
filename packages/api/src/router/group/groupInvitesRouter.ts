@@ -22,9 +22,8 @@ import type { GroupListItem } from "../../types/GroupListItem.ts";
 
 const creatorCanAdmit = async (
   db: Pick<Prisma.TransactionClient, "groupMember">,
-  invite: { creatorId: string | null; groupId: string },
+  invite: { creatorId: string; groupId: string },
 ) => {
-  if (!invite.creatorId) return false;
   const creator = await db.groupMember.findUnique({
     where: { userId_groupId: { userId: invite.creatorId, groupId: invite.groupId } },
     select: { role: true, user: { select: { pendingDeletion: true } } },

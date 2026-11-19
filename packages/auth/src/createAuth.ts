@@ -1,6 +1,6 @@
 import { expo } from "@better-auth/expo";
 import { Prisma, prisma as db } from "@openbeacon/database";
-import { accountNameSchema } from "@openbeacon/schemas";
+import { accountNameFromProfile, accountNameSchema } from "@openbeacon/schemas";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import {
@@ -198,14 +198,15 @@ export const createAuth = ({
       user: {
         create: {
           before: async (user, context) => {
+            if (context?.path !== "/sign-up/email") {
+              return { data: { ...user, name: accountNameFromProfile(user.name), image: null } };
+            }
             const result = accountNameSchema.safeParse(user.name);
             if (!result.success)
               throw new APIError("BAD_REQUEST", {
                 message: result.error.issues[0]?.message ?? "Invalid name",
               });
-            if (context?.path !== "/sign-up/email" || !emailCodes) {
-              return { data: { ...user, name: result.data, image: null } };
-            }
+            if (!emailCodes) return { data: { ...user, name: result.data, image: null } };
             const signUpToken: unknown = context.body?.signUpToken;
             const consumed =
               typeof signUpToken === "string" &&

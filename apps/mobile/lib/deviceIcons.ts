@@ -43,9 +43,9 @@ export const deviceIcons = {
   heart: { icon: HeartIcon, label: "Heart" },
   flower: { icon: Flower2Icon, label: "Flower" },
   sun: { icon: SunIcon, label: "Sun" },
-} satisfies Partial<Record<DeviceIcon, { icon: LucideIcon; label: string }>>;
+} satisfies Record<DeviceIcon, { icon: LucideIcon; label: string }>;
 
-export const selectableDeviceIcons = Object.keys(deviceIcons) as (keyof typeof deviceIcons)[];
+export const selectableDeviceIcons = Object.keys(deviceIcons) as DeviceIcon[];
 
 export const deviceIconFor = (
   icon: DeviceIcon,
@@ -55,6 +55,5 @@ export const deviceIconFor = (
   if (icon === "phone" && platform === "android") {
     return { icon: AndroidPhoneIcon, label: "Android phone" };
   }
-  if (icon in deviceIcons) return deviceIcons[icon as keyof typeof deviceIcons];
-  return deviceIconFor("phone", platform);
+  return deviceIcons[icon];
 };

@@ -630,7 +630,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
           id: ownerSilentId,
           userId: ownerId,
           name: "Watch",
-          icon: "watch" as const,
+          icon: "star" as const,
         },
       ].map((device) => ({
         ...device,

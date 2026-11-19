@@ -60,7 +60,7 @@ describe("group epoch helpers", () => {
   });
 
   test("names a new device after its model and picks its icon", async () => {
-    const register = async (input: { model?: string; name?: string; icon?: "car" }) => {
+    const register = async (input: { model?: string; name?: string; icon?: "star" }) => {
       const create = mock(async ({ data }: { data: Record<string, unknown> }) => data);
       await upsertUserDevice({
         db: {
@@ -93,9 +93,9 @@ describe("group epoch helpers", () => {
       icon: "tablet",
     });
     expect(await register({ model: "Galaxy Tab S9" })).toMatchObject({ icon: "tablet" });
-    expect(await register({ model: "iPad Air", name: "Car tablet", icon: "car" })).toMatchObject({
+    expect(await register({ model: "iPad Air", name: "Car tablet", icon: "star" })).toMatchObject({
       name: "Car tablet",
-      icon: "car",
+      icon: "star",
     });
   });
 

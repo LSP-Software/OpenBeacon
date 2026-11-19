@@ -128,7 +128,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       });
       await prisma.feedback.createMany({
         data: [
-          { userId: deletedUser, message: `${prefix}-feedback`, email: null },
           { message: `${prefix}-feedback-anonymous`, email: `${deletedUser}@example.test` },
           {
             message: `${prefix}-feedback-mixed-case`,

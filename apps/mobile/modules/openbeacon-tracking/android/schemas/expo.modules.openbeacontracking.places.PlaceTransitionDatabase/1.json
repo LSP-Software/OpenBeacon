@@ -1,0 +1,94 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "db3d5ba37706187d5eab58e26c2ceedc",
+    "entities": [
+      {
+        "tableName": "place_transition_queue",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `clientId` TEXT NOT NULL, `owner` TEXT NOT NULL, `senderDeviceId` TEXT NOT NULL, `groupId` TEXT NOT NULL, `placeId` TEXT NOT NULL, `direction` TEXT NOT NULL, `occurredAt` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "clientId",
+            "columnName": "clientId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "owner",
+            "columnName": "owner",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "senderDeviceId",
+            "columnName": "senderDeviceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "groupId",
+            "columnName": "groupId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "placeId",
+            "columnName": "placeId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "direction",
+            "columnName": "direction",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "occurredAt",
+            "columnName": "occurredAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": ["id"]
+        },
+        "indices": [
+          {
+            "name": "index_place_transition_queue_clientId",
+            "unique": true,
+            "columnNames": ["clientId"],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_place_transition_queue_clientId` ON `${TABLE_NAME}` (`clientId`)"
+          },
+          {
+            "name": "index_place_transition_queue_owner_id",
+            "unique": false,
+            "columnNames": ["owner", "id"],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_place_transition_queue_owner_id` ON `${TABLE_NAME}` (`owner`, `id`)"
+          },
+          {
+            "name": "index_place_transition_queue_groupId_placeId",
+            "unique": false,
+            "columnNames": ["groupId", "placeId"],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_place_transition_queue_groupId_placeId` ON `${TABLE_NAME}` (`groupId`, `placeId`)"
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'db3d5ba37706187d5eab58e26c2ceedc')"
+    ]
+  }
+}

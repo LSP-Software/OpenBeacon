@@ -20,6 +20,7 @@ mock.module("expo-secure-store", () => ({
 
 mock.module("react-native-mmkv", () => ({
   createMMKV: () => ({
+    getNumber: () => 1,
     getString: () => undefined,
     remove: () => {},
     set: (key: string, value: unknown) => {
