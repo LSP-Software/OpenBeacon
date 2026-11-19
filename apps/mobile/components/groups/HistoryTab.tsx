@@ -21,10 +21,11 @@ import { LoadingIndicator } from "../LoadingIndicator.tsx";
 import { Button } from "../ui/Button.tsx";
 import { Icon } from "../ui/Icon.tsx";
 import { Text } from "../ui/Text.tsx";
-import { useMemberNames } from "../../hooks/useMemberNames.ts";
+import { useMemberNameList } from "../../hooks/useMemberNames.ts";
 import { type RouterInputs, trpcClient } from "../../lib/api.ts";
 import { authClient } from "../../lib/auth-client.ts";
 import { describeGroupEvent, groupByDay, markGroupHistorySeen } from "../../lib/groupHistory.ts";
+import { ownedDeviceName } from "../../lib/ownedDeviceName.ts";
 
 const eventIcons = {
   GROUP_CREATED: SparklesIcon,
@@ -66,7 +67,8 @@ const HistoryTab = ({
   const isFocused = useIsFocused();
   const { data: session } = authClient.useSession();
   const userId = session?.user.id;
-  const memberName = useMemberNames(groupId);
+  const memberNames = useMemberNameList(groupId);
+  const memberName = (memberUserId: string) => memberNames(memberUserId)[0] ?? null;
   const [category, setCategory] = useState<(typeof filters)[number]["category"]>(null);
   const history = useInfiniteQuery({
     queryKey: ["groupHistory", groupId, userId, category],
@@ -230,13 +232,16 @@ const HistoryTab = ({
               );
             }
             const arrived = item.direction === "ARRIVE";
-            const owner =
-              item.userId === userId ? "Your" : `${memberName(item.userId) ?? "Someone"}’s`;
+            const device = ownedDeviceName({
+              deviceName: item.deviceName,
+              ownerNames: memberNames(item.userId),
+              isYou: item.userId === userId,
+            });
             return (
               <View
                 key={item.id}
                 accessible
-                accessibilityLabel={`${owner} ${item.deviceName} ${arrived ? "arrived at" : "left"} ${item.placeName}, ${time}`}
+                accessibilityLabel={`${device} ${arrived ? "arrived at" : "left"} ${item.placeName}, ${time}`}
                 className="flex-row items-center gap-4 border-b border-border/60 px-1 py-3"
               >
                 <View className="size-12 items-center justify-center rounded-xl bg-secondary">
@@ -244,9 +249,7 @@ const HistoryTab = ({
                 </View>
                 <View className="flex-1 gap-0.5">
                   <Text className="text-foreground">
-                    <Text className="text-foreground font-semibold">
-                      {owner} {item.deviceName}
-                    </Text>{" "}
+                    <Text className="text-foreground font-semibold">{device}</Text>{" "}
                     {arrived ? "arrived at" : "left"} {item.placeName}
                   </Text>
                   <Text className="text-sm text-tertiary">{time}</Text>

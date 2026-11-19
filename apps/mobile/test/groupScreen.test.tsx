@@ -130,7 +130,10 @@ mock.module("../components/ui/Text.tsx", () => ({
   Text: ({ children }: { children: React.ReactNode }) => children,
 }));
 mock.module("../components/groups/MembersTab.tsx", () => ({ default: () => null }));
-mock.module("../hooks/useMemberNames.ts", () => ({ useMemberNames: () => () => null }));
+mock.module("../hooks/useMemberNames.ts", () => ({
+  useMemberNameList: () => () => [],
+  useMemberNames: () => () => null,
+}));
 mock.module("../components/ui/Icon.tsx", () => ({ Icon: () => null }));
 mock.module("../components/groups/PlacesTab.tsx", () => ({ default: () => null }));
 mock.module("../hooks/useUnseenGroupHistory.ts", () => ({

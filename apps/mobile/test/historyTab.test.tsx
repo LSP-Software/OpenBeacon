@@ -56,7 +56,10 @@ mock.module("../components/ui/Button.tsx", () => ({
 mock.module("../components/ui/Text.tsx", () => ({
   Text: ({ children }: { children: React.ReactNode }) => children,
 }));
-mock.module("../hooks/useMemberNames.ts", () => ({ useMemberNames: () => () => null }));
+mock.module("../hooks/useMemberNames.ts", () => ({
+  useMemberNameList: () => () => [],
+  useMemberNames: () => () => null,
+}));
 
 const { default: HistoryTab } = await import("../components/groups/HistoryTab.tsx");
 
@@ -104,9 +107,15 @@ test("opening History clears the dot even when the newest group event is beyond 
       kind: "place",
       id: "transition",
       at: new Date("2026-11-17T09:00:00Z"),
-      type: "ARRIVED",
-      actor: { userId: "user-2", name: "Sam" },
-      place: { id: "place-1", name: "Home", emoji: null },
+      groupId: "group-1",
+      placeId: "place-1",
+      placeName: "Home",
+      placeEmoji: "🏠",
+      direction: "ARRIVE",
+      occurredAt: new Date("2026-11-17T09:00:00Z"),
+      userId: "user-2",
+      deviceId: "device-2",
+      deviceName: "Sam's Pixel",
     },
   ];
 
