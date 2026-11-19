@@ -1,32 +1,11 @@
 import { OfflineManager } from "@maplibre/maplibre-react-native";
 import { storage } from "./storage.ts";
 
-export const mapCacheSizesMb = [100, 250, 500, 1000] as const;
+export const mapCacheLimitMb = 250;
 
-type MapCacheSizeMb = (typeof mapCacheSizesMb)[number];
-
-const sizeKey = "map.cacheSizeMb";
 const lastSourceUrlKey = "map.lastSourceUrl";
 const lastArchiveIdKey = "map.lastArchiveId";
 const clearPendingKey = "map.clearPending";
-
-export const formatMapCacheSize = (sizeMb: number) =>
-  sizeMb >= 1000 ? `${sizeMb / 1000} GB` : `${sizeMb} MB`;
-
-export const getMapCacheSizeMb = (): MapCacheSizeMb => {
-  const stored = storage.getNumber(sizeKey);
-  return mapCacheSizesMb.find((size) => size === stored) ?? 250;
-};
-
-const applySize = (size: MapCacheSizeMb) =>
-  OfflineManager.setMaximumAmbientCacheSize(size * 1_000_000);
-
-export const applyMapCacheSize = () => applySize(getMapCacheSizeMb());
-
-export const setMapCacheSizeMb = async (size: MapCacheSizeMb) => {
-  await applySize(size);
-  storage.set(sizeKey, size);
-};
 
 export const readLastMapSource = () => {
   const sourceUrl = storage.getString(lastSourceUrlKey);
@@ -58,5 +37,6 @@ export const clearSavedMap = async () => {
 
 export const prepareMapCache = async () => {
   if (storage.getBoolean(clearPendingKey)) await clearSavedMap();
-  await applyMapCacheSize();
+  storage.remove("map.cacheSizeMb");
+  await OfflineManager.setMaximumAmbientCacheSize(mapCacheLimitMb * 1_000_000);
 };
