@@ -1,7 +1,7 @@
 import { expect, mock, test } from "bun:test";
 import { QueryClient } from "@tanstack/react-query";
 import type { MapTrackingEncryptedPoint } from "./mapTrackingTypes.ts";
-import { subscribeToGroupEpochChanges } from "./trackingEvents.ts";
+import { subscribeToGroupEpochChanges, subscribeToTrackingSync } from "./trackingEvents.ts";
 
 let status: "ok" | "undecryptable" = "undecryptable";
 const queryClient = new QueryClient();
@@ -35,6 +35,7 @@ mock.module("./mapTrackingDecrypt.ts", () => ({
 const { createDefaultMapTrackingDeps }: typeof import("./createDefaultMapTrackingDeps.ts") =
   await import("./createDefaultMapTrackingDeps.ts");
 const {
+  clearTrackingKeyCheck,
   getMembershipSignature,
   getTrackingKeyCheckGeneration,
   isTrackingKeyCheckDue,
@@ -59,6 +60,55 @@ test("a membership change in the fetched group list makes the tracking key check
   });
   await deps.listGroups(new AbortController().signal);
   expect(isTrackingKeyCheckDue("scope")).toBe(true);
+});
+
+test("a membership change asks for one tracking sync with group notices, not one per poll", async () => {
+  clearTrackingKeyCheck();
+  const deps = createDefaultMapTrackingDeps();
+  const syncs: Array<{ groupNotices: boolean }> = [];
+  const unsubscribe = subscribeToTrackingSync((options) => syncs.push(options));
+
+  await deps.listGroups(new AbortController().signal);
+  expect(syncs).toEqual([]);
+
+  recordTrackingKeyCheck({
+    generation: getTrackingKeyCheckGeneration(),
+    membership: getMembershipSignature([]),
+    scope: "scope",
+  });
+  await deps.listGroups(new AbortController().signal);
+  await deps.listGroups(new AbortController().signal);
+  expect(syncs).toEqual([{ groupNotices: true }]);
+
+  recordTrackingKeyCheck({
+    generation: getTrackingKeyCheckGeneration(),
+    membership: getMembershipSignature(groups),
+    scope: "scope",
+  });
+  await deps.listGroups(new AbortController().signal);
+  expect(syncs).toEqual([{ groupNotices: true }]);
+  unsubscribe();
+});
+
+test("a group moving to a new epoch asks for a tracking sync", async () => {
+  status = "ok";
+  const deps = createDefaultMapTrackingDeps();
+  const syncs: Array<{ groupNotices: boolean }> = [];
+  const unsubscribe = subscribeToTrackingSync((options) => syncs.push(options));
+
+  await deps.decryptPoint({
+    groupId: "group",
+    point: point("epoch-1", "point-1", "2026-07-17T10:00:00.000Z"),
+  });
+  expect(syncs).toEqual([]);
+
+  await deps.decryptPoint({
+    groupId: "group",
+    point: point("epoch-2", "point-2", "2026-07-17T11:00:00.000Z"),
+  });
+  expect(syncs).toEqual([{ groupNotices: false }]);
+  unsubscribe();
+  status = "undecryptable";
 });
 
 test("a group moving to a new epoch makes the tracking key check due, the first epoch seen doesn't", async () => {

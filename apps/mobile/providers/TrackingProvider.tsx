@@ -28,6 +28,7 @@ const trackingService = {
   },
   takeKeyAccessChange: async () => (await import("../lib/tracking.ts")).takeKeyAccessChange(),
   syncAccountNotices: async () => (await import("../lib/tracking.ts")).syncAccountNotices(),
+  syncGroupNotices: async () => (await import("../lib/tracking.ts")).syncGroupNotices(),
 };
 
 export const TrackingProvider = ({
@@ -220,10 +221,13 @@ export const TrackingProvider = ({
       return;
     }
 
-    return subscribeToTrackingSync(() => {
-      void runTrackingCycle({ forceKeyCheck: true });
+    return subscribeToTrackingSync(({ groupNotices }) => {
+      void (async () => {
+        await runTrackingCycle({ forceKeyCheck: true });
+        if (groupNotices && sessionReadyRef.current) await tryCatch(service.syncGroupNotices());
+      })();
     });
-  }, [runTrackingCycle, userId]);
+  }, [runTrackingCycle, service, userId]);
 
   return children;
 };

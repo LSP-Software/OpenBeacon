@@ -24,6 +24,7 @@ let reconcileChanged = false;
 let keyAccessChangePending = false;
 let flushCalls = 0;
 let accountSyncs = 0;
+let groupNoticeSyncs = 0;
 let flushModes: boolean[] = [];
 let revokeCalls = 0;
 let revokeInputs: Array<{ keepDeviceRegistration: boolean }> = [];
@@ -61,6 +62,9 @@ const trackingService = {
   },
   syncAccountNotices: async () => {
     accountSyncs += 1;
+  },
+  syncGroupNotices: async () => {
+    groupNoticeSyncs += 1;
   },
   revokeTrackingAccess: async (input: { keepDeviceRegistration: boolean }) => {
     revokeCalls += 1;
@@ -165,6 +169,7 @@ describe("TrackingProvider", () => {
     recoveryGate = null;
     flushCalls = 0;
     accountSyncs = 0;
+    groupNoticeSyncs = 0;
     flushModes = [];
     revokeCalls = 0;
     revokeInputs = [];
@@ -258,6 +263,23 @@ describe("TrackingProvider", () => {
     expect(reconcileCalls).toEqual([]);
     expect(flushCalls).toBe(0);
     expect(revokeCalls).toBe(0);
+  });
+
+  test("checks group notices after the key check only when membership changed", async () => {
+    await renderProvider();
+    reconcileCalls = [];
+
+    requestTrackingSync();
+    await flushEffects();
+    expect(groupNoticeSyncs).toBe(0);
+
+    requestTrackingSync({ groupNotices: true });
+    await flushEffects();
+    expect(reconcileCalls).toEqual([
+      { startCapture: true, force: true },
+      { startCapture: true, force: true },
+    ]);
+    expect(groupNoticeSyncs).toBe(1);
   });
 
   test("refreshes key access only when the key check finds something new", async () => {

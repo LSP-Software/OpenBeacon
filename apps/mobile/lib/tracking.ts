@@ -1214,6 +1214,11 @@ export const syncAccountNotices = async () => {
   await pollPlaceUpdates({ onlyWithoutKeys: true });
 };
 
+export const syncGroupNotices = async () => {
+  if (getApiCompatibility()) return;
+  await pollPlaceUpdates();
+};
+
 export type UploadReason = "upload" | "sharing" | "parked" | "push";
 
 const syncBackgroundTrackingInternal = async (reason: UploadReason) => {
