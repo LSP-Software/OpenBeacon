@@ -3,7 +3,7 @@ import { resolveEpochKey } from "./epochKeys.ts";
 import { isCursorAfter } from "./mapTracking.ts";
 import { createMapTrackingDecryptPoint } from "./mapTrackingDecrypt.ts";
 import type { MapTrackingDeps, MapTrackingEncryptedPoint } from "./mapTrackingTypes.ts";
-import { notifyGroupEpochChange } from "./trackingEvents.ts";
+import { notifyGroupEpochChange, requestTrackingSync } from "./trackingEvents.ts";
 import { markTrackingKeysStale, noteGroupMembership } from "./trackingKeyCheck.ts";
 
 export const createDefaultMapTrackingDeps = (): MapTrackingDeps => {
@@ -28,7 +28,10 @@ export const createDefaultMapTrackingDeps = (): MapTrackingDeps => {
       }
       observedEpochs.set(input.groupId, input.point);
       if (observed?.epochId !== input.point.epochId) {
-        if (observed) markTrackingKeysStale();
+        if (observed) {
+          markTrackingKeysStale();
+          requestTrackingSync();
+        }
         notifyGroupEpochChange(input.groupId);
       }
       return result;
@@ -38,7 +41,7 @@ export const createDefaultMapTrackingDeps = (): MapTrackingDeps => {
     listGroups: async (signal) => {
       const groups = await trpcClient.groupMembership.list.query(undefined, { signal });
       queryClient.setQueryData(trpc.groupMembership.list.queryKey(), groups);
-      noteGroupMembership(groups);
+      if (noteGroupMembership(groups)) requestTrackingSync({ groupNotices: true });
       return groups;
     },
     now: () => Date.now(),

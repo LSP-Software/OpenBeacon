@@ -8,6 +8,7 @@ const WATCHED_KEY_CHECK_INTERVAL_MS = 30 * 60 * 1000;
 const KEY_STATE_FRESH_MS = 10 * 60 * 1000;
 
 let checkedMembership: string | null = null;
+let notedMembership: string | null = null;
 let staleGeneration = 0;
 
 type GroupMembers = { id: string; members: { id: string }[] }[];
@@ -85,6 +86,7 @@ export const clearTrackingKeyCheck = () => {
   storage.remove(KEY_STATE_KEY);
   storage.remove(CURSOR_GROUP_KEY);
   checkedMembership = null;
+  notedMembership = null;
 };
 
 export const rememberCursorGroup = (owner: string, groups: { id: string }[]) => {
@@ -99,5 +101,10 @@ export const readCursorGroup = (owner: string) => {
 };
 
 export const noteGroupMembership = (groups: GroupMembers) => {
-  if (hasMembershipChanged(getMembershipSignature(groups))) markTrackingKeysStale();
+  const membership = getMembershipSignature(groups);
+  if (!hasMembershipChanged(membership)) return false;
+  markTrackingKeysStale();
+  if (notedMembership === membership) return false;
+  notedMembership = membership;
+  return true;
 };

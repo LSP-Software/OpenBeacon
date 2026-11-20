@@ -1,4 +1,4 @@
-const listeners = new Set<() => void>();
+const listeners = new Set<(options: { groupNotices: boolean }) => void>();
 const epochListeners = new Set<(groupId: string) => void>();
 
 export const notifyGroupEpochChange = (groupId: string) => {
@@ -12,13 +12,13 @@ export const subscribeToGroupEpochChanges = (listener: (groupId: string) => void
   };
 };
 
-export const requestTrackingSync = () => {
+export const requestTrackingSync = ({ groupNotices = false }: { groupNotices?: boolean } = {}) => {
   for (const listener of listeners) {
-    listener();
+    listener({ groupNotices });
   }
 };
 
-export const subscribeToTrackingSync = (listener: () => void) => {
+export const subscribeToTrackingSync = (listener: (options: { groupNotices: boolean }) => void) => {
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
