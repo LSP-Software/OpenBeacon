@@ -299,6 +299,7 @@ def main():
             backend_env = os.environ.copy()
             backend_env["BETTER_AUTH_URL"] = args.api_url.rstrip("/")
             backend_env["OPENBEACON_API_HOSTNAME"] = "127.0.0.1"
+            backend_env["NODE_ENV"] = "development"
             children.append(subprocess.Popen(["bun", "run", "--env-file=.env", "--hot", "apps/backend/src/index.ts"], cwd=ROOT, env=backend_env, stdin=subprocess.DEVNULL, start_new_session=True))
         if args.apk is None:
             subprocess.run(["bun", "x", "expo", "prebuild", "--platform", "android"], cwd=ROOT / "apps/mobile", check=True)
