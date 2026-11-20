@@ -3,7 +3,7 @@
     "name": "OpenBeacon",
     "slug": "open-beacon",
     "description": "Privacy-first family location sharing. You own your data.",
-    "version": "1.40.4",
+    "version": "1.40.5",
     "platforms": ["android", "ios"],
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -22,7 +22,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "net.openbeacon.app",
-      "buildNumber": "81",
+      "buildNumber": "82",
       "privacyManifests": {
         "NSPrivacyAccessedAPITypes": [
           {
@@ -44,7 +44,7 @@
       "predictiveBackGestureEnabled": false,
       "allowBackup": false,
       "package": "net.openbeacon.app",
-      "versionCode": 81,
+      "versionCode": 82,
       "blockedPermissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.READ_MEDIA_AUDIO",
@@ -114,7 +114,8 @@
       ],
       "./plugins/withReleaseSigning.js",
       "./plugins/withPodDeploymentTarget.js",
-      "./plugins/withFirebasePush.js"
+      "./plugins/withFirebasePush.js",
+      "./plugins/withOptionalPortraitScreen.js"
     ]
   }
 }
