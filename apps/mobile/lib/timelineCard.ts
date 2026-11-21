@@ -21,6 +21,14 @@ export const timelineCardShift = ({
   return { scale: end.width / start.width, x: end.x - start.x, y: end.y - start.y };
 };
 
+export const timelineMiniClockScale = ({
+  available,
+  width,
+}: {
+  available: number;
+  width: number;
+}) => (available > 0 && width > 0 ? Math.min(0.8, available / width) : 0.8);
+
 const centreOf = (chain: ReadonlyArray<TimelineCardBox | undefined>) => {
   const boxes = chain.filter((box) => box !== undefined);
   const last = boxes.at(-1);

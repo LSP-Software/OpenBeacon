@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { timelineCardOpens, timelineCardShift } from "./timelineCard.ts";
+import { timelineCardOpens, timelineCardShift, timelineMiniClockScale } from "./timelineCard.ts";
 
 describe("timelineCardOpens", () => {
   test("a flick decides the card's state wherever it is let go", () => {
@@ -45,5 +45,20 @@ describe("timelineCardShift", () => {
     expect(timelineCardShift({ from: [undefined, box], to: [box] })).toEqual(still);
     expect(timelineCardShift({ from: [box], to: [{ ...box, width: 0 }] })).toEqual(still);
     expect(timelineCardShift({ from: [box], to: [] })).toEqual(still);
+  });
+});
+
+describe("timelineMiniClockScale", () => {
+  test("shrinks the clock to four fifths when the mini row has room", () => {
+    expect(timelineMiniClockScale({ available: 200, width: 120 })).toBe(0.8);
+  });
+
+  test("shrinks a large-text clock further so it fits beside the play button and speed", () => {
+    expect(timelineMiniClockScale({ available: 150, width: 300 })).toBe(0.5);
+  });
+
+  test("keeps the usual size until both widths are known", () => {
+    expect(timelineMiniClockScale({ available: 0, width: 300 })).toBe(0.8);
+    expect(timelineMiniClockScale({ available: 150, width: 0 })).toBe(0.8);
   });
 });

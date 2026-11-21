@@ -140,7 +140,7 @@ export const TimelineMiniScrubber = (scrub: Scrub) => {
   const { trackProps, width, xOf } = useScrubTrack(scrub);
   const x = xOf(scrub.time);
   return (
-    <View className="h-6 justify-center" {...trackProps}>
+    <View className="h-11 justify-center" {...trackProps}>
       {width > 0 ? (
         <View pointerEvents="none">
           <View className="h-[3px] rounded-full bg-border" />

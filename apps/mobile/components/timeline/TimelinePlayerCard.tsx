@@ -1,12 +1,7 @@
 import type { ReactNode } from "react";
 import { Pressable, View } from "react-native";
 import Animated from "react-native-reanimated";
-import {
-  HANDLE_HEIGHT,
-  MINI_CLOCK_LEFT,
-  MINI_LINE_TOP,
-  type useTimelinePlayerCard,
-} from "../../hooks/useTimelinePlayerCard.ts";
+import type { useTimelinePlayerCard } from "../../hooks/useTimelinePlayerCard.ts";
 import { Text } from "../ui/Text.tsx";
 
 type PlayerCard = ReturnType<typeof useTimelinePlayerCard>;
@@ -46,38 +41,60 @@ export const TimelinePlayerCard = ({
         className={card.canCollapse ? "px-4 pb-3" : "px-4 pb-3 pt-3"}
         onLayout={card.onFullLayout}
       >
-        {card.canCollapse ? (
+        {card.canCollapse ? <View className="h-5" /> : null}
+        <View onLayout={card.measure("content")}>{children}</View>
+      </View>
+      {card.canCollapse ? (
+        <Animated.View
+          {...card.miniOnly}
+          className="absolute inset-x-0 top-0 px-4 pb-1 pt-5"
+          onLayout={card.onMiniLayout}
+        >
+          <View
+            pointerEvents="box-none"
+            className="flex-row items-center gap-3"
+            onLayout={card.measure("miniRow")}
+          >
+            <View
+              pointerEvents="none"
+              style={card.miniSlots.play}
+              onLayout={card.measure("miniPlay")}
+            />
+            <View
+              pointerEvents="none"
+              className="min-w-0 flex-1"
+              onLayout={card.measure("miniColumn")}
+            >
+              <View style={card.miniSlots.clock} onLayout={card.measure("miniClock")} />
+              <Text
+                className="text-xs text-secondary"
+                maxFontSizeMultiplier={1.5}
+                numberOfLines={1}
+              >
+                {miniDate}
+              </Text>
+            </View>
+            <View
+              pointerEvents="none"
+              style={card.miniSlots.speed}
+              onLayout={card.measure("miniSpeed")}
+            />
+          </View>
+          {miniScrubber}
+        </Animated.View>
+      ) : null}
+      {card.canCollapse ? (
+        <View pointerEvents="box-none" className="absolute inset-x-0 top-0 items-center">
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={card.open ? "Collapse player" : "Expand player"}
             accessibilityState={{ expanded: card.open }}
             onPress={() => card.setExpanded(!card.open)}
-            className="items-center justify-center"
-            style={{ height: HANDLE_HEIGHT }}
+            className="h-11 w-24 items-center pt-2"
           >
             <View className="h-1 w-9 rounded-full bg-border-strong" />
           </Pressable>
-        ) : null}
-        {children}
-      </View>
-      {card.canCollapse ? (
-        <Animated.View
-          {...card.miniOnly}
-          className="absolute inset-x-0 top-0 px-4"
-          style={[card.miniOnly.style, { paddingTop: HANDLE_HEIGHT }]}
-        >
-          <Text
-            pointerEvents="none"
-            className="text-xs text-secondary"
-            numberOfLines={1}
-            style={{ marginLeft: MINI_CLOCK_LEFT, marginTop: 30 }}
-          >
-            {miniDate}
-          </Text>
-          <View className="absolute inset-x-4" style={{ top: HANDLE_HEIGHT + MINI_LINE_TOP }}>
-            {miniScrubber}
-          </View>
-        </Animated.View>
+        </View>
       ) : null}
     </Animated.View>
   </View>

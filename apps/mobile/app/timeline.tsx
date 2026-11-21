@@ -990,11 +990,19 @@ const TimelineView = ({
                 </Text>
               </Animated.View>
             ) : null}
-            <View className="flex-row items-center gap-3" onLayout={card.measure("topRow")}>
+            <View
+              className="flex-row flex-wrap items-center gap-3"
+              onLayout={card.measure("topRow")}
+            >
               <TimelineCardShared motion={card.shared.clock}>
-                <Text className="text-3xl font-semibold text-foreground">{clockLabel}</Text>
+                <Text
+                  className="text-3xl font-semibold text-foreground"
+                  maxFontSizeMultiplier={1.5}
+                >
+                  {clockLabel}
+                </Text>
               </TimelineCardShared>
-              <Animated.View {...card.fullOnly} className="min-w-0 flex-1">
+              <Animated.View {...card.fullOnly} className="min-w-16 flex-1">
                 <Text
                   accessibilityLiveRegion="polite"
                   className="font-semibold text-foreground"

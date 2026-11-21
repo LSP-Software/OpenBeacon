@@ -8,15 +8,28 @@ import {
   useSharedValue,
   withSpring,
 } from "react-native-reanimated";
-import { type TimelineCardBox, timelineCardOpens, timelineCardShift } from "../lib/timelineCard.ts";
+import {
+  type TimelineCardBox,
+  timelineCardOpens,
+  timelineCardShift,
+  timelineMiniClockScale,
+} from "../lib/timelineCard.ts";
 
-export const HANDLE_HEIGHT = 20;
-const MINI_ROW = 48;
-export const MINI_CLOCK_LEFT = MINI_ROW + 12;
-const MINI_CLOCK_SCALE = 0.8;
-export const MINI_LINE_TOP = 50;
-const MINI_HEIGHT = HANDLE_HEIGHT + MINI_LINE_TOP + 24 + 10;
+const MINI_PLAY_SIZE = 48;
 const TAP_SLOP = 6;
+
+type BoxName =
+  | "clock"
+  | "content"
+  | "controls"
+  | "miniClock"
+  | "miniColumn"
+  | "miniPlay"
+  | "miniRow"
+  | "miniSpeed"
+  | "play"
+  | "speed"
+  | "topRow";
 
 export const useTimelinePlayerCard = ({
   canCollapse,
@@ -26,14 +39,13 @@ export const useTimelinePlayerCard = ({
   reduceMotion: boolean;
 }) => {
   const [expanded, setExpanded] = useState(true);
-  const [fullHeight, setFullHeight] = useState(0);
-  const [boxes, setBoxes] = useState<
-    Partial<Record<"clock" | "controls" | "play" | "speed" | "topRow", TimelineCardBox>>
-  >({});
+  const [heights, setHeights] = useState({ full: 0, mini: 0 });
+  const [boxes, setBoxes] = useState<Partial<Record<BoxName, TimelineCardBox>>>({});
   const open = expanded || !canCollapse;
   const progress = useSharedValue(1);
   const target = useRef(true);
   const dragStart = useRef(1);
+  const range = heights.full - heights.mini;
 
   const settle = (opened: boolean, velocity = 0) => {
     target.current = opened;
@@ -46,9 +58,9 @@ export const useTimelinePlayerCard = ({
     if (target.current !== open) settle(open);
   });
 
-  const latest = useRef({ canCollapse, open, range: fullHeight - MINI_HEIGHT, settle });
+  const latest = useRef({ canCollapse, open, range, settle });
   useLayoutEffect(() => {
-    latest.current = { canCollapse, open, range: fullHeight - MINI_HEIGHT, settle };
+    latest.current = { canCollapse, open, range, settle };
   });
   const panResponder = useRef(
     PanResponder.create({
@@ -76,7 +88,7 @@ export const useTimelinePlayerCard = ({
     }),
   ).current;
 
-  const measure = (name: keyof typeof boxes) => (event: LayoutChangeEvent) => {
+  const measure = (name: BoxName) => (event: LayoutChangeEvent) => {
     const { height, width, x, y } = event.nativeEvent.layout;
     setBoxes((current) => {
       const box = current[name];
@@ -86,37 +98,33 @@ export const useTimelinePlayerCard = ({
       return { ...current, [name]: { height, width, x, y } };
     });
   };
+  const measureHeight = (name: "full" | "mini") => (event: LayoutChangeEvent) => {
+    const { height } = event.nativeEvent.layout;
+    setHeights((current) => (current[name] === height ? current : { ...current, [name]: height }));
+  };
+
+  const clockScale = timelineMiniClockScale({
+    available: boxes.miniColumn?.width ?? 0,
+    width: boxes.clock?.width ?? 0,
+  });
   const clockShift = timelineCardShift({
-    from: [boxes.topRow, boxes.clock],
-    to: [
-      boxes.clock && {
-        height: boxes.clock.height * MINI_CLOCK_SCALE,
-        width: boxes.clock.width * MINI_CLOCK_SCALE,
-        x: MINI_CLOCK_LEFT,
-        y: 0,
-      },
-    ],
+    from: [boxes.content, boxes.topRow, boxes.clock],
+    to: [boxes.miniRow, boxes.miniColumn, boxes.miniClock],
   });
   const playShift = timelineCardShift({
-    from: [boxes.controls, boxes.play],
-    to: [{ height: MINI_ROW, width: MINI_ROW, x: 0, y: 0 }],
+    from: [boxes.content, boxes.controls, boxes.play],
+    to: [boxes.miniRow, boxes.miniPlay],
   });
   const speedShift = timelineCardShift({
-    from: [boxes.topRow, boxes.speed],
-    to: [
-      boxes.speed && {
-        ...boxes.speed,
-        x: (boxes.topRow?.width ?? 0) - boxes.speed.width,
-        y: (MINI_ROW - boxes.speed.height) / 2,
-      },
-    ],
+    from: [boxes.content, boxes.topRow, boxes.speed],
+    to: [boxes.miniRow, boxes.miniSpeed],
   });
 
   const clockStyle = useAnimatedStyle(() => sharedMotion(progress.value, clockShift));
   const playStyle = useAnimatedStyle(() => sharedMotion(progress.value, playShift));
   const speedStyle = useAnimatedStyle(() => sharedMotion(progress.value, speedShift));
   const heightStyle = useAnimatedStyle(() => ({
-    height: MINI_HEIGHT + (fullHeight - MINI_HEIGHT) * progress.value,
+    height: heights.mini + (heights.full - heights.mini) * progress.value,
   }));
   const fullOnlyStyle = useAnimatedStyle(() => ({
     opacity: interpolate(progress.value, [0.35, 1], [0, 1], Extrapolation.CLAMP),
@@ -133,7 +141,7 @@ export const useTimelinePlayerCard = ({
       pointerEvents: open ? ("auto" as const) : ("none" as const),
       style: fullOnlyStyle,
     },
-    height: fullHeight === 0 ? 0 : open ? fullHeight : MINI_HEIGHT,
+    height: heights.full === 0 ? 0 : open ? heights.full : heights.mini,
     heightStyle,
     measure,
     miniOnly: {
@@ -142,7 +150,16 @@ export const useTimelinePlayerCard = ({
       pointerEvents: open ? ("none" as const) : ("box-none" as const),
       style: miniOnlyStyle,
     },
-    onFullLayout: (event: LayoutChangeEvent) => setFullHeight(event.nativeEvent.layout.height),
+    miniSlots: {
+      clock: {
+        height: (boxes.clock?.height ?? 0) * clockScale,
+        width: (boxes.clock?.width ?? 0) * clockScale,
+      },
+      play: { height: MINI_PLAY_SIZE, width: MINI_PLAY_SIZE },
+      speed: { height: boxes.speed?.height ?? 0, width: boxes.speed?.width ?? 0 },
+    },
+    onFullLayout: measureHeight("full"),
+    onMiniLayout: measureHeight("mini"),
     open,
     panHandlers: panResponder.panHandlers,
     setExpanded,
