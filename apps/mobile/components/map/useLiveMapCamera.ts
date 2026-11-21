@@ -34,6 +34,7 @@ export const useLiveMapCamera = ({
   reduceMotion,
   selectedMarker,
   selectedDeviceId,
+  sheetOpen,
   topInset,
 }: {
   bottomOverlayHeight: number;
@@ -48,6 +49,7 @@ export const useLiveMapCamera = ({
   reduceMotion: boolean;
   selectedMarker: LiveMapMarker | null;
   selectedDeviceId: string | null;
+  sheetOpen: boolean;
   topInset: number;
 }) => {
   const cameraRef = useRef<CameraRef>(null);
@@ -70,6 +72,8 @@ export const useLiveMapCamera = ({
   markersRef.current = markers;
   const selectedDeviceIdRef = useRef(selectedDeviceId);
   selectedDeviceIdRef.current = selectedDeviceId;
+  const sheetOpenRef = useRef(sheetOpen);
+  sheetOpenRef.current = sheetOpen;
   if (previousPmtilesUrlRef.current !== pmtilesUrl) {
     if (previousPmtilesUrlRef.current !== null && pmtilesUrl !== null) {
       pendingCameraRestoreRef.current = true;
@@ -316,7 +320,7 @@ export const useLiveMapCamera = ({
       backgroundedAtMs = null;
       const result = reduceLiveMapInitialFit(initialFitStateRef.current, {
         awayMs,
-        following: selectedDeviceIdRef.current !== null,
+        mapInUse: selectedDeviceIdRef.current !== null || sheetOpenRef.current,
         type: "foreground",
       });
       if (result.state === initialFitStateRef.current) return;

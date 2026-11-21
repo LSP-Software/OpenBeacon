@@ -231,6 +231,8 @@ export const NativeMap = ({
     reduceMotion,
     selectedMarker,
     selectedDeviceId,
+    sheetOpen:
+      selectedPlace !== null || isStackSheetOpen || missingUserId !== null || focusPlaceId !== null,
     topInset: insets.top,
   });
   const {

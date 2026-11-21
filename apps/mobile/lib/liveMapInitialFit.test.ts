@@ -175,7 +175,7 @@ describe("reduceLiveMapInitialFit", () => {
     );
     const back = reduceLiveMapInitialFit(closed.state, {
       awayMs: LIVE_MAP_REFIT_AFTER_BACKGROUND_MS,
-      following: false,
+      mapInUse: false,
       type: "foreground",
     });
 
@@ -184,16 +184,16 @@ describe("reduceLiveMapInitialFit", () => {
   });
 
   test.each([
-    { awayMs: LIVE_MAP_REFIT_AFTER_BACKGROUND_MS - 1, following: false },
-    { awayMs: LIVE_MAP_REFIT_AFTER_BACKGROUND_MS, following: true },
+    { awayMs: LIVE_MAP_REFIT_AFTER_BACKGROUND_MS - 1, mapInUse: false },
+    { awayMs: LIVE_MAP_REFIT_AFTER_BACKGROUND_MS, mapInUse: true },
   ])(
-    "leaves the map alone after a short switch away or while following someone (%o)",
-    ({ awayMs, following }) => {
+    "leaves the map alone after a short switch away or while the map is in use (%o)",
+    ({ awayMs, mapInUse }) => {
       const closed = reduceLiveMapInitialFit(
         markers(createLiveMapInitialFitState(), ["self"], 1_000).state,
         { type: "user_camera_control" },
       );
-      const back = reduceLiveMapInitialFit(closed.state, { awayMs, following, type: "foreground" });
+      const back = reduceLiveMapInitialFit(closed.state, { awayMs, mapInUse, type: "foreground" });
 
       expect(back.state).toBe(closed.state);
     },

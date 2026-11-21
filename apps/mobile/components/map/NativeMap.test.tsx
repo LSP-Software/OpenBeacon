@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, setSystemTime, test } from "bun:test";
 import React, { act } from "react";
 import { createRoot, type Root } from "test-renderer";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
@@ -83,9 +83,19 @@ let mapAssetUrls: { glyphs: string; sprites: string } | null = null;
 const backPressListeners = new Set<() => boolean>();
 const accessibilityAnnouncements: string[] = [];
 let reduceMotionEnabled = false;
+const appStateListeners = new Set<(nextAppState: string) => void>();
 
 mock.module("react-native", () => {
-  const reactNative = createReactNativeTestModule({ platformOS: "android" });
+  const reactNative = createReactNativeTestModule({
+    appState: {
+      currentState: "active",
+      addEventListener: (_event, listener) => {
+        appStateListeners.add(listener);
+        return { remove: () => appStateListeners.delete(listener) };
+      },
+    },
+    platformOS: "android",
+  });
   return {
     ...reactNative,
     AccessibilityInfo: {
@@ -527,6 +537,7 @@ describe("NativeMap over a fake MapLibre", () => {
     backPressListeners.clear();
     accessibilityAnnouncements.length = 0;
     reduceMotionEnabled = false;
+    appStateListeners.clear();
     resetNativeMapHarness();
     currentSignedPmtilesUrlQuery = {
       data: defaultSignedUrl,
@@ -1811,6 +1822,85 @@ describe("NativeMap over a fake MapLibre", () => {
 
     expect(focusHandled).toHaveBeenCalledTimes(2);
     expect(placeFocusCount()).toBe(2);
+  });
+
+  describe("returning after a long time in the background", () => {
+    const home = {
+      canManage: true,
+      emoji: "🏠",
+      groupId: "family",
+      groupName: "Family",
+      id: "home",
+      latitude: 51.5,
+      longitude: -0.12,
+      memberUserIds: ["alice"],
+      name: "Home",
+      radiusMeters: 250,
+    };
+    const people = [
+      createLiveMapMarkerFixture({ latitude: 51.5, longitude: -0.12, userId: "alice" }),
+      createLiveMapMarkerFixture({ latitude: 50.8, longitude: -1.1, userId: "bob" }),
+    ];
+
+    const returnAfterTenMinutes = async () => {
+      const awayAt = Date.now();
+      await act(async () => {
+        for (const listener of appStateListeners) listener("background");
+      });
+      setSystemTime(new Date(awayAt + 10 * 60_000));
+      await act(async () => {
+        for (const listener of appStateListeners) listener("active");
+      });
+      await flushEffects();
+    };
+
+    const fitsSince = (count: number) =>
+      getNativeMapCameraCommands()
+        .slice(count)
+        .filter((command) => command.type === "fitBounds").length;
+
+    afterEach(() => {
+      setSystemTime();
+    });
+
+    test("frames everyone again when nothing is open", async () => {
+      await renderNativeMap({ markers: people, places: [home] });
+      await finishLoadingStyle();
+      await flushEffects();
+      const before = getNativeMapCameraCommands().length;
+
+      await returnAfterTenMinutes();
+
+      expect(fitsSince(before)).toBe(1);
+    });
+
+    test("leaves the map under an open place sheet alone", async () => {
+      await renderNativeMap({ markers: people, places: [home] });
+      await finishLoadingStyle();
+      await flushEffects();
+      await renderNativeMap({ focusPlaceId: "home", markers: people, places: [home] });
+      await flushEffects();
+      await renderNativeMap({ markers: people, places: [home] });
+      await flushEffects();
+      const before = getNativeMapCameraCommands().length;
+
+      await returnAfterTenMinutes();
+
+      expect(fitsSince(before)).toBe(0);
+    });
+
+    test("does not reset the camera while a place focus is waiting for its place", async () => {
+      await renderNativeMap({ focusPlaceId: "home", markers: people });
+      await finishLoadingStyle();
+      await flushEffects();
+      const before = getNativeMapCameraCommands().length;
+
+      await returnAfterTenMinutes();
+      await renderNativeMap({ focusPlaceId: "home", markers: people, places: [home] });
+      await flushEffects();
+
+      expect(fitsSince(before)).toBe(0);
+    });
   });
 
   test("only counts members of the place's group as here now", async () => {

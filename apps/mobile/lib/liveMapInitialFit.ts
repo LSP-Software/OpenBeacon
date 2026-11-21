@@ -26,7 +26,7 @@ export const reduceLiveMapInitialFit = (
   }
 
   if (event.type === "foreground") {
-    if (event.following || event.awayMs < LIVE_MAP_REFIT_AFTER_BACKGROUND_MS) {
+    if (event.mapInUse || event.awayMs < LIVE_MAP_REFIT_AFTER_BACKGROUND_MS) {
       return { fit: false, state };
     }
     return { fit: false, state: createLiveMapInitialFitState() };
@@ -102,6 +102,6 @@ type LiveMapInitialFitEvent =
       nowMs: number;
     }
   | { type: "settle_elapsed"; nowMs: number }
-  | { type: "foreground"; awayMs: number; following: boolean }
+  | { type: "foreground"; awayMs: number; mapInUse: boolean }
   | { type: "user_camera_control" }
   | { type: "show_everyone" };
