@@ -22,6 +22,7 @@ export type PlaceSearchResult = {
   label: string;
   latitude: number;
   longitude: number;
+  name: string | null;
 };
 
 export const placeSearchState = ({
@@ -63,6 +64,7 @@ export const placeSearchState = ({
       label: placeSearchLabel(address),
       latitude: address.latitude,
       longitude: address.longitude,
+      name: address.name?.trim() || null,
     });
   }
   const results = merged
@@ -99,4 +101,33 @@ export const placeSearchArea = (
     north: Math.min(90, latitude + 0.25),
     east: Math.min(180, longitude + 0.25),
   };
+};
+
+export const suggestPlaceName = (query: string, result: PlaceSearchResult) => {
+  const typed = query.replace(/\s+/g, " ").replace(/^[\s,]+|[\s,]+$/g, "");
+  if (/^[a-z]{1,2}\d[a-z\d]?(\s*\d[a-z]{2})?$/i.test(typed)) return null;
+  if (result.name) return result.name.slice(0, 50);
+  const shortWords: Record<string, string> = {
+    avenue: "ave",
+    close: "cl",
+    court: "ct",
+    crescent: "cres",
+    drive: "dr",
+    gardens: "gdns",
+    grove: "gr",
+    lane: "ln",
+    place: "pl",
+    road: "rd",
+    square: "sq",
+    street: "st",
+    terrace: "ter",
+  };
+  const words = (text: string) =>
+    text
+      .toLowerCase()
+      .split(/[^\p{L}\p{N}'’]+/u)
+      .filter((word) => word !== "")
+      .map((word) => shortWords[word] ?? word);
+  const addressWords = new Set(words(result.label));
+  return words(typed).some((word) => !addressWords.has(word)) ? typed.slice(0, 50) : null;
 };

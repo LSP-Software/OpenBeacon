@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { PlaceSearchAddress } from "../modules/openbeacon-tracking/index.ts";
-import { placeSearchArea, placeSearchLabel, placeSearchState } from "./placeSearch.ts";
+import {
+  placeSearchArea,
+  placeSearchLabel,
+  placeSearchState,
+  suggestPlaceName,
+} from "./placeSearch.ts";
 
 const tescoBarnet: PlaceSearchAddress = {
   addressLine: "64-66 High St, Chipping Barnet, Barnet EN5 5SJ, UK",
@@ -109,6 +114,7 @@ describe("placeSearchState", () => {
         label: "64-66 High St, Chipping Barnet, Barnet EN5 5SJ, UK",
         latitude: 51.6531509,
         longitude: -0.1997625,
+        name: null,
       },
     });
   });
@@ -127,6 +133,7 @@ describe("placeSearchState", () => {
         label: "64-66 High St, Chipping Barnet, Barnet EN5 5SJ, UK",
         latitude: 51.6531509,
         longitude: -0.1997625,
+        name: null,
       },
     });
   });
@@ -254,5 +261,56 @@ describe("placeSearchArea", () => {
     expect(placeSearchArea(view([-3, 54], [-15, 49, 9, 59]))).toBeNull();
     expect(placeSearchArea(view([170, 0], [165, -5, -170, 5]))).toBeNull();
     expect(placeSearchArea(null)).toBeNull();
+  });
+});
+
+describe("suggestPlaceName", () => {
+  const found = (addressLine: string, name: string | null = null) => ({
+    distance: null,
+    label: addressLine,
+    latitude: 51.5,
+    longitude: -0.1,
+    name,
+  });
+
+  test("suggests the search text for a named place", () => {
+    expect(
+      suggestPlaceName(
+        " Tesco   Barnet ",
+        found("64-66 High St, Chipping Barnet, Barnet EN5 5SJ, UK"),
+      ),
+    ).toBe("Tesco Barnet");
+    expect(suggestPlaceName("Underhill School", found("215 Mays Ln, Barnet EN5 2LZ, UK"))).toBe(
+      "Underhill School",
+    );
+  });
+
+  test("doesn't suggest a postcode", () => {
+    expect(suggestPlaceName("EN5 3DJ", found("Barnet EN5 3DJ, UK"))).toBeNull();
+    expect(suggestPlaceName("en53dj", found("Barnet EN5 3DJ, UK"))).toBeNull();
+    expect(suggestPlaceName("EN5", found("Barnet EN5, UK"))).toBeNull();
+    expect(suggestPlaceName("SW1A 1AA", found("London SW1A 1AA, UK"))).toBeNull();
+  });
+
+  test("doesn't suggest an address that matches the result", () => {
+    expect(suggestPlaceName("High Street", found("High St, Tyldesley, Manchester, UK"))).toBeNull();
+    expect(
+      suggestPlaceName("10 Downing Street, London", found("10 Downing St, London SW1A 2AA, UK")),
+    ).toBeNull();
+    expect(suggestPlaceName("12 Wood Street", found("12 Wood St, London E17 3HT, UK"))).toBeNull();
+    expect(suggestPlaceName("215 mays lane", found("215 Mays Ln, Barnet EN5 2LZ, UK"))).toBeNull();
+  });
+
+  test("a result's own name comes first", () => {
+    expect(suggestPlaceName("Eden Pro", found("Bodelva, Par PL24 2SG, UK", "Eden Project"))).toBe(
+      "Eden Project",
+    );
+    expect(
+      suggestPlaceName("PL24 2SG", found("Bodelva, Par PL24 2SG, UK", "Eden Project")),
+    ).toBeNull();
+  });
+
+  test("keeps the suggestion within the name limit", () => {
+    expect(suggestPlaceName("x".repeat(80), found("Somewhere, UK"))).toHaveLength(50);
   });
 });

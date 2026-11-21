@@ -335,3 +335,45 @@ test("different near and far matches are listed, and picking one moves there", a
   expect(text(root)).not.toContain("Near the map");
   await act(async () => root.unmount());
 });
+
+const nameField = (root: Root) =>
+  root.container.queryAll(
+    (node) => node.type === "text-input" && node.props["accessibilityLabel"] === "Name",
+  )[0];
+
+const found = (addressLine: string): PlaceSearchOutcome => ({
+  status: "results",
+  results: [{ ...downingStreet, addressLine }],
+});
+
+test("a named-place search suggests the name, and a postcode doesn't", async () => {
+  searchOutcome = found("64-66 High St, Chipping Barnet, Barnet EN5 5SJ, UK");
+  const root = await render();
+  await searchFor(root, "Tesco Barnet");
+  await pressButton(root, "Next");
+  expect(nameField(root)?.props["value"]).toBe("Tesco Barnet");
+
+  await pressButton(root, "Back");
+  searchOutcome = found("Barnet EN5 3DJ, UK");
+  await searchFor(root, "EN5 3DJ");
+  await pressButton(root, "Next");
+  expect(nameField(root)?.props["value"]).toBe("");
+
+  await act(async () => nameField(root)?.props["onChangeText"]("Gran's"));
+  await pressButton(root, "Back");
+  searchOutcome = found("215 Mays Ln, Barnet EN5 2LZ, UK");
+  await searchFor(root, "Underhill School");
+  await pressButton(root, "Next");
+  expect(nameField(root)?.props["value"]).toBe("Gran's");
+  await act(async () => root.unmount());
+});
+
+test("editing a place keeps its name after a named-place search", async () => {
+  placeId = "home";
+  searchOutcome = found("64-66 High St, Chipping Barnet, Barnet EN5 5SJ, UK");
+  const root = await render();
+  await searchFor(root, "Tesco Barnet");
+  await pressButton(root, "Next");
+  expect(nameField(root)?.props["value"]).toBe("Home");
+  await act(async () => root.unmount());
+});

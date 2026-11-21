@@ -42,7 +42,12 @@ import {
   groupPlacesQueryOptions,
   savePlace,
 } from "../lib/placeSync.ts";
-import { type PlaceSearchResult, placeSearchArea, placeSearchState } from "../lib/placeSearch.ts";
+import {
+  type PlaceSearchResult,
+  placeSearchArea,
+  placeSearchState,
+  suggestPlaceName,
+} from "../lib/placeSearch.ts";
 import { loadTrackingModule } from "../lib/trackingModule.ts";
 import type { PlaceSearchBox, PlaceSearchOutcome } from "../modules/openbeacon-tracking/index.ts";
 import { syncGroupPlaces } from "../lib/placeBackgroundSync.ts";
@@ -204,6 +209,9 @@ const PlaceEditor = ({
     ReturnType<typeof placeSearchState> | { kind: "searching" } | null
   >(null);
   const searchRound = useRef(0);
+  const searchedQuery = useRef("");
+  const nameSuggestion = useRef<string | null>(null);
+  const suggestedName = useRef("");
   const mapView = useRef<{
     bounds: [number, number, number, number];
     center: [number, number];
@@ -290,6 +298,7 @@ const PlaceEditor = ({
     };
     const [anywhere, near] = await Promise.all([lookUp(null), area ? lookUp(area) : null]);
     if (round !== searchRound.current) return;
+    searchedQuery.current = query;
     const next = placeSearchState({
       anywhere,
       near: area && near ? { area, outcome: near } : null,
@@ -315,6 +324,7 @@ const PlaceEditor = ({
     setCenter({ latitude: result.latitude, longitude: result.longitude });
     cameraRef.current?.flyTo({ center: cameraCenterFor(result, atZoom), zoom: atZoom });
     setSearch({ kind: "move", result });
+    nameSuggestion.current = suggestPlaceName(searchedQuery.current, result);
     AccessibilityInfo.announceForAccessibility(
       `Moved to ${result.label}. Move the map if it isn’t quite right.`,
     );
@@ -329,6 +339,10 @@ const PlaceEditor = ({
   const goToNaming = () => {
     searchRound.current += 1;
     if (search?.kind === "searching" || search?.kind === "choose") setSearch(null);
+    if (!place && (name === "" || name === suggestedName.current)) {
+      suggestedName.current = nameSuggestion.current ?? "";
+      setName(suggestedName.current);
+    }
     setStep(2);
   };
 

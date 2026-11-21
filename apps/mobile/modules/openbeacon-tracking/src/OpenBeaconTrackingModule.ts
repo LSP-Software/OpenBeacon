@@ -69,6 +69,7 @@ export type PlaceSearchAddress = {
   countryCode: string | null;
   latitude: number;
   longitude: number;
+  name?: string | null;
 };
 
 export type PlaceSearchBox = {
