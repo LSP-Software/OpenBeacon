@@ -37,6 +37,7 @@ let members = new Map<
 let listCalls = 0;
 let latestEpochs = new Map<string, string[]>();
 let unreadableEpochs = new Set<string>();
+let latestFailures = new Map<string, unknown[]>();
 let historyState: "held" | "onOtherDevice" = "held";
 let failures: unknown[] = [];
 let sessions: { id: string; image: string | null; imageKeySealed: string | null }[] = [];
@@ -72,6 +73,8 @@ mock.module("./api.ts", () => ({
     groupEpoch: {
       getLatest: {
         query: async ({ groupId }: { groupId: string }) => {
+          const failure = latestFailures.get(groupId)?.shift();
+          if (failure) throw failure;
           const queue = latestEpochs.get(groupId) ?? [];
           const epochId = queue.length > 1 ? queue.shift() : queue[0];
           return epochId ? { epochId } : null;
@@ -207,6 +210,7 @@ beforeEach(() => {
   listCalls = 0;
   latestEpochs = new Map();
   unreadableEpochs = new Set();
+  latestFailures = new Map();
   historyState = "held";
   failures = [];
   sessions = [];
@@ -217,6 +221,7 @@ beforeEach(() => {
   groupConfirms = [];
   stores = [];
   rotate.mockClear();
+  rotate.mockImplementation(async () => true);
   relink.mockClear();
 });
 
@@ -280,6 +285,69 @@ describe("confirmProfileImage", () => {
       ["family", "family-epoch-3"],
       ["friends", "friends-epoch-2"],
     ]);
+  });
+
+  test("wraps for a group another phone rotated at the same time", async () => {
+    groups = ["family", "friends"];
+    latestEpochs = new Map([
+      ["family", ["family-epoch-3"]],
+      ["friends", ["friends-epoch-1", "friends-epoch-2"]],
+    ]);
+    unreadableEpochs = new Set(["friends-epoch-1"]);
+    rotate.mockImplementation(async () => false);
+
+    await confirmProfileImage({ fileName, imageKey: generateImageKey(), userId: "user-a" });
+
+    expect(
+      profileConfirms[0]!.wraps.map(({ groupId, epochId }) => [groupId, epochId]).sort(),
+    ).toEqual([
+      ["family", "family-epoch-3"],
+      ["friends", "friends-epoch-2"],
+    ]);
+  });
+
+  test("fails without confirming when a group's key couldn't be fetched", async () => {
+    groups = ["family", "friends"];
+    latestEpochs = new Map([
+      ["family", ["family-epoch-3"]],
+      ["friends", ["friends-epoch-1"]],
+    ]);
+    latestFailures = new Map([["friends", [new Error("Network request failed")]]]);
+
+    await expect(
+      confirmProfileImage({ fileName, imageKey: generateImageKey(), userId: "user-a" }),
+    ).rejects.toThrow("Network request failed");
+    expect(profileConfirms).toEqual([]);
+  });
+
+  test("fails without confirming when a pending rotation fails and the key is still unreadable", async () => {
+    groups = ["family", "friends"];
+    latestEpochs = new Map([
+      ["family", ["family-epoch-3"]],
+      ["friends", ["friends-epoch-1"]],
+    ]);
+    unreadableEpochs = new Set(["friends-epoch-1"]);
+    rotate.mockImplementation(async () => {
+      throw new Error("Network request failed");
+    });
+
+    await expect(
+      confirmProfileImage({ fileName, imageKey: generateImageKey(), userId: "user-a" }),
+    ).rejects.toThrow("Network request failed");
+    expect(profileConfirms).toEqual([]);
+  });
+
+  test("skips a group this person has just left", async () => {
+    groups = ["family", "friends"];
+    latestEpochs = new Map([
+      ["family", ["family-epoch-3"]],
+      ["friends", ["friends-epoch-1"]],
+    ]);
+    latestFailures = new Map([["friends", [reasonError("NOT_GROUP_MEMBER")]]]);
+
+    await confirmProfileImage({ fileName, imageKey: generateImageKey(), userId: "user-a" });
+
+    expect(profileConfirms[0]!.wraps.map(({ groupId }) => groupId)).toEqual(["family"]);
   });
 
   test("adds the sealed personal copy when this phone holds the history key", async () => {

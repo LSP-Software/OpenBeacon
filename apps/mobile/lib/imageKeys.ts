@@ -41,10 +41,10 @@ const wrapUnderLatestEpoch = async ({
       : null;
     return latest && epochKey ? { epochId: latest.epochId, epochKey } : null;
   };
-  const latest =
-    (await readLatest()) ??
-    ((await tryCatch(rotateGroupEpochIfRequired(groupId))).data ? await readLatest() : null);
-  if (!latest) throw new GroupKeyUnavailableError();
+  const first = await readLatest();
+  const rotated = first ? null : await tryCatch(rotateGroupEpochIfRequired(groupId));
+  const latest = first ?? (await readLatest());
+  if (!latest) throw rotated?.error ?? new GroupKeyUnavailableError();
   return encryptImageKey({
     epochId: latest.epochId,
     epochKey: latest.epochKey,
@@ -127,7 +127,16 @@ export const confirmProfileImage = async ({
               ownerId: userId,
             }),
           );
-          return wrapped.data ? [{ groupId, ...wrapped.data }] : [];
+          if (!wrapped.error) return [{ groupId, ...wrapped.data }];
+          const reason = errorReason(wrapped.error);
+          if (
+            wrapped.error instanceof GroupKeyUnavailableError ||
+            reason === "NOT_GROUP_MEMBER" ||
+            reason === "GROUP_GONE"
+          ) {
+            return [];
+          }
+          throw wrapped.error;
         }),
       );
       return trpcClient.account.confirmProfileImageUpload.mutate({
