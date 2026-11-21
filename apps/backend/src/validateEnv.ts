@@ -4,30 +4,32 @@ import { emailEnvSchema, findEmailSettingsError } from "@openbeacon/email/config
 import { validateEnv } from "@openbeacon/shared";
 import { envSchema as backendEnvSchema } from "./envSchema.ts";
 
-validateEnv({
-  schemas: {
-    ...backendEnvSchema,
-    ...apiEnvSchema,
-    ...mapEnvSchema,
-    ...emailEnvSchema,
-    ...fcmEnvSchema,
-  },
-  source: process.env,
-  checks: [
-    () =>
-      process.env["TRUSTED_PROXY_PROVIDER"] === "cloudflare-authenticated" &&
-      !process.env["CLOUDFLARE_ORIGIN_SECRET"]
-        ? "CLOUDFLARE_ORIGIN_SECRET: required for cloudflare-authenticated"
-        : null,
-    () =>
-      Boolean(process.env["GOOGLE_CLIENT_ID"]?.trim()) !==
-      Boolean(process.env["GOOGLE_CLIENT_SECRET"]?.trim())
-        ? "GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET: both are required for Google sign-in"
-        : null,
-    () => resolveFcmSettings(process.env).error,
-    () => {
-      const emailError = findEmailSettingsError();
-      return emailError ? `Email: ${emailError}` : null;
+if (process.env["OPENBEACON_ENV_ALREADY_VALIDATED"] !== "1") {
+  validateEnv({
+    schemas: {
+      ...backendEnvSchema,
+      ...apiEnvSchema,
+      ...mapEnvSchema,
+      ...emailEnvSchema,
+      ...fcmEnvSchema,
     },
-  ],
-});
+    source: process.env,
+    checks: [
+      () =>
+        process.env["TRUSTED_PROXY_PROVIDER"] === "cloudflare-authenticated" &&
+        !process.env["CLOUDFLARE_ORIGIN_SECRET"]
+          ? "CLOUDFLARE_ORIGIN_SECRET: required for cloudflare-authenticated"
+          : null,
+      () =>
+        Boolean(process.env["GOOGLE_CLIENT_ID"]?.trim()) !==
+        Boolean(process.env["GOOGLE_CLIENT_SECRET"]?.trim())
+          ? "GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET: both are required for Google sign-in"
+          : null,
+      () => resolveFcmSettings(process.env).error,
+      () => {
+        const emailError = findEmailSettingsError();
+        return emailError ? `Email: ${emailError}` : null;
+      },
+    ],
+  });
+}

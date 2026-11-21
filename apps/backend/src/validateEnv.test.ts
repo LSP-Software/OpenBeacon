@@ -38,6 +38,15 @@ describe("production environment validation", () => {
     expect(output).not.toContain(env.BETTER_AUTH_SECRET);
   });
 
+  test("skips the check the Docker entrypoint has already run", () => {
+    const result = Bun.spawnSync({
+      cmd: [process.execPath, `${import.meta.dir}/validateEnv.ts`],
+      env: { ...env, DATABASE_URL: "not-a-url", OPENBEACON_ENV_ALREADY_VALIDATED: "1" },
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.toString()).not.toContain("Environment configuration");
+  });
+
   test("accepts HTTP public URLs", () => {
     const result = Bun.spawnSync({
       cmd: [process.execPath, `${import.meta.dir}/validateEnv.ts`],
