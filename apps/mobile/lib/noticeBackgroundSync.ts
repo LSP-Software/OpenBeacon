@@ -2,7 +2,7 @@ import { alertsCursorSchema, notificationTypes } from "@openbeacon/schemas";
 import { type AccountRound, isRoundCurrent } from "./accountSession.ts";
 import type { RouterOutputs } from "./api.ts";
 import { getBaseUrl } from "./currentServer.ts";
-import { describeGroupEvent } from "./groupHistory.ts";
+import type { GroupHistoryItem } from "./groupHistory.ts";
 import { showEventNotice } from "./notifications.ts";
 import { nicknamesByGroup } from "./nicknamesByGroup.ts";
 import { storage } from "./storage.ts";
@@ -40,43 +40,43 @@ export const describeAccountNotice = (notice: AccountNotices["notices"][number])
       };
     case "PASSWORD_CHANGED":
       return {
-        title: "Your password was changed",
-        body: "If this wasn’t you, use Forgot password on the sign-in screen to choose a new one.",
+        title: "Password changed",
+        body: "Your password was changed. If this wasn’t you, use Forgot password on the sign-in screen to choose a new one.",
         link: accountLink("password"),
       };
     case "PASSWORD_RESET":
       return {
-        title: "Your password was reset",
-        body: "Every phone and tablet was signed out.",
+        title: "Password reset",
+        body: "Your password was reset and every phone and tablet was signed out.",
         link: accountLink("password"),
       };
     case "RECOVERY_PHRASE_CHANGED":
     case "RECOVERY_PHRASE_RESET":
       return {
-        title: `Your recovery phrase was ${notice.type === "RECOVERY_PHRASE_RESET" ? "reset" : "changed"}`,
-        body: "Your old phrase no longer works.",
+        title: `Recovery phrase ${notice.type === "RECOVERY_PHRASE_RESET" ? "reset" : "changed"}`,
+        body: `Your recovery phrase was ${notice.type === "RECOVERY_PHRASE_RESET" ? "reset" : "changed"}. Your old phrase no longer works.`,
         link: accountLink("recovery"),
       };
     case "OTHER_SESSIONS_SIGNED_OUT":
       return {
-        title: "Your other sessions were signed out",
-        body: notice.device?.name
-          ? `${notice.device.name} signed out your other phones and tablets.`
-          : null,
+        title: "Other sessions signed out",
+        body: `${notice.device?.name ?? "One of your phones or tablets"} signed out your other phones and tablets. If this wasn’t you, change your password.`,
         link: accountLink("devices"),
       };
     case "DEVICE_REMOVED":
       return {
-        title: `${notice.device?.name ?? "A device"} was removed from your account`,
-        body: "It was signed out and won’t receive new locations.",
+        title: "Device removed",
+        body: `${notice.device?.name ?? "A phone or tablet"} was removed from your account. It was signed out and won’t receive new locations.`,
         link: accountLink("devices"),
       };
     case "DELETION_SCHEDULED":
       return {
-        title: notice.deletionDate
-          ? `Your account will be deleted on ${notice.deletionDate.toLocaleDateString(undefined, { day: "numeric", month: "short" })}`
-          : "Your account is scheduled for deletion",
-        body: "Sign in within 7 days to cancel it.",
+        title: "Account deletion scheduled",
+        body: `${
+          notice.deletionDate
+            ? `Your account will be deleted on ${notice.deletionDate.toLocaleDateString(undefined, { day: "numeric", month: "short" })}.`
+            : "Your account is scheduled for deletion."
+        } Sign in within 7 days to cancel it.`,
         link: accountLink("delete"),
       };
     case "SIGN_IN_CODES_TURNED_ON":
@@ -104,10 +104,57 @@ export const describeAccountNotice = (notice: AccountNotices["notices"][number])
             notice.device?.name && `Turned off on ${notice.device.name}.`,
           ]
             .filter(Boolean)
-            .join(" ") || null,
+            .join(" ") || "Some security alerts were turned off for your account.",
         link: accountLink("notifications"),
       };
     }
+    default:
+      return null;
+  }
+};
+
+export const describeGroupNotice = ({
+  event,
+  groupName,
+  memberName,
+  userId,
+}: {
+  event: Extract<GroupHistoryItem, { kind: "group" }>;
+  groupName: string;
+  memberName: (memberUserId: string) => string | null;
+  userId: string;
+}) => {
+  const person = (who: { userId: string; name: string } | null, startOfSentence: boolean) => {
+    if (!who) return startOfSentence ? "A deleted account" : "a deleted account";
+    if (who.userId === userId) return startOfSentence ? "You" : "you";
+    return memberName(who.userId) ?? who.name;
+  };
+  const subject = person(event.subject, true);
+  const role =
+    event.role === "OWNER" ? "an owner" : event.role === "ADMIN" ? "an admin" : "a member";
+  switch (event.type) {
+    case "MEMBER_JOINED":
+      return {
+        title: `${subject} joined ${groupName}`,
+        body: event.role === "OWNER" || event.role === "ADMIN" ? `Joined as ${role}.` : null,
+      };
+    case "MEMBER_LEFT":
+      return { title: `${subject} left ${groupName}`, body: null };
+    case "MEMBER_REMOVED":
+      return {
+        title: `${subject} ${subject === "You" ? "were" : "was"} removed from ${groupName}`,
+        body: `Removed by ${person(event.actor, false)}.`,
+      };
+    case "ACCOUNT_DELETED":
+      return { title: `A member left ${groupName}`, body: "They deleted their account." };
+    case "ROLE_CHANGED":
+      return {
+        title: `${subject} ${subject === "You" ? "are" : "is"} now ${role} of ${groupName}`,
+        body:
+          event.actor && event.actor.userId !== event.subject?.userId
+            ? `Changed by ${person(event.actor, false)}.`
+            : null,
+      };
     default:
       return null;
   }
@@ -149,18 +196,18 @@ export const showNotices = async ({
     const group = (await groups()).find(({ id }) => id === notice.groupId);
     if (!group) continue;
     const groupNicknames = await nicknamesFor(notice.groupId);
-    const title = describeGroupEvent({
+    const described = describeGroupNotice({
       event: notice,
+      groupName: group.name,
       memberName: (memberUserId) => {
         const member = group.members.find((item) => item.userId === memberUserId);
         return member ? (groupNicknames[member.id]?.name ?? member.name) : null;
       },
       userId,
     });
-    if (!title) continue;
+    if (!described) continue;
     await showEventNotice({
-      title,
-      body: null,
+      ...described,
       groupName: group.name,
       key: notice.id,
       kind: "groupActivity",

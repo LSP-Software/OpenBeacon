@@ -74,8 +74,10 @@ export const describePlaceAlert = ({
 }: {
   alert: Pick<PlaceAlert, "deviceName" | "direction" | "placeEmoji" | "placeName">;
   ownerNames: readonly string[];
-}) =>
-  `${ownedDeviceName({ deviceName: alert.deviceName, ownerNames, isYou: false })} ${alert.direction === "ARRIVE" ? "arrived at" : "left"} ${alert.placeEmoji} ${alert.placeName}`;
+}) => ({
+  title: `${alert.direction === "ARRIVE" ? "Arrived at" : "Left"} ${alert.placeEmoji} ${alert.placeName}`,
+  body: ownedDeviceName({ deviceName: alert.deviceName, ownerNames, isYou: false }),
+});
 
 export const describePlacesChanged = ({
   added,
@@ -211,8 +213,7 @@ const showPlaceAlerts = async ({
     const nickname = member ? (await nicknamesFor(alert.groupId))[member.id]?.name : undefined;
     const ownerNames = member ? [...(nickname ? [nickname] : []), member.name] : [];
     await showEventNotice({
-      title: describePlaceAlert({ alert, ownerNames }),
-      body: null,
+      ...describePlaceAlert({ alert, ownerNames }),
       groupName: group.name,
       key: alert.id,
       kind: "alert",

@@ -111,7 +111,7 @@ beforeEach(() => {
 });
 
 describe("showEventNotice", () => {
-  test("an in-app banner without a body names the group instead", async () => {
+  test("an in-app banner without a body shows only the title", async () => {
     appState.currentState = "active";
     inApp.length = 0;
     await showEventNotice({
@@ -120,10 +120,10 @@ describe("showEventNotice", () => {
       key: "event-1",
       kind: "groupActivity",
       link: { href: "/", url: "openbeacon:///" },
-      title: "Mum joined",
+      title: "Mum joined Family",
       round: startAccountRound("user-a"),
     });
-    expect(inApp).toEqual([{ title: "Mum joined", body: "Family" }]);
+    expect(inApp).toEqual([{ title: "Mum joined Family", body: null }]);
     expect(shownEvents).toEqual([]);
   });
 
@@ -149,13 +149,13 @@ describe("showEventNotice", () => {
 describe("notices for an account this phone is no longer signed in to", () => {
   const placeAlert = (round = startAccountRound("user-a")) =>
     ({
-      body: null,
+      body: "Alice’s Pixel 8",
       groupName: "Family",
       key: "alert-1",
       kind: "alert",
       link: { href: "/", url: "openbeacon:///" },
       round,
-      title: "Alice arrived at Home",
+      title: "Arrived at Home",
     }) as const;
 
   test.each([
@@ -180,7 +180,7 @@ describe("notices for an account this phone is no longer signed in to", () => {
     expect(await showEventNotice(placeAlert(rejectedRound))).toBe(false);
     expect(shownEvents).toEqual([]);
     expect(await showEventNotice(placeAlert(nextRound))).toBe(true);
-    expect(shownEvents).toEqual([{ kind: "alert", title: "Alice arrived at Home" }]);
+    expect(shownEvents).toEqual([{ kind: "alert", title: "Arrived at Home" }]);
   });
 
   test("clearing alerts about others also empties the in-app banners", async () => {

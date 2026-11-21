@@ -209,15 +209,17 @@ beforeEach(() => {
 
 describe("wording", () => {
   test("alerts name the person and device the way this phone does", () => {
-    expect(describePlaceAlert({ alert: alert({}), ownerNames: ["Sam"] })).toBe(
-      "Sam’s Pixel 8 arrived at 🏠 Home",
-    );
-    expect(describePlaceAlert({ alert: alert({ direction: "LEAVE" }), ownerNames: [] })).toBe(
-      "Someone’s Pixel 8 left 🏠 Home",
-    );
+    expect(describePlaceAlert({ alert: alert({}), ownerNames: ["Sam"] })).toEqual({
+      title: "Arrived at 🏠 Home",
+      body: "Sam’s Pixel 8",
+    });
+    expect(describePlaceAlert({ alert: alert({ direction: "LEAVE" }), ownerNames: [] })).toEqual({
+      title: "Left 🏠 Home",
+      body: "Someone’s Pixel 8",
+    });
     expect(
-      describePlaceAlert({ alert: alert({ deviceName: "Sam's Pixel" }), ownerNames: ["Sam"] }),
-    ).toBe("Sam’s Pixel arrived at 🏠 Home");
+      describePlaceAlert({ alert: alert({ deviceName: "Sam's Pixel" }), ownerNames: ["Sam"] }).body,
+    ).toBe("Sam’s Pixel");
   });
 
   test("a place notice says what changed and that this phone will share arrivals", () => {
@@ -447,8 +449,8 @@ describe("applyPlaceUpdates", () => {
       round: { userId: "user-1", number: 1 },
     });
     expect(notices).toEqual([
-      { kind: "alert", key: "alert-1", title: "Mum’s Pixel 8 arrived at 🏠 Home", body: null },
-      { kind: "alert", key: "alert-2", title: "Alex’s Pixel 8 left 🏠 Home", body: null },
+      { kind: "alert", key: "alert-1", title: "Arrived at 🏠 Home", body: "Mum’s Pixel 8" },
+      { kind: "alert", key: "alert-2", title: "Left 🏠 Home", body: "Alex’s Pixel 8" },
     ]);
     expect(getPlaceAlertsCursor("user-1")).toBe("2026-11-15T10:00:00.000Z|alert-2");
     expect(getPlaceAlertsCursor("user-2")).toBeNull();

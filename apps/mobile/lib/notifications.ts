@@ -56,7 +56,7 @@ export const showEventNotice = async ({
   if (!isRoundCurrent(round)) return false;
   const active = AppState.currentState === "active";
   if (active) {
-    showInAppNotice({ title, body: body ?? groupName, href: link.href });
+    showInAppNotice({ title, body, href: link.href });
     if (kind !== "accountAlert") return true;
   }
   if (!trackingModule) return active;

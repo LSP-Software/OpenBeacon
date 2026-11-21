@@ -120,9 +120,9 @@ class NoticesTest {
 
   @Test
   fun eventsAreGroupedPerChannelUnderOneQuietSummary() {
-    Notices.showEvent(application, EventNoticeKind.ACCOUNT_ALERT, "notice-1", "Your password was reset", null, null, "openbeacon:///account/password")
-    Notices.showEvent(application, EventNoticeKind.ACCOUNT_ALERT, "notice-2", "New sign-in", null, null, "openbeacon:///account/devices")
-    Notices.showEvent(application, EventNoticeKind.ALERT, "alert-1", "Mum arrived at Home", null, "Family", "openbeacon:///map")
+    Notices.showEvent(application, EventNoticeKind.ACCOUNT_ALERT, "notice-1", "Password reset", "Your password was reset.", null, "openbeacon:///account/password")
+    Notices.showEvent(application, EventNoticeKind.ACCOUNT_ALERT, "notice-2", "New sign-in", "A Pixel 9 signed in to your account.", null, "openbeacon:///account/devices")
+    Notices.showEvent(application, EventNoticeKind.ALERT, "alert-1", "Arrived at Home", "Mum’s Pixel 8", "Family", "openbeacon:///map")
 
     val notifications = shadowOf(manager).allNotifications
     val summaries = notifications.filter { it.flags and Notification.FLAG_GROUP_SUMMARY != 0 }
@@ -144,10 +144,10 @@ class NoticesTest {
   @Test
   fun clearingAlertsAboutOthersKeepsSecurityAlertsAndSharingNotices() {
     Notices.show(application, Notice.SIGNED_OUT)
-    Notices.showEvent(application, EventNoticeKind.ACCOUNT_ALERT, "notice-1", "New sign-in", null, null, "openbeacon:///account/devices")
-    Notices.showEvent(application, EventNoticeKind.ALERT, "alert-1", "Mum arrived at Home", null, "Family", "openbeacon:///map")
-    Notices.showEvent(application, EventNoticeKind.GROUP_ACTIVITY, "event-1", "Dad joined", null, "Family", "openbeacon:///groups/family")
-    Notices.showEvent(application, EventNoticeKind.PLACES_CHANGED, "places-1", "Places changed", null, "Family", "openbeacon:///place-alerts")
+    Notices.showEvent(application, EventNoticeKind.ACCOUNT_ALERT, "notice-1", "New sign-in", "A Pixel 9 signed in to your account.", null, "openbeacon:///account/devices")
+    Notices.showEvent(application, EventNoticeKind.ALERT, "alert-1", "Arrived at Home", "Mum’s Pixel 8", "Family", "openbeacon:///map")
+    Notices.showEvent(application, EventNoticeKind.GROUP_ACTIVITY, "event-1", "Dad joined Family", "Dad can now see locations shared in Family.", "Family", "openbeacon:///groups/family")
+    Notices.showEvent(application, EventNoticeKind.PLACES_CHANGED, "places-1", "Family added Home", "This phone will tell Family when it arrives at or leaves Home.", "Family", "openbeacon:///place-alerts")
 
     Notices.clearEvents(application, keepSecurityAlerts = true)
 
@@ -159,8 +159,18 @@ class NoticesTest {
   }
 
   @Test
+  fun eventNoticesShowTheirDescriptionCollapsedAndExpanded() {
+    Notices.showEvent(application, EventNoticeKind.ALERT, "alert-1", "Left Home", "Andy’s Pixel 9 Pro", "The Kings", "openbeacon:///map")
+
+    val notification = shadowOf(manager).allNotifications.single { it.flags and Notification.FLAG_GROUP_SUMMARY == 0 }
+    assertEquals("Andy’s Pixel 9 Pro", notification.extras.getCharSequence(Notification.EXTRA_TEXT).toString())
+    assertEquals("Andy’s Pixel 9 Pro", notification.extras.getCharSequence(Notification.EXTRA_BIG_TEXT).toString())
+    assertEquals("The Kings", notification.extras.getCharSequence(Notification.EXTRA_SUB_TEXT).toString())
+  }
+
+  @Test
   fun theAccountChannelIsNamedSecurityAlerts() {
-    Notices.showEvent(application, EventNoticeKind.ACCOUNT_ALERT, "notice-1", "Your password was reset", null, null, "openbeacon:///account/password")
+    Notices.showEvent(application, EventNoticeKind.ACCOUNT_ALERT, "notice-1", "Password reset", "Your password was reset.", null, "openbeacon:///account/password")
 
     assertEquals("Security alerts", manager.getNotificationChannel("openbeacon_account_alerts").name)
   }

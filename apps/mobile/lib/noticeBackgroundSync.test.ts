@@ -50,6 +50,7 @@ mock.module("./notifications.ts", () => ({
 
 const {
   describeAccountNotice,
+  describeGroupNotice,
   getAccountNoticesCursor,
   getNoticesCursor,
   showAccountNotices,
@@ -128,10 +129,10 @@ describe("account notices", () => {
 
   test("match the advice in the security emails", () => {
     expect(describeAccountNotice(account("PASSWORD_CHANGED"))?.body).toBe(
-      "If this wasn’t you, use Forgot password on the sign-in screen to choose a new one.",
+      "Your password was changed. If this wasn’t you, use Forgot password on the sign-in screen to choose a new one.",
     );
     expect(describeAccountNotice(account("DELETION_SCHEDULED"))?.body).toBe(
-      "Sign in within 7 days to cancel it.",
+      "Your account is scheduled for deletion. Sign in within 7 days to cancel it.",
     );
   });
 
@@ -189,13 +190,90 @@ describe("account notices", () => {
 
   test("say which device was removed or did the signing out", () => {
     const device = { name: "Old tablet", model: "Tab S9", platform: "android" };
-    expect(describeAccountNotice(account("DEVICE_REMOVED", { device }))?.title).toBe(
-      "Old tablet was removed from your account",
-    );
+    expect(describeAccountNotice(account("DEVICE_REMOVED", { device }))).toMatchObject({
+      title: "Device removed",
+      body: "Old tablet was removed from your account. It was signed out and won’t receive new locations.",
+    });
     expect(describeAccountNotice(account("OTHER_SESSIONS_SIGNED_OUT", { device }))?.body).toBe(
-      "Old tablet signed out your other phones and tablets.",
+      "Old tablet signed out your other phones and tablets. If this wasn’t you, change your password.",
     );
-    expect(describeAccountNotice(account("OTHER_SESSIONS_SIGNED_OUT"))?.body).toBeNull();
+    expect(describeAccountNotice(account("OTHER_SESSIONS_SIGNED_OUT"))?.body).toBe(
+      "One of your phones or tablets signed out your other phones and tablets. If this wasn’t you, change your password.",
+    );
+  });
+
+  test("every security alert has a short title and a description", () => {
+    const types = [
+      "NEW_SIGN_IN",
+      "PASSWORD_CHANGED",
+      "PASSWORD_RESET",
+      "RECOVERY_PHRASE_CHANGED",
+      "RECOVERY_PHRASE_RESET",
+      "OTHER_SESSIONS_SIGNED_OUT",
+      "DEVICE_REMOVED",
+      "DELETION_SCHEDULED",
+      "SIGN_IN_CODES_TURNED_ON",
+      "SIGN_IN_CODES_TURNED_OFF",
+      "ALERTS_TURNED_OFF",
+    ] as const;
+    for (const type of types) {
+      const described = describeAccountNotice(
+        account(type, {
+          deletionDate: new Date("2026-12-03T12:00:00.000Z"),
+          device: { name: "A very long tablet name indeed", model: null, platform: null },
+        }),
+      );
+      expect(described?.title.length).toBeLessThanOrEqual(30);
+      expect(described?.body).toBeTruthy();
+    }
+    expect(describeAccountNotice(account("ALERTS_TURNED_OFF"))?.body).toBe(
+      "Some security alerts were turned off for your account.",
+    );
+  });
+});
+
+describe("group notices", () => {
+  const groupNotice = (event: Parameters<typeof groupEvent>[0]) =>
+    describeGroupNotice({
+      event: groupEvent(event),
+      groupName: "The Kings",
+      memberName: () => null,
+      userId: "user-1",
+    });
+
+  test("name the group in the title and add only what the title leaves out", () => {
+    expect(groupNotice({ subject: { userId: "user-emma", name: "Emma" } })).toEqual({
+      title: "Emma joined The Kings",
+      body: null,
+    });
+    expect(
+      groupNotice({ subject: { userId: "user-emma", name: "Emma" }, role: "ADMIN" })?.body,
+    ).toBe("Joined as an admin.");
+    expect(
+      groupNotice({
+        type: "MEMBER_REMOVED" as "MEMBER_LEFT",
+        actor: { userId: "user-sam", name: "Sam" },
+        subject: { userId: "user-emma", name: "Emma" },
+      }),
+    ).toEqual({
+      title: "Emma was removed from The Kings",
+      body: "Removed by Sam.",
+    });
+    expect(groupNotice({ type: "ACCOUNT_DELETED" as "MEMBER_LEFT", subject: null })).toEqual({
+      title: "A member left The Kings",
+      body: "They deleted their account.",
+    });
+    expect(
+      groupNotice({
+        type: "ROLE_CHANGED",
+        role: "OWNER",
+        actor: { userId: "user-emma", name: "Emma" },
+        subject: { userId: "user-emma", name: "Emma" },
+      }),
+    ).toEqual({
+      title: "Emma is now an owner of The Kings",
+      body: null,
+    });
   });
 });
 
@@ -222,21 +300,21 @@ describe("showing notices", () => {
     expect(shown).toEqual([
       {
         kind: "groupActivity",
-        title: "Mum joined",
+        title: "Mum joined Family",
         body: null,
         groupName: "Family",
         url: "openbeacon:///groups/family?tab=history",
       },
       {
         kind: "groupActivity",
-        title: "Mum made you an admin",
-        body: null,
+        title: "You are now an admin of Family",
+        body: "Changed by Mum.",
         groupName: "Family",
         url: "openbeacon:///groups/family?tab=history",
       },
       {
         kind: "groupActivity",
-        title: "Alex left the group",
+        title: "Alex left Family",
         body: null,
         groupName: "Family",
         url: "openbeacon:///groups/family?tab=history",
@@ -277,8 +355,8 @@ describe("showing notices", () => {
     expect(shown).toEqual([
       {
         kind: "accountAlert",
-        title: "Your password was changed",
-        body: "If this wasn’t you, use Forgot password on the sign-in screen to choose a new one.",
+        title: "Password changed",
+        body: "Your password was changed. If this wasn’t you, use Forgot password on the sign-in screen to choose a new one.",
         groupName: null,
         url: "openbeacon:///account/password",
       },
@@ -337,7 +415,7 @@ describe("showing notices", () => {
       groups,
       round: { userId: "user-1", number: 1 },
     });
-    expect(shown.map(({ title }) => title)).toEqual(["Mum left the group"]);
+    expect(shown.map(({ title }) => title)).toEqual(["Mum left Family"]);
     expect(getNoticesCursor("user-1")).toBe("2026-11-17T10:00:00.000Z|event-1");
   });
 
