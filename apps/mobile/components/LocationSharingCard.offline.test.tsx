@@ -42,6 +42,7 @@ mock.module("react-native", () => ({
     visible ? children : null,
 }));
 mock.module("expo-location", () => ({
+  enableNetworkProviderAsync: async () => undefined,
   getBackgroundPermissionsAsync: async () => ({}),
   getForegroundPermissionsAsync: async () => ({}),
   requestBackgroundPermissionsAsync: async () => ({}),

@@ -97,21 +97,19 @@ const WelcomeScreen = () => {
       primary={{ label: "Get started", onPress: start, loading: starting }}
     >
       <View className="rounded-2xl border border-border bg-card px-4">
-        {[
-          `Name this ${noun}`,
-          "Allow location and notifications",
-          "Protect your location history",
-        ].map((item, index, items) => (
-          <View
-            key={item}
-            className={`flex-row items-center gap-4 py-3 ${index < items.length - 1 ? "border-b border-border/50" : ""}`}
-          >
-            <View className="size-8 items-center justify-center rounded-full bg-primary-soft">
-              <Text className="text-primary-text text-sm font-bold">{index + 1}</Text>
+        {[`Name this ${noun}`, "Allow location and notifications", "Create recovery phrase"].map(
+          (item, index, items) => (
+            <View
+              key={item}
+              className={`flex-row items-center gap-4 py-3 ${index < items.length - 1 ? "border-b border-border/50" : ""}`}
+            >
+              <View className="size-8 items-center justify-center rounded-full bg-primary-soft">
+                <Text className="text-primary-text text-sm font-bold">{index + 1}</Text>
+              </View>
+              <Text className="text-foreground text-base font-medium">{item}</Text>
             </View>
-            <Text className="text-foreground text-base font-medium">{item}</Text>
-          </View>
-        ))}
+          ),
+        )}
       </View>
       <View className="flex-row items-center justify-center gap-2">
         <Icon as={LockIcon} className="text-tertiary size-4" />

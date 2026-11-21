@@ -14,6 +14,20 @@ mock.module("expo-screen-capture", () => ({
   preventScreenCaptureAsync: async () => {},
 }));
 mock.module("react-native", () => ({ View }));
+const copied: string[] = [];
+const pdfs: string[][] = [];
+mock.module("expo-clipboard", () => ({
+  setStringAsync: async (text: string) => {
+    copied.push(text);
+    return true;
+  },
+}));
+mock.module("../lib/recoveryPhrasePdf.ts", () => ({
+  clearRecoveryPhrasePdfs: () => {},
+  shareRecoveryPhrasePdf: async ({ words }: { words: string[]; signal: AbortSignal }) => {
+    pdfs.push(words);
+  },
+}));
 mock.module("../lib/alert.ts", () => ({ Alert: { alert: () => {} } }));
 mock.module("../lib/recovery.ts", () => ({
   confirmsRecoveryPhrase: () => true,
@@ -41,7 +55,7 @@ test("keeps the entered words when confirming fails, so they don't need typing a
       />,
     ),
   );
-  const [writtenDown] = root.container.queryAll((item) => item.type === "test-button");
+  const writtenDown = root.container.queryAll((item) => item.type === "test-button").at(-1);
   if (!writtenDown) throw new Error("Missing the written-down button");
   await act(async () => (writtenDown.props as { onPress: () => void }).onPress());
   const grid = () =>
@@ -55,5 +69,31 @@ test("keeps the entered words when confirming fails, so they don't need typing a
   await act(async () => grid().onSubmit());
 
   expect(grid().words).toEqual(["apple", "banana", "cherry"]);
+  await act(async () => root.unmount());
+});
+
+test("copying and saving as a PDF both use the phrase on screen", async () => {
+  const root = createRoot();
+  await act(async () =>
+    root.render(
+      <NewRecoveryPhrase
+        onConfirm={async () => {}}
+        submitLabel="Confirm"
+        submittingLabel="Setting up…"
+      />,
+    ),
+  );
+  const [grid] = root.container.queryAll((item) => item.type === "phrase-grid");
+  if (!grid) throw new Error("Missing the phrase");
+  const shown = (grid.props as { words: string[] }).words;
+  const [copy, savePdf] = root.container.queryAll((item) => item.type === "test-button");
+  if (!copy || !savePdf) throw new Error("Missing the copy and PDF buttons");
+
+  await act(async () => (copy.props as { onPress: () => Promise<void> }).onPress());
+  await act(async () => (savePdf.props as { onPress: () => Promise<void> }).onPress());
+
+  expect(shown).toHaveLength(12);
+  expect(copied).toEqual([shown.join(" ")]);
+  expect(pdfs).toEqual([shown]);
   await act(async () => root.unmount());
 });

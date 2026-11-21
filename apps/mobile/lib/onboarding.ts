@@ -20,23 +20,27 @@ import { storage } from "./storage.ts";
 const stepSchema = z.enum([
   "restore",
   "name",
-  "sharing",
   "notifications",
   "location",
   "background",
   "recovery",
   "appLock",
 ]);
+const knownStepsSchema = z.array(z.string()).transform((names) =>
+  names.flatMap((name) => {
+    const step = stepSchema.safeParse(name);
+    return step.success ? [step.data] : [];
+  }),
+);
 const progressSchema = z.object({
   kind: z.enum(["newAccount", "newDevice", "returning"]),
-  steps: z.array(stepSchema).nullable(),
-  done: z.array(stepSchema),
-}) satisfies z.ZodType<OnboardingProgress>;
+  steps: knownStepsSchema.nullable(),
+  done: knownStepsSchema,
+}) satisfies z.ZodType<OnboardingProgress, unknown>;
 
 const stepRoutes = {
   restore: "/setup",
   name: "/setup/name",
-  sharing: "/onboarding/sharing",
   notifications: "/onboarding/notifications",
   location: "/onboarding/location",
   background: "/onboarding/background",

@@ -21,6 +21,7 @@ import { clearPendingSharingChanges, getPendingSharingChanges } from "./location
 import { deleteOwnImageKey } from "./ownImageKey.ts";
 import { parseJson } from "./parseJson.ts";
 import { clearPendingJoinCodes } from "./pendingJoinCode.ts";
+import { clearRecoveryPhrasePdfs } from "./recoveryPhrasePdf.ts";
 import { readRegisteredDevice } from "./registeredDevice.ts";
 import { deleteSavedDeviceLink } from "./savedDeviceLink.ts";
 import { invalidateSecretWrites } from "./secretStorage.ts";
@@ -161,6 +162,7 @@ export const endSession = async ({
   abortHistoryExport();
   await tryCatch(Promise.resolve().then(clearImageCache));
   await tryCatch(Promise.resolve().then(clearHistoryExports));
+  await tryCatch(Promise.resolve().then(clearRecoveryPhrasePdfs));
   const clears = endSessionClears[reason];
   const registered = await readRegisteredDevice();
   if (reason === "sessionLost") {
@@ -230,6 +232,7 @@ export const endSession = async ({
   queryClient.clear();
   await tryCatch(Promise.resolve().then(clearImageCache));
   await tryCatch(Promise.resolve().then(clearHistoryExports));
+  await tryCatch(Promise.resolve().then(clearRecoveryPhrasePdfs));
   clearGroupColors();
   clearTrackingUploadTimes();
   clearTrackingKeyCheck();

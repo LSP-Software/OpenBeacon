@@ -36,6 +36,11 @@ export const SessionDataCleanup = () => {
         clearHistoryExports(),
       ),
     );
+    void tryCatch(
+      import("../lib/recoveryPhrasePdf.ts").then(({ clearRecoveryPhrasePdfs }) =>
+        clearRecoveryPhrasePdfs(),
+      ),
+    );
   }, []);
 
   useEffect(() => {

@@ -35,6 +35,7 @@ let permissionState: {
 } | null = null;
 let permissionSettingsOpened = 0;
 mock.module("expo-location", () => ({
+  enableNetworkProviderAsync: async () => undefined,
   getBackgroundPermissionsAsync: async () => ({}),
   getForegroundPermissionsAsync: async () => ({}),
   requestBackgroundPermissionsAsync: async () => ({}),

@@ -178,90 +178,179 @@ const TimelineLanes = memo(
     lanes: readonly Lane[];
     width: number;
   }) => {
-    const colors = useColors();
     const span = day.end - day.start;
     const xOf = (value: number) => ((value - day.start) / span) * width;
     const shadedWidth = Math.max(0, Math.min(xOf(historyStart), width));
     return (
       <Svg width={width} height={height}>
-        <Defs>
-          <Pattern
-            id="timeline-hatch"
-            width={6}
-            height={6}
-            patternUnits="userSpaceOnUse"
-            patternTransform="rotate(45)"
-          >
-            <Rect width={6} height={6} fill={colors.background} />
-            <Line x1={0} y1={0} x2={0} y2={6} stroke={colors.textMuted} strokeWidth={2} />
-          </Pattern>
-        </Defs>
+        <HatchPattern />
         {lanes.map((lane, index) => {
           const y = index * (LANE_HEIGHT + LANE_GAP);
           const laneShaded = Math.min(xOf(lane.historyStart), width) - shadedWidth;
           return [
             ...(laneShaded > 0
               ? [
-                  <Rect
+                  <UnavailableShape
                     key={`${lane.id}:shaded`}
+                    height={LANE_HEIGHT}
+                    width={laneShaded}
                     x={shadedWidth}
                     y={y}
-                    width={laneShaded}
-                    height={LANE_HEIGHT}
-                    fill="url(#timeline-hatch)"
                   />,
                 ]
               : []),
             ...lane.runs.map((run) => {
               const x = xOf(run.start);
               const runWidth = Math.max(xOf(run.end) - x, 1);
-              const key = `${lane.id}:${run.start}`;
-              if (run.kind === "pause") {
-                return (
-                  <Rect
-                    key={key}
-                    x={x + 0.75}
-                    y={y + 0.75}
-                    width={Math.max(runWidth - 1.5, 0.5)}
-                    height={LANE_HEIGHT - 1.5}
-                    fill="none"
-                    stroke={colors.textSecondary}
-                    strokeWidth={1.5}
-                    strokeDasharray="2 2"
-                  />
-                );
-              }
-              if (run.kind === "stay") {
-                return (
-                  <Rect
-                    key={key}
-                    x={x}
-                    y={y + (LANE_HEIGHT - STOPPED_HEIGHT) / 2}
-                    width={runWidth}
-                    height={STOPPED_HEIGHT}
-                    fill={lane.color}
-                    opacity={0.45}
-                  />
-                );
-              }
               return (
-                <Rect
-                  key={key}
+                <RunShape
+                  key={`${lane.id}:${run.start}`}
+                  color={lane.color}
+                  kind={run.kind}
+                  width={runWidth}
                   x={x}
                   y={y}
-                  width={runWidth}
-                  height={LANE_HEIGHT}
-                  fill={run.kind === "noLocation" ? "url(#timeline-hatch)" : lane.color}
-                  opacity={run.kind === "noLocation" ? 0.6 : 1}
                 />
               );
             }),
           ];
         })}
         {shadedWidth > 0 ? (
-          <Rect x={0} y={0} width={shadedWidth} height={height} fill="url(#timeline-hatch)" />
+          <UnavailableShape height={height} width={shadedWidth} x={0} y={0} />
         ) : null}
       </Svg>
     );
   },
 );
+
+const HatchPattern = () => {
+  const colors = useColors();
+  return (
+    <Defs>
+      <Pattern
+        id="timeline-hatch"
+        width={6}
+        height={6}
+        patternUnits="userSpaceOnUse"
+        patternTransform="rotate(45)"
+      >
+        <Rect width={6} height={6} fill={colors.background} />
+        <Line x1={0} y1={0} x2={0} y2={6} stroke={colors.textMuted} strokeWidth={2} />
+      </Pattern>
+    </Defs>
+  );
+};
+
+const UnavailableShape = ({
+  height,
+  width,
+  x,
+  y,
+}: {
+  height: number;
+  width: number;
+  x: number;
+  y: number;
+}) => {
+  const colors = useColors();
+  return (
+    <Rect
+      x={x}
+      y={y}
+      width={width}
+      height={height}
+      fill={colors.textMuted}
+      opacity={colors.isDark ? 0.28 : 0.18}
+    />
+  );
+};
+
+const RunShape = ({
+  color,
+  kind,
+  width,
+  x,
+  y,
+}: {
+  color: string;
+  kind: TimelineSegment["kind"];
+  width: number;
+  x: number;
+  y: number;
+}) => {
+  const colors = useColors();
+  if (kind === "pause") {
+    return (
+      <Rect
+        x={x + 0.75}
+        y={y + 0.75}
+        width={Math.max(width - 1.5, 0.5)}
+        height={LANE_HEIGHT - 1.5}
+        fill="none"
+        stroke={colors.textSecondary}
+        strokeWidth={1.5}
+        strokeDasharray="2 2"
+      />
+    );
+  }
+  if (kind === "stay") {
+    return (
+      <Rect
+        x={x}
+        y={y + (LANE_HEIGHT - STOPPED_HEIGHT) / 2}
+        width={width}
+        height={STOPPED_HEIGHT}
+        fill={color}
+        opacity={0.45}
+      />
+    );
+  }
+  return (
+    <Rect
+      x={x}
+      y={y}
+      width={width}
+      height={LANE_HEIGHT}
+      fill={kind === "noLocation" ? "url(#timeline-hatch)" : color}
+      opacity={kind === "noLocation" ? 0.6 : 1}
+    />
+  );
+};
+
+export const TimelineKey = ({
+  color,
+  showNotAvailable,
+}: {
+  color?: string | undefined;
+  showNotAvailable: boolean;
+}) => {
+  const colors = useColors();
+  return (
+    <View className="flex-row flex-wrap gap-x-3 gap-y-1">
+      {(
+        [
+          { kind: "moving", label: "Moving" },
+          { kind: "stay", label: "Stopped" },
+          { kind: "pause", label: "Paused" },
+          { kind: "noLocation", label: "No location" },
+        ] as const
+      ).map((item) => (
+        <View key={item.kind} className="flex-row items-center gap-1.5">
+          <Svg width={18} height={LANE_HEIGHT}>
+            <HatchPattern />
+            <RunShape color={color ?? colors.text} kind={item.kind} width={18} x={0} y={0} />
+          </Svg>
+          <Text className="text-xs text-secondary">{item.label}</Text>
+        </View>
+      ))}
+      {showNotAvailable ? (
+        <View className="flex-row items-center gap-1.5">
+          <Svg width={18} height={LANE_HEIGHT}>
+            <UnavailableShape height={LANE_HEIGHT} width={18} x={0} y={0} />
+          </Svg>
+          <Text className="text-xs text-secondary">Not available</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+};

@@ -27,7 +27,7 @@ import { TimelineDecryptCard } from "../components/timeline/TimelineDecryptCard.
 import { TimelineMapLayers } from "../components/timeline/TimelineMapLayers.tsx";
 import { TimelinePeopleChooser } from "../components/timeline/TimelinePeopleChooser.tsx";
 import { TimelinePin } from "../components/timeline/TimelinePin.tsx";
-import { TimelineScrubber } from "../components/timeline/TimelineScrubber.tsx";
+import { TimelineKey, TimelineScrubber } from "../components/timeline/TimelineScrubber.tsx";
 import { DecryptedAvatarImage } from "../components/image/DecryptedAvatarImage.tsx";
 import { Avatar, AvatarFallback } from "../components/ui/Avatar.tsx";
 import { Button } from "../components/ui/Button.tsx";
@@ -235,7 +235,6 @@ const TimelineView = ({
     [chosenPeople, day, daysQuery.data, members, personId],
   );
   const {
-    joinStart,
     progress,
     query: dayQuery,
     timeline,
@@ -252,7 +251,7 @@ const TimelineView = ({
     const note = member
       ? historyShareNote(member.isSelf ? null : member.name, sender.historyShare)
       : null;
-    return note ? [{ note, userId: sender.userId }] : [];
+    return note ? [note] : [];
   });
   const peopleWithLocations = budget?.people.filter((person) => person.points > 0) ?? [];
   const hiddenCount = peopleWithLocations.filter(
@@ -935,7 +934,7 @@ const TimelineView = ({
           <View className="gap-1 py-4">
             {timelineEmptyLines({
               groupName: group.name,
-              notes: shareNotes.map((item) => item.note),
+              notes: shareNotes,
               personSelected: personId !== null,
             }).map((line) => (
               <Text key={line} className="text-center text-tertiary">
@@ -1004,12 +1003,13 @@ const TimelineView = ({
               </Text>
             )}
             {routes.length > 0 ? (
-              <View className="flex-row flex-wrap gap-x-3 gap-y-1">
-                <LegendItem kind="moving" label="Moving" color={selectedPerson?.color} />
-                <LegendItem kind="stopped" label="Stopped" color={selectedPerson?.color} />
-                <LegendItem kind="paused" label="Paused" />
-                <LegendItem kind="noLocation" label="No location" />
-              </View>
+              <TimelineKey
+                color={selectedPerson?.color}
+                showNotAvailable={
+                  timeline.historyStart > timeline.day.start ||
+                  lanes.some((lane) => lane.historyStart > timeline.day.start)
+                }
+              />
             ) : null}
             {selectedPerson && selectedRoute ? (
               <>
@@ -1086,24 +1086,6 @@ const TimelineView = ({
                   label="End of day"
                   onPress={() => scrubTo(timeline.to)}
                 />
-              </View>
-            ) : null}
-            {shareNotes.length > 0 ? (
-              <View className="gap-1 rounded-xl bg-background p-3">
-                {shareNotes.map((item) => (
-                  <Text key={item.userId} className="text-sm text-foreground">
-                    {item.note}
-                  </Text>
-                ))}
-              </View>
-            ) : null}
-            {timeline.historyStart > timeline.day.start ? (
-              <View className="rounded-xl bg-background p-3">
-                <Text className="text-sm text-foreground">
-                  {joinStart !== null && timeline.historyStart === joinStart
-                    ? `You joined ${group.name} on ${formatDate(joinStart)} at ${formatClock(joinStart)}. Members see history only from when they joined.`
-                    : `History from before ${formatClock(timeline.historyStart)} on this day is no longer kept.`}
-                </Text>
               </View>
             ) : null}
             {personId === null && hiddenCount > 0 ? (
@@ -1199,35 +1181,6 @@ const PersonChip = ({
       {label}
     </Text>
   </Pressable>
-);
-
-const LegendItem = ({
-  color,
-  kind,
-  label,
-}: {
-  color?: string | undefined;
-  kind: "moving" | "noLocation" | "paused" | "stopped";
-  label: string;
-}) => (
-  <View className="flex-row items-center gap-1.5">
-    <View className="h-2.5 w-4 justify-center">
-      <View
-        className={cn(
-          "rounded-sm",
-          kind === "stopped" ? "h-1.5" : "h-full",
-          (kind === "moving" || kind === "stopped") && "bg-foreground",
-          kind === "paused" && "border border-dashed border-muted",
-          kind === "noLocation" && "bg-muted/40",
-        )}
-        style={{
-          ...(color && (kind === "moving" || kind === "stopped") ? { backgroundColor: color } : {}),
-          opacity: kind === "stopped" ? 0.45 : 1,
-        }}
-      />
-    </View>
-    <Text className="text-xs text-secondary">{label}</Text>
-  </View>
 );
 
 const StatCard = ({ label, value }: { label: string; value: string }) => (

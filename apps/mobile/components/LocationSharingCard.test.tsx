@@ -57,6 +57,7 @@ mock.module("react-native", () => ({
 }));
 const appLock = { locked: false, away: false };
 mock.module("expo-location", () => ({
+  enableNetworkProviderAsync: async () => undefined,
   getBackgroundPermissionsAsync: async () => ({}),
   getForegroundPermissionsAsync: async () => ({}),
   requestBackgroundPermissionsAsync: async () => ({}),

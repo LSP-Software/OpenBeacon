@@ -316,8 +316,8 @@ const AccountScreen = () => {
           <PromptCard
             icon={KeyRoundIcon}
             tone="primary"
-            title="Protect your location history"
-            description="Create a recovery phrase so you can read your history on a new phone."
+            title="Create recovery phrase"
+            description="So you can read your location history on a new phone."
           >
             <Link href="/account/recovery-setup" asChild>
               <Button size="sm">

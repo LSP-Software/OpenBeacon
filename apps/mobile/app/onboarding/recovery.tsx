@@ -35,8 +35,8 @@ const RecoveryStepScreen = () => {
           </View>
         </View>
       }
-      title="Protect your location history"
-      description={`Your history is encrypted with a key only your devices hold. If you lose this ${noun}, a 12-word recovery phrase is the only way to get it back. We can’t reset it for you.`}
+      title="Create recovery phrase"
+      description={`Your history is encrypted with a key only your ${noun}s hold. If you lose this ${noun}, a 12-word recovery phrase is the only way to get it back. We can’t reset it for you.`}
       primary={{
         label: "Create my phrase",
         onPress: () => router.push("/account/recovery-setup"),
@@ -46,7 +46,7 @@ const RecoveryStepScreen = () => {
       <View className="gap-3">
         {[
           "Takes about a minute",
-          "Write it down or keep it in a password manager",
+          "Write it down, keep it in a password manager or save it as a PDF",
           `Also lets you set up a new ${noun} without your old one`,
         ].map((item) => (
           <View key={item} className="flex-row items-center gap-3">

@@ -25,10 +25,16 @@ let backgroundPermission: {
   };
 };
 
+let foregroundRequests = 0;
+
 mock.module("expo-location", () => ({
+  enableNetworkProviderAsync: async () => undefined,
   getForegroundPermissionsAsync: async () => foregroundPermission,
   getBackgroundPermissionsAsync: async () => backgroundPermission,
-  requestForegroundPermissionsAsync: async () => foregroundPermission,
+  requestForegroundPermissionsAsync: async () => {
+    foregroundRequests += 1;
+    return foregroundPermission;
+  },
   requestBackgroundPermissionsAsync: async () => backgroundPermission,
 }));
 
@@ -36,6 +42,7 @@ const {
   getLocationPermissionState,
   getLocationPermissionWarningDescription,
   getLocationPermissionWarningTitle,
+  requestForegroundLocationPermissions,
 }: typeof import("./locationPermissions.ts") = await import("./locationPermissions.ts");
 
 const createPermissionResponse = ({
@@ -64,6 +71,7 @@ const createPermissionResponse = ({
 
 describe("locationPermissions", () => {
   beforeEach(() => {
+    foregroundRequests = 0;
     foregroundPermission = createPermissionResponse({
       status: "denied",
       granted: false,
@@ -160,6 +168,36 @@ describe("locationPermissions", () => {
 
     expect(permissionState.missing).toEqual([]);
     expect(permissionState.canRequestBackgroundInApp).toBe(false);
+  });
+
+  test("asks again when only approximate location is allowed", async () => {
+    foregroundPermission = createPermissionResponse({
+      status: "granted",
+      granted: true,
+      android: { accuracy: "coarse" },
+    });
+
+    await requestForegroundLocationPermissions();
+
+    expect(foregroundRequests).toBe(1);
+  });
+
+  test("does not ask again when precise location is already allowed", async () => {
+    foregroundPermission = createPermissionResponse({
+      status: "granted",
+      granted: true,
+      android: { accuracy: "fine" },
+    });
+
+    await requestForegroundLocationPermissions();
+
+    expect(foregroundRequests).toBe(0);
+  });
+
+  test("asks when location is not allowed yet", async () => {
+    await requestForegroundLocationPermissions();
+
+    expect(foregroundRequests).toBe(1);
   });
 
   test("formats a precise-only warning", () => {
