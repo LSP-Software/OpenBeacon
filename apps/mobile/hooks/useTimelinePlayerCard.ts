@@ -44,15 +44,26 @@ export const useTimelinePlayerCard = ({
   const [boxes, setBoxes] = useState<Partial<Record<BoxName, TimelineCardBox>>>({});
   const open = expanded || !canCollapse;
   const progress = useSharedValue(1);
+  const restingOpen = useSharedValue(true);
   const target = useRef(true);
   const dragStart = useRef(1);
   const range = heights.full - heights.mini;
 
   const settle = (opened: boolean, velocity = 0) => {
     target.current = opened;
-    progress.value = reduceMotion
-      ? Number(opened)
-      : withSpring(Number(opened), { damping: 26, stiffness: 260, velocity });
+    if (reduceMotion) {
+      progress.value = Number(opened);
+      restingOpen.value = opened;
+      return;
+    }
+    restingOpen.value = false;
+    progress.value = withSpring(
+      Number(opened),
+      { damping: 26, overshootClamping: true, stiffness: 260, velocity },
+      (finished) => {
+        if (finished && opened) restingOpen.value = true;
+      },
+    );
   };
 
   useEffect(() => {
@@ -72,6 +83,7 @@ export const useTimelinePlayerCard = ({
         Math.abs(gesture.dy) > Math.abs(gesture.dx),
       onPanResponderGrant: () => {
         cancelAnimation(progress);
+        restingOpen.value = false;
         dragStart.current = progress.value;
       },
       onPanResponderMove: (_event, gesture) => {
@@ -127,7 +139,9 @@ export const useTimelinePlayerCard = ({
   const playStyle = useAnimatedStyle(() => sharedMotion(progress.value, shifts.play));
   const speedStyle = useAnimatedStyle(() => sharedMotion(progress.value, shifts.speed));
   const heightStyle = useAnimatedStyle(() => ({
-    height: heights.mini + (heights.full - heights.mini) * progress.value,
+    height: restingOpen.value
+      ? ("auto" as const)
+      : heights.mini + (heights.full - heights.mini) * clampProgress(progress.value),
   }));
   const fullOnlyStyle = useAnimatedStyle(() => ({
     opacity: interpolate(progress.value, [0.35, 1], [0, 1], Extrapolation.CLAMP),
@@ -176,10 +190,15 @@ export const useTimelinePlayerCard = ({
 
 const sharedMotion = (progress: number, shift: { scale: number; x: number; y: number }) => {
   "worklet";
-  const rest = 1 - progress;
+  const rest = 1 - clampProgress(progress);
   return {
     left: shift.x * rest,
     top: shift.y * rest,
     transform: [{ scale: 1 + (shift.scale - 1) * rest }],
   };
+};
+
+const clampProgress = (progress: number) => {
+  "worklet";
+  return Math.min(Math.max(progress, 0), 1);
 };
