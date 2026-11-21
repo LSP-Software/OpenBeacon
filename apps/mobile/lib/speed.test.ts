@@ -5,6 +5,7 @@ import {
   liveSpeedHidesAt,
   liveSpeedLabel,
   movingSpeedLabel,
+  timelineSpeedLabel,
 } from "./speed.ts";
 
 describe("formatSpeed", () => {
@@ -102,5 +103,21 @@ describe("defaultSpeedUnit", () => {
     expect(defaultSpeedUnit({ measurementSystem: "uk", regionCode: null })).toBe("mph");
     expect(defaultSpeedUnit({ measurementSystem: "metric", regionCode: null })).toBe("kmh");
     expect(defaultSpeedUnit({ measurementSystem: null, regionCode: null })).toBe("kmh");
+  });
+});
+
+describe("timelineSpeedLabel", () => {
+  test("only gives a speed while the person is moving", () => {
+    const at = (state: "moving" | "pause" | "stay") => ({ position: { speed: 15.2 }, state });
+    expect(timelineSpeedLabel(at("moving"), "mph")).toBe("34 mph");
+    expect(timelineSpeedLabel(at("stay"), "mph")).toBeNull();
+    expect(timelineSpeedLabel(at("pause"), "mph")).toBeNull();
+    expect(timelineSpeedLabel(null, "mph")).toBeNull();
+  });
+
+  test("hides an unknown, slow or impossible speed while moving", () => {
+    expect(timelineSpeedLabel({ position: { speed: null }, state: "moving" }, "kmh")).toBeNull();
+    expect(timelineSpeedLabel({ position: { speed: 0.5 }, state: "moving" }, "kmh")).toBeNull();
+    expect(timelineSpeedLabel({ position: { speed: 95 }, state: "moving" }, "kmh")).toBeNull();
   });
 });

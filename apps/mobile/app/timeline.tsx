@@ -58,7 +58,7 @@ import { GROUP_COLOR_PALETTE, getGroupColor } from "../lib/groupColor.ts";
 import { loadPersonalNicknames } from "../lib/personalNicknames.ts";
 import { groupPlacesQueryOptions } from "../lib/placeSync.ts";
 import { getSymbolVisibility } from "../lib/protomaps-style.ts";
-import { movingSpeedLabel } from "../lib/speed.ts";
+import { timelineSpeedLabel } from "../lib/speed.ts";
 import {
   pickPersonDevices,
   timelineDayStats,
@@ -564,10 +564,7 @@ const TimelineView = ({
     }
     switch (selectedSegment.kind) {
       case "moving": {
-        const speedLabel =
-          selectedPin?.state === "moving"
-            ? movingSpeedLabel(selectedPin.position.speed, speedUnit)
-            : null;
+        const speedLabel = timelineSpeedLabel(selectedPin, speedUnit);
         return { title: "Moving", detail: speedLabel ? `${speedLabel} · ${date}` : date };
       }
       case "stay": {

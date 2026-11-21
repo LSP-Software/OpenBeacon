@@ -78,3 +78,8 @@ export const liveSpeedLabel = ({
 
 export const liveSpeedHidesAt = (timestamp: string) =>
   Date.parse(timestamp) + LIVE_SPEED_MAX_AGE_MS + 1;
+
+export const timelineSpeedLabel = (
+  pin: { position: { speed: number | null }; state: "moving" | "pause" | "stay" } | null,
+  unit: SpeedUnit,
+) => (pin?.state === "moving" ? movingSpeedLabel(pin.position.speed, unit) : null);
