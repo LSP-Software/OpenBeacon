@@ -43,6 +43,7 @@ const AboutScreen = () => {
     refetchInterval: 5_000,
     gcTime: 0,
     retry: false,
+    networkMode: "always",
   });
   const pushStatus = push.data;
   const serverName = useQuery(trpc.account.serverName.queryOptions());
