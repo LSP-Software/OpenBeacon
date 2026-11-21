@@ -151,8 +151,8 @@ export const LiveMapMarkerPin = ({
               rx={26}
               ry={26}
             >
-              <Stop offset="77%" stopColor="#000000" stopOpacity="0.2" />
-              <Stop offset="88%" stopColor="#000000" stopOpacity="0.1" />
+              <Stop offset="77%" stopColor="#000000" stopOpacity="0.28" />
+              <Stop offset="88%" stopColor="#000000" stopOpacity="0.14" />
               <Stop offset="100%" stopColor="#000000" stopOpacity="0" />
             </RadialGradient>
           </Defs>

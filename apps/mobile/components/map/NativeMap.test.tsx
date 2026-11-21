@@ -320,6 +320,11 @@ mock.module("../../lib/storage.ts", () => ({
   storage: { getBoolean: () => undefined, set: () => {} },
 }));
 
+mock.module("./refreshViewAnnotation.ts", () => ({
+  refreshViewAnnotation: (annotationRef: { current: { refresh: () => void } | null }) =>
+    annotationRef.current?.refresh(),
+}));
+
 mock.module("../../providers/ThemeProvider.tsx", () => ({
   useTheme: () => ({
     appTheme: "light" as const,

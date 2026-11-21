@@ -4,6 +4,7 @@ import { Platform, View } from "react-native";
 import type { MapPlace } from "../../lib/places.ts";
 import { useTheme } from "../../providers/ThemeProvider.tsx";
 import { PlacePin } from "./PlacePin.tsx";
+import { refreshViewAnnotation } from "./refreshViewAnnotation.ts";
 
 export const PlaceAnnotation = ({
   onSelected,
@@ -20,7 +21,7 @@ export const PlaceAnnotation = ({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: Android draws ViewAnnotation children into a bitmap that needs an explicit refresh when the pin changes
   useEffect(() => {
-    annotationRef.current?.refresh();
+    refreshViewAnnotation(annotationRef);
   }, [appTheme, place.emoji, selected]);
 
   return (

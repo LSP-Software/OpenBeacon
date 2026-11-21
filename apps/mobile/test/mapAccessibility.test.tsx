@@ -89,6 +89,10 @@ mock.module("../components/ui/Avatar.tsx", () => ({
   AvatarImage: () => null,
 }));
 mock.module("../components/ui/Icon.tsx", () => ({ Icon: () => null }));
+mock.module("../components/map/refreshViewAnnotation.ts", () => ({
+  refreshViewAnnotation: (annotationRef: { current: { refresh: () => void } | null }) =>
+    annotationRef.current?.refresh(),
+}));
 mock.module("../components/ui/Text.tsx", () => ({ Text: Passthrough }));
 
 const { LiveMapPointAnnotation } = await import("../components/map/LiveMapPointAnnotation.tsx");

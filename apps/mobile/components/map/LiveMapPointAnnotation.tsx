@@ -8,6 +8,7 @@ import type { LiveMapPinOffset } from "../../lib/liveMapPinGroups.ts";
 import { useTheme } from "../../providers/ThemeProvider.tsx";
 import { LiveMapMarkerPin } from "./LiveMapMarkerPin.tsx";
 import { LiveMapPinMotion } from "./LiveMapPinMotion.tsx";
+import { refreshViewAnnotation } from "./refreshViewAnnotation.ts";
 
 export const SelfLiveMapPointAnnotation = ({
   arrival,
@@ -69,7 +70,7 @@ export const LiveMapPointAnnotation = ({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: Android draws ViewAnnotation children into a bitmap that needs an explicit refresh when the pin's look changes
   useEffect(() => {
-    annotationRef.current?.refresh();
+    refreshViewAnnotation(annotationRef);
   }, [
     appTheme,
     shownHeadingDegrees,
@@ -112,7 +113,7 @@ export const LiveMapPointAnnotation = ({
             ringColor={marker.ringColor}
             ringColors={marker.ringColors}
             timestamp={marker.timestamp}
-            onBitmapContentChange={() => annotationRef.current?.refresh()}
+            onBitmapContentChange={() => refreshViewAnnotation(annotationRef)}
           />
         </LiveMapPinMotion>
       </View>

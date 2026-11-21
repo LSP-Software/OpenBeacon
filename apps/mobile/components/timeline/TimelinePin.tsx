@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 import { Platform, View } from "react-native";
 import { useTheme } from "../../providers/ThemeProvider.tsx";
 import { LiveMapMarkerPin } from "../map/LiveMapMarkerPin.tsx";
+import { refreshViewAnnotation } from "../map/refreshViewAnnotation.ts";
 
 export const TimelinePin = ({
   color,
@@ -29,7 +30,7 @@ export const TimelinePin = ({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: Android draws ViewAnnotation children into a bitmap that needs an explicit refresh when the pin's look changes
   useEffect(() => {
-    annotationRef.current?.refresh();
+    refreshViewAnnotation(annotationRef);
   }, [appTheme, paused, image, color]);
 
   return (
@@ -55,7 +56,7 @@ export const TimelinePin = ({
           ringColor={color}
           status={paused ? "paused" : null}
           timestamp={null}
-          onBitmapContentChange={() => annotationRef.current?.refresh()}
+          onBitmapContentChange={() => refreshViewAnnotation(annotationRef)}
         />
       </View>
     </ViewAnnotation>

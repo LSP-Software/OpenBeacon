@@ -6,6 +6,7 @@ import type { LiveMapPinGroup, LiveMapPinOffset } from "../../lib/liveMapPinGrou
 import { useTheme } from "../../providers/ThemeProvider.tsx";
 import { LiveMapPinMotion } from "./LiveMapPinMotion.tsx";
 import { LiveMapStackPin } from "./LiveMapStackPin.tsx";
+import { refreshViewAnnotation } from "./refreshViewAnnotation.ts";
 
 export const LiveMapStackAnnotation = ({
   arrival,
@@ -36,7 +37,7 @@ export const LiveMapStackAnnotation = ({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: Android draws ViewAnnotation children into a bitmap that needs an explicit refresh when the stack's look changes
   useEffect(() => {
-    annotationRef.current?.refresh();
+    refreshViewAnnotation(annotationRef);
   }, [appTheme, drawnMembers]);
 
   return (
@@ -58,7 +59,7 @@ export const LiveMapStackAnnotation = ({
         <LiveMapPinMotion arrival={arrival}>
           <LiveMapStackPin
             members={members}
-            onBitmapContentChange={() => annotationRef.current?.refresh()}
+            onBitmapContentChange={() => refreshViewAnnotation(annotationRef)}
           />
         </LiveMapPinMotion>
       </View>
