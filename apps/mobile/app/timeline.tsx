@@ -490,7 +490,7 @@ const TimelineView = ({
   // biome-ignore lint/correctness/useExhaustiveDependencies: following tracks the pin's position, and padding changes are picked up on the next move
   useEffect(() => {
     if (!following || followLongitude === undefined || followLatitude === undefined) return;
-    if (timeState?.key !== timeline?.day.key || fittedView.current.view !== fit.view) return;
+    if (fittedView.current.view !== fit.view) return;
     cameraRef.current?.jumpTo({
       center: [followLongitude, followLatitude],
       padding: cameraPadding,
@@ -524,8 +524,9 @@ const TimelineView = ({
       })),
       ...route.stops,
     ]);
-    if (coordinates.length === 0) return;
-    const { ne, sw } = mapFitBounds(coordinates);
+    const framed = coordinates.length > 0 ? coordinates : pins.map((pin) => pin.position);
+    if (framed.length === 0) return;
+    const { ne, sw } = mapFitBounds(framed);
     cameraRef.current?.fitBounds([sw[0], sw[1], ne[0], ne[1]], {
       duration: 600,
       padding: cameraPadding,
@@ -1134,6 +1135,8 @@ const TimelineView = ({
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={playing ? "Pause" : "Play"}
+                    accessibilityState={{ disabled: !styleLoaded }}
+                    disabled={!styleLoaded}
                     onPress={() => {
                       if (playing) {
                         setPlaying(false);
