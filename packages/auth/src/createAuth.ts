@@ -290,7 +290,7 @@ export const createAuth = ({
               });
               if (!result.ok) {
                 console.warn(
-                  `[google-sign-in] refused a Google sign-in ${googleRefusalReason({ result, clientId: google.clientId, serverUrl: env.BETTER_AUTH_URL })}`,
+                  `[google-sign-in] refused a Google sign-in ${googleRefusalReason({ result, clientId: google.clientId, nonceBoundTo: { serverUrl: env.BETTER_AUTH_URL } })}`,
                 );
                 return false;
               }

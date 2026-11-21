@@ -58,16 +58,19 @@ export const verifyGoogleIdToken = createGoogleIdTokenVerifier({
 export const googleRefusalReason = ({
   result,
   clientId,
-  serverUrl,
+  nonceBoundTo,
 }: {
   result: Extract<GoogleIdTokenResult, { ok: false }>;
   clientId: string;
-  serverUrl: string;
+  nonceBoundTo: { serverUrl: string } | "deletion-attempt";
 }) => {
   if (result.refused === "wrong-client")
     return `because Google issued the token for client ${result.tokenClientId}, but GOOGLE_CLIENT_ID is ${clientId}. Set GOOGLE_CLIENT_ID to the web client ID the app was built with (EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID), and GOOGLE_CLIENT_SECRET to that client's secret.`;
-  if (result.refused === "wrong-nonce")
-    return `because the phone asked Google for it on behalf of a different server address. If phones can't sign in with Google, set BETTER_AUTH_URL to the exact address phones use, with the same scheme, host and port. It is ${new URL(serverUrl).origin} now.`;
+  if (result.refused === "wrong-nonce") {
+    if (nonceBoundTo === "deletion-attempt")
+      return "because Google's response belonged to a different or older deletion attempt. The person should start the account deletion again.";
+    return `because the phone asked Google for it on behalf of a different server address. If phones can't sign in with Google, set BETTER_AUTH_URL to the exact address phones use, with the same scheme, host and port. It is ${new URL(nonceBoundTo.serverUrl).origin} now.`;
+  }
   if (result.refused === "expired")
     return "because the token had expired. If this keeps happening, check this server's clock.";
   if (result.refused === "keys-unreachable")

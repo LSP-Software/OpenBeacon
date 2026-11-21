@@ -45,14 +45,17 @@ export const canOfferGoogleSignIn = (
   !googleSignInMisconfigured &&
   (providers.googleClientId === undefined || providers.googleClientId === getGoogleWebClientId());
 
+const subscribeToGoogleSignInMisconfigured = (listener: () => void) => {
+  googleSignInListeners.add(listener);
+  return () => {
+    googleSignInListeners.delete(listener);
+  };
+};
+
+const readGoogleSignInMisconfigured = () => googleSignInMisconfigured;
+
 export const useCanOfferGoogleSignIn = (providers: Parameters<typeof canOfferGoogleSignIn>[0]) => {
-  useSyncExternalStore(
-    (listener) => {
-      googleSignInListeners.add(listener);
-      return () => googleSignInListeners.delete(listener);
-    },
-    () => googleSignInMisconfigured,
-  );
+  useSyncExternalStore(subscribeToGoogleSignInMisconfigured, readGoogleSignInMisconfigured);
   return canOfferGoogleSignIn(providers);
 };
 
@@ -104,7 +107,7 @@ const googleLibraryError = (error: unknown) => {
   if (isErrorWithCode(error) && error.code === statusCodes.DEVELOPER_ERROR) {
     googleSignInMisconfigured = true;
     for (const listener of googleSignInListeners) listener();
-    return { cancelled: true as const };
+    return { unavailable: true as const };
   }
   if (isErrorWithCode(error) && error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
     return googleSignInError(

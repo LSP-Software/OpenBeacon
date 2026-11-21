@@ -61,7 +61,7 @@ export const verifyGoogleDeletionCode = async ({
   });
   if (!claims.ok) {
     console.warn(
-      `[google-deletion] refused a Google account check ${googleRefusalReason({ result: claims, clientId: env.GOOGLE_CLIENT_ID, serverUrl: env.BETTER_AUTH_URL })}`,
+      `[google-deletion] refused a Google account check ${googleRefusalReason({ result: claims, clientId: env.GOOGLE_CLIENT_ID, nonceBoundTo: "deletion-attempt" })}`,
     );
     return null;
   }

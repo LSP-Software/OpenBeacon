@@ -443,7 +443,7 @@ describe("auth Google sign-in configuration", () => {
       const providers = { google: true, googleClientId: "web-client-id" };
       expect(canOfferGoogleSignIn(providers)).toBe(true);
 
-      expect(await signInWithGoogle()).toEqual({ cancelled: true });
+      expect(await signInWithGoogle()).toEqual({ unavailable: true });
       expect(socialSignInMock).not.toHaveBeenCalled();
       expect(canOfferGoogleSignIn(providers)).toBe(false);
     },

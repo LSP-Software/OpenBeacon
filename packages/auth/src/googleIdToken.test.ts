@@ -148,9 +148,29 @@ test("a token for another client says which client ID to set", () => {
         tokenClientId: "985-app.apps.googleusercontent.com",
       },
       clientId: "1077-server.apps.googleusercontent.com",
-      serverUrl: "https://api.example.com",
+      nonceBoundTo: { serverUrl: "https://api.example.com" },
     }),
   ).toBe(
     "because Google issued the token for client 985-app.apps.googleusercontent.com, but GOOGLE_CLIENT_ID is 1077-server.apps.googleusercontent.com. Set GOOGLE_CLIENT_ID to the web client ID the app was built with (EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID), and GOOGLE_CLIENT_SECRET to that client's secret.",
   );
+});
+
+test("a nonce mismatch at sign-in points at BETTER_AUTH_URL", () => {
+  expect(
+    googleRefusalReason({
+      result: { ok: false, refused: "wrong-nonce" },
+      clientId: "client-id",
+      nonceBoundTo: { serverUrl: "https://api.example.com/openbeacon/" },
+    }),
+  ).toContain("set BETTER_AUTH_URL to the exact address phones use");
+});
+
+test("a nonce mismatch during deletion asks to start again instead of blaming BETTER_AUTH_URL", () => {
+  const reason = googleRefusalReason({
+    result: { ok: false, refused: "wrong-nonce" },
+    clientId: "client-id",
+    nonceBoundTo: "deletion-attempt",
+  });
+  expect(reason).toContain("different or older deletion attempt");
+  expect(reason).not.toContain("BETTER_AUTH_URL");
 });
