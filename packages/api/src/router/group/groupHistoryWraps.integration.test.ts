@@ -106,6 +106,8 @@ const bundle = ({
   recipientKeys: result.wrappedKeys,
 });
 
+const seededEpochs: { created: string; named: string | null }[] = [];
+
 const createGroup = async (id: string, creator: Account) => {
   const device = await prisma.userDevice.findUniqueOrThrow({ where: { id: creator.deviceId } });
   const initial = createInitialGroupEpoch({
@@ -123,11 +125,12 @@ const createGroup = async (id: string, creator: Account) => {
     ],
   });
   const { historyRecipients } = await caller(creator.userId).auth.deviceKeyContext();
-  await caller(creator.userId).groupLifecycle.create({
+  const created = await caller(creator.userId).groupLifecycle.create({
     groupId: id,
     initialEpoch: bundle({ creator: creator, historyRecipients, result: initial }),
     name: "Family",
   });
+  seededEpochs.push({ created: initial.epoch.epochId, named: created.newGroup.latestEpochId });
   return initial;
 };
 
@@ -147,7 +150,7 @@ const join = async (id: string, joiner: Account) => {
     previousEpoch: context.latestEpoch!,
     recipients: context.recipients,
   });
-  await caller(joiner.userId).groupInvites.accept({
+  const joined = await caller(joiner.userId).groupInvites.accept({
     inviteId: invite.id,
     nextEpoch: bundle({
       creator: joiner,
@@ -155,6 +158,7 @@ const join = async (id: string, joiner: Account) => {
       result: next,
     }),
   });
+  seededEpochs.push({ created: next.epoch.epochId, named: joined.group.latestEpochId });
   return next;
 };
 
@@ -297,6 +301,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(Object.fromEntries(members.map((row) => [row.userId, row.joinedEpochNumber]))).toEqual(
         { [owner.userId]: 1, [member.userId]: 2, [other.userId]: 3 },
       );
+    });
+
+    test("creating and joining a group name the epoch they just started, so the app's list starts current", () => {
+      expect(seededEpochs.length).toBeGreaterThan(0);
+      for (const { created, named } of seededEpochs) expect(named).toBe(created);
     });
 
     test("backfill offers only entitled epochs and wraps are stored idempotently, with or without an escrow", async () => {

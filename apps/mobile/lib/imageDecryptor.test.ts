@@ -563,6 +563,36 @@ describe("epoch keys", () => {
     expect(epochKeyRequests).toEqual([`${groupId}:epoch-2`, `${groupId}:epoch-2`]);
   });
 
+  test("a picture key moved to a newer epoch is tried straight away after a stale one", async () => {
+    const imageKey = encrypt({ fileName: fileA, ownerId: bob, purpose: "profile-image" });
+    const stale = wrap({
+      epochId: "epoch-0",
+      fileName: fileA,
+      imageKey,
+      kind: "profile-image-key",
+      ownerId: bob,
+    });
+    const decryptor = createDecryptor();
+
+    expect(await decryptor.load({ sources: [memberSource(stale)], url: urlFor(fileA) })).toEqual({
+      status: "stale-key",
+    });
+
+    now = 1_000;
+    epochKeys.set(`${groupId}:epoch-2`, generateGroupEpochKey());
+    const moved = wrap({
+      epochId: "epoch-2",
+      fileName: fileA,
+      imageKey,
+      kind: "profile-image-key",
+      ownerId: bob,
+    });
+    const result = await decryptor.load({ sources: [memberSource(moved)], url: urlFor(fileA) });
+
+    expect(result.status).toBe("ready");
+    expect(epochKeyRequests).toEqual([`${groupId}:epoch-0`, `${groupId}:epoch-2`]);
+  });
+
   test("a failed lookup isn't remembered", async () => {
     const source = memberPicture(fileA);
     let failing = true;
