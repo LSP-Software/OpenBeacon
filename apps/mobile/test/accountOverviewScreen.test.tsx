@@ -50,6 +50,7 @@ mock.module("lucide-react-native", () =>
       "BellOffIcon",
       "BookOpenIcon",
       "EyeIcon",
+      "GaugeIcon",
       "HistoryIcon",
       "InfoIcon",
       "KeyRoundIcon",
@@ -106,6 +107,7 @@ mock.module("../components/ui/Text.tsx", () => ({ Text: View }));
 mock.module("../hooks/useHeldHistoryKeyVersions.ts", () => ({
   useHeldHistoryKeyVersions: () => query,
 }));
+mock.module("../hooks/useSpeedUnit.ts", () => ({ useSpeedUnit: () => ({ unit: "mph" }) }));
 mock.module("../hooks/useHistoryShare.ts", () => ({ useHistoryShare: () => ({ setting: null }) }));
 mock.module("../lib/appLock.ts", () => ({ useAppLock: () => ({ enabled: false }) }));
 mock.module("../lib/versions.ts", () => ({ appVersion: "1.0.0" }));
