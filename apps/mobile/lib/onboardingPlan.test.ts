@@ -23,7 +23,6 @@ describe("planOnboarding", () => {
   test("a new account goes through every step except restoring", () => {
     expect(planOnboarding({ kind: "newAccount", ...nothingAllowed })).toEqual([
       "name",
-      "sharing",
       "notifications",
       "location",
       "background",
@@ -36,7 +35,6 @@ describe("planOnboarding", () => {
     expect(planOnboarding({ kind: "newDevice", ...nothingAllowed })).toEqual([
       "restore",
       "name",
-      "sharing",
       "notifications",
       "location",
       "background",
@@ -58,10 +56,7 @@ describe("planOnboarding", () => {
   });
 
   test("permissions already granted are skipped", () => {
-    expect(planOnboarding({ kind: "newAccount", ...everythingAllowed })).toEqual([
-      "name",
-      "sharing",
-    ]);
+    expect(planOnboarding({ kind: "newAccount", ...everythingAllowed })).toEqual(["name"]);
   });
 
   test("only missing precise location asks again for location but not background", () => {
@@ -84,15 +79,15 @@ describe("planOnboarding", () => {
 describe("onboarding progress", () => {
   const progress = {
     kind: "newDevice" as const,
-    steps: ["restore" as const, "name" as const, "sharing" as const, "appLock" as const],
+    steps: ["restore" as const, "name" as const, "notifications" as const, "appLock" as const],
     done: [],
   };
 
   test("completing a later step also completes the steps before it", () => {
     const { progress: next, next: step } = completeOnboardingSteps(progress, ["name"]);
     expect(next.done).toEqual(["restore", "name"]);
-    expect(step).toBe("sharing");
-    expect(nextOnboardingStep(next)).toBe("sharing");
+    expect(step).toBe("notifications");
+    expect(nextOnboardingStep(next)).toBe("notifications");
   });
 
   test("there is no next step once everything is done", () => {
@@ -104,19 +99,22 @@ describe("onboarding progress", () => {
   test("going back two steps then continuing walks forward through the step in between", () => {
     const atAppLock = {
       ...progress,
-      done: ["restore" as const, "name" as const, "sharing" as const],
+      done: ["restore" as const, "name" as const, "notifications" as const],
     };
 
     const fromName = completeOnboardingSteps(atAppLock, ["name"]);
-    expect(fromName.next).toBe("sharing");
+    expect(fromName.next).toBe("notifications");
     expect(fromName.progress.done).toEqual(atAppLock.done);
 
-    expect(completeOnboardingSteps(fromName.progress, ["sharing"]).next).toBe("appLock");
+    expect(completeOnboardingSteps(fromName.progress, ["notifications"]).next).toBe("appLock");
   });
 
   test("completing several steps at once moves on from the latest of them", () => {
-    const { progress: next, next: step } = completeOnboardingSteps(progress, ["sharing", "name"]);
-    expect(next.done).toEqual(["restore", "name", "sharing"]);
+    const { progress: next, next: step } = completeOnboardingSteps(progress, [
+      "notifications",
+      "name",
+    ]);
+    expect(next.done).toEqual(["restore", "name", "notifications"]);
     expect(step).toBe("appLock");
   });
 
@@ -140,8 +138,8 @@ describe("onboarding progress", () => {
 
     const { progress: next, next: step } = completeOnboardingSteps(halfway, ["background"]);
     expect(next.done).toEqual(["restore", "name", "background"]);
-    expect(step).toBe("sharing");
-    expect(completeOnboardingSteps(next, ["background"]).next).toBe("sharing");
+    expect(step).toBe("notifications");
+    expect(completeOnboardingSteps(next, ["background"]).next).toBe("notifications");
   });
 
   test("with nothing left anywhere there is no next step", () => {
@@ -162,7 +160,7 @@ describe("onboarding progress", () => {
       total: 4,
       previous: null,
     });
-    expect(onboardingPosition(progress, "sharing")).toEqual({
+    expect(onboardingPosition(progress, "notifications")).toEqual({
       number: 3,
       total: 4,
       previous: "name",

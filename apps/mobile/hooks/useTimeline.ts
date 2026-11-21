@@ -140,7 +140,6 @@ export const useTimelineDay = ({
     });
   }, [data, dataUpdatedAt, day, pausedDeviceIds, senders, shownPartial, windowStart]);
   return {
-    joinStart: data?.joinStart ?? shownPartial?.joinStart ?? null,
     progress: progress?.loadKey === loadKey ? progress.people : null,
     query,
     timeline,

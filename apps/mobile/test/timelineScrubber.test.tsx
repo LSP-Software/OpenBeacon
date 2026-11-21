@@ -27,7 +27,8 @@ mock.module("../lib/theme.ts", () => ({
 }));
 mock.module("../components/ui/Text.tsx", () => ({ Text: element("text") }));
 
-const { TimelineScrubber } = await import("../components/timeline/TimelineScrubber.tsx");
+const { TimelineKey, TimelineScrubber } =
+  await import("../components/timeline/TimelineScrubber.tsx");
 
 const ticksFor = async (uses24HourClock: boolean) => {
   const start = new Date(2026, 10, 19).getTime();
@@ -67,4 +68,71 @@ const ticksFor = async (uses24HourClock: boolean) => {
 test("the scrubber's hour marks follow the phone's 12 or 24-hour clock", async () => {
   expect(await ticksFor(true)).toEqual(["00", "06", "12", "18", "24"]);
   expect(await ticksFor(false)).toEqual(["12 AM", "6 AM", "12 PM", "6 PM", "12 AM"]);
+});
+
+test("time before history starts is drawn apart from the no-location hatch", async () => {
+  const start = new Date(2026, 10, 19).getTime();
+  const end = new Date(2026, 10, 20).getTime();
+  const hour = 60 * 60_000;
+  const root = createRoot();
+  await act(async () =>
+    root.render(
+      <TimelineScrubber
+        day={{ end, start }}
+        from={start + 2 * hour}
+        historyStart={start + 2 * hour}
+        lanes={[
+          {
+            color: "#ff0000",
+            historyStart: start + 4 * hour,
+            id: "lane",
+            initials: "AB",
+            runs: [{ end: start + 6 * hour, kind: "noLocation", start: start + 5 * hour }],
+          },
+        ]}
+        onScrub={() => {}}
+        step={15 * 60_000}
+        time={start + 2 * hour}
+        to={end}
+        uses24HourClock
+        valueLabel="02:00"
+      />,
+    ),
+  );
+  const track = root.container.queryAll(
+    (node) => node.type === "view" && node.props["accessibilityLabel"] === "Time of day",
+  )[0];
+  const onLayout = track?.props["onLayout"] as
+    ((event: { nativeEvent: { layout: { width: number } } }) => void) | undefined;
+  await act(async () => onLayout?.({ nativeEvent: { layout: { width: 240 } } }));
+  const fills = root.container
+    .queryAll((node) => node.type === "rect" && node.parent?.type === "svg")
+    .map((node) => ({ fill: node.props["fill"], x: node.props["x"] }));
+  await act(async () => root.unmount());
+  expect(fills).toEqual([
+    { fill: "#000000", x: 20 },
+    { fill: "url(#timeline-hatch)", x: 50 },
+    { fill: "#000000", x: 0 },
+  ]);
+});
+
+const keyLabels = async (showNotAvailable: boolean) => {
+  const root = createRoot();
+  await act(async () => root.render(<TimelineKey showNotAvailable={showNotAvailable} />));
+  const labels = root.container
+    .queryAll((node) => node.type === "text")
+    .map((node) => node.children.join(""));
+  await act(async () => root.unmount());
+  return labels;
+};
+
+test("the key only lists Not available when the day has unavailable time", async () => {
+  expect(await keyLabels(false)).toEqual(["Moving", "Stopped", "Paused", "No location"]);
+  expect(await keyLabels(true)).toEqual([
+    "Moving",
+    "Stopped",
+    "Paused",
+    "No location",
+    "Not available",
+  ]);
 });

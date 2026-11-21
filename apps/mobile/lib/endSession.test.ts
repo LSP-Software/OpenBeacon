@@ -700,12 +700,14 @@ describe("ending a session", () => {
     "serverChanged",
     "sessionLost",
   ] as const)(
-    "%s deletes every decrypted picture and history export on this phone",
+    "%s deletes every decrypted picture, history export and recovery phrase PDF on this phone",
     async (reason) => {
       await seedSignedInPhone();
       cachedFiles.add("cache/images/0d6c8c2e-2b1a-4c55-9a4e-6f1b2f3c4d5e");
       cachedFiles.add("cache/images/7f0a1b2c-3d4e-4f50-8a6b-7c8d9e0f1a2b");
       cachedFiles.add("cache/history-export/openbeacon-history-2026-11-19.gpx");
+      cachedFiles.add("cache/recovery-phrase/openbeacon-recovery-phrase_a1b2.pdf");
+      cachedFiles.add("cache/Print/0d6c8c2e-2b1a-4c55-9a4e-6f1b2f3c4d5e.pdf");
       cachedFiles.add("cache/map/tiles.pmtiles");
 
       await endSession({ reason });

@@ -58,8 +58,13 @@ mock.module("./appLock.ts", () => ({
   getAppLockState: () => ({ enabled: appLockEnabled }),
 }));
 
-const { advanceOnboarding, planCurrentOnboarding, readOnboarding, startOnboarding } =
-  await import("./onboarding.ts");
+const {
+  advanceOnboarding,
+  continueOnboarding,
+  planCurrentOnboarding,
+  readOnboarding,
+  startOnboarding,
+} = await import("./onboarding.ts");
 
 const store = (progress: OnboardingProgress) =>
   storageValues.set("onboarding.user-1", JSON.stringify(progress));
@@ -77,11 +82,11 @@ beforeEach(() => {
 
 describe("advancing onboarding", () => {
   test("goes to the next step's screen and remembers what is done", () => {
-    store({ kind: "newAccount", steps: ["name", "sharing", "notifications"], done: [] });
+    store({ kind: "newAccount", steps: ["name", "notifications", "location"], done: [] });
 
     advanceOnboarding("name");
 
-    expect(events).toEqual(["/onboarding/sharing"]);
+    expect(events).toEqual(["/onboarding/notifications"]);
     expect(readOnboarding("user-1")?.done).toEqual(["name"]);
   });
 
@@ -100,13 +105,13 @@ describe("advancing onboarding", () => {
   test("going back and continuing revisits the step in between", () => {
     store({
       kind: "newAccount",
-      steps: ["name", "sharing", "notifications"],
-      done: ["name", "sharing"],
+      steps: ["name", "notifications", "location"],
+      done: ["name", "notifications"],
     });
 
     advanceOnboarding("name");
 
-    expect(events).toEqual(["/onboarding/sharing"]);
+    expect(events).toEqual(["/onboarding/notifications"]);
   });
 
   test("a new phone shows the done screen after the last step", () => {
@@ -146,6 +151,27 @@ describe("advancing onboarding", () => {
 
     expect(events).toEqual(["openApp:/", "openApp:/"]);
   });
+
+  test("resumes progress saved with a step that no longer exists", () => {
+    storageValues.set(
+      "onboarding.user-1",
+      JSON.stringify({
+        kind: "newAccount",
+        steps: ["name", "notifications", "sharing", "location", "background"],
+        done: ["name", "notifications", "sharing"],
+      }),
+    );
+
+    const progress = readOnboarding("user-1");
+    if (progress) continueOnboarding(progress);
+
+    expect(progress).toEqual({
+      kind: "newAccount",
+      steps: ["name", "notifications", "location", "background"],
+      done: ["name", "notifications"],
+    });
+    expect(events).toEqual(["/onboarding/location"]);
+  });
 });
 
 describe("planning onboarding", () => {
@@ -158,7 +184,6 @@ describe("planning onboarding", () => {
 
     expect(planned?.steps).toEqual([
       "name",
-      "sharing",
       "notifications",
       "location",
       "background",
@@ -188,7 +213,6 @@ describe("planning onboarding", () => {
 
     expect((await planCurrentOnboarding())?.steps).toEqual([
       "name",
-      "sharing",
       "notifications",
       "location",
       "background",

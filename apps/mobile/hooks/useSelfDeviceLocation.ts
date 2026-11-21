@@ -21,6 +21,7 @@ export const useSelfDeviceLocation = (enabled: boolean) => {
             accuracy: Location.Accuracy.High,
             distanceInterval: 5,
             timeInterval: 1_000,
+            mayShowUserSettingsDialog: false,
           },
           (position) => {
             setLocation({

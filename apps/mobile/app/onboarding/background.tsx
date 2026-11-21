@@ -12,6 +12,7 @@ import { cn } from "../../lib/cn.ts";
 import {
   getLocationPermissionState,
   type LocationPermissionState,
+  askForImprovedLocationAccuracy,
   openLocationSettings,
   requestBackgroundLocationPermissions,
   requestForegroundLocationPermissions,
@@ -57,6 +58,7 @@ const BackgroundLocationStepScreen = () => {
       advance("background");
       return;
     }
+    if (Platform.OS === "android") await tryCatch(askForImprovedLocationAccuracy());
     setState(result.data);
   };
 
@@ -138,6 +140,9 @@ const BackgroundLocationStepScreen = () => {
         disabled: asking,
       }}
     >
+      <OnboardingNote
+        text={`OpenBeacon uses your location even when the app is closed or not in use, to share it with the groups you join. Your ${noun} shows a notice whenever it’s sharing.`}
+      />
       {!asksForLocationFirst && (
         <>
           <View className="gap-2">
@@ -175,8 +180,8 @@ const BackgroundLocationStepScreen = () => {
                       {option}
                     </Text>
                     {chosen && (
-                      <View className="rounded-full bg-primary px-2.5 py-0.5">
-                        <Text className="text-xs font-bold text-white">Pick this</Text>
+                      <View className="rounded-full bg-primary-soft px-2.5 py-0.5">
+                        <Text className="text-primary-text text-xs font-bold">Pick this</Text>
                       </View>
                     )}
                   </View>

@@ -17,7 +17,7 @@ export const planOnboarding = ({
   const firstTimeOnThisPhone = kind !== "returning";
   const steps: OnboardingStep[] = [];
   if (kind === "newDevice") steps.push("restore");
-  if (firstTimeOnThisPhone) steps.push("name", "sharing");
+  if (firstTimeOnThisPhone) steps.push("name");
   if (!notificationsEnabled) steps.push("notifications");
   if (location.missing.includes("foreground") || location.missing.includes("precise")) {
     steps.push("location");

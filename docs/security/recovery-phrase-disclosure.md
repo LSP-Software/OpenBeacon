@@ -4,7 +4,7 @@ This is user-facing text for the Beta 1 privacy and support information (OPE-163
 
 ## What a recovery phrase is
 
-A recovery phrase is 12 words that let you read your encrypted location history on a new or reinstalled phone. Your phone creates it, and you write it down on paper. OpenBeacon never sees it, can't give it back to you, and can't use it to read your history.
+A recovery phrase is 12 words that let you read your encrypted location history on a new or reinstalled phone. Your phone creates it, and you keep it somewhere safe: write it down on paper, copy the words into a password manager, or save it as a PDF. The phone makes the PDF itself, and it goes only where you choose to save or share it. OpenBeacon never sees it, can't give it back to you, and can't use it to read your history.
 
 The phrase is optional. You can set it up in Account › Recovery phrase.
 

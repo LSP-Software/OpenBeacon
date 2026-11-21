@@ -1,12 +1,5 @@
 export type OnboardingStep =
-  | "restore"
-  | "name"
-  | "sharing"
-  | "notifications"
-  | "location"
-  | "background"
-  | "recovery"
-  | "appLock";
+  "restore" | "name" | "notifications" | "location" | "background" | "recovery" | "appLock";
 
 export type OnboardingKind = "newAccount" | "newDevice" | "returning";
 

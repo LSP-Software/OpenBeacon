@@ -36,6 +36,11 @@ export const SessionDataCleanup = () => {
         clearHistoryExports(),
       ),
     );
+    void tryCatch(
+      import("../lib/recoveryPhrasePdf.ts").then(({ clearRecoveryPhrasePdfs }) =>
+        clearRecoveryPhrasePdfs(),
+      ),
+    );
   }, []);
 
   useEffect(() => {
@@ -71,6 +76,11 @@ export const SessionDataCleanup = () => {
     clearGroupColors();
     clearTrackingUploadTimes();
     void tryCatch(import("../lib/mapCache.ts").then(({ clearSavedMap }) => clearSavedMap()));
+    void tryCatch(
+      import("../lib/recoveryPhrasePdf.ts").then(({ clearRecoveryPhrasePdfs }) =>
+        clearRecoveryPhrasePdfs(),
+      ),
+    );
     void tryCatch(
       import("../lib/notifications.ts").then(({ clearEventNotices }) =>
         clearEventNotices({ keepSecurityAlerts: true }),

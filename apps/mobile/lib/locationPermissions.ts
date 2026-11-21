@@ -1,5 +1,6 @@
 import type { LocationPermissionResponse as ExpoLocationPermissionResponse } from "expo-location";
 import {
+  enableNetworkProviderAsync,
   getBackgroundPermissionsAsync,
   getForegroundPermissionsAsync,
   requestBackgroundPermissionsAsync,
@@ -169,7 +170,8 @@ export const getLocationPermissionState = async (): Promise<LocationPermissionSt
 export const requestForegroundLocationPermissions = async (): Promise<LocationPermissionState> => {
   let foregroundPermission = await getForegroundPermissionsAsync();
 
-  if (!foregroundPermission.granted) {
+  const permission = toLocationPermissionResponse(foregroundPermission);
+  if (!permission.granted || (permission.android && !getPreciseEnabled(permission))) {
     foregroundPermission = await withOwnScreen(requestForegroundPermissionsAsync);
   }
 
@@ -180,6 +182,8 @@ export const requestForegroundLocationPermissions = async (): Promise<LocationPe
     backgroundPermission: toLocationPermissionResponse(backgroundPermission),
   });
 };
+
+export const askForImprovedLocationAccuracy = () => withOwnScreen(enableNetworkProviderAsync);
 
 export const requestBackgroundLocationPermissions = async (): Promise<LocationPermissionState> => {
   const foregroundPermission = await getForegroundPermissionsAsync();
