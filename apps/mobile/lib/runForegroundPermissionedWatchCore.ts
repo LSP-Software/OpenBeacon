@@ -42,8 +42,13 @@ export const runForegroundPermissionedWatchCore = ({
     );
     starting = false;
 
-    if (watchResult.error || cancelled || getAppState() !== "active") {
-      watchResult.data?.remove();
+    if (watchResult.error) {
+      onInactive?.();
+      return;
+    }
+
+    if (cancelled || getAppState() !== "active") {
+      watchResult.data.remove();
       return;
     }
 
