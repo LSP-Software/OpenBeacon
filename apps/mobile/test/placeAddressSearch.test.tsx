@@ -10,6 +10,7 @@ import type { PlaceSearchBox, PlaceSearchOutcome } from "../modules/openbeacon-t
 let placeId: string | undefined;
 let searchAvailable = true;
 let searchOutcome: PlaceSearchOutcome = { status: "results", results: [] };
+let nearOutcome: PlaceSearchOutcome | null = null;
 let heldSearch: (() => void) | null = null;
 let holdSearches = false;
 const searches: { box: PlaceSearchBox | null; query: string }[] = [];
@@ -38,6 +39,7 @@ mock.module("expo-router", () => ({
 }));
 mock.module("lucide-react-native", () => ({
   LocateFixedIcon: () => null,
+  MapPinIcon: () => null,
   SearchIcon: () => null,
   XIcon: () => null,
 }));
@@ -114,7 +116,7 @@ mock.module("../lib/trackingModule.ts", () => ({
     searchPlaces: async (query: string, box: PlaceSearchBox | null) => {
       searches.push({ box, query });
       if (holdSearches) await new Promise<void>((resolve) => (heldSearch = resolve));
-      return searchOutcome;
+      return box && nearOutcome ? nearOutcome : searchOutcome;
     },
   }),
 }));
@@ -188,6 +190,7 @@ beforeEach(() => {
   saved.length = 0;
   heldSearch = null;
   holdSearches = false;
+  nearOutcome = null;
 });
 
 test("a phone without an address lookup service shows the bar disabled with the reason", async () => {
@@ -265,5 +268,70 @@ test("a result that arrives after moving on to naming the place is ignored", asy
   expect(flights).toHaveLength(0);
   await pressButton(root, "Save place");
   expect(saved).toHaveLength(0);
+  await act(async () => root.unmount());
+});
+
+const showMap = async (
+  root: Root,
+  center: [number, number],
+  bounds: [number, number, number, number],
+) => {
+  const map = root.container.queryAll((node) => node.type === "map")[0];
+  const onRegionDidChange = map?.props["onRegionDidChange"];
+  if (typeof onRegionDidChange !== "function") throw new Error("Map not found");
+  await act(async () =>
+    onRegionDidChange({ nativeEvent: { bounds, center, userInteraction: false, zoom: 16 } }),
+  );
+};
+
+const highStreet = (locality: string, latitude: number, longitude: number) => ({
+  ...downingStreet,
+  addressLine: `High St, ${locality}, UK`,
+  houseNumber: null,
+  street: "High Street",
+  locality,
+  postcode: null,
+  latitude,
+  longitude,
+});
+
+test("searches near the map and everywhere at once", async () => {
+  const root = await render();
+  await showMap(root, [-2.24, 53.48], [-2.26, 53.47, -2.22, 53.49]);
+  await searchFor(root, "High Street");
+
+  expect(searches).toEqual(
+    expect.arrayContaining([
+      { box: null, query: "High Street" },
+      { box: { south: 53.25, west: -2.5, north: 53.75, east: -2 }, query: "High Street" },
+    ]),
+  );
+  expect(searches).toHaveLength(2);
+  await act(async () => root.unmount());
+});
+
+test("different near and far matches are listed, and picking one moves there", async () => {
+  nearOutcome = { status: "results", results: [highStreet("Manchester", 53.4842479, -2.2378783)] };
+  searchOutcome = { status: "results", results: [highStreet("Barnet", 51.652, -0.2)] };
+  const root = await render();
+  await showMap(root, [-2.24, 53.48], [-2.26, 53.47, -2.22, 53.49]);
+  await searchFor(root, "High Street");
+
+  const rows = root.container
+    .queryAll((node) => node.type === "pressable")
+    .map((node) => node.props["accessibilityLabel"])
+    .filter((label) => typeof label === "string" && label.startsWith("High St"));
+  expect(rows).toEqual([
+    "High St, Manchester, UK, Near the map",
+    "High St, Barnet, UK, Further away",
+  ]);
+  expect(flights).toHaveLength(0);
+  expect(announcements).toEqual(["2 places found. Choose one from the list."]);
+
+  await press(root, "High St, Barnet, UK, Further away");
+  expect(flights).toHaveLength(1);
+  expect(flights[0]?.center[0]).toBeCloseTo(-0.2, 6);
+  expect(text(root)).toContain("High St, Barnet, UK");
+  expect(text(root)).not.toContain("Near the map");
   await act(async () => root.unmount());
 });

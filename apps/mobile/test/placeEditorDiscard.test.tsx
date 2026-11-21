@@ -39,6 +39,7 @@ const navigation = {
 };
 mock.module("lucide-react-native", () => ({
   LocateFixedIcon: () => null,
+  MapPinIcon: () => null,
   SearchIcon: () => null,
   XIcon: () => null,
 }));

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { PlaceSearchAddress } from "../modules/openbeacon-tracking/index.ts";
-import { placeSearchLabel, placeSearchState } from "./placeSearch.ts";
+import { placeSearchArea, placeSearchLabel, placeSearchState } from "./placeSearch.ts";
 
 const tescoBarnet: PlaceSearchAddress = {
   addressLine: "64-66 High St, Chipping Barnet, Barnet EN5 5SJ, UK",
@@ -45,37 +45,214 @@ describe("placeSearchLabel", () => {
   });
 });
 
+const edenProject: PlaceSearchAddress = {
+  addressLine: "Bodelva, Par PL24 2SG, UK",
+  houseNumber: null,
+  street: null,
+  subLocality: null,
+  locality: "Bodelva",
+  postcode: "PL24 2SG",
+  countryCode: "GB",
+  latitude: 50.3601344,
+  longitude: -4.7447178,
+};
+
+const highStreet = (locality: string, latitude: number, longitude: number) => ({
+  ...whetstone,
+  addressLine: `High St, ${locality}, UK`,
+  street: "High Street",
+  subLocality: null,
+  locality,
+  latitude,
+  longitude,
+});
+
+const northLondon = { south: 51.5, west: -0.5, north: 52, east: 0 };
+const results = (...found: PlaceSearchAddress[]) => ({
+  status: "results" as const,
+  results: found,
+});
+const failed = { status: "error" as const, message: "Timed out." };
+
 describe("placeSearchState", () => {
   test("a phone without a lookup service disables search", () => {
-    expect(placeSearchState({ status: "unavailable" })).toEqual({ kind: "unavailable" });
+    expect(placeSearchState({ anywhere: { status: "unavailable" }, near: null })).toEqual({
+      kind: "unavailable",
+    });
+    expect(
+      placeSearchState({
+        anywhere: { status: "unavailable" },
+        near: { area: northLondon, outcome: { status: "unavailable" } },
+      }),
+    ).toEqual({ kind: "unavailable" });
   });
 
   test("a failed lookup says search isn't working", () => {
-    expect(placeSearchState({ status: "error", message: "timeout" })).toEqual({ kind: "error" });
+    expect(placeSearchState({ anywhere: failed, near: null })).toEqual({ kind: "error" });
+    expect(
+      placeSearchState({ anywhere: failed, near: { area: northLondon, outcome: failed } }),
+    ).toEqual({ kind: "error" });
   });
 
   test("no matches says nothing was found", () => {
-    expect(placeSearchState({ status: "results", results: [] })).toEqual({ kind: "noResults" });
+    expect(placeSearchState({ anywhere: results(), near: null })).toEqual({ kind: "noResults" });
+    expect(
+      placeSearchState({ anywhere: results(), near: { area: northLondon, outcome: results() } }),
+    ).toEqual({ kind: "noResults" });
   });
 
-  test("moves to the first result with its label", () => {
-    expect(placeSearchState({ status: "results", results: [tescoBarnet, whetstone] })).toEqual({
+  test("a single match moves straight there", () => {
+    expect(placeSearchState({ anywhere: results(tescoBarnet), near: null })).toEqual({
       kind: "move",
-      label: "64-66 High St, Chipping Barnet, Barnet EN5 5SJ, UK",
-      latitude: 51.6531509,
-      longitude: -0.1997625,
+      result: {
+        distance: null,
+        label: "64-66 High St, Chipping Barnet, Barnet EN5 5SJ, UK",
+        latitude: 51.6531509,
+        longitude: -0.1997625,
+      },
     });
+  });
+
+  test("the same place found by both searches counts once, as near the map", () => {
+    const sameShop = { ...tescoBarnet, latitude: 51.6533, longitude: -0.1999 };
+    expect(
+      placeSearchState({
+        anywhere: results(sameShop),
+        near: { area: northLondon, outcome: results(tescoBarnet) },
+      }),
+    ).toEqual({
+      kind: "move",
+      result: {
+        distance: "near",
+        label: "64-66 High St, Chipping Barnet, Barnet EN5 5SJ, UK",
+        latitude: 51.6531509,
+        longitude: -0.1997625,
+      },
+    });
+  });
+
+  test("a match found only without the area is further away", () => {
+    expect(
+      placeSearchState({
+        anywhere: results(edenProject),
+        near: { area: northLondon, outcome: results() },
+      }),
+    ).toMatchObject({
+      kind: "move",
+      result: { distance: "further", label: "Bodelva, Par PL24 2SG, UK" },
+    });
+  });
+
+  test("a match inside the area is near the map whichever search found it", () => {
+    expect(
+      placeSearchState({
+        anywhere: results(tescoBarnet),
+        near: { area: northLondon, outcome: results() },
+      }),
+    ).toMatchObject({ kind: "move", result: { distance: "near" } });
+  });
+
+  test("different near and far matches are listed with the near ones first", () => {
+    const tyldesley = highStreet("Tyldesley", 53.514544, -2.4694598);
+    const manchester = highStreet("Manchester", 53.4842479, -2.2378783);
+    const barnet = highStreet("Barnet", 51.652, -0.2);
+    const manchesterArea = { south: 53.25, west: -2.5, north: 53.75, east: -2 };
+    const state = placeSearchState({
+      anywhere: results(barnet, manchester),
+      near: { area: manchesterArea, outcome: results(tyldesley, manchester) },
+    });
+    expect(state.kind).toBe("choose");
+    expect(
+      state.kind === "choose" ? state.results.map(({ distance, label }) => [label, distance]) : [],
+    ).toEqual([
+      ["High St, Tyldesley, UK", "near"],
+      ["High St, Manchester, UK", "near"],
+      ["High St, Barnet, UK", "further"],
+    ]);
+  });
+
+  test("one search failing still shows what the other found", () => {
+    expect(
+      placeSearchState({
+        anywhere: failed,
+        near: { area: northLondon, outcome: results(tescoBarnet) },
+      }),
+    ).toMatchObject({ kind: "move", result: { distance: "near" } });
+    expect(
+      placeSearchState({
+        anywhere: results(edenProject),
+        near: { area: northLondon, outcome: failed },
+      }),
+    ).toMatchObject({ kind: "move", result: { distance: "further" } });
+  });
+
+  test("one search failing and the other finding nothing says search isn't working", () => {
+    expect(
+      placeSearchState({ anywhere: results(), near: { area: northLondon, outcome: failed } }),
+    ).toEqual({ kind: "error" });
   });
 
   test("skips results without usable coordinates", () => {
     expect(
       placeSearchState({
-        status: "results",
-        results: [{ ...tescoBarnet, latitude: Number.NaN }, whetstone],
+        anywhere: results({ ...tescoBarnet, latitude: Number.NaN }, whetstone),
+        near: null,
       }),
-    ).toMatchObject({ kind: "move", label: "Whetstone, London, UK" });
+    ).toMatchObject({ kind: "move", result: { label: "Whetstone, London, UK" } });
     expect(
-      placeSearchState({ status: "results", results: [{ ...whetstone, latitude: 91 }] }),
+      placeSearchState({ anywhere: results({ ...whetstone, latitude: 91 }), near: null }),
     ).toEqual({ kind: "noResults" });
+  });
+});
+
+describe("placeSearchArea", () => {
+  const view = (center: [number, number], bounds: [number, number, number, number]) => ({
+    bounds,
+    center,
+  });
+
+  test("snaps the map centre to a quarter-degree grid and sends a half-degree box", () => {
+    expect(placeSearchArea(view([-0.13, 51.51], [-0.14, 51.5, -0.12, 51.52]))).toEqual({
+      south: 51.25,
+      west: -0.5,
+      north: 51.75,
+      east: 0,
+    });
+  });
+
+  test("snaps west of Greenwich the same way", () => {
+    expect(placeSearchArea(view([-2.24, 53.48], [-2.26, 53.47, -2.22, 53.49]))).toEqual({
+      south: 53.25,
+      west: -2.5,
+      north: 53.75,
+      east: -2,
+    });
+    expect(placeSearchArea(view([-0.125, 51.625], [-0.13, 51.62, -0.12, 51.63]))).toEqual({
+      south: 51.5,
+      west: -0.25,
+      north: 52,
+      east: 0.25,
+    });
+  });
+
+  test("the same rough area goes with every spot in a grid square", () => {
+    const area = placeSearchArea(view([-0.2, 51.65], [-0.21, 51.64, -0.19, 51.66]));
+    expect(placeSearchArea(view([-0.15, 51.7], [-0.16, 51.69, -0.14, 51.71]))).toEqual(area);
+  });
+
+  test("uses the visible map when it's wider than the box", () => {
+    expect(placeSearchArea(view([-0.1, 51.55], [-1, 51.2, 0.8, 51.9]))).toEqual({
+      south: 51.2,
+      west: -1,
+      north: 51.9,
+      east: 0.8,
+    });
+  });
+
+  test("sends no area at world scale", () => {
+    expect(placeSearchArea(view([0, 20], [-180, -60, 180, 80]))).toBeNull();
+    expect(placeSearchArea(view([-3, 54], [-15, 49, 9, 59]))).toBeNull();
+    expect(placeSearchArea(view([170, 0], [165, -5, -170, 5]))).toBeNull();
+    expect(placeSearchArea(null)).toBeNull();
   });
 });

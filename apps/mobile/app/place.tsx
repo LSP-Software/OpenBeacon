@@ -3,7 +3,7 @@ import { placeEmojiSchema, placeNameSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
-import { LocateFixedIcon, SearchIcon, XIcon } from "lucide-react-native";
+import { LocateFixedIcon, MapPinIcon, SearchIcon, XIcon } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AccessibilityInfo,
@@ -42,8 +42,9 @@ import {
   groupPlacesQueryOptions,
   savePlace,
 } from "../lib/placeSync.ts";
-import { placeSearchState } from "../lib/placeSearch.ts";
+import { type PlaceSearchResult, placeSearchArea, placeSearchState } from "../lib/placeSearch.ts";
 import { loadTrackingModule } from "../lib/trackingModule.ts";
+import type { PlaceSearchBox, PlaceSearchOutcome } from "../modules/openbeacon-tracking/index.ts";
 import { syncGroupPlaces } from "../lib/placeBackgroundSync.ts";
 import { userMessage } from "../lib/userMessage.ts";
 import { thisDeviceNoun } from "../lib/thisDeviceNoun.ts";
@@ -203,6 +204,10 @@ const PlaceEditor = ({
     ReturnType<typeof placeSearchState> | { kind: "searching" } | null
   >(null);
   const searchRound = useRef(0);
+  const mapView = useRef<{
+    bounds: [number, number, number, number];
+    center: [number, number];
+  } | null>(null);
   const unsaved = place
     ? center !== null &&
       !isPlaceEditUnchanged({
@@ -277,25 +282,41 @@ const PlaceEditor = ({
     const round = ++searchRound.current;
     setSearch({ kind: "searching" });
     const tracking = await loadTrackingModule();
-    const outcome = tracking
-      ? await tryCatch(tracking.searchPlaces(query, null))
-      : { data: { status: "unavailable" as const }, error: null };
+    const area = placeSearchArea(mapView.current);
+    const lookUp = async (box: PlaceSearchBox | null): Promise<PlaceSearchOutcome> => {
+      if (!tracking) return { status: "unavailable" };
+      const outcome = await tryCatch(tracking.searchPlaces(query, box));
+      return outcome.error ? { status: "error", message: outcome.error.message } : outcome.data;
+    };
+    const [anywhere, near] = await Promise.all([lookUp(null), area ? lookUp(area) : null]);
     if (round !== searchRound.current) return;
-    const next = outcome.error ? { kind: "error" as const } : placeSearchState(outcome.data);
+    const next = placeSearchState({
+      anywhere,
+      near: area && near ? { area, outcome: near } : null,
+    });
     if (next.kind === "unavailable") setSearchAvailable(false);
     if (next.kind === "move") {
-      const atZoom = Math.max(zoom, 16);
-      setMovedByUser(true);
-      setCenter({ latitude: next.latitude, longitude: next.longitude });
-      cameraRef.current?.flyTo({ center: cameraCenterFor(next, atZoom), zoom: atZoom });
+      moveTo(next.result);
+      return;
     }
     setSearch(next);
     AccessibilityInfo.announceForAccessibility(
-      next.kind === "move"
-        ? `Moved to ${next.label}. Move the map if it isn’t quite right.`
+      next.kind === "choose"
+        ? `${next.results.length} places found. Choose one from the list.`
         : next.kind === "unavailable"
           ? `Address search isn’t available on this ${thisDeviceNoun()}`
           : SEARCH_MESSAGES[next.kind],
+    );
+  };
+
+  const moveTo = (result: PlaceSearchResult) => {
+    const atZoom = Math.max(zoom, 16);
+    setMovedByUser(true);
+    setCenter({ latitude: result.latitude, longitude: result.longitude });
+    cameraRef.current?.flyTo({ center: cameraCenterFor(result, atZoom), zoom: atZoom });
+    setSearch({ kind: "move", result });
+    AccessibilityInfo.announceForAccessibility(
+      `Moved to ${result.label}. Move the map if it isn’t quite right.`,
     );
   };
 
@@ -307,7 +328,7 @@ const PlaceEditor = ({
 
   const goToNaming = () => {
     searchRound.current += 1;
-    if (search?.kind === "searching") setSearch(null);
+    if (search?.kind === "searching" || search?.kind === "choose") setSearch(null);
     setStep(2);
   };
 
@@ -431,10 +452,13 @@ const PlaceEditor = ({
         touchRotate={false}
         androidView="surface"
         onRegionIsChanging={(event) => {
+          mapView.current = { bounds: event.nativeEvent.bounds, center: event.nativeEvent.center };
+          if (event.nativeEvent.userInteraction && search?.kind === "choose") setSearch(null);
           if (event.nativeEvent.userInteraction && !movedByUser) setMovedByUser(true);
           if (center || place) updateCenter(event.nativeEvent.center, event.nativeEvent.zoom);
         }}
         onRegionDidChange={(event) => {
+          mapView.current = { bounds: event.nativeEvent.bounds, center: event.nativeEvent.center };
           if (event.nativeEvent.userInteraction && !movedByUser) setMovedByUser(true);
           if (center || place || event.nativeEvent.userInteraction) {
             updateCenter(event.nativeEvent.center, event.nativeEvent.zoom);
@@ -536,6 +560,50 @@ const PlaceEditor = ({
             </View>
           )}
         </View>
+        {step === 1 && search?.kind === "choose" ? (
+          <View className="rounded-2xl bg-card px-3 py-1 shadow-md shadow-black/15">
+            {search.results.map((result, index) => {
+              const [title, ...rest] = result.label.split(", ");
+              const tag =
+                result.distance === "near"
+                  ? "Near the map"
+                  : result.distance === "further"
+                    ? "Further away"
+                    : null;
+              return (
+                <Pressable
+                  key={`${result.latitude},${result.longitude}`}
+                  accessibilityRole="button"
+                  accessibilityLabel={tag ? `${result.label}, ${tag}` : result.label}
+                  onPress={() => moveTo(result)}
+                  className={cn(
+                    "flex-row items-center gap-3 py-3",
+                    index > 0 && "border-t border-border",
+                  )}
+                >
+                  <View className="size-9 items-center justify-center rounded-full bg-primary-soft">
+                    <Icon as={MapPinIcon} size={18} className="text-primary-text" />
+                  </View>
+                  <View className="flex-1 gap-0.5">
+                    <View className="flex-row flex-wrap items-center gap-2">
+                      <Text className="font-bold text-foreground">{title}</Text>
+                      {tag ? (
+                        <View className="rounded-full bg-primary-soft px-2 py-0.5">
+                          <Text className="text-xs font-semibold text-primary-text">{tag}</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    {rest.length > 0 ? (
+                      <Text className="text-sm text-tertiary" numberOfLines={1}>
+                        {rest.join(", ")}
+                      </Text>
+                    ) : null}
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
         {step === 1 && (search?.kind === "noResults" || search?.kind === "error") ? (
           <View className="rounded-2xl bg-card px-4 py-3 shadow-md shadow-black/15">
             <Text
@@ -588,8 +656,9 @@ const PlaceEditor = ({
                 {search?.kind === "move" ? (
                   <View className="rounded-xl bg-primary-soft px-4 py-3">
                     <Text accessibilityLiveRegion="polite" className="text-foreground">
-                      Moved to <Text className="font-bold text-foreground">{search.label}</Text>.
-                      Move the map if it isn’t quite right.
+                      Moved to{" "}
+                      <Text className="font-bold text-foreground">{search.result.label}</Text>. Move
+                      the map if it isn’t quite right.
                     </Text>
                   </View>
                 ) : (
