@@ -64,9 +64,19 @@
       "env": ["ANDROID_HOME", "ANDROID_SDK_ROOT", "CI"],
       "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/scripts/test-offline-tracking-queue.sh"]
     },
+    "@openbeacon/map-tiles-cli#test": {
+      "dependsOn": ["^db:generate"],
+      "outputs": [],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/apps/backend/src/version.ts"]
+    },
     "typecheck": {
       "dependsOn": ["db:generate", "^db:generate"],
       "outputs": []
+    },
+    "@openbeacon/map-tiles-cli#typecheck": {
+      "dependsOn": ["db:generate", "^db:generate"],
+      "outputs": [],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/apps/backend/src/version.ts"]
     },
     "db:generate": {
       "dependsOn": ["^db:generate"],

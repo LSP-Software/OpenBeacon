@@ -24,6 +24,7 @@ type ApiCompatibilityLevels = { level: number; minClient: number; minServer: num
 type Versions = {
   client: { version: string; buildNumber: number; versionCode: number };
   server: string;
+  oldestSupportedApp?: string;
   apiCompatibility: ApiCompatibilityLevels | null;
   rootPackage?: string;
 };
@@ -117,6 +118,48 @@ const findApiCompatibilityProblems = ({ base, head }: { base: Versions; head: Ve
   return problems;
 };
 
+const findOldestSupportedAppProblems = ({ base, head }: { base: Versions; head: Versions }) => {
+  const oldest = head.oldestSupportedApp;
+  if (!oldest) return [];
+  const problems: string[] = [];
+  const previous = base.oldestSupportedApp;
+  if (isSemverGreater(oldest, head.client.version)) {
+    problems.push(
+      `oldestSupportedAppVersion (${oldest}) in ${serverVersionPath} can't be above expo.version (${head.client.version}): set it to ${head.client.version} or lower.`,
+    );
+  }
+  if (previous && isSemverGreater(previous, oldest)) {
+    problems.push(
+      `oldestSupportedAppVersion in ${serverVersionPath} can't go down (was ${previous}, now ${oldest}): set it back to ${previous} or later.`,
+    );
+  }
+  const levels = head.apiCompatibility;
+  const previousLevels = base.apiCompatibility;
+  if (!levels || !previousLevels) return problems;
+  if (levels.minClient > previousLevels.level) {
+    if (oldest !== head.client.version) {
+      problems.push(
+        `minClientApiCompatibilityLevel rose to the new level ${levels.minClient}: set oldestSupportedAppVersion in ${serverVersionPath} to ${head.client.version}.`,
+      );
+    }
+  } else if (levels.minClient > previousLevels.minClient) {
+    if (previous && !isSemverGreater(oldest, previous)) {
+      problems.push(
+        `minClientApiCompatibilityLevel rose to ${levels.minClient}: set oldestSupportedAppVersion in ${serverVersionPath} above ${previous}, to the first app version on level ${levels.minClient}.`,
+      );
+    }
+  } else if (
+    levels.minClient === previousLevels.minClient &&
+    previous &&
+    isSemverGreater(oldest, previous)
+  ) {
+    problems.push(
+      `minClientApiCompatibilityLevel didn't change: set oldestSupportedAppVersion in ${serverVersionPath} back to ${previous}.`,
+    );
+  }
+  return problems;
+};
+
 export const parseClientVersion = (appJson: string): Versions["client"] => {
   const config: {
     expo?: {
@@ -145,6 +188,23 @@ export const parseServerVersion = (source: string) => {
   const version = /export const serverVersion = "([^"]+)";/.exec(source)?.[1];
   if (!version) {
     throw new Error(`${serverVersionPath} must export serverVersion`);
+  }
+  parseSemver(version);
+  return version;
+};
+
+export const parseOldestSupportedAppVersion = (
+  source: string,
+  { required }: { required: boolean },
+) => {
+  const version = /export const oldestSupportedAppVersion = "([^"]+)";/.exec(source)?.[1];
+  if (!version) {
+    if (required) {
+      throw new Error(
+        `${serverVersionPath} must export oldestSupportedAppVersion as a major.minor.patch version`,
+      );
+    }
+    return undefined;
   }
   parseSemver(version);
   return version;
@@ -206,7 +266,11 @@ export const findMissingVersionBumps = ({
     );
   }
 
-  return [...problems, ...findApiCompatibilityProblems({ base, head })];
+  return [
+    ...problems,
+    ...findApiCompatibilityProblems({ base, head }),
+    ...findOldestSupportedAppProblems({ base, head }),
+  ];
 };
 
 if (import.meta.main) {
@@ -215,15 +279,22 @@ if (import.meta.main) {
   const changedFiles = (await Bun.$`git diff --name-only ${mergeBase} HEAD`.text())
     .split("\n")
     .filter(Boolean);
-  const readVersions = async (ref: string): Promise<Versions> => ({
-    client: parseClientVersion(await Bun.$`git show ${ref}:${appConfigPath}`.text()),
-    server: parseServerVersion(await Bun.$`git show ${ref}:${serverVersionPath}`.text()),
-    apiCompatibility: await (async () => {
-      const source = await Bun.$`git show ${ref}:${apiCompatibilityPath}`.quiet().nothrow();
-      return source.exitCode === 0 ? parseApiCompatibilityLevels(source.text()) : null;
-    })(),
-    rootPackage: parseRootPackage(await Bun.$`git show ${ref}:package.json`.text()),
-  });
+  const readVersions = async (ref: string): Promise<Versions> => {
+    const serverSource = await Bun.$`git show ${ref}:${serverVersionPath}`.text();
+    const oldestSupportedApp = parseOldestSupportedAppVersion(serverSource, {
+      required: ref === "HEAD",
+    });
+    return {
+      client: parseClientVersion(await Bun.$`git show ${ref}:${appConfigPath}`.text()),
+      server: parseServerVersion(serverSource),
+      ...(oldestSupportedApp ? { oldestSupportedApp } : {}),
+      apiCompatibility: await (async () => {
+        const source = await Bun.$`git show ${ref}:${apiCompatibilityPath}`.quiet().nothrow();
+        return source.exitCode === 0 ? parseApiCompatibilityLevels(source.text()) : null;
+      })(),
+      rootPackage: parseRootPackage(await Bun.$`git show ${ref}:package.json`.text()),
+    };
+  };
 
   const problems = findMissingVersionBumps({
     changedFiles,

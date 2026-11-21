@@ -3,6 +3,7 @@ import {
   findMissingVersionBumps,
   parseApiCompatibilityLevels,
   parseClientVersion,
+  parseOldestSupportedAppVersion,
   parseRootPackage,
   parseServerVersion,
 } from "./check-version-bump.ts";
@@ -317,6 +318,103 @@ describe("API compatibility levels", () => {
   });
 });
 
+describe("oldest supported app version", () => {
+  const serverFile = ["apps/backend/src/version.ts"];
+  const newLevel = { level: 4, minClient: 4, minServer: 4 };
+
+  test("allows it unchanged when the minimum is unchanged and the app is bumped", () => {
+    expect(
+      findMissingVersionBumps({
+        changedFiles: ["apps/mobile/app/index.tsx", ...serverFile],
+        base: { ...base, oldestSupportedApp: "1.0.0" },
+        head: { ...bumped, oldestSupportedApp: "1.0.0" },
+      }),
+    ).toEqual([]);
+  });
+
+  test("rejects it above expo.version", () => {
+    expect(
+      findMissingVersionBumps({
+        changedFiles: serverFile,
+        base,
+        head: { ...bumped, oldestSupportedApp: "1.2.0" },
+      }),
+    ).toEqual([
+      "oldestSupportedAppVersion (1.2.0) in apps/backend/src/version.ts can't be above expo.version (1.0.5): set it to 1.0.5 or lower.",
+    ]);
+  });
+
+  test("rejects it going down", () => {
+    expect(
+      findMissingVersionBumps({
+        changedFiles: serverFile,
+        base: { ...base, oldestSupportedApp: "1.0.2" },
+        head: { ...bumped, oldestSupportedApp: "1.0.1" },
+      }),
+    ).toEqual([
+      "oldestSupportedAppVersion in apps/backend/src/version.ts can't go down (was 1.0.2, now 1.0.1): set it back to 1.0.2 or later.",
+    ]);
+  });
+
+  test("rejects a change while the client minimum stays the same", () => {
+    expect(
+      findMissingVersionBumps({
+        changedFiles: serverFile,
+        base: { ...base, oldestSupportedApp: "1.0.0" },
+        head: { ...bumped, oldestSupportedApp: "1.0.3" },
+      }),
+    ).toEqual([
+      "minClientApiCompatibilityLevel didn't change: set oldestSupportedAppVersion in apps/backend/src/version.ts back to 1.0.0.",
+    ]);
+  });
+
+  test("requires the new app version when the client minimum rises to a brand-new level", () => {
+    expect(
+      findMissingVersionBumps({
+        changedFiles: levelFile,
+        base: { ...base, oldestSupportedApp: "1.0.0" },
+        head: { ...minorBump, oldestSupportedApp: "1.0.0", apiCompatibility: newLevel },
+      }),
+    ).toEqual([
+      "minClientApiCompatibilityLevel rose to the new level 4: set oldestSupportedAppVersion in apps/backend/src/version.ts to 1.1.0.",
+    ]);
+    expect(
+      findMissingVersionBumps({
+        changedFiles: levelFile,
+        base,
+        head: { ...minorBump, oldestSupportedApp: "1.0.4", apiCompatibility: newLevel },
+      }),
+    ).toHaveLength(1);
+    expect(
+      findMissingVersionBumps({
+        changedFiles: levelFile,
+        base: { ...base, oldestSupportedApp: "1.0.0" },
+        head: { ...minorBump, oldestSupportedApp: "1.1.0", apiCompatibility: newLevel },
+      }),
+    ).toEqual([]);
+  });
+
+  test("requires it to go up when the client minimum rises to an existing level", () => {
+    const head = { ...minorBump, apiCompatibility: { ...levels, minClient: 3 } };
+    expect(
+      findMissingVersionBumps({
+        changedFiles: levelFile,
+        base: { ...base, oldestSupportedApp: "1.0.0" },
+        head: { ...head, oldestSupportedApp: "1.0.0" },
+      }),
+    ).toEqual([
+      "minClientApiCompatibilityLevel rose to 3: set oldestSupportedAppVersion in apps/backend/src/version.ts above 1.0.0, to the first app version on level 3.",
+    ]);
+    expect(
+      findMissingVersionBumps({
+        changedFiles: levelFile,
+        base: { ...base, oldestSupportedApp: "1.0.0" },
+        head: { ...head, oldestSupportedApp: "1.0.3" },
+      }),
+    ).toEqual([]);
+  });
+});
+
 describe("version parsing", () => {
   test("reads the client versions from app.json", () => {
     expect(
@@ -335,5 +433,33 @@ describe("version parsing", () => {
   test("reads the server version and rejects non-semver values", () => {
     expect(parseServerVersion('export const serverVersion = "0.2.0";\n')).toBe("0.2.0");
     expect(() => parseServerVersion('export const serverVersion = "beta";\n')).toThrow();
+  });
+
+  test("reads the oldest supported app version from the real file", async () => {
+    const source = await Bun.file(
+      new URL("../apps/backend/src/version.ts", import.meta.url),
+    ).text();
+    expect(parseOldestSupportedAppVersion(source, { required: true })).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+
+  test("requires HEAD to export a valid oldest supported app version", () => {
+    expect(() =>
+      parseOldestSupportedAppVersion('export const serverVersion = "0.2.0";\n', {
+        required: true,
+      }),
+    ).toThrow("apps/backend/src/version.ts must export oldestSupportedAppVersion");
+    expect(() =>
+      parseOldestSupportedAppVersion('export const oldestSupportedAppVersion = "beta";\n', {
+        required: true,
+      }),
+    ).toThrow();
+  });
+
+  test("lets an older base branch lack the oldest supported app version", () => {
+    expect(
+      parseOldestSupportedAppVersion('export const serverVersion = "0.2.0";\n', {
+        required: false,
+      }),
+    ).toBe(undefined);
   });
 });

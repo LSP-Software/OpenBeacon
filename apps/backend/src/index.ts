@@ -4,7 +4,11 @@ import { env as apiEnv } from "@openbeacon/api/env.ts";
 import { mapEnv } from "@openbeacon/api/mapEnv.ts";
 import { getMapTilesManifest } from "@openbeacon/api/mapStorage.ts";
 import { backgroundWork, securityAlerts } from "@openbeacon/auth";
-import { tryCatch } from "@openbeacon/shared";
+import {
+  apiCompatibilityLevel,
+  minClientApiCompatibilityLevel,
+  tryCatch,
+} from "@openbeacon/shared";
 import { refreshAnnouncements } from "./announcements.ts";
 import { app } from "./app.ts";
 import { cache } from "./cache.ts";
@@ -13,6 +17,7 @@ import { env } from "./env.ts";
 import { findHttpsWarnings } from "./findHttpsWarnings.ts";
 import { authenticateCloudflare, resolveClientIp } from "./helpers/clientIp.ts";
 import { shutDownGracefully } from "./shutdown.ts";
+import { oldestSupportedAppVersion, serverVersion } from "./version.ts";
 
 for (const warning of findHttpsWarnings({
   BETTER_AUTH_URL: env.BETTER_AUTH_URL,
@@ -93,6 +98,17 @@ const server = Bun.serve({
   idleTimeout: 60,
   maxRequestBodySize: 8 * 1024 * 1024,
 });
+
+console.log(
+  [
+    `OpenBeacon backend ${serverVersion} (Bun ${Bun.version}) started at ${new Date().toISOString()}`,
+    `  Listening on ${server.url.host}`,
+    `  Public URL: ${new URL(env.BETTER_AUTH_URL).origin}`,
+    `  Server name: ${env.SERVER_NAME}`,
+    `  SELF_HOSTED=${env.SELF_HOSTED}, TRUSTED_PROXY_PROVIDER=${env.TRUSTED_PROXY_PROVIDER}`,
+    `  Accepts OpenBeacon app ${oldestSupportedAppVersion} and later (API compatibility level ${apiCompatibilityLevel}, oldest accepted app level ${minClientApiCompatibilityLevel})`,
+  ].join("\n"),
+);
 
 let stopping = false;
 const stop = async (signal: string) => {
