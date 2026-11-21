@@ -1,6 +1,6 @@
 export type SpeedUnit = "mph" | "kmh";
 
-export const MOVING_SPEED_MPS = 1;
+const MOVING_SPEED_MPS = 1;
 const MAX_SHOWN_SPEED_MPS = 90;
 export const LIVE_SPEED_MAX_AGE_MS = 3 * 60_000;
 
