@@ -40,6 +40,7 @@ import { useTimelineDay, useTimelineDays } from "../hooks/useTimeline.ts";
 import { trpc } from "../lib/api.ts";
 import { authClient } from "../lib/auth-client.ts";
 import { initialsFromName } from "../lib/buildLiveMapMarkers.ts";
+import { mapFitBounds } from "../lib/fitLiveMapMarkers.ts";
 import { historyShareNote, timelineEmptyLines } from "../lib/historyShare.ts";
 import { cn } from "../lib/cn.ts";
 import { GROUP_COLOR_PALETTE, getGroupColor } from "../lib/groupColor.ts";
@@ -475,22 +476,18 @@ const TimelineView = ({
       }
     }
     const coordinates = routes.flatMap((route) => [
-      ...route.line,
-      ...route.pauses.flat(),
-      ...route.stops.map((stop): [number, number] => [stop.longitude, stop.latitude]),
+      ...[...route.line, ...route.pauses.flat()].map(([longitude, latitude]) => ({
+        latitude,
+        longitude,
+      })),
+      ...route.stops,
     ]);
     if (coordinates.length === 0) return;
-    const longitudes = coordinates.map(([longitude]) => longitude);
-    const latitudes = coordinates.map(([, latitude]) => latitude);
-    cameraRef.current?.fitBounds(
-      [
-        Math.min(...longitudes),
-        Math.min(...latitudes),
-        Math.max(...longitudes),
-        Math.max(...latitudes),
-      ],
-      { duration: 600, padding: cameraPadding },
-    );
+    const { ne, sw } = mapFitBounds(coordinates);
+    cameraRef.current?.fitBounds([sw[0], sw[1], ne[0], ne[1]], {
+      duration: 600,
+      padding: cameraPadding,
+    });
   }, [fit.key]);
 
   const followLongitude = selectedPin?.position.longitude;

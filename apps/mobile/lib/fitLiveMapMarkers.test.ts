@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { LiveMapMarker } from "./buildLiveMapMarkers.ts";
-import { fitLiveMapMarkers } from "./fitLiveMapMarkers.ts";
+import { fitLiveMapMarkers, mapFitBounds } from "./fitLiveMapMarkers.ts";
 
 const padding = {
   paddingBottom: 48,
@@ -231,5 +231,29 @@ describe("fitLiveMapMarkers", () => {
       duration: 0,
       easing: "ease",
     });
+  });
+});
+
+describe("mapFitBounds", () => {
+  test("keeps a day spent in one spot at neighbourhood scale", () => {
+    const { ne, sw } = mapFitBounds([
+      { latitude: 51.50001, longitude: -0.12001 },
+      { latitude: 51.50003, longitude: -0.12002 },
+      { latitude: 51.50002, longitude: -0.12004 },
+    ]);
+
+    expect(ne[1] - sw[1]).toBeCloseTo(0.02, 6);
+    expect(ne[0] - sw[0]).toBeCloseTo(0.02, 6);
+    expect((ne[1] + sw[1]) / 2).toBeCloseTo(51.50002, 6);
+    expect((ne[0] + sw[0]) / 2).toBeCloseTo(-0.120025, 6);
+  });
+
+  test("leaves a day of travel at its own bounds", () => {
+    expect(
+      mapFitBounds([
+        { latitude: 51.5, longitude: -0.12 },
+        { latitude: 51.75, longitude: -1.25 },
+      ]),
+    ).toEqual({ ne: [-0.12, 51.75], sw: [-1.25, 51.5] });
   });
 });

@@ -51,7 +51,7 @@ export const fitLiveMapMarkers = ({
     return duration;
   }
 
-  const bounds = computeLiveMapFitBounds(validMarkers);
+  const bounds = mapFitBounds(validMarkers);
   camera.fitBounds([bounds.sw[0], bounds.sw[1], bounds.ne[0], bounds.ne[1]], {
     padding: paddingConfig,
     duration,
@@ -81,7 +81,7 @@ export const liveMapMarkersCenter = (
   ];
 };
 
-const computeLiveMapFitBounds = (markers: readonly LiveMapMarker[]) => {
+export const mapFitBounds = (markers: readonly { latitude: number; longitude: number }[]) => {
   const latitudes = markers.map((marker) => marker.latitude);
   let north = Math.max(...latitudes);
   let south = Math.min(...latitudes);
