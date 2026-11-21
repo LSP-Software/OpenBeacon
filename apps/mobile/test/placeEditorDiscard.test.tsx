@@ -37,8 +37,14 @@ const navigation = {
   },
   dispatch: (action: { type: string }) => dispatched.push(action),
 };
-mock.module("lucide-react-native", () => ({ LocateFixedIcon: () => null, XIcon: () => null }));
+mock.module("lucide-react-native", () => ({
+  LocateFixedIcon: () => null,
+  MapPinIcon: () => null,
+  SearchIcon: () => null,
+  XIcon: () => null,
+}));
 mock.module("react-native", () => ({
+  AccessibilityInfo: { announceForAccessibility: () => {} },
   ActivityIndicator: element("activity-indicator"),
   BackHandler: { addEventListener: () => ({ remove: () => {} }) },
   KeyboardAvoidingView: element("keyboard-avoiding-view"),
@@ -98,6 +104,9 @@ mock.module("../lib/placeSync.ts", () => ({
   savePlace: async () => ({ place: { id: "home" } }),
 }));
 mock.module("../lib/placeBackgroundSync.ts", () => ({ syncGroupPlaces: async () => {} }));
+mock.module("../lib/trackingModule.ts", () => ({
+  loadTrackingModule: async () => ({ isPlaceSearchAvailable: () => true }),
+}));
 
 const { getSnapshot } = await import("../lib/alert.ts");
 const { default: PlaceScreen } = await import("../app/place.tsx");

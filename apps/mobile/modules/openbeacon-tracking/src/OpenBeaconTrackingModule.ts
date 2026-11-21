@@ -59,6 +59,31 @@ export type QueuedPlaceTransition = {
   occurredAt: number;
 };
 
+export type PlaceSearchAddress = {
+  addressLine: string | null;
+  houseNumber: string | null;
+  street: string | null;
+  subLocality: string | null;
+  locality: string | null;
+  postcode: string | null;
+  countryCode: string | null;
+  latitude: number;
+  longitude: number;
+  name?: string | null;
+};
+
+export type PlaceSearchBox = {
+  south: number;
+  west: number;
+  north: number;
+  east: number;
+};
+
+export type PlaceSearchOutcome =
+  | { status: "results"; results: PlaceSearchAddress[] }
+  | { status: "unavailable" }
+  | { status: "error"; message: string };
+
 export type NoticeKind =
   | "appTooOld"
   | "serverTooOld"
@@ -145,6 +170,8 @@ declare class OpenBeaconTrackingModule extends NativeModule<{
     link: string,
   ): boolean;
   clearEventNotices(keepSecurityAlerts: boolean): Promise<void>;
+  isPlaceSearchAvailable(): boolean;
+  searchPlaces(query: string, box: PlaceSearchBox | null): Promise<PlaceSearchOutcome>;
 }
 
 export default requireNativeModule<OpenBeaconTrackingModule>("OpenBeaconTracking");

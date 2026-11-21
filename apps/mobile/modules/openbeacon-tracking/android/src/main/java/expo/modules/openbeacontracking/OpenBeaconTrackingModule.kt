@@ -13,9 +13,12 @@ import expo.modules.openbeacontracking.capture.UploadTasks
 import expo.modules.openbeacontracking.crypto.GroupPayloadEncrypt
 import expo.modules.openbeacontracking.keys.ProvisionedEpochKey
 import expo.modules.openbeacontracking.places.PlaceGeofence
+import expo.modules.openbeacontracking.places.PlaceSearch
+import expo.modules.openbeacontracking.places.PlaceSearchBox
 import expo.modules.openbeacontracking.push.PushRuntime
 import expo.modules.openbeacontracking.queue.CiphertextQueueRow
 import expo.modules.openbeacontracking.queue.CiphertextQueueDatabase
+import expo.modules.kotlin.Promise
 import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -119,6 +122,18 @@ class OpenBeaconTrackingModule : Module() {
 
       AsyncFunction("deletePlaceTransitions") { clientIds: List<String> ->
         TrackingRuntime.placeDetection(requireContext()).acknowledge(clientIds)
+      }
+
+      Function("isPlaceSearchAvailable") {
+        PlaceSearch.isAvailable()
+      }
+
+      AsyncFunction("searchPlaces") { query: String, box: Map<String, Any?>?, promise: Promise ->
+        val parsed =
+          box?.let {
+            PlaceSearchBox(it.doubleValue("south"), it.doubleValue("west"), it.doubleValue("north"), it.doubleValue("east"))
+          }
+        PlaceSearch.search(requireContext(), query, parsed) { promise.resolve(it) }
       }
 
       Function("showEventNotice") { kind: String, key: String, title: String, body: String?, groupName: String?, link: String ->

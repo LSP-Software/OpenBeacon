@@ -108,6 +108,14 @@ public class OpenBeaconTrackingModule: Module {
       try TrackingRuntime.places.acknowledge(clientIds: clientIds)
     }
 
+    Function("isPlaceSearchAvailable") { () -> Bool in
+      false
+    }
+
+    AsyncFunction("searchPlaces") { (_: String, _: [String: Double]?) -> [String: String] in
+      ["status": "unavailable"]
+    }
+
     Function("showEventNotice") { (kind: String, key: String, title: String, body: String?, groupName: String?, link: String) -> Bool in
       Notices.showEvent(kind: kind, key: key, title: title, body: body, groupName: groupName, link: link)
     }
