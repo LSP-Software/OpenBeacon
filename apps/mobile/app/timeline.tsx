@@ -782,6 +782,7 @@ const TimelineView = ({
     timeline && time >= timeline.day.end
       ? formatTimelineDayEnd(timeline.day.end, uses24HourClock)
       : formatClock(time);
+  const dayLabel = day ? formatDate(day.start) : "";
 
   const scrubTo = (value: number) => {
     setPlaying(false);
@@ -941,7 +942,9 @@ const TimelineView = ({
       <TimelinePlayerCard
         bottom={insets.bottom + 8}
         card={card}
-        miniDate={day ? formatDate(day.start) : ""}
+        miniStatus={
+          status && status.title !== dayLabel ? `${status.title} · ${dayLabel}` : dayLabel
+        }
         miniScrubber={
           timeline ? (
             <TimelineMiniScrubber

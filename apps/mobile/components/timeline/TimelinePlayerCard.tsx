@@ -22,13 +22,13 @@ export const TimelinePlayerCard = ({
   bottom,
   card,
   children,
-  miniDate,
+  miniStatus,
   miniScrubber,
 }: {
   bottom: number;
   card: PlayerCard;
   children: ReactNode;
-  miniDate: string;
+  miniStatus: string;
   miniScrubber: ReactNode;
 }) => (
   <View
@@ -67,11 +67,12 @@ export const TimelinePlayerCard = ({
             >
               <View style={card.miniSlots.clock} onLayout={card.measure("miniClock")} />
               <Text
+                accessibilityLiveRegion="polite"
                 className="text-xs text-secondary"
                 maxFontSizeMultiplier={1.5}
                 numberOfLines={1}
               >
-                {miniDate}
+                {miniStatus}
               </Text>
             </View>
             <View
