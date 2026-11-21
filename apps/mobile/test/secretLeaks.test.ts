@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { encodeBase64, generateRecoveryPhrase } from "@openbeacon/encryption";
+import { encodeBase64, generateRecoveryPhrase, parseRecoveryPhrase } from "@openbeacon/encryption";
 import { expectNoSecretsIn } from "./secretLeaks.testUtil.ts";
 
 const key = Uint8Array.from({ length: 32 }, (_, index) => (index * 37 + 171) % 256);
@@ -12,6 +12,22 @@ describe("expectNoSecretsIn", () => {
       expectNoSecretsIn(
         { groupId: "group-1", ciphertext: encodeBase64(new Uint8Array(32).fill(7)) },
         { secrets: [key], phrases: [phrase] },
+      ),
+    ).not.toThrow();
+  });
+
+  test("passes when phrase words only appear in key names or as JSON booleans", () => {
+    const keyWordPhrase = parseRecoveryPhrase(
+      "distance true chalk click usage purchase message group fog crew tourist behind",
+    );
+    expect(() =>
+      expectNoSecretsIn(
+        {
+          storage: new Map([["group.color.household", "1"]]),
+          settings: { "group.enabled": true, confirmReset: true },
+          nullPrototype: Object.assign(Object.create(null), { "group.muted": false }),
+        },
+        { secrets: [key], phrases: [keyWordPhrase] },
       ),
     ).not.toThrow();
   });
@@ -38,6 +54,8 @@ describe("expectNoSecretsIn", () => {
     ["the phrase joined by nothing", { phrase: words.join("") }],
     ["the phrase as an array", { phrase: words }],
     ["the phrase words as object keys", words.map((word) => ({ [word]: true }))],
+    ["one phrase word as a storage value", new Map([["recovery.hint", words[3]]])],
+    ["one phrase word as an object value", { hint: `${words[3]} first` }],
     ["a redacted key object", { privateKey: "[REDACTED]" }],
   ])("catches %s", (_name, leak) => {
     expect(() => expectNoSecretsIn(leak, { secrets: [key], phrases: [phrase] })).toThrow();
