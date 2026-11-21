@@ -1,0 +1,23 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="common.css"><script src="parts.js"></script></head><body><script>
+document.body.innerHTML = [
+
+frame("A1 · Search bar on the map","Search replaces the title pill; the sheet is unchanged",
+ `<div class="fab" style="left:16px;top:48px">${I.x}</div>
+  <div class="pill" style="left:74px;right:16px;top:48px;font-weight:400;color:#9a93ab;gap:10px">${I.search} Search address or postcode</div>
+  ${locBtn(108)}${circle(195,330,150)}${pin(195,330)}
+  <div class="sheet"><div class="step">ADD PLACE TO FAMILY · STEP 1 OF 2</div><h2>Where is it?</h2>
+  <div class="hint">Search, or move the map so the pin sits on the place.</div>${sizeBlock}<div class="btn">Next</div></div>`),
+frame("A2 · Typing, then search","Results drop down under the bar; Android shows up to two",
+ `<div class="fab" style="left:16px;top:48px">${I.back}</div>
+  <div class="pill" style="left:74px;right:16px;top:48px;font-weight:400;gap:10px">${I.search} High Street<span style="margin-left:auto">${I.xs}</span></div>
+  <div style="position:absolute;left:16px;right:16px;top:106px;background:#fff;border-radius:16px;padding:4px 12px;box-shadow:0 4px 14px rgba(0,0,0,.15)">${results}</div>
+  <div class="kbd"></div>`),
+frame("A3 · Picked a result","Map flies there; the sheet says where it landed",
+ `<div class="fab" style="left:16px;top:48px">${I.x}</div>
+  <div class="pill" style="left:74px;right:16px;top:48px;font-weight:400;gap:10px">${I.search} High Street<span style="margin-left:auto">${I.xs}</span></div>
+  ${locBtn(108)}${circle(195,330,150)}${pin(195,330)}
+  <div class="sheet"><div class="step">ADD PLACE TO FAMILY · STEP 1 OF 2</div><h2>Where is it?</h2>
+  <div class="note">Moved to <b>64–66 High St, Chipping Barnet</b>. Move the map if it isn’t quite right.</div>${sizeBlock}<div class="btn">Next</div></div>`)
+
+].join("");
+</script></body></html>

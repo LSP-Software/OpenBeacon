@@ -1,0 +1,21 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="common.css"><script src="parts.js"></script></head><body><script>
+document.body.innerHTML = [
+
+frame("B1 · Search inside the sheet","A field at the top of step 1; the map stays clear",
+ `${topBar("Add place to Family")}${locBtn(108)}${circle(195,300,150)}${pin(195,300)}
+  <div class="sheet"><div class="step">STEP 1 OF 2</div><h2>Where is it?</h2>
+  <div class="field ph">${I.search} Search address or postcode</div>
+  <div class="hint" style="margin-top:10px">Or move the map so the pin sits on the place.</div>${sizeBlock}<div class="btn">Next</div></div>`),
+frame("B2 · Searching","The sheet grows into a results list; size and Next hide until you pick",
+ `${topBar("Add place to Family")}
+  <div class="sheet" style="bottom:280px"><div class="step">STEP 1 OF 2</div><h2>Where is it?</h2>
+  <div class="field" style="border-color:#E6005C">${I.search} High Street<span style="margin-left:auto">${I.xs}</span></div>
+  <div style="margin-top:6px">${results}</div><div class="btn2" style="margin-top:8px">Cancel search</div></div><div class="kbd"></div>`),
+frame("B3 · Picked a result","Back to the normal sheet with a note",
+ `${topBar("Add place to Family")}${locBtn(108)}${circle(195,280,150)}${pin(195,280)}
+  <div class="sheet"><div class="step">STEP 1 OF 2</div><h2>Where is it?</h2>
+  <div class="field">${I.search} High Street<span style="margin-left:auto">${I.xs}</span></div>
+  <div class="note" style="margin-top:10px">Moved to <b>64–66 High St, Chipping Barnet</b>. Move the map if it isn’t quite right.</div>${sizeBlock}<div class="btn">Next</div></div>`)
+
+].join("");
+</script></body></html>

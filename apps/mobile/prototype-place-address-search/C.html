@@ -1,0 +1,25 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="common.css"><script src="parts.js"></script></head><body><script>
+document.body.innerHTML = [
+
+frame("C1 · Search first","New first step: a plain page, field focused; map is one tap away",
+ `<div style="position:absolute;inset:0;background:#fff;padding:52px 18px">
+  <div style="display:flex;gap:12px;align-items:center">${I.x}<b style="font-size:18px;color:#1c1530">Add place to Family</b></div>
+  <div class="step" style="margin-top:26px">STEP 1 OF 3</div><h2>Find it</h2>
+  <div class="field ph" style="border-color:#E6005C">${I.search} Address, postcode or place</div>
+  <div class="res" style="margin-top:12px"><div class="ic">${I.loc}</div><div><b>Use my location</b><i>Start from where you are now</i></div></div>
+  <div class="res"><div class="ic">${I.pinI}</div><div><b>Choose on the map</b><i>Move the map to the spot yourself</i></div></div></div><div class="kbd"></div>`),
+frame("C2 · Results","Full-page list; up to two on Android, more on iOS",
+ `<div style="position:absolute;inset:0;background:#fff;padding:52px 18px">
+  <div style="display:flex;gap:12px;align-items:center">${I.x}<b style="font-size:18px;color:#1c1530">Add place to Family</b></div>
+  <div class="step" style="margin-top:26px">STEP 1 OF 3</div><h2>Find it</h2>
+  <div class="field">${I.search} High Street<span style="margin-left:auto">${I.xs}</span></div>
+  <div style="margin-top:8px">${results}</div>
+  <div class="res"><div class="ic">${I.pinI}</div><div><b>Choose on the map</b><i>Move the map to the spot yourself</i></div></div></div><div class="kbd"></div>`),
+frame("C3 · Check the spot","Today’s map step, now step 2, starting at the result",
+ `${topBar("Add place to Family")}${locBtn(108)}${circle(195,330,150)}${pin(195,330)}
+  <div class="sheet"><div class="step">STEP 2 OF 3</div><h2>Check the spot</h2>
+  <div class="note">We found <b>64–66 High St, Chipping Barnet</b>. Move the map if the pin isn’t quite right.</div>${sizeBlock}
+  <div style="display:flex;gap:10px"><div class="btn2" style="flex:1">Back</div><div class="btn" style="flex:1">Next</div></div></div>`)
+
+].join("");
+</script></body></html>
