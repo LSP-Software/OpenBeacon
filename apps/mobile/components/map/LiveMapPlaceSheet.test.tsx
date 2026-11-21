@@ -44,6 +44,7 @@ test("people here now are drawn with their own picture and group ring", async ()
     otherSharedGroupNames: [],
     ringColor: "#2A9D8F",
     sourceGroupId: "family",
+    speed: null,
     timestamp: new Date().toISOString(),
     userId: "alice",
   };

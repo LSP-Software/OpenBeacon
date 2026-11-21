@@ -1,12 +1,14 @@
 import { Link } from "expo-router";
-import { HistoryIcon } from "lucide-react-native";
+import { GaugeIcon, HistoryIcon } from "lucide-react-native";
 import { Pressable, View } from "react-native";
+import { useSpeedUnit } from "../../hooks/useSpeedUnit.ts";
 import { useTimeSince } from "../../hooks/useTimeSince.ts";
 import { shortTimeSince } from "../../lib/timeSince.ts";
 import { getBatteryVisual } from "../../lib/batteryVisual.ts";
 import { type DeviceIcon, deviceIconFor } from "../../lib/deviceIcons.ts";
 import { locationStaleAt } from "../../lib/locationStaleAt.ts";
 import { mayBeOutOfBattery } from "../../lib/mayBeOutOfBattery.ts";
+import { liveSpeedLabel } from "../../lib/speed.ts";
 import { DecryptedAvatarImage } from "../image/DecryptedAvatarImage.tsx";
 import { Avatar, AvatarFallback } from "../ui/Avatar.tsx";
 import { Button } from "../ui/Button.tsx";
@@ -40,6 +42,7 @@ export const LiveMapPersonSheet = ({
   onRequestUpdate,
   onSelectDevice,
   otherSharedGroupNames,
+  speed,
   timeline,
   timestamp,
   unreadableGroup,
@@ -55,11 +58,13 @@ export const LiveMapPersonSheet = ({
   onRequestUpdate?: (() => Promise<void>) | undefined;
   onSelectDevice?: (deviceId: string) => void;
   otherSharedGroupNames: readonly string[];
+  speed: number | null;
   timeline?: { groupId: string; userId: string } | undefined;
   timestamp: string | null;
   unreadableGroup?: { id: string; name: string } | undefined;
 }) => {
   const updatedAge = useTimeSince(timestamp);
+  const { unit } = useSpeedUnit();
   const isMultiDevice = devices !== undefined && devices.length >= 2;
   const isOutOfDate = !isSelf && timestamp !== null && Date.now() >= locationStaleAt(timestamp);
   const batteryVisual = battery
@@ -68,6 +73,9 @@ export const LiveMapPersonSheet = ({
         charging: battery.charging,
       })
     : null;
+  const speedLabel = isMultiDevice
+    ? null
+    : liveSpeedLabel({ now: Date.now(), speed, timestamp, unit });
 
   return (
     <LiveMapBottomSheet
@@ -115,16 +123,30 @@ export const LiveMapPersonSheet = ({
               </Text>
             </View>
           ) : null}
-          {!isMultiDevice && batteryVisual?.label ? (
-            <View
-              accessible
-              accessibilityLabel={`Battery ${batteryVisual.label}`}
-              className="mt-3 flex-row items-center gap-1.5 self-start rounded-full bg-secondary px-3 py-1.5"
-            >
-              <Icon as={batteryVisual.icon} size={16} className={batteryVisual.colorClass} />
-              <Text className={`${batteryVisual.colorClass} text-sm font-medium`}>
-                {batteryVisual.label}
-              </Text>
+          {(!isMultiDevice && batteryVisual?.label) || speedLabel ? (
+            <View className="mt-3 flex-row flex-wrap gap-2">
+              {!isMultiDevice && batteryVisual?.label ? (
+                <View
+                  accessible
+                  accessibilityLabel={`Battery ${batteryVisual.label}`}
+                  className="flex-row items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5"
+                >
+                  <Icon as={batteryVisual.icon} size={16} className={batteryVisual.colorClass} />
+                  <Text className={`${batteryVisual.colorClass} text-sm font-medium`}>
+                    {batteryVisual.label}
+                  </Text>
+                </View>
+              ) : null}
+              {speedLabel ? (
+                <View
+                  accessible
+                  accessibilityLabel={`Moving at ${speedLabel}`}
+                  className="flex-row items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5"
+                >
+                  <Icon as={GaugeIcon} size={16} className="text-foreground" />
+                  <Text className="text-foreground text-sm font-medium">{speedLabel}</Text>
+                </View>
+              ) : null}
             </View>
           ) : null}
           {otherSharedGroupNames.length > 0 ? (

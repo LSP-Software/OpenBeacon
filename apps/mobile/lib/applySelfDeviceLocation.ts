@@ -52,6 +52,7 @@ export const applySelfDeviceLocation = ({
       ringColor: selfFallback.ringColor,
       ...(selfFallback.ringColors ? { ringColors: selfFallback.ringColors } : {}),
       sourceGroupId: selfFallback.sourceGroupId,
+      speed: null,
       timestamp: lastSentAt,
       userId: selfUserId,
     },

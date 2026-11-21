@@ -16,6 +16,7 @@ const marker = (
   otherSharedGroupNames: [],
   ringColor: "#E85D4C",
   sourceGroupId: "family",
+  speed: null,
   timestamp: "2026-07-17T12:00:00.000Z",
   ...overrides,
 });
@@ -95,6 +96,7 @@ describe("applySelfDeviceLocation", () => {
         ringColor: "#2A9D8F",
         ringColors: ["#2A9D8F", "#E85D4C"],
         sourceGroupId: "family",
+        speed: null,
         timestamp: "2026-07-17T12:00:00.000Z",
         userId: "alice",
       },
@@ -116,6 +118,7 @@ describe("applySelfDeviceLocation", () => {
       otherSharedGroupNames: [],
       ringColor: "#2A9D8F",
       sourceGroupId: "family",
+      speed: null,
     };
 
     const withLocalGps = applySelfDeviceLocation({
@@ -189,6 +192,7 @@ describe("applySelfDeviceLocation", () => {
         otherSharedGroupNames: [],
         ringColor: "#2A9D8F",
         sourceGroupId: "family",
+        speed: null,
         timestamp: null,
         userId: "alice",
       },

@@ -15,6 +15,7 @@ mock.module("react-native", () => ({
 }));
 mock.module("expo-router", () => ({ Link: Passthrough }));
 mock.module("lucide-react-native", () => ({
+  GaugeIcon: () => null,
   EyeIcon: () => null,
   HistoryIcon: () => null,
   RefreshCwIcon: () => null,
@@ -32,6 +33,7 @@ mock.module("../components/ui/Button.tsx", () => ({
     onPress?: () => void;
   }) => React.createElement("mock-button", { disabled, loading, onPress }, children),
 }));
+mock.module("../hooks/useSpeedUnit.ts", () => ({ useSpeedUnit: () => ({ unit: "mph" }) }));
 mock.module("../hooks/useTimeSince.ts", () => ({
   useTimeSince: (timestamp: string | null) => (timestamp ? "1 min ago" : null),
 }));
@@ -97,6 +99,7 @@ const renderSheet = async ({
         onDismiss={() => {}}
         onRequestUpdate={onRequestUpdate}
         otherSharedGroupNames={[]}
+        speed={null}
         timestamp={timestamp}
       />,
     ),

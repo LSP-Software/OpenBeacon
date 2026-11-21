@@ -21,6 +21,7 @@ const marker = (
   otherSharedGroupNames: [],
   ringColor: "#E85D4C",
   sourceGroupId: "family",
+  speed: null,
   timestamp: "2026-07-17T12:00:00.000Z",
   ...overrides,
 });

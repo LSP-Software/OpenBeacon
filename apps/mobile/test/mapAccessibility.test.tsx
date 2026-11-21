@@ -29,11 +29,13 @@ mock.module("@maplibre/maplibre-react-native", () => ({
 }));
 mock.module("expo-router", () => ({ Link: Passthrough }));
 mock.module("lucide-react-native", () => ({
+  GaugeIcon: () => null,
   HistoryIcon: () => null,
   RefreshCwIcon: () => null,
 }));
 mock.module("../components/ui/Button.tsx", () => ({ Button: Passthrough }));
 mock.module("../hooks/useSelfDeviceHeading.ts", () => ({ useSelfDeviceHeading: () => null }));
+mock.module("../hooks/useSpeedUnit.ts", () => ({ useSpeedUnit: () => ({ unit: "mph" }) }));
 mock.module("../hooks/useTimeSince.ts", () => ({
   useTimeSince: (timestamp: string | null) => (timestamp ? "1 min ago" : null),
 }));
@@ -108,6 +110,7 @@ const marker = (overrides: Partial<LiveMapMarker>): LiveMapMarker => ({
   otherSharedGroupNames: [],
   ringColor: "red",
   sourceGroupId: "group-1",
+  speed: null,
   timestamp: new Date().toISOString(),
   userId: "alice",
   ...overrides,
@@ -170,6 +173,7 @@ test("a device row without a location on the map isn't a button", async () => {
       name="Alice"
       onDismiss={() => {}}
       otherSharedGroupNames={[]}
+      speed={null}
       timestamp={null}
     />,
   );
@@ -204,6 +208,7 @@ test("a device that went quiet on a low battery may be out of battery, except on
       name="Alice"
       onDismiss={() => {}}
       otherSharedGroupNames={[]}
+      speed={null}
       timestamp={null}
     />
   );
@@ -231,6 +236,7 @@ test.each([
         name="Alice"
         onDismiss={() => {}}
         otherSharedGroupNames={[]}
+        speed={null}
         timestamp={new Date(Date.now() - 2 * 3_600_000).toISOString()}
       />,
     ),
@@ -260,6 +266,7 @@ test("someone with several devices still gets a way to open the group whose key 
         name="Alice"
         onDismiss={() => {}}
         otherSharedGroupNames={[]}
+        speed={null}
         timestamp={null}
         unreadableGroup={{ id: "group-1", name: "Family" }}
       />,
@@ -267,4 +274,32 @@ test("someone with several devices still gets a way to open the group whose key 
   ).filter((item) => item.accessibilityRole === "link");
   expect(links).toHaveLength(1);
   expect(JSON.stringify(root?.container.toJSON())).toContain(`["Open ","Family"]`);
+});
+
+test.each([
+  [15.2, 30_000, "34 mph"],
+  [0.5, 30_000, null],
+  [15.2, 4 * 60_000, null],
+])("a fix at %p m/s from %p ms ago shows speed %p", async (speed, age, text) => {
+  root = createRoot();
+  await act(async () =>
+    root?.render(
+      <LiveMapPersonSheet
+        battery={null}
+        image={null}
+        initials="Al"
+        name="Alice"
+        onDismiss={() => {}}
+        otherSharedGroupNames={[]}
+        speed={speed}
+        timestamp={new Date(Date.now() - age).toISOString()}
+      />,
+    ),
+  );
+  const rendered = JSON.stringify(root?.container.toJSON());
+  if (text) {
+    expect(rendered).toContain(`"${text}"`);
+  } else {
+    expect(rendered).not.toContain("mph");
+  }
 });

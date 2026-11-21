@@ -25,6 +25,7 @@ const person = (
   otherSharedGroupNames: [],
   ringColor: "#000000",
   sourceGroupId: "group",
+  speed: null,
   timestamp: device.timestamp ?? null,
   userId,
   ...(device.isSelf ? { isSelf: true } : {}),

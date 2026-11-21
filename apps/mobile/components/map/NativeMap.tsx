@@ -846,6 +846,7 @@ export const NativeMap = ({
           isSelf={selectedMarker.isSelf}
           name={selectedMarker.name}
           otherSharedGroupNames={selectedMarker.otherSharedGroupNames}
+          speed={selectedMarker.speed}
           timeline={
             personTimelineGroupId
               ? { groupId: personTimelineGroupId, userId: selectedMarker.userId }

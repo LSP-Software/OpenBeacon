@@ -24,6 +24,7 @@ const marker = (
   otherSharedGroupNames: [],
   ringColor: "#FF1464",
   sourceGroupId: "family",
+  speed: null,
   timestamp: minutesAgo === null ? null : new Date(NOW - minutesAgo * 60_000).toISOString(),
   userId,
 });

@@ -95,6 +95,7 @@ export const createLiveMapMarkerFixture = (
   otherSharedGroupNames: [],
   ringColor: "#3366FF",
   sourceGroupId: "group-1",
+  speed: null,
   timestamp: "2026-07-19T10:00:00.000Z",
   ...overrides,
   deviceId: overrides.deviceId ?? overrides.userId,
