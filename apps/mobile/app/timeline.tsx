@@ -31,7 +31,6 @@ import { TimelinePin } from "../components/timeline/TimelinePin.tsx";
 import {
   TimelineCardShared,
   TimelinePlayerCard,
-  useTimelinePlayerCard,
 } from "../components/timeline/TimelinePlayerCard.tsx";
 import {
   TimelineKey,
@@ -46,6 +45,7 @@ import { Text } from "../components/ui/Text.tsx";
 import { useCachedGroup } from "../hooks/useCachedGroup.ts";
 import { useReducedMotion } from "../hooks/useReducedMotion.ts";
 import { useSpeedUnit } from "../hooks/useSpeedUnit.ts";
+import { useTimelinePlayerCard } from "../hooks/useTimelinePlayerCard.ts";
 import { useUses24HourClock } from "../hooks/useUses24HourClock.ts";
 import { useTimelineDay, useTimelineDays } from "../hooks/useTimeline.ts";
 import { trpc } from "../lib/api.ts";

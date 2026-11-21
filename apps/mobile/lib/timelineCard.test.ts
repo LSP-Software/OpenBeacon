@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { timelineCardOpens } from "./timelineCard.ts";
+import { timelineCardOpens, timelineCardShift } from "./timelineCard.ts";
 
 describe("timelineCardOpens", () => {
   test("a flick decides the card's state wherever it is let go", () => {
@@ -10,5 +10,40 @@ describe("timelineCardOpens", () => {
   test("a slow drag settles on whichever state is nearer", () => {
     expect(timelineCardOpens({ progress: 0.6, velocity: 0.1 })).toBe(true);
     expect(timelineCardOpens({ progress: 0.4, velocity: -0.1 })).toBe(false);
+  });
+});
+
+describe("timelineCardShift", () => {
+  test("moves an element's centre onto its mini slot through each parent's offset", () => {
+    expect(
+      timelineCardShift({
+        from: [
+          { height: 300, width: 320, x: 16, y: 20 },
+          { height: 56, width: 320, x: 0, y: 200 },
+          { height: 56, width: 56, x: 132, y: 0 },
+        ],
+        to: [
+          { height: 48, width: 320, x: 16, y: 20 },
+          { height: 48, width: 48, x: 0, y: 0 },
+        ],
+      }),
+    ).toEqual({ scale: 48 / 56, x: -136, y: -204 });
+  });
+
+  test("scales by the slot's width so a shrunk clock fills its slot", () => {
+    expect(
+      timelineCardShift({
+        from: [{ height: 40, width: 100, x: 0, y: 0 }],
+        to: [{ height: 32, width: 80, x: 60, y: 4 }],
+      }),
+    ).toEqual({ scale: 0.8, x: 50, y: 0 });
+  });
+
+  test("stays put until every box in both chains has been measured", () => {
+    const box = { height: 10, width: 10, x: 5, y: 5 };
+    const still = { scale: 1, x: 0, y: 0 };
+    expect(timelineCardShift({ from: [undefined, box], to: [box] })).toEqual(still);
+    expect(timelineCardShift({ from: [box], to: [{ ...box, width: 0 }] })).toEqual(still);
+    expect(timelineCardShift({ from: [box], to: [] })).toEqual(still);
   });
 });
