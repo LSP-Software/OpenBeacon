@@ -189,7 +189,7 @@ const TimelineView = ({
   const [pickedDayKey, setPickedDayKey] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(60);
-  const [following, setFollowing] = useState(true);
+  const [following, setFollowing] = useState(false);
   const fittedView = useRef({ moved: false, view: "" });
   const [timeState, setTimeState] = useState<{ key: string; time: number } | null>(null);
   const [drawIn, setDrawIn] = useState<{ clock: number; starts: Record<string, number> }>({
@@ -487,21 +487,10 @@ const TimelineView = ({
   // biome-ignore lint/correctness/useExhaustiveDependencies: the camera moves only when the day, people or layout change, not on every frame
   useEffect(() => {
     if (!styleLoaded || topHeight === 0 || panelHeight === 0) return;
-    if (fittedView.current.view === fit.view && fittedView.current.moved) return;
+    const sameView = fittedView.current.view === fit.view;
+    if (sameView && (fittedView.current.moved || (following && selectedPerson))) return;
     fittedView.current = { moved: false, view: fit.view };
-    if (selectedPerson) {
-      setFollowing(true);
-      const at = timelinePositionAt(selectedPerson.device.segments, timeRef.current);
-      if (at.position) {
-        cameraRef.current?.easeTo({
-          center: [at.position.longitude, at.position.latitude],
-          duration: 600,
-          padding: cameraPadding,
-          zoom: 15,
-        });
-        return;
-      }
-    }
+    setFollowing(false);
     const coordinates = routes.flatMap((route) => [
       ...[...route.line, ...route.pauses.flat()].map(([longitude, latitude]) => ({
         latitude,
@@ -768,7 +757,6 @@ const TimelineView = ({
               selected={member.userId === personId}
               onPress={() => {
                 setPersonId(member.userId);
-                setFollowing(true);
               }}
             />
           ))}
