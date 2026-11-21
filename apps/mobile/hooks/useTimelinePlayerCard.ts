@@ -195,6 +195,11 @@ export const useTimelinePlayerCard = ({
   };
 };
 
+const clampProgress = (progress: number) => {
+  "worklet";
+  return Math.min(Math.max(progress, 0), 1);
+};
+
 const sharedMotion = (progress: number, shift: { scale: number; x: number; y: number }) => {
   "worklet";
   const rest = 1 - clampProgress(progress);
@@ -203,9 +208,4 @@ const sharedMotion = (progress: number, shift: { scale: number; x: number; y: nu
     top: shift.y * rest,
     transform: [{ scale: 1 + (shift.scale - 1) * rest }],
   };
-};
-
-const clampProgress = (progress: number) => {
-  "worklet";
-  return Math.min(Math.max(progress, 0), 1);
 };
