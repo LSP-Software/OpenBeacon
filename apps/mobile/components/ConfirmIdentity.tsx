@@ -125,6 +125,11 @@ export const ConfirmIdentity = ({ onConfirmed }: { onConfirmed: () => void }) =>
       setPending(false);
       return;
     }
+    if (result.data && "unavailable" in result.data) {
+      setPending(false);
+      Alert.alert("Couldn’t confirm it’s you", "Please try again.");
+      return;
+    }
     const failure = result.error ?? result.data.error;
     if (failure) {
       setPending(false);

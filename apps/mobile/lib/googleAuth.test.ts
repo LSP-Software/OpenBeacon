@@ -15,6 +15,7 @@ const signInWithGoogleMock = mock(
         error?: { message: string };
       }
     | { cancelled: true }
+    | { unavailable: true }
   > => ({ data: { ok: true } }),
 );
 
@@ -35,8 +36,11 @@ describe("performGoogleAuth", () => {
     signInWithGoogleMock.mockClear();
   });
 
-  test("closing the Google account picker stops quietly without setting up the device", async () => {
-    signInWithGoogleMock.mockImplementationOnce(async () => ({ cancelled: true }));
+  test.each([
+    ["closing the Google account picker", { cancelled: true as const }],
+    ["Google turning out to be unavailable", { unavailable: true as const }],
+  ])("%s stops quietly without setting up the device", async (_name, result) => {
+    signInWithGoogleMock.mockImplementationOnce(async () => result);
 
     const loadingStates: boolean[] = [];
     const onSuccess = mock(async () => {});

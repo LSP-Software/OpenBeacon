@@ -1,10 +1,10 @@
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { env } from "./env.ts";
-import { verifyGoogleIdToken } from "./googleIdToken.ts";
+import { googleRefusalReason, verifyGoogleIdToken } from "./googleIdToken.ts";
 import { getPublicUrl } from "./publicUrl.ts";
 
-const redirectUri = () =>
+export const googleDeletionRedirectUri = () =>
   `${getPublicUrl(env.BETTER_AUTH_URL).baseUrl}/api/auth/google-deletion-callback`;
 
 export const createGoogleDeletionAuthorization = () => {
@@ -16,7 +16,7 @@ export const createGoogleDeletionAuthorization = () => {
   const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
   url.search = new URLSearchParams({
     client_id: env.GOOGLE_CLIENT_ID,
-    redirect_uri: redirectUri(),
+    redirect_uri: googleDeletionRedirectUri(),
     response_type: "code",
     scope: "openid email",
     prompt: "select_account",
@@ -46,7 +46,7 @@ export const verifyGoogleDeletionCode = async ({
       code_verifier: codeVerifier,
       client_id: env.GOOGLE_CLIENT_ID,
       client_secret: env.GOOGLE_CLIENT_SECRET,
-      redirect_uri: redirectUri(),
+      redirect_uri: googleDeletionRedirectUri(),
       grant_type: "authorization_code",
     }),
     signal: AbortSignal.timeout(10_000),
@@ -59,7 +59,11 @@ export const verifyGoogleDeletionCode = async ({
     audience: env.GOOGLE_CLIENT_ID,
     nonce,
   });
-  return claims !== "wrong-nonce" && typeof claims?.sub === "string" && claims.sub
-    ? claims.sub
-    : null;
+  if (!claims.ok) {
+    console.warn(
+      `[google-deletion] refused a Google account check ${googleRefusalReason({ result: claims, clientId: env.GOOGLE_CLIENT_ID, nonceBoundTo: "deletion-attempt" })}`,
+    );
+    return null;
+  }
+  return typeof claims.payload.sub === "string" && claims.payload.sub ? claims.payload.sub : null;
 };

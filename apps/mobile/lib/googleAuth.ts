@@ -30,7 +30,7 @@ const runGoogleAuth = async ({
 
   const result = await signInWithGoogle();
 
-  if ("cancelled" in result) {
+  if ("cancelled" in result || "unavailable" in result) {
     setLoading(false);
     return;
   }

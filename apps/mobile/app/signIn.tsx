@@ -19,7 +19,7 @@ import { Button } from "../components/ui/Button.tsx";
 import { Input } from "../components/ui/Input.tsx";
 import { Text } from "../components/ui/Text.tsx";
 import { trpc } from "../lib/api.ts";
-import { completeAuthenticatedSessionSetup, isNativeGoogleSignInConfigured } from "../lib/auth.ts";
+import { completeAuthenticatedSessionSetup, useCanOfferGoogleSignIn } from "../lib/auth.ts";
 import {
   emailCodeErrorMessage,
   emailCodes,
@@ -55,7 +55,7 @@ const SignIn = () => {
   });
 
   const isSubmitting = emailLoading || googleLoading;
-  const isGoogleEnabled = providers?.google === true && isNativeGoogleSignInConfigured;
+  const isGoogleEnabled = useCanOfferGoogleSignIn(providers);
   const enteredEmail = form.watch("email");
 
   const handleLogin = async ({

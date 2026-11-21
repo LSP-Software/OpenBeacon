@@ -27,6 +27,7 @@ const phone: { hasLock: boolean; result: "confirmed" | "noScreenLock" | "lockedO
   result: "confirmed",
 };
 let methodsWaitingForNetwork = false;
+let googleResult: { data: Record<string, never> } | { unavailable: true } = { data: {} };
 const View = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
 
 mock.module("react-native", () => ({
@@ -85,7 +86,7 @@ mock.module("../lib/auth.ts", () => ({
   isNativeGoogleSignInConfigured: true,
   signInWithGoogle: async () => {
     events.push("google");
-    return { data: {} };
+    return googleResult;
   },
 }));
 mock.module("../lib/auth-client.ts", () => ({
@@ -167,6 +168,7 @@ beforeEach(() => {
   phone.hasLock = true;
   phone.result = "confirmed";
   methodsWaitingForNetwork = false;
+  googleResult = { data: {} };
   currentUserId = "user-1";
   typedPassword = "secret";
 });
@@ -258,6 +260,23 @@ test("Google asks for the phone's screen lock before signing in", async () => {
 
   expect(events).toEqual(["phoneLock", "google", "confirmed"]);
   expect(alerts).toEqual([]);
+});
+
+test("Google that turns out to be unavailable says to try again and keeps the Google option", async () => {
+  googleResult = { unavailable: true };
+  const root = createRoot();
+  await act(async () =>
+    root.render(<ConfirmIdentity onConfirmed={() => events.push("confirmed")} />),
+  );
+  const googleButton = root.container.queryAll((item) => item.type === "mock-button")[1];
+  if (!googleButton) throw new Error("Missing Google button");
+
+  await act(async () => (googleButton.props as { onPress: () => Promise<void> }).onPress());
+
+  expect(events).toEqual(["phoneLock", "google"]);
+  expect(alerts).toEqual(["Couldn’t confirm it’s you|Please try again."]);
+  expect(root.container.queryAll((item) => item.type === "mock-button")).toHaveLength(2);
+  await act(async () => root.unmount());
 });
 
 test("a cancelled or failed screen lock stops before Google", async () => {

@@ -17,7 +17,7 @@ import { Button } from "../components/ui/Button.tsx";
 import { Input } from "../components/ui/Input.tsx";
 import { Text } from "../components/ui/Text.tsx";
 import { trpc } from "../lib/api.ts";
-import { completeAuthenticatedSessionSetup, isNativeGoogleSignInConfigured } from "../lib/auth.ts";
+import { completeAuthenticatedSessionSetup, useCanOfferGoogleSignIn } from "../lib/auth.ts";
 import { authClient } from "../lib/auth-client.ts";
 import {
   emailCodeErrorMessage,
@@ -47,7 +47,7 @@ const ForgotPassword = () => {
   const [loading, setLoading] = useState(false);
   const resetServer = useRef(getBaseUrl());
   const { data: providers } = useQuery(trpc.auth.providers.queryOptions());
-  const isGoogleEnabled = providers?.google === true && isNativeGoogleSignInConfigured;
+  const isGoogleEnabled = useCanOfferGoogleSignIn(providers);
   const form = useForm<z.infer<typeof resetFormSchema>>({
     resolver: zodResolver(resetFormSchema),
     mode: "onTouched",

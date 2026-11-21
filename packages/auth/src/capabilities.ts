@@ -8,5 +8,6 @@ export const getAuthCapabilities = ({
   emailEnabled: boolean;
 }) => ({
   google: Boolean(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET),
+  googleClientId: GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET ? GOOGLE_CLIENT_ID : null,
   email: emailEnabled,
 });

@@ -12,6 +12,8 @@ import { createAuth } from "./createAuth.ts";
 import { prisma as db } from "@openbeacon/database";
 import { createEmailCodes } from "./emailCode.ts";
 import { env } from "./env.ts";
+import { checkGoogleClient } from "./googleClientCheck.ts";
+import { googleDeletionRedirectUri } from "./googleDeletion.ts";
 import { createFcmClient, resolveFcmSettings } from "./fcm.ts";
 import { getPublicUrl } from "./publicUrl.ts";
 import { createPushSender } from "./push.ts";
@@ -25,6 +27,15 @@ export { checkPasswordWithinLimit, passwordFailureLimitFor } from "./passwordAtt
 export { createGoogleDeletionAuthorization, verifyGoogleDeletionCode } from "./googleDeletion.ts";
 
 export const authPublicPath = getPublicUrl(env.BETTER_AUTH_URL).path;
+
+const googleCredentials =
+  env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
+    ? { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET }
+    : null;
+
+export const checkGoogleSignIn = googleCredentials
+  ? () => checkGoogleClient({ ...googleCredentials, redirectUri: googleDeletionRedirectUri() })
+  : null;
 
 export const authCapabilities = getAuthCapabilities({
   GOOGLE_CLIENT_ID: env.GOOGLE_CLIENT_ID,

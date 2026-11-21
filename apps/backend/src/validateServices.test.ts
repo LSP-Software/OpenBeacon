@@ -27,7 +27,12 @@ mock.module("@openbeacon/email", () => ({
   emailEnabled: true,
   emailUnreachableCode: "EMAIL_UNREACHABLE",
 }));
-mock.module("@openbeacon/auth", () => ({ fcm: { getAccessToken } }));
+const checkGoogleSignIn = mock(async () => ({
+  status: "rejected",
+  detail: "invalid_client: The OAuth client was not found.",
+}));
+const startupErrors = spyOn(console, "error").mockImplementation(() => {});
+mock.module("@openbeacon/auth", () => ({ checkGoogleSignIn, fcm: { getAccessToken } }));
 const shared = await import("@openbeacon/shared");
 mock.module("@openbeacon/shared", () => ({
   ...shared,
@@ -42,7 +47,18 @@ mock.module("./checkOptionalServices.ts", () => ({
 }));
 
 await import("./validateServices.ts");
+const startupErrorCalls = [...startupErrors.mock.calls];
+startupErrors.mockRestore();
 afterAll(() => mock.restore());
+
+test("a Google OAuth client that Google rejects is reported without stopping startup", () => {
+  expect(checkGoogleSignIn).toHaveBeenCalledTimes(1);
+  expect(startupErrorCalls).toEqual([
+    [
+      `  Google sign-in: Google rejected GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET (invalid_client: The OAuth client was not found.). Set them to the client ID and secret of the same "Web application" OAuth client, the one the app was built with. Starting anyway, but Google sign-in and deleting Google accounts won't work until this is fixed.`,
+    ],
+  ]);
+});
 
 test("wires each configured service into startup validation", async () => {
   expect(Object.keys(checks)).toEqual(["PostgreSQL", "Redis", "Image storage", "Map storage"]);

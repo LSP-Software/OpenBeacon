@@ -17,7 +17,7 @@ import { Button } from "../components/ui/Button.tsx";
 import { Input } from "../components/ui/Input.tsx";
 import { Text } from "../components/ui/Text.tsx";
 import { trpc } from "../lib/api.ts";
-import { completeAuthenticatedSessionSetup, isNativeGoogleSignInConfigured } from "../lib/auth.ts";
+import { completeAuthenticatedSessionSetup, useCanOfferGoogleSignIn } from "../lib/auth.ts";
 import { authClient } from "../lib/auth-client.ts";
 import { emailCodeErrorMessage, emailCodes } from "../lib/emailCodes.ts";
 import { finishAuthentication } from "../lib/finishAuthentication.ts";
@@ -53,7 +53,7 @@ const SignUp = () => {
   });
 
   const isSubmitting = emailLoading || googleLoading;
-  const isGoogleEnabled = providers?.google === true && isNativeGoogleSignInConfigured;
+  const isGoogleEnabled = useCanOfferGoogleSignIn(providers);
   const verifiesEmail = providers?.email === true;
   const signUpToken = step.name === "details" ? step.signUpToken : undefined;
 

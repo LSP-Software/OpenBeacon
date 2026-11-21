@@ -1,4 +1,5 @@
 import { googleSignInNonce, tryCatch } from "@openbeacon/shared";
+import { useSyncExternalStore } from "react";
 import { Platform } from "react-native";
 import {
   GoogleOneTapSignIn,
@@ -32,6 +33,31 @@ export const isNativeGoogleSignInConfiguredForPlatform = (platform: string) =>
 export const isNativeGoogleSignInConfigured = isNativeGoogleSignInConfiguredForPlatform(
   Platform.OS,
 );
+
+let googleSignInMisconfigured = false;
+const googleSignInListeners = new Set<() => void>();
+
+export const canOfferGoogleSignIn = (
+  providers: { google: boolean; googleClientId?: string | null } | undefined,
+) =>
+  providers?.google === true &&
+  isNativeGoogleSignInConfigured &&
+  !googleSignInMisconfigured &&
+  (providers.googleClientId === undefined || providers.googleClientId === getGoogleWebClientId());
+
+const subscribeToGoogleSignInMisconfigured = (listener: () => void) => {
+  googleSignInListeners.add(listener);
+  return () => {
+    googleSignInListeners.delete(listener);
+  };
+};
+
+const readGoogleSignInMisconfigured = () => googleSignInMisconfigured;
+
+export const useCanOfferGoogleSignIn = (providers: Parameters<typeof canOfferGoogleSignIn>[0]) => {
+  useSyncExternalStore(subscribeToGoogleSignInMisconfigured, readGoogleSignInMisconfigured);
+  return canOfferGoogleSignIn(providers);
+};
 
 export const revokePendingSessionToken = async () => {
   const token = await tryCatch(readSessionTokenToRevoke());
@@ -77,6 +103,11 @@ const googleSignInError = (message: string) => ({ error: { message } });
 const googleLibraryError = (error: unknown) => {
   if (isErrorWithCode(error) && error.code === statusCodes.SIGN_IN_CANCELLED) {
     return { cancelled: true as const };
+  }
+  if (isErrorWithCode(error) && error.code === statusCodes.DEVELOPER_ERROR) {
+    googleSignInMisconfigured = true;
+    for (const listener of googleSignInListeners) listener();
+    return { unavailable: true as const };
   }
   if (isErrorWithCode(error) && error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
     return googleSignInError(
