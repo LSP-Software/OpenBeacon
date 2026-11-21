@@ -33,17 +33,17 @@ const urlTransforms: Array<{ id: string; find: string; replace: string }> = [];
 export const getNativeMapUrlTransforms = () => urlTransforms;
 const urlTransformEvents: string[] = [];
 export const getNativeMapUrlTransformEvents = () => urlTransformEvents;
-const annotationMountCounts = new Map<string, number>();
 const annotationSelectedProps = new Map<string, boolean | undefined>();
 const annotationHandlersById = new Map<
   string,
   {
     onDeselected?: () => void;
+    onPressed?: () => void;
     onSelected?: () => void;
   }
 >();
 const mountedAnnotationIds = new Set<string>();
-const removedAnnotationDeselectionHandlers = new Map<string, () => void>();
+let nativeSelectedAnnotationId: string | null = null;
 let mapViewHandlers: {
   onDidFailLoadingMap?: () => void;
   onDidFinishLoadingStyle?: () => void;
@@ -77,7 +77,6 @@ let latestCameraDefaultSettings: {
 let selfHeadingDegrees: number | null = null;
 let showEveryonePressHandler: (() => void) | null = null;
 let goToCurrentLocationPressHandler: (() => void) | null = null;
-let androidActiveAnnotationId: string | null = null;
 let mapProjectedPoint: [number, number] = [200, 300];
 let mapProjectionWait: Promise<void> | null = null;
 const removedStyleLayerIds: string[] = [];
@@ -107,11 +106,10 @@ export const resetNativeMapHarness = () => {
   urlTransforms.length = 0;
   urlTransformEvents.length = 0;
   annotationRefreshCalls.length = 0;
-  annotationMountCounts.clear();
   annotationSelectedProps.clear();
   annotationHandlersById.clear();
   mountedAnnotationIds.clear();
-  removedAnnotationDeselectionHandlers.clear();
+  nativeSelectedAnnotationId = null;
   mapViewHandlers = {};
   mapViewMountCount = 0;
   liveMapViewCount = 0;
@@ -120,7 +118,6 @@ export const resetNativeMapHarness = () => {
   selfHeadingDegrees = null;
   showEveryonePressHandler = null;
   goToCurrentLocationPressHandler = null;
-  androidActiveAnnotationId = null;
   mapProjectedPoint = [200, 300];
   mapProjectionWait = null;
   removedStyleLayerIds.length = 0;
@@ -137,9 +134,6 @@ export const setNativeMapProjectionWait = (wait: Promise<void> | null) => {
 export const getNativeMapCameraCommands = () => [...cameraCommands];
 
 export const getNativeMapAnnotationRefreshCalls = () => [...annotationRefreshCalls];
-
-export const getNativeMapAnnotationMountCount = (annotationId: string) =>
-  annotationMountCounts.get(annotationId) ?? 0;
 
 export const getNativeMapAnnotationSelectedProp = (annotationId: string) =>
   annotationSelectedProps.get(annotationId);
@@ -160,7 +154,14 @@ export const setNativeMapSelfHeadingDegrees = (headingDegrees: number | null) =>
 
 export const getNativeMapSelfHeadingDegrees = () => selfHeadingDegrees;
 
+const deselectNativeAnnotation = () => {
+  const deselectedId = nativeSelectedAnnotationId;
+  nativeSelectedAnnotationId = null;
+  if (deselectedId !== null) annotationHandlersById.get(deselectedId)?.onDeselected?.();
+};
+
 export const emitNativeMapPress = (point: [number, number] = [0, 0]) => {
+  deselectNativeAnnotation();
   mapViewHandlers.onPress?.({ nativeEvent: { point } });
 };
 
@@ -245,30 +246,17 @@ export const emitNativeMapGoToCurrentLocation = () => {
   goToCurrentLocationPressHandler?.();
 };
 
-export const emitNativeMapAnnotationSelected = (annotationId: string) => {
+export const emitNativeMapIosAnnotationTap = (annotationId: string) => {
+  annotationHandlersById.get(annotationId)?.onPressed?.();
+  if (nativeSelectedAnnotationId === annotationId) return;
+  deselectNativeAnnotation();
+  nativeSelectedAnnotationId = annotationId;
   annotationHandlersById.get(annotationId)?.onSelected?.();
 };
 
-export const emitNativeMapAnnotationDeselected = (annotationId: string) => {
-  annotationHandlersById.get(annotationId)?.onDeselected?.();
-};
-
-export const emitRemovedAnnotationDeselected = (annotationId: string) => {
-  removedAnnotationDeselectionHandlers.get(annotationId)?.();
-};
-
 export const emitNativeMapAndroidMarkerTap = (annotationId: string) => {
-  const previouslyActiveId = androidActiveAnnotationId;
-
-  if (previouslyActiveId !== null) {
-    androidActiveAnnotationId = null;
-    emitNativeMapAnnotationDeselected(previouslyActiveId);
-  }
-
-  if (previouslyActiveId !== annotationId) {
-    androidActiveAnnotationId = annotationId;
-    emitNativeMapAnnotationSelected(annotationId);
-  }
+  annotationHandlersById.get(annotationId)?.onPressed?.();
+  emitNativeMapPress();
 };
 
 export const createMapLibreMockModule = () => {
@@ -473,51 +461,60 @@ export const createMapLibreMockModule = () => {
       children?: ReactNode;
       id: string;
       onDeselect?: () => void;
+      onPress?: () => void;
       onSelect?: () => void;
       selected?: boolean;
     }
-  >(({ children, id, onDeselect: onDeselected, onSelect: onSelected, selected }, ref) => {
-    useImperativeHandle(ref, () => ({
-      refresh: () => {
-        annotationRefreshCalls.push(id);
-      },
-    }));
-
-    annotationSelectedProps.set(id, selected);
-
-    useEffect(() => {
-      mountedAnnotationIds.add(id);
-      annotationMountCounts.set(id, (annotationMountCounts.get(id) ?? 0) + 1);
-
-      return () => {
-        mountedAnnotationIds.delete(id);
-        if (androidActiveAnnotationId === id) {
-          androidActiveAnnotationId = null;
-        }
-      };
-    }, [id]);
-
-    useEffect(() => {
-      annotationHandlersById.set(id, {
-        ...(onDeselected ? { onDeselected } : {}),
-        ...(onSelected ? { onSelected } : {}),
-      });
-
-      return () => {
-        if (onDeselected) removedAnnotationDeselectionHandlers.set(id, onDeselected);
-        annotationHandlersById.delete(id);
-      };
-    }, [id, onDeselected, onSelected]);
-
-    return React.createElement(
-      "point-annotation",
+  >(
+    (
       {
+        children,
         id,
-        selected: selected ?? false,
+        onDeselect: onDeselected,
+        onPress: onPressed,
+        onSelect: onSelected,
+        selected,
       },
-      children,
-    );
-  });
+      ref,
+    ) => {
+      useImperativeHandle(ref, () => ({
+        refresh: () => {
+          annotationRefreshCalls.push(id);
+        },
+      }));
+
+      annotationSelectedProps.set(id, selected);
+
+      useEffect(() => {
+        mountedAnnotationIds.add(id);
+
+        return () => {
+          mountedAnnotationIds.delete(id);
+        };
+      }, [id]);
+
+      useEffect(() => {
+        annotationHandlersById.set(id, {
+          ...(onDeselected ? { onDeselected } : {}),
+          ...(onPressed ? { onPressed } : {}),
+          ...(onSelected ? { onSelected } : {}),
+        });
+
+        return () => {
+          annotationHandlersById.delete(id);
+        };
+      }, [id, onDeselected, onPressed, onSelected]);
+
+      return React.createElement(
+        "point-annotation",
+        {
+          id,
+          selected: selected ?? false,
+        },
+        children,
+      );
+    },
+  );
   PointAnnotation.displayName = "MockMapLibrePointAnnotation";
 
   return {
@@ -538,8 +535,6 @@ export const createMapLibreMockModule = () => {
         urlTransformEvents.push(`remove:${id}:liveMaps=${liveMapViewCount}`);
       },
     },
-    Marker: ({ children, lngLat }: { children?: ReactNode; lngLat: number[] }) =>
-      React.createElement("marker-view", { coordinate: lngLat, allowOverlap: true }, children),
     ViewAnnotation: PointAnnotation,
     GeoJSONSource: ({ children, id }: { children?: ReactNode; id: string }) =>
       React.createElement("geojson-source", { id }, children),

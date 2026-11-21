@@ -1,6 +1,6 @@
 import { ClockIcon, EyeOffIcon, HourglassIcon, PauseIcon } from "lucide-react-native";
-import { useEffect, useEffectEvent } from "react";
-import { View } from "react-native";
+import { useEffect, useEffectEvent, useState } from "react";
+import { Platform, View } from "react-native";
 import Svg, { Circle, Defs, Path, RadialGradient, Stop } from "react-native-svg";
 import { useLocationStale } from "../../hooks/useLocationStale.ts";
 import { cn } from "../../lib/cn.ts";
@@ -81,19 +81,20 @@ export const LiveMapMarkerPin = ({
   image: string | null;
   initials: string;
   name: string;
-  onBitmapContentChange?: () => void;
+  onBitmapContentChange?: (() => void) | undefined;
   ringColor: string;
   ringColors?: string[] | undefined;
   status?: MapPersonStatus | null | undefined;
   timestamp: string | null;
 }) => {
   const isStale = useLocationStale(timestamp);
+  const [imageStatusChanges, setImageStatusChanges] = useState(0);
   const refreshBitmap = useEffectEvent(() => onBitmapContentChange?.());
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: iOS annotation bitmaps need an explicit refresh when the pin's look changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Android draws map pins into a bitmap that needs an explicit refresh when the pin's look changes
   useEffect(() => {
     refreshBitmap();
-  }, [hasUnreadableUpdate, isStale]);
+  }, [hasUnreadableUpdate, imageStatusChanges, isStale]);
   const showHeading = headingDegrees !== null;
   const size = showHeading ? OUTER_SIZE : PIN_SIZE;
   const badgeIcon = deviceIcon ? deviceIconFor(deviceIcon, devicePlatform) : null;
@@ -134,6 +135,30 @@ export const LiveMapMarkerPin = ({
           </Svg>
         </View>
       ) : null}
+      {Platform.OS === "android" && onBitmapContentChange ? (
+        <Svg
+          width={52}
+          height={52}
+          pointerEvents="none"
+          style={{ position: "absolute", left: size / 2 - 26, top: size / 2 - 24 }}
+        >
+          <Defs>
+            <RadialGradient
+              id="pinShadow"
+              gradientUnits="userSpaceOnUse"
+              cx={26}
+              cy={26}
+              rx={26}
+              ry={26}
+            >
+              <Stop offset="77%" stopColor="#000000" stopOpacity="0.28" />
+              <Stop offset="88%" stopColor="#000000" stopOpacity="0.14" />
+              <Stop offset="100%" stopColor="#000000" stopOpacity="0" />
+            </RadialGradient>
+          </Defs>
+          <Circle cx={26} cy={26} r={26} fill="url(#pinShadow)" />
+        </Svg>
+      ) : null}
       <View
         collapsable={false}
         style={{
@@ -153,9 +178,8 @@ export const LiveMapMarkerPin = ({
         <Avatar alt={name} className="size-10" style={status ? { opacity: 0.45 } : undefined}>
           <DecryptedAvatarImage
             url={image}
-            onLoadingStatusChange={(_status: "error" | "loaded") => {
-              onBitmapContentChange?.();
-            }}
+            {...(onBitmapContentChange ? { fadeDuration: 0 } : {})}
+            onLoadingStatusChange={() => setImageStatusChanges((changes) => changes + 1)}
           />
           <AvatarFallback
             className={status ? "bg-neutral-500" : ""}

@@ -243,8 +243,6 @@ export const useLiveMapEdgeMarkers = ({
   return {
     mapRef,
     edgeMarkers,
-    isEdgeMarker: (id: string) =>
-      edgeMarkersRef.current.some((edge) => edge.memberIds.includes(id)),
     suppress,
     release,
     releaseAfter,

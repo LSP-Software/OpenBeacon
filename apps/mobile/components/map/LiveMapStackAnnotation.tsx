@@ -1,10 +1,12 @@
-import { Marker, ViewAnnotation } from "@maplibre/maplibre-react-native";
-import { useState } from "react";
-import { type GestureResponderEvent, Platform, Pressable, View } from "react-native";
+import { ViewAnnotation, type ViewAnnotationRef } from "@maplibre/maplibre-react-native";
+import { useEffect, useRef } from "react";
+import { Platform, View } from "react-native";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
 import type { LiveMapPinGroup, LiveMapPinOffset } from "../../lib/liveMapPinGroups.ts";
+import { useTheme } from "../../providers/ThemeProvider.tsx";
 import { LiveMapPinMotion } from "./LiveMapPinMotion.tsx";
 import { LiveMapStackPin } from "./LiveMapStackPin.tsx";
+import { refreshViewAnnotation } from "./refreshViewAnnotation.ts";
 
 export const LiveMapStackAnnotation = ({
   arrival,
@@ -15,45 +17,52 @@ export const LiveMapStackAnnotation = ({
   arrival: LiveMapPinOffset | undefined;
   group: LiveMapPinGroup;
   members: readonly LiveMapMarker[];
-  onPress: (event?: GestureResponderEvent) => void;
+  onPress: () => void;
 }) => {
-  const [selectionRevision, setSelectionRevision] = useState(0);
-  const pin = (
-    <View collapsable={false} style={{ paddingHorizontal: 6, paddingVertical: 4 }}>
-      <LiveMapPinMotion arrival={arrival}>
-        <LiveMapStackPin members={members} />
-      </LiveMapPinMotion>
-    </View>
-  );
+  const annotationRef = useRef<ViewAnnotationRef>(null);
+  const { appTheme } = useTheme();
+  const accessibilityLabel = `${members.length} people: ${members.map((member) => member.name).join(", ")}`;
+  const drawnMembers = members
+    .map((member) =>
+      [
+        member.deviceId,
+        member.image,
+        member.initials,
+        member.ringColor,
+        member.ringColors?.join(" "),
+        member.unreadableGroup !== undefined,
+      ].join(","),
+    )
+    .join("|");
 
-  if (Platform.OS === "android") {
-    return (
-      <Marker lngLat={[group.longitude, group.latitude]}>
-        <Pressable
-          onPress={onPress}
-          accessibilityRole="button"
-          accessibilityLabel={`${members.length} people: ${members.map((member) => member.name).join(", ")}`}
-          style={{ alignSelf: "flex-start" }}
-        >
-          {pin}
-        </Pressable>
-      </Marker>
-    );
-  }
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Android draws ViewAnnotation children into a bitmap that needs an explicit refresh when the stack's look changes
+  useEffect(() => {
+    refreshViewAnnotation(annotationRef);
+  }, [appTheme, drawnMembers]);
 
   return (
     <ViewAnnotation
-      key={selectionRevision}
+      ref={annotationRef}
       id={group.id}
       lngLat={[group.longitude, group.latitude]}
       anchor="center"
-      onSelect={() => {
-        onPress();
-        // iOS only reports a tap on an unselected annotation, and a stack never stays selected
-        setSelectionRevision((current) => current + 1);
-      }}
+      onPress={onPress}
+      {...(Platform.OS === "ios" ? { title: accessibilityLabel } : {})}
     >
-      {pin}
+      <View
+        {...(Platform.OS === "ios"
+          ? { accessible: true, accessibilityRole: "button" as const, accessibilityLabel }
+          : { importantForAccessibility: "no-hide-descendants" as const })}
+        collapsable={false}
+        style={{ paddingHorizontal: 6, paddingVertical: 4 }}
+      >
+        <LiveMapPinMotion arrival={arrival}>
+          <LiveMapStackPin
+            members={members}
+            onBitmapContentChange={() => refreshViewAnnotation(annotationRef)}
+          />
+        </LiveMapPinMotion>
+      </View>
     </ViewAnnotation>
   );
 };
