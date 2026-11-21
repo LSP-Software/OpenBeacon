@@ -51,7 +51,7 @@ const TabsLayout = () => {
   });
   const userImage = session?.user.image ?? null;
   const userImageKeySealed = session?.user.imageKeySealed ?? null;
-  useEffect(() => {
+  const checkKeys = useCallback(() => {
     if (!groups || !userId) return;
     void tryCatch(
       checkImageKeys({
@@ -64,7 +64,11 @@ const TabsLayout = () => {
       }
     });
   }, [groups, userId, userImage, userImageKeySealed]);
-  useAppForeground(reportTimezone);
+  useEffect(checkKeys, [checkKeys]);
+  useAppForeground(() => {
+    reportTimezone();
+    checkKeys();
+  });
 
   if (isPending) {
     return <LoadingIndicator />;
