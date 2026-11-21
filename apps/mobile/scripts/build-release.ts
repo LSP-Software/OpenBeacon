@@ -5,10 +5,15 @@ import { isAbsolute, join, resolve } from "node:path";
 import { z } from "zod";
 import { FIREBASE_ENV_NAMES } from "../plugins/withFirebasePush.js";
 import { checkFirebaseValues } from "./firebaseBuildCheck.ts";
+import { checkServerGoogleClientId } from "./googleClientIdBuildCheck.ts";
 
 const projectRoot = resolve(import.meta.dir, "..");
 const allowDirty = process.argv.includes("--allow-dirty");
 const apk = process.argv.includes("--apk");
+const skipServerCheck = process.argv.includes("--skip-server-check");
+const serverUrl =
+  process.argv.find((arg) => arg.startsWith("--server="))?.slice("--server=".length) ??
+  "https://api.openbeacon.net";
 
 const fail: (message: string) => never = (message) => {
   console.error(`\n${message}`);
@@ -63,6 +68,14 @@ if (!googleWebClientId) {
   fail(
     "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID is not set, so Google sign-in would be turned off. Set it in apps/mobile/.env.",
   );
+}
+
+if (skipServerCheck) {
+  console.warn("\nNot checking EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID against the server.\n");
+} else {
+  const google = await checkServerGoogleClientId({ serverUrl, webClientId: googleWebClientId });
+  if (google.problem === "fail") fail(google.message);
+  if (google.problem === "warn") console.warn(`\n${google.message}\n`);
 }
 
 const firebaseEnv = Object.fromEntries(

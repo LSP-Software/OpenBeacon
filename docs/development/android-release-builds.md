@@ -78,6 +78,7 @@ bun run build-aab
 
 - there are uncommitted changes, since they would end up in the release;
 - `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` isn't set;
+- the hosted server at `https://api.openbeacon.net` has Google sign-in turned off, uses a different `GOOGLE_CLIENT_ID`, or can't be reached, since the app would then hide Continue with Google. A server too old to report its client ID only prints a warning. Check against another server with `--server=https://your.server`, or skip the check with `--skip-server-check`;
 - any of the four [Firebase values](#push-notifications) isn't set, since the release would have no push;
 - `credentials.json` is missing or has an empty field, or the keystore doesn't open with its passwords;
 - `keyPassword` differs from `keystorePassword` in a PKCS12 keystore, which would otherwise only fail at the signing step.
