@@ -63,6 +63,13 @@ describe("liveSpeedLabel", () => {
     ).toBeNull();
   });
 
+  test("tolerates a minute of clock difference but hides fixes further in the future", () => {
+    expect(liveSpeedLabel({ now, speed: 15.2, timestamp: ago(-60_000), unit: "mph" })).toBe(
+      "34 mph",
+    );
+    expect(liveSpeedLabel({ now, speed: 15.2, timestamp: ago(-60_001), unit: "mph" })).toBeNull();
+  });
+
   test("hides the speed without a usable timestamp or while still", () => {
     expect(liveSpeedLabel({ now, speed: 15.2, timestamp: null, unit: "mph" })).toBeNull();
     expect(liveSpeedLabel({ now, speed: 15.2, timestamp: "not a date", unit: "mph" })).toBeNull();

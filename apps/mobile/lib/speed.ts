@@ -72,6 +72,6 @@ export const liveSpeedLabel = ({
 }) => {
   if (timestamp === null) return null;
   const age = now - Date.parse(timestamp);
-  if (!(age <= LIVE_SPEED_MAX_AGE_MS)) return null;
+  if (!(age >= -60_000 && age <= LIVE_SPEED_MAX_AGE_MS)) return null;
   return movingSpeedLabel(speed, unit);
 };
