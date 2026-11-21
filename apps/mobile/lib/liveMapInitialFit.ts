@@ -1,9 +1,11 @@
 import { hasValidCoordinate, isWithinMapFitBounds, mapFitBounds } from "./fitLiveMapMarkers.ts";
 
 export const LIVE_MAP_INITIAL_FIT_SETTLE_MS = 3_000;
+export const LIVE_MAP_INITIAL_FIT_SELF_FIX_WAIT_MS = 15_000;
 export const LIVE_MAP_REFIT_AFTER_BACKGROUND_MS = 5 * 60_000;
 
 type LiveMapInitialFitState = {
+  awaitingLiveSelfFix: boolean;
   fittedMarkerIds: string[];
   framedBounds: ReturnType<typeof mapFitBounds> | null;
   phase: "waiting" | "fitting" | "closed";
@@ -11,6 +13,7 @@ type LiveMapInitialFitState = {
 };
 
 export const createLiveMapInitialFitState = (): LiveMapInitialFitState => ({
+  awaitingLiveSelfFix: false,
   fittedMarkerIds: [],
   framedBounds: null,
   phase: "waiting",
@@ -51,6 +54,7 @@ export const reduceLiveMapInitialFit = (
     return {
       fit: true,
       state: {
+        awaitingLiveSelfFix: event.awaitingLiveSelfFix,
         fittedMarkerIds: markerIds,
         framedBounds,
         phase: "fitting",
@@ -75,19 +79,39 @@ export const reduceLiveMapInitialFit = (
     );
 
   if (!hasNewMarker && !hasMovedOutOfFrame) {
-    return { fit: false, state: { ...state, settledAtMs } };
+    return {
+      fit: false,
+      state: { ...state, awaitingLiveSelfFix: event.awaitingLiveSelfFix, settledAtMs },
+    };
   }
 
   return {
     fit: true,
-    state: { fittedMarkerIds: markerIds, framedBounds, phase: "fitting", settledAtMs },
+    state: {
+      awaitingLiveSelfFix: event.awaitingLiveSelfFix,
+      fittedMarkerIds: markerIds,
+      framedBounds,
+      phase: "fitting",
+      settledAtMs,
+    },
   };
 };
 
-const hasSettled = (state: LiveMapInitialFitState, nowMs: number) =>
-  state.phase === "fitting" &&
-  state.settledAtMs !== null &&
-  nowMs >= state.settledAtMs + LIVE_MAP_INITIAL_FIT_SETTLE_MS;
+export const liveMapInitialFitClosesAtMs = (state: LiveMapInitialFitState) => {
+  if (state.phase !== "fitting" || state.settledAtMs === null) {
+    return null;
+  }
+  return (
+    state.settledAtMs +
+    LIVE_MAP_INITIAL_FIT_SETTLE_MS +
+    (state.awaitingLiveSelfFix ? LIVE_MAP_INITIAL_FIT_SELF_FIX_WAIT_MS : 0)
+  );
+};
+
+const hasSettled = (state: LiveMapInitialFitState, nowMs: number) => {
+  const closesAtMs = liveMapInitialFitClosesAtMs(state);
+  return closesAtMs !== null && nowMs >= closesAtMs;
+};
 
 const closed = (state: LiveMapInitialFitState): LiveMapInitialFitState => ({
   ...state,
@@ -99,6 +123,7 @@ type LiveMapInitialFitEvent =
       type: "markers";
       markers: readonly { deviceId: string; latitude: number; longitude: number }[];
       locationsLoading: boolean;
+      awaitingLiveSelfFix: boolean;
       nowMs: number;
     }
   | { type: "settle_elapsed"; nowMs: number }

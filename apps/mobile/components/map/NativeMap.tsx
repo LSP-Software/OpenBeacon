@@ -49,6 +49,7 @@ import { useLiveMapSelection } from "./useLiveMapSelection.ts";
 import { useNativeMapStyle } from "./useNativeMapStyle.ts";
 
 export const NativeMap = ({
+  awaitingLiveSelfFix = false,
   devices = [],
   focusPlaceId = null,
   groupOptions = null,
@@ -67,6 +68,7 @@ export const NativeMap = ({
   selectedDeviceId = null,
   timelineGroupId = null,
 }: {
+  awaitingLiveSelfFix?: boolean;
   devices?: readonly (MapMemberDevice & { paused: boolean; unreadable: boolean })[];
   focusPlaceId?: string | null;
   groupOptions?: readonly MapGroupOption[] | null;
@@ -219,6 +221,7 @@ export const NativeMap = ({
   const personTimelineGroupId = selectedMarker?.sourceGroupId || timelineGroupId;
   const hasMarkers = markers.length > 0;
   const camera = useLiveMapCamera({
+    awaitingLiveSelfFix,
     bottomOverlayHeight: trayPeople ? trayHeight : 0,
     edge,
     locationsLoading,

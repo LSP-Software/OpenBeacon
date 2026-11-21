@@ -5,7 +5,7 @@ import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
 import { fitLiveMapMarkers } from "../../lib/fitLiveMapMarkers.ts";
 import {
   createLiveMapInitialFitState,
-  LIVE_MAP_INITIAL_FIT_SETTLE_MS,
+  liveMapInitialFitClosesAtMs,
   reduceLiveMapInitialFit,
 } from "../../lib/liveMapInitialFit.ts";
 import {
@@ -22,6 +22,7 @@ import type { useLiveMapEdgeMarkers } from "./useLiveMapEdgeMarkers.ts";
 import type { useNativeMapStyle } from "./useNativeMapStyle.ts";
 
 export const useLiveMapCamera = ({
+  awaitingLiveSelfFix,
   bottomOverlayHeight,
   edge,
   locationsLoading,
@@ -37,6 +38,7 @@ export const useLiveMapCamera = ({
   sheetOpen,
   topInset,
 }: {
+  awaitingLiveSelfFix: boolean;
   bottomOverlayHeight: number;
   edge: Pick<ReturnType<typeof useLiveMapEdgeMarkers>, "suppress" | "release" | "releaseAfter">;
   locationsLoading: boolean;
@@ -342,6 +344,7 @@ export const useLiveMapCamera = ({
     }
 
     const result = reduceLiveMapInitialFit(initialFitStateRef.current, {
+      awaitingLiveSelfFix,
       locationsLoading,
       markers,
       nowMs: Date.now(),
@@ -360,7 +363,15 @@ export const useLiveMapCamera = ({
         previousCamera: preservedCameraRef.current,
       });
     }
-  }, [cameraPadding, initialFitRevision, isStyleLoaded, locationsLoading, mapStyle, markers]);
+  }, [
+    awaitingLiveSelfFix,
+    cameraPadding,
+    initialFitRevision,
+    isStyleLoaded,
+    locationsLoading,
+    mapStyle,
+    markers,
+  ]);
 
   useEffect(() => {
     if (!mapStyle || !cameraRef.current) return;
@@ -515,8 +526,8 @@ const scheduleLiveMapInitialFitSettle = (
   stateRef: { current: ReturnType<typeof createLiveMapInitialFitState> },
 ) => {
   clearLiveMapInitialFitTimer(timerRef);
-  const settledAtMs = stateRef.current.settledAtMs;
-  if (stateRef.current.phase !== "fitting" || settledAtMs === null) {
+  const closesAtMs = liveMapInitialFitClosesAtMs(stateRef.current);
+  if (closesAtMs === null) {
     return;
   }
 
@@ -528,6 +539,6 @@ const scheduleLiveMapInitialFitSettle = (
         type: "settle_elapsed",
       }).state;
     },
-    Math.max(0, settledAtMs + LIVE_MAP_INITIAL_FIT_SETTLE_MS - Date.now()),
+    Math.max(0, closesAtMs - Date.now()),
   );
 };

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mapFitBounds } from "./fitLiveMapMarkers.ts";
 import {
   createLiveMapInitialFitState,
+  LIVE_MAP_INITIAL_FIT_SELF_FIX_WAIT_MS,
   LIVE_MAP_INITIAL_FIT_SETTLE_MS,
   LIVE_MAP_REFIT_AFTER_BACKGROUND_MS,
   reduceLiveMapInitialFit,
@@ -19,8 +20,10 @@ const markers = (
   nowMs: number,
   locationsLoading = false,
   moved: Readonly<Record<string, { latitude: number; longitude: number }>> = {},
+  awaitingLiveSelfFix = false,
 ) =>
   reduceLiveMapInitialFit(state, {
+    awaitingLiveSelfFix,
     locationsLoading,
     markers: markerIds.map((deviceId) => ({
       deviceId,
@@ -139,6 +142,64 @@ describe("reduceLiveMapInitialFit", () => {
 
     expect(late.fit).toBe(false);
     expect(late.state.phase).toBe("closed");
+  });
+
+  test("stays open past the settle time while your own position is still cached", () => {
+    const loaded = markers(
+      createLiveMapInitialFitState(),
+      ["self", "alice"],
+      1_000,
+      false,
+      {},
+      true,
+    );
+    const settleTick = reduceLiveMapInitialFit(loaded.state, {
+      nowMs: 1_000 + LIVE_MAP_INITIAL_FIT_SETTLE_MS,
+      type: "settle_elapsed",
+    });
+    const liveFix = markers(settleTick.state, ["self", "alice"], 12_000, false, {
+      self: { latitude: 40, longitude: -3 },
+    });
+    const afterFix = reduceLiveMapInitialFit(liveFix.state, {
+      nowMs: 12_000,
+      type: "settle_elapsed",
+    });
+
+    expect(settleTick.state.phase).toBe("fitting");
+    expect(liveFix.fit).toBe(true);
+    expect(liveFix.state.awaitingLiveSelfFix).toBe(false);
+    expect(afterFix.state.phase).toBe("closed");
+  });
+
+  test("stops waiting for a live fix of your own position after the cap", () => {
+    const loaded = markers(createLiveMapInitialFitState(), ["self"], 1_000, false, {}, true);
+    const closesAtMs =
+      1_000 + LIVE_MAP_INITIAL_FIT_SETTLE_MS + LIVE_MAP_INITIAL_FIT_SELF_FIX_WAIT_MS;
+    const beforeCap = reduceLiveMapInitialFit(loaded.state, {
+      nowMs: closesAtMs - 1,
+      type: "settle_elapsed",
+    });
+    const atCap = reduceLiveMapInitialFit(beforeCap.state, {
+      nowMs: closesAtMs,
+      type: "settle_elapsed",
+    });
+    const lateFix = markers(atCap.state, ["self"], closesAtMs + 1, false, {
+      self: { latitude: 40, longitude: -3 },
+    });
+
+    expect(beforeCap.state.phase).toBe("fitting");
+    expect(atCap.state.phase).toBe("closed");
+    expect(lateFix.fit).toBe(false);
+  });
+
+  test("closes straight away on user camera control while your own position is cached", () => {
+    const loaded = markers(createLiveMapInitialFitState(), ["self"], 1_000, false, {}, true);
+    const moved = reduceLiveMapInitialFit(loaded.state, { type: "user_camera_control" });
+
+    expect(moved.state.phase).toBe("closed");
+    expect(
+      markers(moved.state, ["self"], 2_000, false, { self: { latitude: 40, longitude: -3 } }).fit,
+    ).toBe(false);
   });
 
   test("an early settle timer does not close while locations are loading", () => {

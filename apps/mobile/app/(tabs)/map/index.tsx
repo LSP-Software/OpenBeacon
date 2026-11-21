@@ -388,6 +388,7 @@ const MapScreen = () => {
       style={{ paddingBottom: insets.bottom + TAB_BAR_CONTENT_HEIGHT }}
     >
       <NativeMap
+        awaitingLiveSelfFix={selfDeviceLocation?.cached !== false}
         devices={memberDevices.map((device) => ({
           ...device,
           paused:
