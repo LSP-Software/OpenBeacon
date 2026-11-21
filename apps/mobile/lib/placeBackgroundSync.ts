@@ -13,6 +13,7 @@ import { queryClient, type RouterOutputs, trpc, trpcClient } from "./api.ts";
 import { getBaseUrl } from "./currentServer.ts";
 import { getRegisteredDeviceKey } from "./deviceKeys.ts";
 import { catchUpGroupImageKeys } from "./imageKeyCatchUp.ts";
+import { imageKeyCatchUpWaitMs } from "./imageKeyCatchUpBackoff.ts";
 import { showNotices } from "./noticeBackgroundSync.ts";
 import { showEventNotice } from "./notifications.ts";
 import { ownedDeviceName } from "./ownedDeviceName.ts";
@@ -274,8 +275,8 @@ const catchUpImageKeys = async ({
   saveMisses(current);
   const due = groupIds.filter((groupId) => {
     const catchUpKey = storageKey(userId, "imageKeysCatchUpAt", groupId);
-    const waitMinutes = [15, 15, 60, 6 * 60][current[groupId]?.misses ?? 0] ?? 24 * 60;
-    if (Date.now() - (storage.getNumber(catchUpKey) ?? 0) < waitMinutes * 60_000) return false;
+    const waitMs = imageKeyCatchUpWaitMs(current[groupId]?.misses ?? 0);
+    if (Date.now() - (storage.getNumber(catchUpKey) ?? 0) < waitMs) return false;
     storage.set(catchUpKey, Date.now());
     return true;
   });

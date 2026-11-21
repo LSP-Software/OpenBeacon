@@ -421,6 +421,7 @@ test("waits 15 minutes before checking again after a failure", async () => {
 test("reads the cached picture only when it's about to upload it", async () => {
   expect(await check([makeGroup({})])).toBe(false);
   expect(reads).toEqual([]);
+  groupId = `${groupId}-junk`;
   expect(await check([makeGroup({ groupKey: junkGroupKey() })])).toBe(true);
   expect(reads).toEqual([GROUP_FILE]);
 });
@@ -604,22 +605,113 @@ test("asks for no catch-up when every key is on the latest epoch or the server d
   expect(catchUp).not.toHaveBeenCalled();
 });
 
-test("a catch-up this phone can't do waits 15 minutes, but a new epoch is tried straight away", async () => {
+const atTime = (time: string) => jest.setSystemTime(new Date(`2026-11-16T${time}:00.000Z`));
+
+test("a catch-up this phone can't do backs off from 15 minutes to a day, even across restarts", async () => {
   jest.useFakeTimers();
   try {
-    jest.setSystemTime(new Date("2026-11-16T10:00:00.000Z"));
+    atTime("10:00");
     catchUp.mockImplementation(async () => 0);
     const groups = [withOldMemberKey(makeGroup({ role: "MEMBER" }))];
     expect(await check(groups)).toBe(false);
     expect(await check(groups)).toBe(false);
     expect(catchUp).toHaveBeenCalledTimes(1);
-    expect(await check([{ ...groups[0]!, latestEpochId: "epoch-3" }])).toBe(false);
+    atTime("10:14");
+    await check(groups);
+    expect(catchUp).toHaveBeenCalledTimes(1);
+    atTime("10:15");
+    await check(groups);
     expect(catchUp).toHaveBeenCalledTimes(2);
-    jest.setSystemTime(new Date("2026-11-16T10:15:00.000Z"));
-    expect(await check(groups)).toBe(false);
+    atTime("11:14");
+    await check(groups);
+    expect(catchUp).toHaveBeenCalledTimes(2);
+    atTime("11:15");
+    await check(groups);
+    expect(catchUp).toHaveBeenCalledTimes(3);
+    atTime("11:20");
+    const restarted = await freshImport("backoff-restart");
+    await restarted.checkImageKeys({ groups, user });
+    expect(catchUp).toHaveBeenCalledTimes(3);
+    atTime("17:14");
+    await restarted.checkImageKeys({ groups, user });
+    expect(catchUp).toHaveBeenCalledTimes(3);
+    atTime("17:15");
+    await restarted.checkImageKeys({ groups, user });
+    expect(catchUp).toHaveBeenCalledTimes(4);
+    jest.setSystemTime(new Date("2026-11-17T17:14:00.000Z"));
+    await restarted.checkImageKeys({ groups, user });
+    expect(catchUp).toHaveBeenCalledTimes(4);
+    jest.setSystemTime(new Date("2026-11-17T17:15:00.000Z"));
+    await restarted.checkImageKeys({ groups, user });
+    expect(catchUp).toHaveBeenCalledTimes(5);
+  } finally {
+    catchUp.mockImplementation(async () => 1);
+    jest.useRealTimers();
+  }
+});
+
+test("a new epoch is tried again after a minute, without waiting out the backoff", async () => {
+  jest.useFakeTimers();
+  try {
+    atTime("10:00");
+    catchUp.mockImplementation(async () => 0);
+    const groups = [withOldMemberKey(makeGroup({ role: "MEMBER" }))];
+    await check(groups);
+    atTime("10:15");
+    await check(groups);
+    expect(catchUp).toHaveBeenCalledTimes(2);
+    const newer = [{ ...groups[0]!, latestEpochId: "epoch-3" }];
+    await check(newer);
+    expect(catchUp).toHaveBeenCalledTimes(2);
+    atTime("10:16");
+    await check(newer);
     expect(catchUp).toHaveBeenCalledTimes(3);
   } finally {
     catchUp.mockImplementation(async () => 1);
+    jest.useRealTimers();
+  }
+});
+
+test("runs a group's catch-up at most once a minute when the server keeps sending new stale keys", async () => {
+  jest.useFakeTimers();
+  try {
+    atTime("10:00");
+    const fresh = (epoch: string) => [
+      { ...withOldMemberKey(makeGroup({ role: "MEMBER" })), latestEpochId: epoch },
+    ];
+    expect(await check(fresh("epoch-2"))).toBe(true);
+    expect(await check(fresh("epoch-3"))).toBe(false);
+    expect(await check(fresh("epoch-4"))).toBe(false);
+    expect(catchUp).toHaveBeenCalledTimes(1);
+    atTime("10:01");
+    expect(await check(fresh("epoch-5"))).toBe(true);
+    expect(catchUp).toHaveBeenCalledTimes(2);
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test("repairs this phone's own key at most once a minute when the server keeps replacing it", async () => {
+  jest.useFakeTimers();
+  try {
+    atTime("10:00");
+    const junk = () =>
+      makeGroup({
+        ownGroupKey: wrap({
+          fileName: ME_FILE,
+          imageKey: generateImageKey(),
+          kind: "profile-image-key",
+          ownerId: "user-a",
+        }),
+        role: "MEMBER",
+      });
+    expect(await check([junk()])).toBe(true);
+    expect(await check([junk()])).toBe(false);
+    expect(storeOwn).toHaveBeenCalledTimes(1);
+    atTime("10:01");
+    expect(await check([junk()])).toBe(true);
+    expect(storeOwn).toHaveBeenCalledTimes(2);
+  } finally {
     jest.useRealTimers();
   }
 });

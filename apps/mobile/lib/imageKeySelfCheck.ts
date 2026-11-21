@@ -1,5 +1,6 @@
 import { decryptImage, decryptImageKey, type ImageKeyMaterial } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
+import { z } from "zod";
 import { type RouterOutputs, trpcClient } from "./api.ts";
 import { getBaseUrl } from "./currentServer.ts";
 import { downloadEncryptedImage } from "./decryptedImages.ts";
@@ -8,11 +9,14 @@ import { resolveEpochKey } from "./epochKeys.ts";
 import { uploadEncryptedImage } from "./image-upload.ts";
 import { cachedImageUri, imageFileNameFromUrl, readCachedImage } from "./imageCache.ts";
 import { catchUpGroupImageKeys } from "./imageKeyCatchUp.ts";
+import { imageKeyCatchUpWaitMs } from "./imageKeyCatchUpBackoff.ts";
 import { confirmGroupImage, getOwnImageKey, storeOwnImageKeyInGroup } from "./imageKeys.ts";
 import type { StoredImageKey } from "./imageKeyTypes.ts";
+import { parseJson } from "./parseJson.ts";
 import { storage } from "./storage.ts";
 
 const RETRY_AFTER_MS = 15 * 60_000;
+const MIN_GAP_MS = 60_000;
 const GROUP_IMAGE_REPAIR_EVERY_MS = 24 * 60 * 60_000;
 
 const attempts = new Map<string, { at: number; signature: string }>();
@@ -27,6 +31,12 @@ let pending: CheckInput | null = null;
 let currentUserId: string | null = null;
 
 const unsettled = { settled: false, repaired: false };
+
+const staleBackoffSchema = z.object({
+  epochId: z.string(),
+  misses: z.number().int().min(0),
+  at: z.number(),
+});
 
 const storageKey = (name: string, userId: string, groupId: string) =>
   `imageKeys.${name}.${JSON.stringify([getBaseUrl(), userId, groupId])}`;
@@ -190,7 +200,9 @@ const runCheck = async ({
 }) => {
   if (storage.getString(slot) === signature) return false;
   const previous = attempts.get(slot);
-  if (previous?.signature === signature && Date.now() - previous.at < RETRY_AFTER_MS) return false;
+  const sincePrevious = previous ? Date.now() - previous.at : Infinity;
+  if (sincePrevious < MIN_GAP_MS) return false;
+  if (previous?.signature === signature && sincePrevious < RETRY_AFTER_MS) return false;
   attempts.set(slot, { at: Date.now(), signature });
   const result = await tryCatch(check());
   if (result.error) return false;
@@ -256,17 +268,34 @@ const checkAll = async ({ groups, user }: CheckInput) => {
     }
     if (currentUserId !== user.id) break;
     const stale = staleImageKeyCiphertexts(group);
-    if (stale.length > 0) {
+    const latestEpochId = group.latestEpochId;
+    const backoffKey = storageKey("staleBackoff", user.id, group.id);
+    const stored = staleBackoffSchema.safeParse(parseJson(storage.getString(backoffKey) ?? ""));
+    const backoff =
+      stored.success && stored.data.epochId === latestEpochId ? stored.data : { misses: 0, at: 0 };
+    if (
+      latestEpochId &&
+      stale.length > 0 &&
+      (backoff.misses === 0 || Date.now() - backoff.at >= imageKeyCatchUpWaitMs(backoff.misses))
+    ) {
       repaired =
         (await runCheck({
           slot: storageKey("staleChecked", user.id, group.id),
-          signature: `${group.latestEpochId}|${stale.join(",")}`,
+          signature: `${latestEpochId}|${stale.join(",")}`,
           check: async () => {
             const moved = await catchUpGroupImageKeys({
               groupId: group.id,
               groups: async () => groups,
               userId: user.id,
             });
+            storage.set(
+              backoffKey,
+              JSON.stringify({
+                epochId: latestEpochId,
+                misses: moved > 0 ? 0 : Math.min(backoff.misses + 1, 4),
+                at: Date.now(),
+              }),
+            );
             return { settled: moved > 0, repaired: moved > 0 };
           },
         })) || repaired;
