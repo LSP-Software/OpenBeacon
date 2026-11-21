@@ -71,7 +71,11 @@ export const recoveryPhrasePdfHtml = ({
 </html>`;
 };
 
+let activeExport: AbortController | null = null;
+
 export const clearRecoveryPhrasePdfs = () => {
+  activeExport?.abort();
+  activeExport = null;
   for (const directory of [pdfDirectory(), new Directory(Paths.cache, "Print")]) {
     if (directory.exists) directory.delete();
   }
@@ -84,11 +88,16 @@ export const shareRecoveryPhrasePdf = async ({
   words: string[];
   signal: AbortSignal;
 }) => {
+  const exportController = new AbortController();
+  activeExport = exportController;
+  signal.addEventListener("abort", () => exportController.abort(), { once: true });
+  if (signal.aborted) exportController.abort();
+  const exportSignal = exportController.signal;
   const [{ printToFileAsync }, { shareAsync }] = await Promise.all([
     import("expo-print"),
     import("expo-sharing"),
   ]);
-  if (signal.aborted) return;
+  if (exportSignal.aborted) return;
   const created = new Date().toLocaleDateString(undefined, {
     day: "numeric",
     month: "long",
@@ -101,7 +110,7 @@ export const shareRecoveryPhrasePdf = async ({
       })
     ).uri,
   );
-  if (signal.aborted) {
+  if (exportSignal.aborted) {
     if (printed.exists) printed.delete();
     return;
   }

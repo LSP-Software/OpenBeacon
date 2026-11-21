@@ -170,7 +170,8 @@ export const getLocationPermissionState = async (): Promise<LocationPermissionSt
 export const requestForegroundLocationPermissions = async (): Promise<LocationPermissionState> => {
   let foregroundPermission = await getForegroundPermissionsAsync();
 
-  if (!getPreciseEnabled(toLocationPermissionResponse(foregroundPermission))) {
+  const permission = toLocationPermissionResponse(foregroundPermission);
+  if (!permission.granted || (permission.android && !getPreciseEnabled(permission))) {
     foregroundPermission = await withOwnScreen(requestForegroundPermissionsAsync);
   }
 

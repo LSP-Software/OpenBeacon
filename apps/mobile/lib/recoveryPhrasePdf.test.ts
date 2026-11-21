@@ -117,3 +117,12 @@ test("each export shares one PDF at a new address and clearing removes every cop
 
   expect([...cachedFiles]).toEqual([]);
 });
+
+test("clearing while a print is running stops it from being shared", async () => {
+  afterPrint = () => clearRecoveryPhrasePdfs();
+
+  await shareRecoveryPhrasePdf({ words, signal: new AbortController().signal });
+
+  expect([...cachedFiles]).toEqual([]);
+  expect(shared).toEqual([]);
+});

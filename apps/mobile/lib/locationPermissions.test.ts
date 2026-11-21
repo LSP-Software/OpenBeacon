@@ -182,6 +182,18 @@ describe("locationPermissions", () => {
     expect(foregroundRequests).toBe(1);
   });
 
+  test("does not ask again on iOS when only reduced accuracy is allowed", async () => {
+    foregroundPermission = createPermissionResponse({
+      status: "granted",
+      granted: true,
+      ios: { scope: "whenInUse", accuracy: "reduced" },
+    });
+
+    await requestForegroundLocationPermissions();
+
+    expect(foregroundRequests).toBe(0);
+  });
+
   test("does not ask again when precise location is already allowed", async () => {
     foregroundPermission = createPermissionResponse({
       status: "granted",
