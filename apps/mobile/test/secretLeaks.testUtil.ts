@@ -13,12 +13,9 @@ const serialize = (value: unknown, { withKeys }: { withKeys: boolean }) =>
         }
         if (item instanceof Map) return withKeys ? [...item.entries()] : [...item.values()];
         if (item instanceof Set) return [...item.values()];
-        if (
-          !withKeys &&
-          typeof item === "object" &&
-          item !== null &&
-          Object.getPrototypeOf(item) === Object.prototype
-        ) {
+        if (withKeys) return item;
+        if (typeof item === "boolean") return null;
+        if (typeof item === "object" && item !== null && !Array.isArray(item)) {
           return Object.values(item);
         }
         return item;
