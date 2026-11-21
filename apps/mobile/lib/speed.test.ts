@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   defaultSpeedUnit,
   formatSpeed,
-  LIVE_SPEED_MAX_AGE_MS,
+  liveSpeedHidesAt,
   liveSpeedLabel,
   movingSpeedLabel,
 } from "./speed.ts";
@@ -52,15 +52,25 @@ describe("liveSpeedLabel", () => {
     expect(liveSpeedLabel({ now, speed: 15.2, timestamp: ago(30_000), unit: "mph" })).toBe(
       "34 mph",
     );
-    expect(
-      liveSpeedLabel({ now, speed: 15.2, timestamp: ago(LIVE_SPEED_MAX_AGE_MS), unit: "mph" }),
-    ).toBe("34 mph");
+    expect(liveSpeedLabel({ now, speed: 15.2, timestamp: ago(3 * 60_000), unit: "mph" })).toBe(
+      "34 mph",
+    );
   });
 
   test("hides the speed once the fix is too old to still be true", () => {
     expect(
-      liveSpeedLabel({ now, speed: 15.2, timestamp: ago(LIVE_SPEED_MAX_AGE_MS + 1), unit: "mph" }),
+      liveSpeedLabel({ now, speed: 15.2, timestamp: ago(3 * 60_000 + 1), unit: "mph" }),
     ).toBeNull();
+  });
+
+  test("gives the first moment the speed is hidden, so a card can re-render then", () => {
+    const timestamp = ago(30_000);
+    const hidesAt = liveSpeedHidesAt(timestamp);
+    expect(hidesAt).toBe(now - 30_000 + 3 * 60_000 + 1);
+    expect(liveSpeedLabel({ now: hidesAt - 1, speed: 15.2, timestamp, unit: "mph" })).toBe(
+      "34 mph",
+    );
+    expect(liveSpeedLabel({ now: hidesAt, speed: 15.2, timestamp, unit: "mph" })).toBeNull();
   });
 
   test("tolerates a minute of clock difference but hides fixes further in the future", () => {

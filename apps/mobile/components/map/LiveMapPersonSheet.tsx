@@ -1,14 +1,13 @@
 import { Link } from "expo-router";
 import { GaugeIcon, HistoryIcon } from "lucide-react-native";
 import { Pressable, View } from "react-native";
-import { useSpeedUnit } from "../../hooks/useSpeedUnit.ts";
+import { useLiveSpeedLabel } from "../../hooks/useLiveSpeedLabel.ts";
 import { useTimeSince } from "../../hooks/useTimeSince.ts";
 import { shortTimeSince } from "../../lib/timeSince.ts";
 import { getBatteryVisual } from "../../lib/batteryVisual.ts";
 import { type DeviceIcon, deviceIconFor } from "../../lib/deviceIcons.ts";
 import { locationStaleAt } from "../../lib/locationStaleAt.ts";
 import { mayBeOutOfBattery } from "../../lib/mayBeOutOfBattery.ts";
-import { liveSpeedLabel } from "../../lib/speed.ts";
 import { DecryptedAvatarImage } from "../image/DecryptedAvatarImage.tsx";
 import { Avatar, AvatarFallback } from "../ui/Avatar.tsx";
 import { Button } from "../ui/Button.tsx";
@@ -64,7 +63,6 @@ export const LiveMapPersonSheet = ({
   unreadableGroup?: { id: string; name: string } | undefined;
 }) => {
   const updatedAge = useTimeSince(timestamp);
-  const { unit } = useSpeedUnit();
   const isMultiDevice = devices !== undefined && devices.length >= 2;
   const isOutOfDate = !isSelf && timestamp !== null && Date.now() >= locationStaleAt(timestamp);
   const batteryVisual = battery
@@ -73,9 +71,8 @@ export const LiveMapPersonSheet = ({
         charging: battery.charging,
       })
     : null;
-  const speedLabel = isMultiDevice
-    ? null
-    : liveSpeedLabel({ now: Date.now(), speed, timestamp, unit });
+  const liveSpeed = useLiveSpeedLabel({ speed, timestamp });
+  const speedLabel = isMultiDevice ? null : liveSpeed;
 
   return (
     <LiveMapBottomSheet

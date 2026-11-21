@@ -303,3 +303,24 @@ test.each([
     expect(rendered).not.toContain("mph");
   }
 });
+
+test("the speed chip goes the moment the fix passes three minutes old", async () => {
+  root = createRoot();
+  await act(async () =>
+    root?.render(
+      <LiveMapPersonSheet
+        battery={null}
+        image={null}
+        initials="Al"
+        name="Alice"
+        onDismiss={() => {}}
+        otherSharedGroupNames={[]}
+        speed={15.2}
+        timestamp={new Date(Date.now() - 3 * 60_000 + 50).toISOString()}
+      />,
+    ),
+  );
+  expect(JSON.stringify(root?.container.toJSON())).toContain(`"34 mph"`);
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 100)));
+  expect(JSON.stringify(root?.container.toJSON())).not.toContain("mph");
+});

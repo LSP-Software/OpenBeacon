@@ -2,7 +2,7 @@ export type SpeedUnit = "mph" | "kmh";
 
 const MOVING_SPEED_MPS = 1;
 const MAX_SHOWN_SPEED_MPS = 90;
-export const LIVE_SPEED_MAX_AGE_MS = 3 * 60_000;
+const LIVE_SPEED_MAX_AGE_MS = 3 * 60_000;
 
 const MPH_REGIONS = new Set([
   "AG",
@@ -75,3 +75,6 @@ export const liveSpeedLabel = ({
   if (!(age >= -60_000 && age <= LIVE_SPEED_MAX_AGE_MS)) return null;
   return movingSpeedLabel(speed, unit);
 };
+
+export const liveSpeedHidesAt = (timestamp: string) =>
+  Date.parse(timestamp) + LIVE_SPEED_MAX_AGE_MS + 1;
