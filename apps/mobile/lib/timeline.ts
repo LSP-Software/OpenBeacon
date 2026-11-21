@@ -67,7 +67,7 @@ const interpolate = (
     accuracy: between(from.accuracy, to.accuracy),
     latitude: from.latitude + (to.latitude - from.latitude) * fraction,
     longitude: from.longitude + (to.longitude - from.longitude) * fraction,
-    speed: between(from.speed, to.speed),
+    speed: between(from.speed, to.speed) ?? from.speed ?? to.speed,
   };
 };
 

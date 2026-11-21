@@ -427,14 +427,20 @@ describe("timelinePositionAt", () => {
     });
   });
 
-  test("eases the speed between fixes and drops it when a fix has none", () => {
+  test("eases the speed between fixes and uses the one known speed when a fix has none", () => {
     const moving = segmentsOf([
       point({ latitude: 51, speed: 10, time: at(10) }),
       point({ latitude: 52, speed: 20, time: at(10, 10) }),
       point({ latitude: 53, time: at(10, 20) }),
+      point({ latitude: 54, speed: 8, time: at(10, 30) }),
+      point({ latitude: 55, time: at(10, 40) }),
+      point({ latitude: 56, time: at(10, 50) }),
     ]);
     expect(timelinePositionAt(moving, at(10, 5)).position?.speed).toBe(15);
-    expect(timelinePositionAt(moving, at(10, 15)).position?.speed).toBeNull();
+    expect(timelinePositionAt(moving, at(10, 15)).position?.speed).toBe(20);
+    expect(timelinePositionAt(moving, at(10, 25)).position?.speed).toBe(8);
+    expect(timelinePositionAt(moving, at(10, 35)).position?.speed).toBe(8);
+    expect(timelinePositionAt(moving, at(10, 45)).position?.speed).toBeNull();
   });
 
   test("stays at the last position before a pause", () => {
