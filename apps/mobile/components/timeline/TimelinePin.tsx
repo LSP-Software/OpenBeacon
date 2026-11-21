@@ -31,7 +31,7 @@ export const TimelinePin = ({
   // biome-ignore lint/correctness/useExhaustiveDependencies: Android draws ViewAnnotation children into a bitmap that needs an explicit refresh when the pin's look changes
   useEffect(() => {
     refreshViewAnnotation(annotationRef);
-  }, [appTheme, paused, image, color]);
+  }, [appTheme, paused, image, initials, color]);
 
   return (
     <ViewAnnotation
