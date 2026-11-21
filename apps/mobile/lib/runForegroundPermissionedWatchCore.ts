@@ -7,7 +7,7 @@ export const runForegroundPermissionedWatchCore = ({
   onInactive,
   subscribeAppState,
 }: {
-  createSubscription: () => Promise<{ remove: () => void }>;
+  createSubscription: (isWanted: () => boolean) => Promise<{ remove: () => void }>;
   getAppState: () => string;
   getForegroundPermissions: () => Promise<{ granted: boolean }>;
   onInactive?: () => void;
@@ -37,7 +37,9 @@ export const runForegroundPermissionedWatchCore = ({
       return;
     }
 
-    const watchResult = await tryCatch(createSubscription());
+    const watchResult = await tryCatch(
+      createSubscription(() => !cancelled && getAppState() === "active"),
+    );
     starting = false;
 
     if (watchResult.error || cancelled || getAppState() !== "active") {

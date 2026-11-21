@@ -6,7 +6,7 @@ export const runForegroundPermissionedWatch = ({
   createSubscription,
   onInactive,
 }: {
-  createSubscription: () => Promise<Location.LocationSubscription>;
+  createSubscription: (isWanted: () => boolean) => Promise<Location.LocationSubscription>;
   onInactive?: () => void;
 }) =>
   runForegroundPermissionedWatchCore({

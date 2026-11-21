@@ -199,4 +199,24 @@ describe("runForegroundPermissionedWatchCore", () => {
 
     stop();
   });
+
+  test("tells a starting subscription when it is no longer wanted", async () => {
+    const subscription = { isWanted: () => false };
+    const stop = runWatch({
+      createSubscription: (isWanted) => {
+        subscription.isWanted = isWanted;
+        return new Promise(() => undefined);
+      },
+    });
+
+    await flushAsync();
+    expect(subscription.isWanted()).toBe(true);
+
+    appState = "background";
+    expect(subscription.isWanted()).toBe(false);
+
+    appState = "active";
+    stop();
+    expect(subscription.isWanted()).toBe(false);
+  });
 });
