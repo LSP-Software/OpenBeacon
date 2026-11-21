@@ -50,6 +50,7 @@ const marker = (deviceId: string, ringColor: string, ringColors?: string[]): Liv
   ringColor,
   ...(ringColors ? { ringColors } : {}),
   sourceGroupId: "family",
+  speed: null,
   timestamp: null,
   userId: deviceId,
 });

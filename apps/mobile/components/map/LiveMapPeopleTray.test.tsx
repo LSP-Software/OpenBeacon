@@ -55,6 +55,7 @@ const marker = (userId: string, name: string, minutesAgo: number): LiveMapMarker
   otherSharedGroupNames: [],
   ringColor: "#FF1464",
   sourceGroupId: "group-1",
+  speed: null,
   timestamp: new Date(now - minutesAgo * 60_000).toISOString(),
   userId,
 });

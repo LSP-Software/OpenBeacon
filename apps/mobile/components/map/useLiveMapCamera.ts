@@ -1,10 +1,11 @@
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { AppState } from "react-native";
 import type { CameraRef } from "@maplibre/maplibre-react-native";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
 import { fitLiveMapMarkers } from "../../lib/fitLiveMapMarkers.ts";
 import {
   createLiveMapInitialFitState,
-  LIVE_MAP_INITIAL_FIT_COALESCE_MS,
+  liveMapInitialFitClosesAtMs,
   reduceLiveMapInitialFit,
 } from "../../lib/liveMapInitialFit.ts";
 import {
@@ -21,8 +22,10 @@ import type { useLiveMapEdgeMarkers } from "./useLiveMapEdgeMarkers.ts";
 import type { useNativeMapStyle } from "./useNativeMapStyle.ts";
 
 export const useLiveMapCamera = ({
+  awaitingLiveSelfFix,
   bottomOverlayHeight,
   edge,
+  locationsLoading,
   mapStyle,
   mapRevision,
   markers,
@@ -32,10 +35,14 @@ export const useLiveMapCamera = ({
   reduceMotion,
   selectedMarker,
   selectedDeviceId,
+  sheetOpen,
   topInset,
+  topOverlayBottom,
 }: {
+  awaitingLiveSelfFix: boolean;
   bottomOverlayHeight: number;
   edge: Pick<ReturnType<typeof useLiveMapEdgeMarkers>, "suppress" | "release" | "releaseAfter">;
+  locationsLoading: boolean;
   mapStyle: ReturnType<typeof useNativeMapStyle>["mapStyle"];
   mapRevision: number;
   markers: readonly LiveMapMarker[];
@@ -45,7 +52,9 @@ export const useLiveMapCamera = ({
   reduceMotion: boolean;
   selectedMarker: LiveMapMarker | null;
   selectedDeviceId: string | null;
+  sheetOpen: boolean;
   topInset: number;
+  topOverlayBottom: number;
 }) => {
   const cameraRef = useRef<CameraRef>(null);
   const { scheduleRelease, setCamera } = useLiveMapCameraCommands(cameraRef, reduceMotion);
@@ -53,6 +62,7 @@ export const useLiveMapCamera = ({
   const moveCamera = useEffectEvent(setCamera);
   const initialFitStateRef = useRef(createLiveMapInitialFitState());
   const initialFitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [initialFitRevision, setInitialFitRevision] = useState(0);
   const [styleLoadedRevision, setStyleLoadedRevision] = useState<number | null>(null);
   const isStyleLoaded = styleLoadedRevision === mapRevision;
   const preservedCameraRef = useRef(INITIAL_MAP_CAMERA);
@@ -66,6 +76,8 @@ export const useLiveMapCamera = ({
   markersRef.current = markers;
   const selectedDeviceIdRef = useRef(selectedDeviceId);
   selectedDeviceIdRef.current = selectedDeviceId;
+  const sheetOpenRef = useRef(sheetOpen);
+  sheetOpenRef.current = sheetOpen;
   if (previousPmtilesUrlRef.current !== pmtilesUrl) {
     if (previousPmtilesUrlRef.current !== null && pmtilesUrl !== null) {
       pendingCameraRestoreRef.current = true;
@@ -87,10 +99,10 @@ export const useLiveMapCamera = ({
     () => ({
       paddingBottom: 48 + bottomOverlayHeight,
       paddingLeft: 32,
-      paddingRight: 32,
-      paddingTop: topInset + 56,
+      paddingRight: MAP_BUTTONS_RIGHT_EDGE + FITTED_PIN_CLEARANCE,
+      paddingTop: topOverlayBottom + FITTED_PIN_CLEARANCE,
     }),
-    [bottomOverlayHeight, topInset],
+    [bottomOverlayHeight, topOverlayBottom],
   );
   const cameraPaddingRef = useRef(cameraPadding);
   cameraPaddingRef.current = cameraPadding;
@@ -117,10 +129,10 @@ export const useLiveMapCamera = ({
     };
   }) => {
     const animationDuration = fitLiveMapMarkers({
+      animate: !reduceMotion,
       camera: cameraRef.current,
       markers: markersToFit,
       padding,
-      reduceMotion,
     });
     if (animationDuration !== null) {
       scheduleRelease(animationDuration);
@@ -301,42 +313,69 @@ export const useLiveMapCamera = ({
   };
 
   useEffect(() => {
+    let backgroundedAtMs: number | null = null;
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "background") {
+        backgroundedAtMs = Date.now();
+        return;
+      }
+      if (nextState !== "active" || backgroundedAtMs === null) return;
+      const awayMs = Date.now() - backgroundedAtMs;
+      backgroundedAtMs = null;
+      const result = reduceLiveMapInitialFit(initialFitStateRef.current, {
+        awayMs,
+        mapInUse: selectedDeviceIdRef.current !== null || sheetOpenRef.current,
+        type: "foreground",
+      });
+      if (result.state === initialFitStateRef.current) return;
+      clearLiveMapInitialFitTimer(initialFitTimerRef);
+      initialFitStateRef.current = result.state;
+      setInitialFitRevision((revision) => revision + 1);
+    });
     return () => {
+      subscription.remove();
       clearLiveMapInitialFitTimer(initialFitTimerRef);
     };
   }, []);
 
   useEffect(() => {
+    void initialFitRevision;
     const camera = cameraRef.current;
     if (!mapStyle || !isStyleLoaded || !camera) {
       return;
     }
 
     const result = reduceLiveMapInitialFit(initialFitStateRef.current, {
+      awaitingLiveSelfFix,
+      locationsLoading,
+      markers,
       nowMs: Date.now(),
       type: "markers",
-      markerIds: markers.map((marker) => marker.deviceId),
     });
     initialFitStateRef.current = result.state;
+    scheduleLiveMapInitialFitSettle(initialFitTimerRef, initialFitStateRef);
 
-    if (result.shouldFit) {
+    if (result.fit) {
       suppressUserCameraControlFor(suppressUserCameraControlUntilMsRef, 600);
-      const animationDuration = fitLiveMapMarkers({
-        camera,
-        markers,
-        padding: cameraPadding,
-        reduceMotion,
-      });
-      if (animationDuration !== null) {
-        scheduleCameraRelease(animationDuration);
+      if (
+        fitLiveMapMarkers({ animate: false, camera, markers, padding: fitEveryonePadding }) !== null
+      ) {
+        scheduleCameraRelease(0);
       }
       preservedCameraRef.current = mapCameraAfterFittingMarkers({
         markers,
         previousCamera: preservedCameraRef.current,
       });
-      scheduleLiveMapInitialFitClose(initialFitTimerRef, initialFitStateRef);
     }
-  }, [cameraPadding, isStyleLoaded, mapStyle, markers, reduceMotion]);
+  }, [
+    awaitingLiveSelfFix,
+    fitEveryonePadding,
+    initialFitRevision,
+    isStyleLoaded,
+    locationsLoading,
+    mapStyle,
+    markers,
+  ]);
 
   useEffect(() => {
     if (!mapStyle || !cameraRef.current) return;
@@ -469,6 +508,9 @@ export const useLiveMapCamera = ({
   };
 };
 
+const MAP_BUTTONS_RIGHT_EDGE = 60;
+const FITTED_PIN_CLEARANCE = 28;
+
 const clearLiveMapInitialFitTimer = (timerRef: {
   current: ReturnType<typeof setTimeout> | null;
 }) => {
@@ -486,25 +528,24 @@ const suppressUserCameraControlFor = (
   untilMsRef.current = Math.max(untilMsRef.current, Date.now() + animationDurationMs + 100);
 };
 
-const scheduleLiveMapInitialFitClose = (
+const scheduleLiveMapInitialFitSettle = (
   timerRef: { current: ReturnType<typeof setTimeout> | null },
   stateRef: { current: ReturnType<typeof createLiveMapInitialFitState> },
 ) => {
   clearLiveMapInitialFitTimer(timerRef);
-  const coalesceStartedAtMs = stateRef.current.coalesceStartedAtMs;
-  if (stateRef.current.phase !== "coalescing" || coalesceStartedAtMs === null) {
+  const closesAtMs = liveMapInitialFitClosesAtMs(stateRef.current);
+  if (closesAtMs === null) {
     return;
   }
 
-  const remainingMs = coalesceStartedAtMs + LIVE_MAP_INITIAL_FIT_COALESCE_MS - Date.now();
   timerRef.current = setTimeout(
     () => {
       timerRef.current = null;
       stateRef.current = reduceLiveMapInitialFit(stateRef.current, {
         nowMs: Date.now(),
-        type: "coalesce_elapsed",
+        type: "settle_elapsed",
       }).state;
     },
-    Math.max(0, remainingMs),
+    Math.max(0, closesAtMs - Date.now()),
   );
 };

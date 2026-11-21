@@ -3,13 +3,15 @@ import type { LiveMapMarker } from "./buildLiveMapMarkers.ts";
 
 const ANIMATION_DURATION_MS = 600;
 const MIN_FIT_SPAN_DEGREES = 0.02;
+export const SINGLE_MARKER_FIT_ZOOM = 14;
 
 export const fitLiveMapMarkers = ({
+  animate,
   camera,
   markers,
   padding,
-  reduceMotion,
 }: {
+  animate: boolean;
   camera: CameraRef | null;
   markers: readonly LiveMapMarker[];
   padding: {
@@ -18,7 +20,6 @@ export const fitLiveMapMarkers = ({
     paddingRight: number;
     paddingTop: number;
   };
-  reduceMotion: boolean;
 }) => {
   if (!camera) {
     return null;
@@ -30,7 +31,7 @@ export const fitLiveMapMarkers = ({
     return null;
   }
 
-  const duration = reduceMotion ? 0 : ANIMATION_DURATION_MS;
+  const duration = animate ? ANIMATION_DURATION_MS : 0;
   const paddingConfig = {
     top: padding.paddingTop,
     right: padding.paddingRight,
@@ -43,22 +44,23 @@ export const fitLiveMapMarkers = ({
       duration,
       center: [firstMarker.longitude, firstMarker.latitude] as [number, number],
       padding: paddingConfig,
-      zoom: 14,
+      zoom: SINGLE_MARKER_FIT_ZOOM,
     };
-    if (reduceMotion) camera.jumpTo(stop);
-    else camera.easeTo(stop);
+    if (animate) camera.easeTo(stop);
+    else camera.jumpTo(stop);
     return duration;
   }
 
-  const bounds = computeLiveMapFitBounds(validMarkers);
+  const bounds = mapFitBounds(validMarkers);
   camera.fitBounds([bounds.sw[0], bounds.sw[1], bounds.ne[0], bounds.ne[1]], {
     padding: paddingConfig,
     duration,
+    easing: "ease",
   });
   return duration;
 };
 
-const hasValidCoordinate = (marker: LiveMapMarker) =>
+export const hasValidCoordinate = (marker: { latitude: number; longitude: number }) =>
   Number.isFinite(marker.latitude) &&
   Number.isFinite(marker.longitude) &&
   marker.latitude >= -90 &&
@@ -79,7 +81,7 @@ export const liveMapMarkersCenter = (
   ];
 };
 
-const computeLiveMapFitBounds = (markers: readonly LiveMapMarker[]) => {
+export const mapFitBounds = (markers: readonly { latitude: number; longitude: number }[]) => {
   const latitudes = markers.map((marker) => marker.latitude);
   let north = Math.max(...latitudes);
   let south = Math.min(...latitudes);
@@ -105,6 +107,27 @@ const computeLiveMapFitBounds = (markers: readonly LiveMapMarker[]) => {
     ne: [east, north] as [number, number],
     sw: [west, south] as [number, number],
   };
+};
+
+export const isWithinMapFitBounds = ({
+  bounds,
+  marginFraction,
+  point,
+}: {
+  bounds: ReturnType<typeof mapFitBounds>;
+  marginFraction: number;
+  point: { latitude: number; longitude: number };
+}) => {
+  const [west, south] = bounds.sw;
+  const [east, north] = bounds.ne;
+  const latitudeMargin = (north - south) * marginFraction;
+  if (point.latitude < south - latitudeMargin || point.latitude > north + latitudeMargin) {
+    return false;
+  }
+  const span = longitudeSpan(west, east);
+  const longitudeMargin = span * marginFraction;
+  const eastOfWest = (((normalizeLongitude(point.longitude) - west) % 360) + 360) % 360;
+  return eastOfWest <= span + longitudeMargin || eastOfWest >= 360 - longitudeMargin;
 };
 
 const shortestLongitudeBounds = (longitudes: readonly number[]) => {

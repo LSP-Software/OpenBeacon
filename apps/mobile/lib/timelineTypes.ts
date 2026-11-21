@@ -4,6 +4,7 @@ export type TimelinePosition = {
   latitude: number;
   longitude: number;
   accuracy: number | null;
+  speed: number | null;
 };
 
 export type TimelinePoint = TrackingPoint & {

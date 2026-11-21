@@ -34,6 +34,7 @@ const marker = (userId: string, ringColors: string[], isSelf = false): LiveMapMa
   ringColor: ringColors[0] ?? "#FF1464",
   ...(ringColors.length > 1 ? { ringColors } : {}),
   sourceGroupId: "club",
+  speed: null,
   timestamp: null,
   userId,
 });

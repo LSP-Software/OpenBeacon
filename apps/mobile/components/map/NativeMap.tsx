@@ -49,9 +49,11 @@ import { useLiveMapSelection } from "./useLiveMapSelection.ts";
 import { useNativeMapStyle } from "./useNativeMapStyle.ts";
 
 export const NativeMap = ({
+  awaitingLiveSelfFix = false,
   devices = [],
   focusPlaceId = null,
   groupOptions = null,
+  locationsLoading = false,
   markers = [],
   now = 0,
   onFocusPlaceHandled,
@@ -66,9 +68,11 @@ export const NativeMap = ({
   selectedDeviceId = null,
   timelineGroupId = null,
 }: {
+  awaitingLiveSelfFix?: boolean;
   devices?: readonly (MapMemberDevice & { paused: boolean; unreadable: boolean })[];
   focusPlaceId?: string | null;
   groupOptions?: readonly MapGroupOption[] | null;
+  locationsLoading?: boolean;
   markers?: readonly LiveMapMarker[];
   now?: number;
   onFocusPlaceHandled?: () => void;
@@ -137,6 +141,7 @@ export const NativeMap = ({
   const trayPeople = isTrayOpen ? people : null;
   const [trayHeight, setTrayHeight] = useState(0);
   const [mapHeight, setMapHeight] = useState(0);
+  const [chipsBottom, setChipsBottom] = useState<number | null>(null);
   const [groupMenuOpen, setGroupMenuOpen] = useState(false);
   const [toastGroups, setToastGroups] = useState<readonly { id: string; name: string }[]>([]);
   const [screenReaderEnabled, setScreenReaderEnabled] = useState(false);
@@ -217,8 +222,10 @@ export const NativeMap = ({
   const personTimelineGroupId = selectedMarker?.sourceGroupId || timelineGroupId;
   const hasMarkers = markers.length > 0;
   const camera = useLiveMapCamera({
+    awaitingLiveSelfFix,
     bottomOverlayHeight: trayPeople ? trayHeight : 0,
     edge,
+    locationsLoading,
     mapStyle,
     mapRevision: map.mapRevision,
     markers,
@@ -228,7 +235,10 @@ export const NativeMap = ({
     reduceMotion,
     selectedMarker,
     selectedDeviceId,
+    sheetOpen:
+      selectedPlace !== null || isStackSheetOpen || missingUserId !== null || focusPlaceId !== null,
     topInset: insets.top,
+    topOverlayBottom: chipsBottom ?? insets.top + 48,
   });
   const {
     cameraRef,
@@ -658,6 +668,10 @@ export const NativeMap = ({
         pointerEvents="box-none"
         className="absolute left-3 right-3 flex-row flex-wrap gap-2"
         style={{ top: insets.top + 8 }}
+        onLayout={(event) => {
+          const { height, y } = event.nativeEvent.layout;
+          setChipsBottom(y + height);
+        }}
       >
         {canHideGroups ? (
           <Pressable
@@ -833,6 +847,7 @@ export const NativeMap = ({
                   name: device.name,
                   platform: device.platform,
                   paused: device.paused,
+                  speed: device.marker?.speed ?? null,
                   timestamp: device.marker?.timestamp ?? null,
                   unreadable: device.unreadable || device.marker?.unreadableGroup !== undefined,
                 }))
@@ -843,6 +858,7 @@ export const NativeMap = ({
           isSelf={selectedMarker.isSelf}
           name={selectedMarker.name}
           otherSharedGroupNames={selectedMarker.otherSharedGroupNames}
+          speed={selectedMarker.speed}
           timeline={
             personTimelineGroupId
               ? { groupId: personTimelineGroupId, userId: selectedMarker.userId }

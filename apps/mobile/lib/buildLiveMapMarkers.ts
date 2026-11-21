@@ -22,6 +22,7 @@ export type LiveMapMarker = {
   ringColor: string;
   ringColors?: string[];
   sourceGroupId: string;
+  speed: number | null;
   timestamp: string | null;
   unreadableGroup?: { id: string; name: string };
   userId: string;
@@ -85,6 +86,7 @@ export const buildLiveMapMarkers = ({
         getGroupColor(livePosition.sourceGroupId),
       ...(ringColors.length > 1 ? { ringColors } : {}),
       sourceGroupId: livePosition.sourceGroupId,
+      speed: livePosition.speed,
       timestamp: livePosition.timestamp,
       userId: livePosition.userId,
     });

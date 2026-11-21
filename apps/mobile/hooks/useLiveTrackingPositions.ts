@@ -1,3 +1,4 @@
+import { tryCatch } from "@openbeacon/shared";
 import { useIsFocused } from "@react-navigation/native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
@@ -18,12 +19,15 @@ export const useLiveTrackingPositions = ({ groupId }: { groupId?: string } = {})
     positions: LiveMapPosition[];
     status: MapTrackingStatus;
   }>(() => ({ positions: [], status: INITIAL_STATUS }));
+  const [refreshingAfterForeground, setRefreshingAfterForeground] = useState(false);
   const sessionRef = useRef<ReturnType<typeof createMapTrackingSession> | null>(null);
   const isFocusedRef = useRef(isFocused);
   isFocusedRef.current = isFocused;
 
   useEffect(() => {
     setTracking({ positions: [], status: INITIAL_STATUS });
+    setRefreshingAfterForeground(false);
+    let refreshRound = 0;
     const deps = createDefaultMapTrackingDeps();
     const session = createMapTrackingSession(
       groupId
@@ -42,7 +46,17 @@ export const useLiveTrackingPositions = ({ groupId }: { groupId?: string } = {})
       session.setActive(isFocusedRef.current && AppState.currentState === "active");
     };
     syncActive();
-    const appStateSubscription = AppState.addEventListener("change", syncActive);
+    const appStateSubscription = AppState.addEventListener("change", (nextState) => {
+      syncActive();
+      if (nextState !== "active" || !isFocusedRef.current) return;
+      const round = ++refreshRound;
+      setRefreshingAfterForeground(true);
+      void tryCatch(session.tick()).then(() => {
+        if (round === refreshRound && sessionRef.current === session) {
+          setRefreshingAfterForeground(false);
+        }
+      });
+    });
 
     return () => {
       appStateSubscription.remove();
@@ -63,5 +77,5 @@ export const useLiveTrackingPositions = ({ groupId }: { groupId?: string } = {})
     [],
   );
 
-  return { ...tracking, dropRemovedDevices };
+  return { ...tracking, dropRemovedDevices, refreshingAfterForeground };
 };

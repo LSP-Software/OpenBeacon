@@ -9,6 +9,8 @@ import { createRoot, type Root } from "test-renderer";
 const appState = { currentState: "active" };
 const appStateListeners = new Set<(state: string) => void>();
 const sessions: { active: boolean; destroyed: boolean; activatedAfterDestroy: boolean }[] = [];
+const pendingTicks: (() => void)[] = [];
+let refreshing: boolean[] = [];
 
 mock.module("react-native", () => ({
   AppState: {
@@ -45,6 +47,10 @@ mock.module("../lib/mapTracking.ts", () => ({
         state.active = active;
       },
       subscribe: () => () => {},
+      tick: () =>
+        new Promise<void>((resolve) => {
+          pendingTicks.push(resolve);
+        }),
     };
   },
 }));
@@ -52,7 +58,7 @@ mock.module("../lib/mapTracking.ts", () => ({
 const { useLiveTrackingPositions } = await import("./useLiveTrackingPositions.ts");
 
 const Probe = ({ groupId }: { groupId: string }) => {
-  useLiveTrackingPositions({ groupId });
+  refreshing.push(useLiveTrackingPositions({ groupId }).refreshingAfterForeground);
   return null;
 };
 
@@ -74,6 +80,8 @@ afterEach(async () => {
   root = null;
   appState.currentState = "active";
   sessions.length = 0;
+  pendingTicks.length = 0;
+  refreshing = [];
 });
 
 test("follows the app state on the new session after the group changes", async () => {
@@ -87,4 +95,21 @@ test("follows the app state on the new session after the group changes", async (
   await changeTo("active");
   expect(second?.active).toBe(true);
   expect(first?.activatedAfterDestroy).toBe(false);
+});
+
+test("reports a refresh after returning to the app until the session's next tick finishes", async () => {
+  await render("group-a");
+  expect(refreshing.at(-1)).toBe(false);
+
+  await changeTo("background");
+  await changeTo("active");
+  expect(refreshing.at(-1)).toBe(true);
+
+  await changeTo("background");
+  await changeTo("active");
+  await act(async () => pendingTicks[0]?.());
+  expect(refreshing.at(-1)).toBe(true);
+
+  await act(async () => pendingTicks[1]?.());
+  expect(refreshing.at(-1)).toBe(false);
 });

@@ -34,13 +34,20 @@ const wrapUnderLatestEpoch = async ({
   kind: ImageKeyKind;
   ownerId: string;
 }) => {
-  const latest = await trpcClient.groupEpoch.getLatest.query({ groupId });
-  if (!latest) throw new GroupKeyUnavailableError();
-  const epochKey = await resolveEpochKey({ device, epochId: latest.epochId, groupId });
-  if (!epochKey) throw new GroupKeyUnavailableError();
+  const readLatest = async () => {
+    const latest = await trpcClient.groupEpoch.getLatest.query({ groupId });
+    const epochKey = latest
+      ? await resolveEpochKey({ device, epochId: latest.epochId, groupId })
+      : null;
+    return latest && epochKey ? { epochId: latest.epochId, epochKey } : null;
+  };
+  const first = await readLatest();
+  const rotated = first ? null : await tryCatch(rotateGroupEpochIfRequired(groupId));
+  const latest = first ?? (await readLatest());
+  if (!latest) throw rotated?.error ?? new GroupKeyUnavailableError();
   return encryptImageKey({
     epochId: latest.epochId,
-    epochKey,
+    epochKey: latest.epochKey,
     fileName,
     groupId,
     imageKey,
@@ -120,7 +127,16 @@ export const confirmProfileImage = async ({
               ownerId: userId,
             }),
           );
-          return wrapped.data ? [{ groupId, ...wrapped.data }] : [];
+          if (!wrapped.error) return [{ groupId, ...wrapped.data }];
+          const reason = errorReason(wrapped.error);
+          if (
+            wrapped.error instanceof GroupKeyUnavailableError ||
+            reason === "NOT_GROUP_MEMBER" ||
+            reason === "GROUP_GONE"
+          ) {
+            return [];
+          }
+          throw wrapped.error;
         }),
       );
       return trpcClient.account.confirmProfileImageUpload.mutate({

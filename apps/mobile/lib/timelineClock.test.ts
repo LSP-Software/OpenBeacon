@@ -3,6 +3,7 @@ import {
   formatTimelineClock,
   formatTimelineDayEnd,
   formatTimelineHourTick,
+  timelineHourTicks,
 } from "./timelineClock.ts";
 
 const evening = new Date(2026, 10, 19, 21, 5).getTime();
@@ -30,4 +31,10 @@ test("scrubber ticks follow the phone's clock", () => {
   expect(
     [0, 6, 12, 18, 24].map((hour) => formatTimelineHourTick(hour, false).replace(/\s/g, " ")),
   ).toEqual(["12 AM", "6 AM", "12 PM", "6 PM", "12 AM"]);
+});
+
+test("scrubber keeps every six-hour tick while the labels fit and drops to midnight and noon when they don't", () => {
+  expect(timelineHourTicks({ labelWidth: 32, trackWidth: 300 })).toEqual([0, 6, 12, 18, 24]);
+  expect(timelineHourTicks({ labelWidth: 75, trackWidth: 300 })).toEqual([0, 6, 12, 18, 24]);
+  expect(timelineHourTicks({ labelWidth: 80, trackWidth: 300 })).toEqual([0, 12, 24]);
 });

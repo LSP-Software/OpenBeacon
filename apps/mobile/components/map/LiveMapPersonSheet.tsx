@@ -1,6 +1,7 @@
 import { Link } from "expo-router";
-import { HistoryIcon } from "lucide-react-native";
+import { GaugeIcon, HistoryIcon } from "lucide-react-native";
 import { Pressable, View } from "react-native";
+import { useLiveSpeedLabel } from "../../hooks/useLiveSpeedLabel.ts";
 import { useTimeSince } from "../../hooks/useTimeSince.ts";
 import { shortTimeSince } from "../../lib/timeSince.ts";
 import { getBatteryVisual } from "../../lib/batteryVisual.ts";
@@ -24,6 +25,7 @@ type PersonDevice = {
   name: string;
   paused: boolean;
   platform: string | null;
+  speed: number | null;
   timestamp: string | null;
   unreadable: boolean;
 };
@@ -40,6 +42,7 @@ export const LiveMapPersonSheet = ({
   onRequestUpdate,
   onSelectDevice,
   otherSharedGroupNames,
+  speed,
   timeline,
   timestamp,
   unreadableGroup,
@@ -55,6 +58,7 @@ export const LiveMapPersonSheet = ({
   onRequestUpdate?: (() => Promise<void>) | undefined;
   onSelectDevice?: (deviceId: string) => void;
   otherSharedGroupNames: readonly string[];
+  speed: number | null;
   timeline?: { groupId: string; userId: string } | undefined;
   timestamp: string | null;
   unreadableGroup?: { id: string; name: string } | undefined;
@@ -68,6 +72,8 @@ export const LiveMapPersonSheet = ({
         charging: battery.charging,
       })
     : null;
+  const liveSpeed = useLiveSpeedLabel({ speed, timestamp });
+  const speedLabel = isMultiDevice ? null : liveSpeed;
 
   return (
     <LiveMapBottomSheet
@@ -115,16 +121,30 @@ export const LiveMapPersonSheet = ({
               </Text>
             </View>
           ) : null}
-          {!isMultiDevice && batteryVisual?.label ? (
-            <View
-              accessible
-              accessibilityLabel={`Battery ${batteryVisual.label}`}
-              className="mt-3 flex-row items-center gap-1.5 self-start rounded-full bg-secondary px-3 py-1.5"
-            >
-              <Icon as={batteryVisual.icon} size={16} className={batteryVisual.colorClass} />
-              <Text className={`${batteryVisual.colorClass} text-sm font-medium`}>
-                {batteryVisual.label}
-              </Text>
+          {(!isMultiDevice && batteryVisual?.label) || speedLabel ? (
+            <View className="mt-3 flex-row flex-wrap gap-2">
+              {!isMultiDevice && batteryVisual?.label ? (
+                <View
+                  accessible
+                  accessibilityLabel={`Battery ${batteryVisual.label}`}
+                  className="flex-row items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5"
+                >
+                  <Icon as={batteryVisual.icon} size={16} className={batteryVisual.colorClass} />
+                  <Text className={`${batteryVisual.colorClass} text-sm font-medium`}>
+                    {batteryVisual.label}
+                  </Text>
+                </View>
+              ) : null}
+              {speedLabel ? (
+                <View
+                  accessible
+                  accessibilityLabel={`Moving at ${speedLabel}`}
+                  className="flex-row items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5"
+                >
+                  <Icon as={GaugeIcon} size={16} className="text-foreground" />
+                  <Text className="text-foreground text-sm font-medium">{speedLabel}</Text>
+                </View>
+              ) : null}
             </View>
           ) : null}
           {otherSharedGroupNames.length > 0 ? (
@@ -191,6 +211,8 @@ const PersonDeviceRow = ({
   onPress: () => void;
 }) => {
   const updatedAge = useTimeSince(device.timestamp);
+  const liveSpeed = useLiveSpeedLabel({ speed: device.speed, timestamp: device.timestamp });
+  const speedLabel = device.paused ? null : liveSpeed;
   const batteryVisual = device.battery
     ? getBatteryVisual({ batteryLevel: device.battery.level, charging: device.battery.charging })
     : null;
@@ -230,6 +252,12 @@ const PersonDeviceRow = ({
           {updated}
         </Text>
       </View>
+      {speedLabel ? (
+        <View className="flex-row items-center gap-1">
+          <Icon as={GaugeIcon} size={18} className="text-foreground" />
+          <Text className="text-foreground text-sm">{speedLabel}</Text>
+        </View>
+      ) : null}
       {batteryVisual && batteryLevel ? (
         <View className="flex-row items-center gap-1">
           <Icon as={batteryVisual.icon} size={18} className={batteryVisual.colorClass} />
@@ -244,7 +272,12 @@ const PersonDeviceRow = ({
   ) : (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={[`Show ${label}`, updated, batteryLevel && `battery ${batteryLevel}`]
+      accessibilityLabel={[
+        `Show ${label}`,
+        updated,
+        speedLabel && `moving at ${speedLabel}`,
+        batteryLevel && `battery ${batteryLevel}`,
+      ]
         .filter(Boolean)
         .join(", ")}
       className="min-h-11 flex-row items-center gap-3 py-1.5 active:opacity-70"

@@ -10,6 +10,7 @@ import {
   BellOffIcon,
   BookOpenIcon,
   EyeIcon,
+  GaugeIcon,
   HistoryIcon,
   InfoIcon,
   KeyRoundIcon,
@@ -43,6 +44,7 @@ import { Input } from "../../../components/ui/Input.tsx";
 import { Text } from "../../../components/ui/Text.tsx";
 import { useHeldHistoryKeyVersions } from "../../../hooks/useHeldHistoryKeyVersions.ts";
 import { useHistoryShare } from "../../../hooks/useHistoryShare.ts";
+import { useSpeedUnit } from "../../../hooks/useSpeedUnit.ts";
 import { trpc } from "../../../lib/api.ts";
 import { useAppLock } from "../../../lib/appLock.ts";
 import { authClient } from "../../../lib/auth-client.ts";
@@ -81,6 +83,8 @@ const AccountScreen = () => {
   const appLock = useAppLock();
   const historyShare = useHistoryShare();
   const { appThemePreference } = useTheme();
+  const speedUnit = useSpeedUnit();
+  const speedUnitLabel = speedUnit.unit === "mph" ? "mph" : "km/h";
   const [signOutPhase, setSignOutPhase] = useState<"uploading" | "signingOut" | null>(null);
   const signingOut = useRef(false);
   const recoveryStatus = useQuery({
@@ -427,6 +431,15 @@ const AccountScreen = () => {
                     value: { system: `Match ${thisDeviceNoun()}`, light: "Light", dark: "Dark" }[
                       appThemePreference
                     ],
+                  },
+                  {
+                    label: "Units",
+                    icon: GaugeIcon,
+                    href: "/account/units",
+                    value:
+                      speedUnit.preference === "auto"
+                        ? `${speedUnitLabel} (${thisDeviceNoun()} region)`
+                        : speedUnitLabel,
                   },
                 ],
               },

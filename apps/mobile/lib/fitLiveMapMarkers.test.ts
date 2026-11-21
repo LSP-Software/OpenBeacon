@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { LiveMapMarker } from "./buildLiveMapMarkers.ts";
-import { fitLiveMapMarkers } from "./fitLiveMapMarkers.ts";
+import { fitLiveMapMarkers, isWithinMapFitBounds, mapFitBounds } from "./fitLiveMapMarkers.ts";
 
 const padding = {
   paddingBottom: 48,
@@ -21,20 +21,22 @@ const marker = (
   otherSharedGroupNames: [],
   ringColor: "#E85D4C",
   sourceGroupId: "family",
+  speed: null,
   timestamp: "2026-07-17T12:00:00.000Z",
   ...overrides,
 });
 
-const fit = (markers: readonly LiveMapMarker[]) => {
+const fit = (markers: readonly LiveMapMarker[], animate = true) => {
   const setCamera = mock(() => {});
+  const jumpTo = mock(() => {});
   const fitBounds = mock(() => {});
   const animationDuration = fitLiveMapMarkers({
-    camera: { easeTo: setCamera, fitBounds } as never,
+    animate,
+    camera: { easeTo: setCamera, fitBounds, jumpTo } as never,
     markers,
     padding,
-    reduceMotion: false,
   });
-  return { animationDuration, fitBounds, setCamera };
+  return { animationDuration, fitBounds, jumpTo, setCamera };
 };
 
 describe("fitLiveMapMarkers", () => {
@@ -43,17 +45,17 @@ describe("fitLiveMapMarkers", () => {
     const fitBounds = mock(() => {});
 
     fitLiveMapMarkers({
+      animate: true,
       camera: null,
       markers: [marker({ latitude: 51.5, longitude: -0.12, userId: "alice" })],
       padding,
-      reduceMotion: false,
     });
 
     fitLiveMapMarkers({
+      animate: true,
       camera: { easeTo: setCamera, fitBounds } as never,
       markers: [],
       padding,
-      reduceMotion: false,
     });
 
     expect(setCamera).not.toHaveBeenCalled();
@@ -142,6 +144,7 @@ describe("fitLiveMapMarkers", () => {
     expect(fitBounds).toHaveBeenCalledWith([...expectedSw, ...expectedNe], {
       padding: { top: 56, right: 32, bottom: 48, left: 32 },
       duration: 600,
+      easing: "ease",
     });
     expect(setCamera).not.toHaveBeenCalled();
   });
@@ -196,5 +199,96 @@ describe("fitLiveMapMarkers", () => {
     expect(lonSpan).toBeGreaterThan(0.019);
     expect((north + south) / 2).toBeCloseTo(center.latitude, 5);
     expect(lonCenter).toBeCloseTo(center.longitude, 5);
+  });
+
+  test("jumps straight to one person without animating", () => {
+    const { animationDuration, jumpTo, setCamera } = fit(
+      [marker({ latitude: 51.5, longitude: -0.12, userId: "alice" })],
+      false,
+    );
+
+    expect(animationDuration).toBe(0);
+    expect(setCamera).not.toHaveBeenCalled();
+    expect(jumpTo).toHaveBeenCalledWith({
+      duration: 0,
+      center: [-0.12, 51.5],
+      padding: { top: 56, right: 32, bottom: 48, left: 32 },
+      zoom: 14,
+    });
+  });
+
+  test("frames everyone at once without animating", () => {
+    const { animationDuration, fitBounds } = fit(
+      [
+        marker({ latitude: 51.5, longitude: -0.12, userId: "alice" }),
+        marker({ latitude: 50.8, longitude: -1.1, userId: "bob" }),
+      ],
+      false,
+    );
+
+    expect(animationDuration).toBe(0);
+    expect(fitBounds).toHaveBeenCalledWith([-1.1, 50.8, -0.12, 51.5], {
+      padding: { top: 56, right: 32, bottom: 48, left: 32 },
+      duration: 0,
+      easing: "ease",
+    });
+  });
+});
+
+describe("mapFitBounds", () => {
+  test("keeps a day spent in one spot at neighbourhood scale", () => {
+    const { ne, sw } = mapFitBounds([
+      { latitude: 51.50001, longitude: -0.12001 },
+      { latitude: 51.50003, longitude: -0.12002 },
+      { latitude: 51.50002, longitude: -0.12004 },
+    ]);
+
+    expect(ne[1] - sw[1]).toBeCloseTo(0.02, 6);
+    expect(ne[0] - sw[0]).toBeCloseTo(0.02, 6);
+    expect((ne[1] + sw[1]) / 2).toBeCloseTo(51.50002, 6);
+    expect((ne[0] + sw[0]) / 2).toBeCloseTo(-0.120025, 6);
+  });
+
+  test("leaves a day of travel at its own bounds", () => {
+    expect(
+      mapFitBounds([
+        { latitude: 51.5, longitude: -0.12 },
+        { latitude: 51.75, longitude: -1.25 },
+      ]),
+    ).toEqual({ ne: [-0.12, 51.75], sw: [-1.25, 51.5] });
+  });
+});
+
+describe("isWithinMapFitBounds", () => {
+  const bounds = mapFitBounds([
+    { latitude: 51.4, longitude: -0.2 },
+    { latitude: 51.6, longitude: 0 },
+  ]);
+
+  test.each([
+    { name: "inside", point: { latitude: 51.5, longitude: -0.1 }, within: true },
+    { name: "inside the margin", point: { latitude: 51.61, longitude: 0.01 }, within: true },
+    { name: "past the margin north", point: { latitude: 51.7, longitude: -0.1 }, within: false },
+    { name: "past the margin east", point: { latitude: 51.5, longitude: 0.1 }, within: false },
+  ])("$name", ({ point, within }) => {
+    expect(isWithinMapFitBounds({ bounds, marginFraction: 0.1, point })).toBe(within);
+  });
+
+  test("handles a frame that crosses 180°", () => {
+    const crossing = mapFitBounds([
+      { latitude: -17, longitude: 179 },
+      { latitude: -18, longitude: -179 },
+    ]);
+    const within = (longitude: number) =>
+      isWithinMapFitBounds({
+        bounds: crossing,
+        marginFraction: 0.1,
+        point: { latitude: -17.5, longitude },
+      });
+
+    expect(within(180)).toBe(true);
+    expect(within(-179.1)).toBe(true);
+    expect(within(0)).toBe(false);
+    expect(within(178)).toBe(false);
   });
 });

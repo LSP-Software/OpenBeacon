@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { runForegroundPermissionedWatchCore } from "./runForegroundPermissionedWatchCore.ts";
+import { watchPositionWithLastKnown } from "./watchPositionWithLastKnown.ts";
 
 let appState: string;
 let appStateListener: ((nextAppState: string) => void) | null;
@@ -196,6 +197,53 @@ describe("runForegroundPermissionedWatchCore", () => {
 
     expect(removeCalls).toBe(1);
     expect(inactiveCalls).toBe(1);
+
+    stop();
+  });
+
+  test("tells a starting subscription when it is no longer wanted", async () => {
+    const subscription = { isWanted: () => false };
+    const stop = runWatch({
+      createSubscription: (isWanted) => {
+        subscription.isWanted = isWanted;
+        return new Promise(() => undefined);
+      },
+    });
+
+    await flushAsync();
+    expect(subscription.isWanted()).toBe(true);
+
+    appState = "background";
+    expect(subscription.isWanted()).toBe(false);
+
+    appState = "active";
+    stop();
+    expect(subscription.isWanted()).toBe(false);
+  });
+
+  test("clears a cached position when the watch then fails to start", async () => {
+    const shown: (string | null)[] = [];
+    let failWatch: (error: Error) => void = () => undefined;
+    const stop = runWatch({
+      createSubscription: (isWanted) =>
+        watchPositionWithLastKnown<{ label: string; timestamp: number }>({
+          getLastKnownPosition: () => Promise.resolve({ label: "cached", timestamp: 1_000 }),
+          isWanted,
+          onPosition: (position) => shown.push(position.label),
+          watchPosition: () =>
+            new Promise((_, reject) => {
+              failWatch = reject;
+            }),
+        }),
+      onInactive: () => shown.push(null),
+    });
+
+    await flushAsync();
+    expect(shown).toEqual(["cached"]);
+
+    failWatch(new Error("location off"));
+    await flushAsync();
+    expect(shown).toEqual(["cached", null]);
 
     stop();
   });

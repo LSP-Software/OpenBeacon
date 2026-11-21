@@ -132,6 +132,7 @@ test("edge chips appear at full size without a spring when Reduce motion is on",
     otherSharedGroupNames: [],
     ringColor: "#FF1464",
     sourceGroupId: "family",
+    speed: null,
     timestamp: null,
     userId: "alice",
   };

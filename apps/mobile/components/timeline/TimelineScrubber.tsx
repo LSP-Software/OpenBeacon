@@ -1,7 +1,13 @@
 import { memo, useLayoutEffect, useRef, useState } from "react";
-import { PanResponder, View } from "react-native";
+import {
+  type AccessibilityActionEvent,
+  type LayoutChangeEvent,
+  PanResponder,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import Svg, { Defs, Line, Pattern, Rect } from "react-native-svg";
-import { formatTimelineHourTick } from "../../lib/timelineClock.ts";
+import { formatTimelineHourTick, timelineHourTicks } from "../../lib/timelineClock.ts";
 import type { TimelineSegment } from "../../lib/timelineTypes.ts";
 import { useColors } from "../../lib/theme.ts";
 import { Text } from "../ui/Text.tsx";
@@ -11,6 +17,7 @@ const STOPPED_HEIGHT = 8;
 const KNOB_SIZE = 20;
 const LANE_GAP = 8;
 const AVATAR_WIDTH = 30;
+const TICK_MAX_FONT_SCALE = 2;
 
 type Lane = {
   color: string;
@@ -24,58 +31,36 @@ type Lane = {
   }>;
 };
 
-export const TimelineScrubber = ({
-  day,
-  from,
-  historyStart,
-  lanes,
-  onScrub,
-  step,
-  time,
-  to,
-  uses24HourClock,
-  valueLabel,
-}: {
+type Scrub = {
   day: { end: number; start: number };
   from: number;
-  historyStart: number;
-  lanes: readonly Lane[];
   onScrub: (time: number) => void;
   step: number;
   time: number;
   to: number;
-  uses24HourClock: boolean;
   valueLabel: string;
+};
+
+export const TimelineScrubber = ({
+  historyStart,
+  lanes,
+  uses24HourClock,
+  ...scrub
+}: Scrub & {
+  historyStart: number;
+  lanes: readonly Lane[];
+  uses24HourClock: boolean;
 }) => {
-  const [width, setWidth] = useState(0);
-  const span = day.end - day.start;
-  const xOf = (value: number) => ((value - day.start) / span) * width;
-  const latest = useRef({ day, from, onScrub, span, to, width });
-  useLayoutEffect(() => {
-    latest.current = { day, from, onScrub, span, to, width };
-  });
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderTerminationRequest: () => false,
-      onPanResponderGrant: (event) => scrubTo(event.nativeEvent.locationX),
-      onPanResponderMove: (event) => scrubTo(event.nativeEvent.locationX),
-    }),
-  ).current;
-  const scrubTo = (x: number) => {
-    const current = latest.current;
-    if (current.width <= 0) return;
-    const value = current.day.start + (x / current.width) * current.span;
-    current.onScrub(Math.min(Math.max(value, current.from), current.to));
-  };
+  const { day, time } = scrub;
+  const { trackProps, width, xOf } = useScrubTrack(scrub);
   const height = lanes.length * (LANE_HEIGHT + LANE_GAP) - LANE_GAP;
   const date = new Date(day.start);
-  const ticks = [0, 6, 12, 18, 24].map((hour) => ({
+  const tickScale = Math.min(useWindowDimensions().fontScale, TICK_MAX_FONT_SCALE);
+  const tickWidth = Math.ceil((uses24HourClock ? 16 : 40) * tickScale);
+  const ticks = timelineHourTicks({ labelWidth: tickWidth, trackWidth: width }).map((hour) => ({
     hour,
     at: new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour).getTime(),
   }));
-  const tickWidth = uses24HourClock ? 16 : 40;
 
   return (
     <View>
@@ -100,17 +85,7 @@ export const TimelineScrubber = ({
         <View
           className="flex-1"
           style={{ minHeight: 44, paddingBottom: 8, paddingTop: KNOB_SIZE / 2 + 6 }}
-          onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
-          accessible
-          accessibilityRole="adjustable"
-          accessibilityLabel="Time of day"
-          accessibilityValue={{ text: valueLabel }}
-          accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}
-          onAccessibilityAction={(event) => {
-            const change = event.nativeEvent.actionName === "increment" ? step : -step;
-            onScrub(Math.min(Math.max(time + change, from), to));
-          }}
-          {...panResponder.panHandlers}
+          {...trackProps}
         >
           {width > 0 ? (
             <View pointerEvents="none">
@@ -143,12 +118,17 @@ export const TimelineScrubber = ({
           ) : null}
         </View>
       </View>
-      <View className="flex-row" style={{ marginLeft: AVATAR_WIDTH, height: 16 }}>
+      <View
+        className="flex-row"
+        style={{ marginLeft: AVATAR_WIDTH, height: Math.ceil(16 * tickScale) }}
+      >
         {width > 0
           ? ticks.map((tick) => (
               <Text
                 key={tick.hour}
                 className="absolute text-xs text-secondary"
+                maxFontSizeMultiplier={TICK_MAX_FONT_SCALE}
+                numberOfLines={1}
                 style={{
                   left: Math.min(Math.max(xOf(tick.at) - tickWidth / 2, 0), width - tickWidth),
                   width: tickWidth,
@@ -162,6 +142,65 @@ export const TimelineScrubber = ({
       </View>
     </View>
   );
+};
+
+export const TimelineMiniScrubber = (scrub: Scrub) => {
+  const { trackProps, width, xOf } = useScrubTrack(scrub);
+  const x = xOf(scrub.time);
+  return (
+    <View className="h-11 justify-center" {...trackProps}>
+      {width > 0 ? (
+        <View pointerEvents="none">
+          <View className="h-[3px] rounded-full bg-border" />
+          <View className="absolute h-[3px] rounded-full bg-foreground" style={{ width: x }} />
+          <View
+            className="absolute rounded-full border-2 border-card bg-foreground"
+            style={{ left: x - 7, top: -5.5, width: 14, height: 14 }}
+          />
+        </View>
+      ) : null}
+    </View>
+  );
+};
+
+const useScrubTrack = ({ day, from, onScrub, step, time, to, valueLabel }: Scrub) => {
+  const [width, setWidth] = useState(0);
+  const latest = useRef({ day, from, onScrub, to, width });
+  useLayoutEffect(() => {
+    latest.current = { day, from, onScrub, to, width };
+  });
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: (event) => scrubTo(event.nativeEvent.locationX),
+      onPanResponderMove: (event) => scrubTo(event.nativeEvent.locationX),
+    }),
+  ).current;
+  const scrubTo = (x: number) => {
+    const current = latest.current;
+    if (current.width <= 0) return;
+    const value = current.day.start + (x / current.width) * (current.day.end - current.day.start);
+    current.onScrub(Math.min(Math.max(value, current.from), current.to));
+  };
+  return {
+    trackProps: {
+      onLayout: (event: LayoutChangeEvent) => setWidth(event.nativeEvent.layout.width),
+      accessible: true,
+      accessibilityRole: "adjustable" as const,
+      accessibilityLabel: "Time of day",
+      accessibilityValue: { text: valueLabel },
+      accessibilityActions: [{ name: "increment" }, { name: "decrement" }],
+      onAccessibilityAction: (event: AccessibilityActionEvent) => {
+        const change = event.nativeEvent.actionName === "increment" ? step : -step;
+        onScrub(Math.min(Math.max(time + change, from), to));
+      },
+      ...panResponder.panHandlers,
+    },
+    width,
+    xOf: (value: number) => ((value - day.start) / (day.end - day.start)) * width,
+  };
 };
 
 const TimelineLanes = memo(

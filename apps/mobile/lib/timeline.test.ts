@@ -19,6 +19,7 @@ const point = ({
   latitude = 51.5,
   longitude = -0.12,
   revisionPrefix = "rev-1",
+  speed = null,
   stayUntil = null,
   streamId = "stream-1",
   time,
@@ -26,6 +27,7 @@ const point = ({
   latitude?: number;
   longitude?: number;
   revisionPrefix?: string;
+  speed?: number | null;
   stayUntil?: number | null;
   streamId?: string;
   time: number;
@@ -36,7 +38,7 @@ const point = ({
   longitude,
   pointId: String(time),
   revisionPrefix,
-  speed: null,
+  speed,
   stayUntil,
   streamId,
   time,
@@ -102,14 +104,14 @@ describe("buildTimeline", () => {
     const segments = segmentsOf(points, { now: at(15), pausedDeviceIds: paused });
     expect(segments.at(-1)).toEqual({
       end: at(15),
-      from: { accuracy: 5, latitude: 51.6, longitude: -0.12 },
+      from: { accuracy: 5, latitude: 51.6, longitude: -0.12, speed: null },
       kind: "pause",
       ongoing: true,
       start: at(10),
-      to: { accuracy: 5, latitude: 51.6, longitude: -0.12 },
+      to: { accuracy: 5, latitude: 51.6, longitude: -0.12, speed: null },
     });
     expect(timelinePositionAt(segments, at(14))).toEqual({
-      position: { accuracy: 5, latitude: 51.6, longitude: -0.12 },
+      position: { accuracy: 5, latitude: 51.6, longitude: -0.12, speed: null },
       state: "pause",
     });
   });
@@ -154,15 +156,15 @@ describe("buildTimeline", () => {
       {
         end: at(10),
         kind: "stay",
-        position: { accuracy: 5, latitude: 51.5, longitude: -0.12 },
+        position: { accuracy: 5, latitude: 51.5, longitude: -0.12, speed: null },
         start: at(9),
       },
       {
         end: at(12),
-        from: { accuracy: 5, latitude: 51.5, longitude: -0.12 },
+        from: { accuracy: 5, latitude: 51.5, longitude: -0.12, speed: null },
         kind: "pause",
         start: at(10),
-        to: { accuracy: 5, latitude: 51.6, longitude: -0.12 },
+        to: { accuracy: 5, latitude: 51.6, longitude: -0.12, speed: null },
       },
     ]);
   });
@@ -179,7 +181,7 @@ describe("buildTimeline", () => {
       ["noLocation", 485, 1440],
     ]);
     expect(timelinePositionAt(segmentsOf(points), at(3))).toEqual({
-      position: { accuracy: 5, latitude: 51.5, longitude: -0.12 },
+      position: { accuracy: 5, latitude: 51.5, longitude: -0.12, speed: null },
       state: "stay",
     });
   });
@@ -254,10 +256,10 @@ describe("buildTimeline", () => {
 
     expect(segments[0]).toEqual({
       end: at(0, 5),
-      from: { accuracy: 5, latitude: 51.5, longitude: -0.12 },
+      from: { accuracy: 5, latitude: 51.5, longitude: -0.12, speed: null },
       kind: "moving",
       start: dayStart,
-      to: { accuracy: 5, latitude: 52, longitude: -0.12 },
+      to: { accuracy: 5, latitude: 52, longitude: -0.12, speed: null },
     });
   });
 
@@ -354,7 +356,12 @@ describe("buildTimeline", () => {
       ["stay", 19 * 60],
     ]);
     expect(timelineDayStats({ places: [], segments }).stops).toEqual([
-      { end: at(20), placeId: null, position: { accuracy: 5, ...home }, start: at(17) },
+      {
+        end: at(20),
+        placeId: null,
+        position: { accuracy: 5, speed: null, ...home },
+        start: at(17),
+      },
     ]);
   });
 
@@ -418,6 +425,22 @@ describe("timelinePositionAt", () => {
       position: { latitude: 52 },
       state: "moving",
     });
+  });
+
+  test("eases the speed between fixes and uses the one known speed when a fix has none", () => {
+    const moving = segmentsOf([
+      point({ latitude: 51, speed: 10, time: at(10) }),
+      point({ latitude: 52, speed: 20, time: at(10, 10) }),
+      point({ latitude: 53, time: at(10, 20) }),
+      point({ latitude: 54, speed: 8, time: at(10, 30) }),
+      point({ latitude: 55, time: at(10, 40) }),
+      point({ latitude: 56, time: at(10, 50) }),
+    ]);
+    expect(timelinePositionAt(moving, at(10, 5)).position?.speed).toBe(15);
+    expect(timelinePositionAt(moving, at(10, 15)).position?.speed).toBe(20);
+    expect(timelinePositionAt(moving, at(10, 25)).position?.speed).toBe(8);
+    expect(timelinePositionAt(moving, at(10, 35)).position?.speed).toBe(8);
+    expect(timelinePositionAt(moving, at(10, 45)).position?.speed).toBeNull();
   });
 
   test("stays at the last position before a pause", () => {

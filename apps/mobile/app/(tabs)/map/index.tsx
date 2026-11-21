@@ -64,6 +64,7 @@ const MapScreen = () => {
   const {
     dropRemovedDevices,
     positions: livePositions,
+    refreshingAfterForeground,
     status: trackingStatus,
   } = useLiveTrackingPositions();
   const { data: session } = authClient.useSession();
@@ -387,6 +388,7 @@ const MapScreen = () => {
       style={{ paddingBottom: insets.bottom + TAB_BAR_CONTENT_HEIGHT }}
     >
       <NativeMap
+        awaitingLiveSelfFix={selfDeviceLocation?.cached !== false}
         devices={memberDevices.map((device) => ({
           ...device,
           paused:
@@ -417,6 +419,12 @@ const MapScreen = () => {
           if (!selfUserId) return;
           setMapGroupHidden({ groupId, hidden, userId: selfUserId });
         }}
+        locationsLoading={
+          refreshingAfterForeground ||
+          trackingStatus.membership === "loading" ||
+          (trackingStatus.membership === "loaded" &&
+            (groups ?? []).some((group) => trackingStatus.groups[group.id] === undefined))
+        }
         markers={markers}
         now={now}
         people={people}

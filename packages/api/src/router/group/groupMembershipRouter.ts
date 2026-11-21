@@ -32,6 +32,7 @@ export const groupMembershipRouter = {
         name: true,
         image: true,
         ...imageKeySelect,
+        groupEpochs: { orderBy: { epochNumber: "desc" }, take: 1, select: { id: true } },
         groupMembers: {
           select: {
             id: true,
@@ -56,6 +57,7 @@ export const groupMembershipRouter = {
           name: group.name,
           image: group.image,
           imageKey: toStoredImageKey(group),
+          latestEpochId: group.groupEpochs[0]?.id ?? null,
           members: group.groupMembers.map((member) => ({
             id: member.id,
             userId: member.user.id,

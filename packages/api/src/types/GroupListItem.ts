@@ -8,6 +8,7 @@ export interface GroupListItem {
   name: string;
   image: string | null;
   imageKey: StoredImageKey | null;
+  latestEpochId: string | null;
   members: {
     id: string;
     userId: string;

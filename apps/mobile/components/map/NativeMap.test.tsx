@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, setSystemTime, test } from "bun:test";
 import React, { act } from "react";
 import { createRoot, type Root } from "test-renderer";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
@@ -83,9 +83,19 @@ let mapAssetUrls: { glyphs: string; sprites: string } | null = null;
 const backPressListeners = new Set<() => boolean>();
 const accessibilityAnnouncements: string[] = [];
 let reduceMotionEnabled = false;
+const appStateListeners = new Set<(nextAppState: string) => void>();
 
 mock.module("react-native", () => {
-  const reactNative = createReactNativeTestModule({ platformOS: "android" });
+  const reactNative = createReactNativeTestModule({
+    appState: {
+      currentState: "active",
+      addEventListener: (_event, listener) => {
+        appStateListeners.add(listener);
+        return { remove: () => appStateListeners.delete(listener) };
+      },
+    },
+    platformOS: "android",
+  });
   return {
     ...reactNative,
     AccessibilityInfo: {
@@ -527,6 +537,7 @@ describe("NativeMap over a fake MapLibre", () => {
     backPressListeners.clear();
     accessibilityAnnouncements.length = 0;
     reduceMotionEnabled = false;
+    appStateListeners.clear();
     resetNativeMapHarness();
     currentSignedPmtilesUrlQuery = {
       data: defaultSignedUrl,
@@ -1505,6 +1516,67 @@ describe("NativeMap over a fake MapLibre", () => {
     ).toHaveLength(1);
   });
 
+  test("jumps to the first location and jumps again to frame people whose locations load later", async () => {
+    const self = createLiveMapMarkerFixture({
+      isSelf: true,
+      latitude: 51.5,
+      longitude: -0.12,
+      userId: "self",
+    });
+    const alice = createLiveMapMarkerFixture({
+      latitude: 50.8,
+      longitude: -1.1,
+      userId: "alice",
+    });
+
+    await renderNativeMap({ locationsLoading: true, markers: [self] });
+    await finishLoadingStyle();
+    await flushEffects();
+    expect(getNativeMapCameraCommands()[0]).toMatchObject({
+      type: "setCamera",
+      stop: { animationDuration: 0, centerCoordinate: [-0.12, 51.5], zoomLevel: 14 },
+    });
+
+    await renderNativeMap({ locationsLoading: false, markers: [self, alice] });
+    await flushEffects();
+    expect(getNativeMapCameraCommands().filter((command) => command.type === "fitBounds")).toEqual([
+      {
+        type: "fitBounds",
+        ne: [-0.12, 51.5],
+        sw: [-1.1, 50.8],
+        padding: expect.any(Array),
+        duration: 0,
+      },
+    ]);
+  });
+
+  test("follows your own pin from a stale cached position to the first live fix", async () => {
+    const cached = createLiveMapMarkerFixture({
+      isSelf: true,
+      latitude: 51.5,
+      longitude: -0.12,
+      userId: "self",
+    });
+
+    await renderNativeMap({ locationsLoading: true, markers: [cached] });
+    await finishLoadingStyle();
+    await flushEffects();
+    await renderNativeMap({
+      locationsLoading: true,
+      markers: [{ ...cached, latitude: 51.4, longitude: -0.3 }],
+    });
+    await flushEffects();
+
+    expect(
+      getNativeMapCameraCommands()
+        .filter((command) => command.type === "setCamera")
+        .map((command) => command.stop),
+    ).toEqual([
+      expect.objectContaining({ animationDuration: 0, centerCoordinate: [-0.12, 51.5] }),
+      expect.objectContaining({ animationDuration: 0, centerCoordinate: [-0.3, 51.4] }),
+    ]);
+  });
+
   test("preserves programmatic fit camera across remount without region events", async () => {
     const alice = createLiveMapMarkerFixture({
       latitude: 51.5,
@@ -1752,6 +1824,85 @@ describe("NativeMap over a fake MapLibre", () => {
     expect(placeFocusCount()).toBe(2);
   });
 
+  describe("returning after a long time in the background", () => {
+    const home = {
+      canManage: true,
+      emoji: "🏠",
+      groupId: "family",
+      groupName: "Family",
+      id: "home",
+      latitude: 51.5,
+      longitude: -0.12,
+      memberUserIds: ["alice"],
+      name: "Home",
+      radiusMeters: 250,
+    };
+    const people = [
+      createLiveMapMarkerFixture({ latitude: 51.5, longitude: -0.12, userId: "alice" }),
+      createLiveMapMarkerFixture({ latitude: 50.8, longitude: -1.1, userId: "bob" }),
+    ];
+
+    const returnAfterTenMinutes = async () => {
+      const awayAt = Date.now();
+      await act(async () => {
+        for (const listener of appStateListeners) listener("background");
+      });
+      setSystemTime(new Date(awayAt + 10 * 60_000));
+      await act(async () => {
+        for (const listener of appStateListeners) listener("active");
+      });
+      await flushEffects();
+    };
+
+    const fitsSince = (count: number) =>
+      getNativeMapCameraCommands()
+        .slice(count)
+        .filter((command) => command.type === "fitBounds").length;
+
+    afterEach(() => {
+      setSystemTime();
+    });
+
+    test("frames everyone again when nothing is open", async () => {
+      await renderNativeMap({ markers: people, places: [home] });
+      await finishLoadingStyle();
+      await flushEffects();
+      const before = getNativeMapCameraCommands().length;
+
+      await returnAfterTenMinutes();
+
+      expect(fitsSince(before)).toBe(1);
+    });
+
+    test("leaves the map under an open place sheet alone", async () => {
+      await renderNativeMap({ markers: people, places: [home] });
+      await finishLoadingStyle();
+      await flushEffects();
+      await renderNativeMap({ focusPlaceId: "home", markers: people, places: [home] });
+      await flushEffects();
+      await renderNativeMap({ markers: people, places: [home] });
+      await flushEffects();
+      const before = getNativeMapCameraCommands().length;
+
+      await returnAfterTenMinutes();
+
+      expect(fitsSince(before)).toBe(0);
+    });
+
+    test("does not reset the camera while a place focus is waiting for its place", async () => {
+      await renderNativeMap({ focusPlaceId: "home", markers: people });
+      await finishLoadingStyle();
+      await flushEffects();
+      const before = getNativeMapCameraCommands().length;
+
+      await returnAfterTenMinutes();
+      await renderNativeMap({ focusPlaceId: "home", markers: people, places: [home] });
+      await flushEffects();
+
+      expect(fitsSince(before)).toBe(0);
+    });
+  });
+
   test("only counts members of the place's group as here now", async () => {
     const timestamp = new Date().toISOString();
     const markers = [
@@ -1971,6 +2122,38 @@ describe("NativeMap over a fake MapLibre", () => {
     await flushEffects();
 
     expect(getNativeMapCameraCommands()).toHaveLength(commandsAfterRelease);
+  });
+
+  test("fits everyone clear of the top chips and the map buttons", async () => {
+    const alice = createLiveMapMarkerFixture({ latitude: 51.5, longitude: -0.12, userId: "alice" });
+    const bob = createLiveMapMarkerFixture({ latitude: 50.8, longitude: -1.1, userId: "bob" });
+
+    await renderNativeMap({ markers: [alice, bob] });
+    await finishLoadingStyle();
+    await flushEffects();
+    const chips = root?.container.queryAll(
+      (node) =>
+        node.type === "view" &&
+        typeof node.props["onLayout"] === "function" &&
+        node.queryAll(
+          (child) =>
+            child.type === "pressable" &&
+            child.props["accessibilityLabel"] === "Show map names and symbols",
+        ).length > 0,
+    );
+    await act(async () => {
+      (chips?.at(-1)?.props["onLayout"] as ((event: unknown) => void) | undefined)?.({
+        nativeEvent: { layout: { height: 88, width: 380, x: 12, y: 8 } },
+      });
+    });
+    emitNativeMapShowEveryone();
+    await flushEffects();
+
+    const fits = getNativeMapCameraCommands().filter((command) => command.type === "fitBounds");
+    expect(fits.map((command) => command.padding)).toEqual([
+      [76, 88, 48, 32],
+      [124, 88, 48, 32],
+    ]);
   });
 
   test("releases MapLibre's retained Show everyone bounds before native marker updates can replay them", async () => {

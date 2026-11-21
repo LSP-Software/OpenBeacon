@@ -621,6 +621,13 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(family?.members.find(({ userId }) => userId === owner)?.imageKey).toBeNull();
     });
 
+    test("the group list names each group's latest epoch, so phones can spot stale picture keys", async () => {
+      const listed = await caller(member).groupMembership.list();
+
+      expect(listed.find(({ id }) => id === groupId)?.latestEpochId).toBe(latestEpochId);
+      expect(listed.find(({ id }) => id === secondGroupId)?.latestEpochId).toBe(secondEpochId);
+    });
+
     test("store writes only your own key, for your current picture, under the latest epoch", async () => {
       const group = await setGroupPicture();
       const admins = await setProfilePicture(admin);

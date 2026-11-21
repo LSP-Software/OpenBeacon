@@ -20,14 +20,30 @@ import {
   SkipForwardIcon,
 } from "lucide-react-native";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, BackHandler, Pressable, ScrollView, View } from "react-native";
+import {
+  ActivityIndicator,
+  BackHandler,
+  Pressable,
+  ScrollView,
+  useWindowDimensions,
+  View,
+} from "react-native";
+import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNativeMapStyle } from "../components/map/useNativeMapStyle.ts";
 import { TimelineDecryptCard } from "../components/timeline/TimelineDecryptCard.tsx";
 import { TimelineMapLayers } from "../components/timeline/TimelineMapLayers.tsx";
 import { TimelinePeopleChooser } from "../components/timeline/TimelinePeopleChooser.tsx";
 import { TimelinePin } from "../components/timeline/TimelinePin.tsx";
-import { TimelineKey, TimelineScrubber } from "../components/timeline/TimelineScrubber.tsx";
+import {
+  TimelineCardShared,
+  TimelinePlayerCard,
+} from "../components/timeline/TimelinePlayerCard.tsx";
+import {
+  TimelineKey,
+  TimelineMiniScrubber,
+  TimelineScrubber,
+} from "../components/timeline/TimelineScrubber.tsx";
 import { DecryptedAvatarImage } from "../components/image/DecryptedAvatarImage.tsx";
 import { Avatar, AvatarFallback } from "../components/ui/Avatar.tsx";
 import { Button } from "../components/ui/Button.tsx";
@@ -35,17 +51,21 @@ import { Icon } from "../components/ui/Icon.tsx";
 import { Text } from "../components/ui/Text.tsx";
 import { useCachedGroup } from "../hooks/useCachedGroup.ts";
 import { useReducedMotion } from "../hooks/useReducedMotion.ts";
+import { useSpeedUnit } from "../hooks/useSpeedUnit.ts";
+import { useTimelinePlayerCard } from "../hooks/useTimelinePlayerCard.ts";
 import { useUses24HourClock } from "../hooks/useUses24HourClock.ts";
 import { useTimelineDay, useTimelineDays } from "../hooks/useTimeline.ts";
 import { trpc } from "../lib/api.ts";
 import { authClient } from "../lib/auth-client.ts";
 import { initialsFromName } from "../lib/buildLiveMapMarkers.ts";
+import { mapFitBounds } from "../lib/fitLiveMapMarkers.ts";
 import { historyShareNote, timelineEmptyLines } from "../lib/historyShare.ts";
 import { cn } from "../lib/cn.ts";
 import { GROUP_COLOR_PALETTE, getGroupColor } from "../lib/groupColor.ts";
 import { loadPersonalNicknames } from "../lib/personalNicknames.ts";
 import { groupPlacesQueryOptions } from "../lib/placeSync.ts";
 import { getSymbolVisibility } from "../lib/protomaps-style.ts";
+import { timelineSpeedLabel } from "../lib/speed.ts";
 import {
   pickPersonDevices,
   timelineDayStats,
@@ -91,7 +111,7 @@ const TimelineScreen = () => {
   if (isPending || !selfUserId) {
     return (
       <View className="flex-1 items-center justify-center bg-background">
-        <ActivityIndicator />
+        <ActivityIndicator className="text-primary" />
       </View>
     );
   }
@@ -163,7 +183,6 @@ const TimelineView = ({
   } | null>(null);
   const [styleLoaded, setStyleLoaded] = useState(false);
   const [topHeight, setTopHeight] = useState(0);
-  const [panelHeight, setPanelHeight] = useState(0);
   const [groupMenuOpen, setGroupMenuOpen] = useState(false);
   const [personId, setPersonId] = useState(initialPersonId);
   const [deviceChoice, setDeviceChoice] = useState<Record<string, string>>({});
@@ -180,6 +199,7 @@ const TimelineView = ({
   const [chosenPeople, setChosenPeople] = useState<string[] | null>(null);
   const [chooserOpen, setChooserOpen] = useState(false);
   const reduceMotion = useReducedMotion();
+  const { unit: speedUnit } = useSpeedUnit();
   const timeRef = useRef(0);
   const dayStripRef = useRef<ScrollView>(null);
 
@@ -385,6 +405,14 @@ const TimelineView = ({
     return at.position ? [{ ...at, route }] : [];
   });
   const selectedPin = selectedPerson ? (pins[0] ?? null) : null;
+  const card = useTimelinePlayerCard({
+    canCollapse: timeline !== null && routes.length > 0,
+    loading: days
+      ? day !== null && (timeline === null || dayQuery.isPending) && !dayQuery.isError
+      : !daysQuery.isError,
+    reduceMotion,
+  });
+  const panelHeight = card.height === 0 ? 0 : card.height + insets.bottom + 8;
   const cameraPadding = {
     top: topHeight + 24,
     bottom: panelHeight + 24,
@@ -475,22 +503,18 @@ const TimelineView = ({
       }
     }
     const coordinates = routes.flatMap((route) => [
-      ...route.line,
-      ...route.pauses.flat(),
-      ...route.stops.map((stop): [number, number] => [stop.longitude, stop.latitude]),
+      ...[...route.line, ...route.pauses.flat()].map(([longitude, latitude]) => ({
+        latitude,
+        longitude,
+      })),
+      ...route.stops,
     ]);
     if (coordinates.length === 0) return;
-    const longitudes = coordinates.map(([longitude]) => longitude);
-    const latitudes = coordinates.map(([, latitude]) => latitude);
-    cameraRef.current?.fitBounds(
-      [
-        Math.min(...longitudes),
-        Math.min(...latitudes),
-        Math.max(...longitudes),
-        Math.max(...latitudes),
-      ],
-      { duration: 600, padding: cameraPadding },
-    );
+    const { ne, sw } = mapFitBounds(coordinates);
+    cameraRef.current?.fitBounds([sw[0], sw[1], ne[0], ne[1]], {
+      duration: 600,
+      padding: cameraPadding,
+    });
   }, [fit.key]);
 
   const followLongitude = selectedPin?.position.longitude;
@@ -504,6 +528,19 @@ const TimelineView = ({
       padding: cameraPadding,
     });
   }, [followLatitude, followLongitude, following]);
+
+  const followedOpen = useRef(card.open);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only the card opening or closing re-centres the followed pin, with the padding for its new size
+  useEffect(() => {
+    if (followedOpen.current === card.open) return;
+    followedOpen.current = card.open;
+    if (!following || followLongitude === undefined || followLatitude === undefined) return;
+    cameraRef.current?.easeTo({
+      center: [followLongitude, followLatitude],
+      duration: 300,
+      padding: cameraPadding,
+    });
+  }, [card.open]);
 
   const selectedRoute = selectedPerson ? routes[0] : undefined;
   const selectedSegment = selectedPerson?.device.segments.find(
@@ -549,8 +586,14 @@ const TimelineView = ({
       };
     }
     switch (selectedSegment.kind) {
-      case "moving":
-        return { title: "Moving", detail: date };
+      case "moving": {
+        const speedLabel = timelineSpeedLabel(selectedPin, speedUnit);
+        return {
+          title: "Moving",
+          detail: speedLabel ? `${speedLabel} · ${date}` : date,
+          speed: speedLabel,
+        };
+      }
       case "stay": {
         const stop = selectedStop ?? selectedSegment;
         const name = selectedStop ? placeName(selectedStop.placeId) : null;
@@ -763,6 +806,7 @@ const TimelineView = ({
     timeline && time >= timeline.day.end
       ? formatTimelineDayEnd(timeline.day.end, uses24HourClock)
       : formatClock(time);
+  const dayLabel = day ? formatDate(day.start) : "";
 
   const scrubTo = (value: number) => {
     setPlaying(false);
@@ -782,9 +826,11 @@ const TimelineView = ({
           touchPitch={false}
           touchRotate={false}
           androidView="surface"
+          onPress={card.collapse}
           onRegionWillChange={(event) => {
             if (!event.nativeEvent.userInteraction) return;
             setFollowing(false);
+            card.collapse();
             fittedView.current.moved = true;
           }}
           onRegionDidChange={(event) => {
@@ -871,7 +917,7 @@ const TimelineView = ({
               </Button>
             </>
           ) : (
-            <ActivityIndicator />
+            <ActivityIndicator className="text-primary" />
           )}
         </View>
       )}
@@ -917,10 +963,31 @@ const TimelineView = ({
         top={topHeight + 40}
       />
 
-      <View
-        className="absolute left-3 right-3 rounded-2xl border border-border bg-card px-4 pb-3 pt-3 shadow-md shadow-black/15"
-        style={{ bottom: insets.bottom + 8 }}
-        onLayout={(event) => setPanelHeight(event.nativeEvent.layout.height + insets.bottom + 8)}
+      <TimelinePlayerCard
+        bottom={insets.bottom + 8}
+        card={card}
+        miniStatus={{
+          date: dayLabel,
+          speed: status && "speed" in status ? status.speed : null,
+          title: status && status.title !== dayLabel ? status.title : null,
+        }}
+        miniScrubber={
+          timeline ? (
+            <TimelineMiniScrubber
+              day={timeline.day}
+              from={timeline.from}
+              step={STEP_MS}
+              time={time}
+              to={timeline.to}
+              valueLabel={status ? `${clockLabel}, ${status.title}` : clockLabel}
+              onScrub={scrubTo}
+            />
+          ) : (
+            <View className="h-11 items-center justify-center">
+              <ActivityIndicator size="small" className="text-primary" />
+            </View>
+          )
+        }
       >
         {daysQuery.isError && !days ? (
           <ProblemNote
@@ -929,7 +996,9 @@ const TimelineView = ({
             onRetry={() => void daysQuery.refetch()}
           />
         ) : !days ? (
-          <ActivityIndicator className="py-6" />
+          <Animated.View {...card.fullOnly}>
+            <ActivityIndicator className="py-6 text-primary" />
+          </Animated.View>
         ) : !day ? (
           <View className="gap-1 py-4">
             {timelineEmptyLines({
@@ -949,17 +1018,32 @@ const TimelineView = ({
             onRetry={() => void dayQuery.refetch()}
           />
         ) : !timeline ? (
-          <ActivityIndicator className="py-6" />
+          <Animated.View {...card.fullOnly}>
+            <ActivityIndicator className="py-6 text-primary" />
+          </Animated.View>
         ) : (
           <View className="gap-3">
             {daysQuery.isError || dayQuery.isError ? (
-              <Text className="text-sm text-secondary">
-                Couldn’t reach the server, so this may be out of date.
-              </Text>
+              <Animated.View {...card.fullOnly}>
+                <Text className="text-sm text-secondary">
+                  Couldn’t reach the server, so this may be out of date.
+                </Text>
+              </Animated.View>
             ) : null}
-            <View className="flex-row items-center gap-3">
-              <Text className="text-3xl font-semibold text-foreground">{clockLabel}</Text>
-              <View className="min-w-0 flex-1">
+            <View
+              className="flex-row flex-wrap items-center gap-3"
+              onLayout={card.measure("topRow")}
+            >
+              <TimelineCardShared motion={card.shared.clock}>
+                <Text
+                  className="text-3xl font-semibold text-foreground"
+                  maxFontSizeMultiplier={1.5}
+                  style={{ fontVariant: ["tabular-nums"] }}
+                >
+                  {clockLabel}
+                </Text>
+              </TimelineCardShared>
+              <Animated.View {...card.fullOnly} className="min-w-16 flex-1">
                 <Text
                   accessibilityLiveRegion="polite"
                   className="font-semibold text-foreground"
@@ -972,124 +1056,137 @@ const TimelineView = ({
                     {status.detail}
                   </Text>
                 ) : null}
-              </View>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Playback speed, ${speed} times. Double tap for ${nextSpeed} times`}
-                onPress={() => setSpeed(nextSpeed)}
-                className="min-h-11 min-w-14 items-center justify-center rounded-full bg-background px-3"
-              >
-                <Text className="font-semibold text-foreground">{speed}×</Text>
-              </Pressable>
-            </View>
-            {routes.length > 0 ? (
-              <TimelineScrubber
-                day={timeline.day}
-                from={timeline.from}
-                historyStart={timeline.historyStart}
-                lanes={lanes}
-                step={STEP_MS}
-                time={time}
-                to={timeline.to}
-                uses24HourClock={uses24HourClock}
-                valueLabel={status ? `${clockLabel}, ${status.title}` : clockLabel}
-                onScrub={scrubTo}
-              />
-            ) : (
-              <Text className="py-2 text-center text-tertiary">
-                {personId
-                  ? `No locations from ${selectedName ?? "this person"} on this day.`
-                  : "No locations on this day."}
-              </Text>
-            )}
-            {routes.length > 0 ? (
-              <TimelineKey
-                color={selectedPerson?.color}
-                showNotAvailable={
-                  timeline.historyStart > timeline.day.start ||
-                  lanes.some((lane) => lane.historyStart > timeline.day.start)
-                }
-              />
-            ) : null}
-            {selectedPerson && selectedRoute ? (
-              <>
-                <View className="flex-row gap-2">
-                  <StatCard
-                    value={formatDistance(selectedRoute.stats.distanceMeters)}
-                    label="travelled"
-                  />
-                  <StatCard
-                    value={String(selectedRoute.stats.stops.length)}
-                    label={selectedRoute.stats.stops.length === 1 ? "stop" : "stops"}
-                  />
-                  <StatCard value={formatDuration(selectedRoute.stats.movingMs)} label="moving" />
-                </View>
-                {selectedPerson.devices.length > 1 ? (
-                  <DeviceSwitch
-                    current={selectedPerson.device.deviceId}
-                    deviceIds={selectedPerson.devices.map((device) => device.deviceId)}
-                    names={memberDevices.data ?? []}
-                    onSwitch={(deviceId) =>
-                      setDeviceChoice((current) => ({
-                        ...current,
-                        [selectedPerson.userId]: deviceId,
-                      }))
-                    }
-                  />
-                ) : null}
-              </>
-            ) : null}
-            {routes.length > 0 ? (
-              <View className="flex-row items-center justify-between px-2">
-                <ControlButton
-                  icon={SkipBackIcon}
-                  label="Start of day"
-                  onPress={() => scrubTo(timeline.from)}
-                />
-                <ControlButton
-                  icon={RewindIcon}
-                  label="Back 15 minutes"
-                  onPress={() => scrubTo(Math.max(time - STEP_MS, timeline.from))}
-                />
+              </Animated.View>
+              <TimelineCardShared motion={card.shared.speed}>
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={playing ? "Pause" : "Play"}
-                  onPress={() => {
-                    if (playing) {
-                      setPlaying(false);
-                      return;
-                    }
-                    setTime(
-                      timelinePlayStart({
-                        from: timeline.from,
-                        located,
-                        scrubbed: timeState?.key === timeline.day.key,
-                        time,
-                        to: timeline.to,
-                        today: showingToday,
-                      }),
-                    );
-                    setFollowing(true);
-                    setPlaying(true);
-                  }}
-                  className="size-14 items-center justify-center rounded-full bg-primary"
+                  accessibilityLabel={`Playback speed, ${speed} times. Double tap for ${nextSpeed} times`}
+                  onPress={() => setSpeed(nextSpeed)}
+                  className="min-h-11 min-w-14 items-center justify-center rounded-full bg-background px-3"
                 >
-                  <Icon as={playing ? PauseIcon : PlayIcon} size={24} className="text-white" />
+                  <Text className="font-semibold text-foreground">{speed}×</Text>
                 </Pressable>
-                <ControlButton
-                  icon={FastForwardIcon}
-                  label="Forward 15 minutes"
-                  onPress={() => scrubTo(Math.min(time + STEP_MS, timeline.to))}
+              </TimelineCardShared>
+            </View>
+            <Animated.View {...card.fullOnly} className="gap-3">
+              {routes.length > 0 ? (
+                <TimelineScrubber
+                  day={timeline.day}
+                  from={timeline.from}
+                  historyStart={timeline.historyStart}
+                  lanes={lanes}
+                  step={STEP_MS}
+                  time={time}
+                  to={timeline.to}
+                  uses24HourClock={uses24HourClock}
+                  valueLabel={status ? `${clockLabel}, ${status.title}` : clockLabel}
+                  onScrub={scrubTo}
                 />
-                <ControlButton
-                  icon={SkipForwardIcon}
-                  label="End of day"
-                  onPress={() => scrubTo(timeline.to)}
+              ) : (
+                <Text className="py-2 text-center text-tertiary">
+                  {personId
+                    ? `No locations from ${selectedName ?? "this person"} on this day.`
+                    : "No locations on this day."}
+                </Text>
+              )}
+              {routes.length > 0 ? (
+                <TimelineKey
+                  color={selectedPerson?.color}
+                  showNotAvailable={
+                    timeline.historyStart > timeline.day.start ||
+                    lanes.some((lane) => lane.historyStart > timeline.day.start)
+                  }
                 />
+              ) : null}
+              {selectedPerson && selectedRoute ? (
+                <>
+                  <View className="flex-row flex-wrap gap-2">
+                    <StatCard
+                      value={formatDistance(selectedRoute.stats.distanceMeters)}
+                      label="travelled"
+                    />
+                    <StatCard
+                      value={String(selectedRoute.stats.stops.length)}
+                      label={selectedRoute.stats.stops.length === 1 ? "stop" : "stops"}
+                    />
+                    <StatCard value={formatDuration(selectedRoute.stats.movingMs)} label="moving" />
+                  </View>
+                  {selectedPerson.devices.length > 1 ? (
+                    <DeviceSwitch
+                      current={selectedPerson.device.deviceId}
+                      deviceIds={selectedPerson.devices.map((device) => device.deviceId)}
+                      names={memberDevices.data ?? []}
+                      onSwitch={(deviceId) =>
+                        setDeviceChoice((current) => ({
+                          ...current,
+                          [selectedPerson.userId]: deviceId,
+                        }))
+                      }
+                    />
+                  ) : null}
+                </>
+              ) : null}
+            </Animated.View>
+            {routes.length > 0 ? (
+              <View className="flex-row items-center" onLayout={card.measure("controls")}>
+                <Animated.View {...card.fullOnly} className="flex-1 flex-row justify-around">
+                  <ControlButton
+                    icon={SkipBackIcon}
+                    label="Start of day"
+                    onPress={() => scrubTo(timeline.from)}
+                  />
+                  <ControlButton
+                    icon={RewindIcon}
+                    label="Back 15 minutes"
+                    onPress={() => scrubTo(Math.max(time - STEP_MS, timeline.from))}
+                  />
+                </Animated.View>
+                <TimelineCardShared motion={card.shared.play}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={playing ? "Pause" : "Play"}
+                    onPress={() => {
+                      if (playing) {
+                        setPlaying(false);
+                        return;
+                      }
+                      setTime(
+                        timelinePlayStart({
+                          from: timeline.from,
+                          located,
+                          scrubbed: timeState?.key === timeline.day.key,
+                          time,
+                          to: timeline.to,
+                          today: showingToday,
+                        }),
+                      );
+                      setFollowing(true);
+                      setPlaying(true);
+                    }}
+                    className="size-14 items-center justify-center rounded-full bg-primary"
+                  >
+                    <Icon as={playing ? PauseIcon : PlayIcon} size={24} className="text-white" />
+                  </Pressable>
+                </TimelineCardShared>
+                <Animated.View {...card.fullOnly} className="flex-1 flex-row justify-around">
+                  <ControlButton
+                    icon={FastForwardIcon}
+                    label="Forward 15 minutes"
+                    onPress={() => scrubTo(Math.min(time + STEP_MS, timeline.to))}
+                  />
+                  <ControlButton
+                    icon={SkipForwardIcon}
+                    label="End of day"
+                    onPress={() => scrubTo(timeline.to)}
+                  />
+                </Animated.View>
               </View>
             ) : null}
             {personId === null && hiddenCount > 0 ? (
-              <View className="gap-2 rounded-xl border border-warning-accent bg-card p-3">
+              <Animated.View
+                {...card.fullOnly}
+                className="gap-2 rounded-xl border border-warning-accent bg-card p-3"
+              >
                 <Text className="text-sm text-foreground">
                   There are too many locations on this day to show everyone, so Timeline is showing{" "}
                   {peopleWithLocations.length - hiddenCount} of {peopleWithLocations.length} people.
@@ -1102,18 +1199,20 @@ const TimelineView = ({
                 >
                   <Text>Choose people</Text>
                 </Button>
-              </View>
+              </Animated.View>
             ) : null}
             {undecryptable > 0 ? (
-              <Text className="text-xs text-secondary">
-                {undecryptable === 1
-                  ? `1 location couldn’t be decrypted on this ${thisDeviceNoun()}, so it’s left out.`
-                  : `${undecryptable.toLocaleString()} locations couldn’t be decrypted on this ${thisDeviceNoun()}, so they’re left out.`}
-              </Text>
+              <Animated.View {...card.fullOnly}>
+                <Text className="text-xs text-secondary">
+                  {undecryptable === 1
+                    ? `1 location couldn’t be decrypted on this ${thisDeviceNoun()}, so it’s left out.`
+                    : `${undecryptable.toLocaleString()} locations couldn’t be decrypted on this ${thisDeviceNoun()}, so they’re left out.`}
+                </Text>
+              </Animated.View>
             ) : null}
           </View>
         )}
-      </View>
+      </TimelinePlayerCard>
 
       {budget ? (
         <TimelinePeopleChooser
@@ -1183,12 +1282,26 @@ const PersonChip = ({
   </Pressable>
 );
 
-const StatCard = ({ label, value }: { label: string; value: string }) => (
-  <View className="flex-1 rounded-xl bg-background px-3 py-2">
-    <Text className="text-lg font-semibold text-foreground">{value}</Text>
-    <Text className="text-xs text-secondary">{label}</Text>
-  </View>
-);
+const StatCard = ({ label, value }: { label: string; value: string }) => {
+  const { fontScale } = useWindowDimensions();
+  return (
+    <View
+      className="flex-1 rounded-xl bg-background px-3 py-2"
+      style={{ minWidth: 72 * Math.max(fontScale, 1) }}
+    >
+      <Text
+        adjustsFontSizeToFit
+        className="text-lg font-semibold text-foreground"
+        numberOfLines={1}
+      >
+        {value}
+      </Text>
+      <Text adjustsFontSizeToFit className="text-xs text-secondary" numberOfLines={1}>
+        {label}
+      </Text>
+    </View>
+  );
+};
 
 const DeviceSwitch = ({
   current,
