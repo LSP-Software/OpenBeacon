@@ -150,6 +150,7 @@ test("a device row without a location on the map isn't a button", async () => {
     isThisDevice: false,
     paused: false,
     platform: null,
+    speed: null,
     unreadable: false,
   };
   const rows = await pressables(
@@ -192,6 +193,7 @@ test("a device that went quiet on a low battery may be out of battery, except on
     isThisDevice: false,
     paused: false,
     platform: null,
+    speed: null,
     timestamp: new Date(Date.now() - 2 * 3_600_000).toISOString(),
     unreadable: false,
   };
@@ -251,6 +253,7 @@ test("someone with several devices still gets a way to open the group whose key 
     isThisDevice: false,
     paused: false,
     platform: null,
+    speed: null,
     timestamp: null,
   };
   const links = (
@@ -323,4 +326,48 @@ test("the speed chip goes the moment the fix passes three minutes old", async ()
   expect(JSON.stringify(root?.container.toJSON())).toContain(`"34 mph"`);
   await act(async () => new Promise((resolve) => setTimeout(resolve, 100)));
   expect(JSON.stringify(root?.container.toJSON())).not.toContain("mph");
+});
+
+test("a moving device shows its speed on its own row", async () => {
+  const device = {
+    battery: null,
+    icon: "phone" as const,
+    isThisDevice: false,
+    platform: null,
+    timestamp: new Date(Date.now() - 30_000).toISOString(),
+    unreadable: false,
+  };
+  const rows = await pressables(
+    <LiveMapPersonSheet
+      battery={null}
+      devices={[
+        { ...device, deviceId: "device-1", name: "Phone", paused: false, speed: 15.2 },
+        { ...device, deviceId: "device-2", name: "Tablet", paused: false, speed: 0.3 },
+        { ...device, deviceId: "device-3", name: "Watch", paused: false, speed: 120 },
+        { ...device, deviceId: "device-4", name: "Car", paused: true, speed: 15.2 },
+        {
+          ...device,
+          deviceId: "device-5",
+          name: "Old phone",
+          paused: false,
+          speed: 15.2,
+          timestamp: new Date(Date.now() - 4 * 60_000).toISOString(),
+        },
+      ]}
+      image={null}
+      initials="Al"
+      name="Alice"
+      onDismiss={() => {}}
+      otherSharedGroupNames={[]}
+      speed={null}
+      timestamp={null}
+    />,
+  );
+  expect(rows.map((row) => row.accessibilityLabel)).toEqual([
+    "Show Phone, Updated 1 min ago, moving at 34 mph",
+    "Show Tablet, Updated 1 min ago",
+    "Show Watch, Updated 1 min ago",
+    "Show Car, Location sharing paused",
+    "Show Old phone, Updated 1 min ago",
+  ]);
 });

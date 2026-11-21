@@ -836,6 +836,7 @@ export const NativeMap = ({
                   name: device.name,
                   platform: device.platform,
                   paused: device.paused,
+                  speed: device.marker?.speed ?? null,
                   timestamp: device.marker?.timestamp ?? null,
                   unreadable: device.unreadable || device.marker?.unreadableGroup !== undefined,
                 }))

@@ -25,6 +25,7 @@ type PersonDevice = {
   name: string;
   paused: boolean;
   platform: string | null;
+  speed: number | null;
   timestamp: string | null;
   unreadable: boolean;
 };
@@ -210,6 +211,8 @@ const PersonDeviceRow = ({
   onPress: () => void;
 }) => {
   const updatedAge = useTimeSince(device.timestamp);
+  const liveSpeed = useLiveSpeedLabel({ speed: device.speed, timestamp: device.timestamp });
+  const speedLabel = device.paused ? null : liveSpeed;
   const batteryVisual = device.battery
     ? getBatteryVisual({ batteryLevel: device.battery.level, charging: device.battery.charging })
     : null;
@@ -249,6 +252,12 @@ const PersonDeviceRow = ({
           {updated}
         </Text>
       </View>
+      {speedLabel ? (
+        <View className="flex-row items-center gap-1">
+          <Icon as={GaugeIcon} size={18} className="text-foreground" />
+          <Text className="text-foreground text-sm">{speedLabel}</Text>
+        </View>
+      ) : null}
       {batteryVisual && batteryLevel ? (
         <View className="flex-row items-center gap-1">
           <Icon as={batteryVisual.icon} size={18} className={batteryVisual.colorClass} />
@@ -263,7 +272,12 @@ const PersonDeviceRow = ({
   ) : (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={[`Show ${label}`, updated, batteryLevel && `battery ${batteryLevel}`]
+      accessibilityLabel={[
+        `Show ${label}`,
+        updated,
+        speedLabel && `moving at ${speedLabel}`,
+        batteryLevel && `battery ${batteryLevel}`,
+      ]
         .filter(Boolean)
         .join(", ")}
       className="min-h-11 flex-row items-center gap-3 py-1.5 active:opacity-70"
