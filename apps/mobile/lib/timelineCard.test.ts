@@ -1,5 +1,24 @@
 import { describe, expect, test } from "bun:test";
-import { timelineCardOpens, timelineCardShift, timelineMiniClockScale } from "./timelineCard.ts";
+import {
+  timelineCardBoxMoved,
+  timelineCardOpens,
+  timelineCardShift,
+  timelineMiniClockScale,
+} from "./timelineCard.ts";
+
+describe("timelineCardBoxMoved", () => {
+  const box = { height: 36, width: 92, x: 0, y: 4 };
+
+  test("a first measurement or a real move counts", () => {
+    expect(timelineCardBoxMoved(undefined, box)).toBe(true);
+    expect(timelineCardBoxMoved(box, { ...box, width: 104 })).toBe(true);
+    expect(timelineCardBoxMoved(box, { ...box, y: 3.5 })).toBe(true);
+  });
+
+  test("sub-pixel layout noise does not", () => {
+    expect(timelineCardBoxMoved(box, { ...box, height: 36.2, x: 0.3 })).toBe(false);
+  });
+});
 
 describe("timelineCardOpens", () => {
   test("a flick decides the card's state wherever it is let go", () => {

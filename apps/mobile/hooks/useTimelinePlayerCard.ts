@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { type LayoutChangeEvent, PanResponder } from "react-native";
 import {
   cancelAnimation,
@@ -10,6 +10,7 @@ import {
 } from "react-native-reanimated";
 import {
   type TimelineCardBox,
+  timelineCardBoxMoved,
   timelineCardOpens,
   timelineCardShift,
   timelineMiniClockScale,
@@ -90,13 +91,10 @@ export const useTimelinePlayerCard = ({
 
   const measure = (name: BoxName) => (event: LayoutChangeEvent) => {
     const { height, width, x, y } = event.nativeEvent.layout;
-    setBoxes((current) => {
-      const box = current[name];
-      if (box?.height === height && box.width === width && box.x === x && box.y === y) {
-        return current;
-      }
-      return { ...current, [name]: { height, width, x, y } };
-    });
+    const next = { height, width, x, y };
+    setBoxes((current) =>
+      timelineCardBoxMoved(current[name], next) ? { ...current, [name]: next } : current,
+    );
   };
   const measureHeight = (name: "full" | "mini") => (event: LayoutChangeEvent) => {
     const { height } = event.nativeEvent.layout;
@@ -107,22 +105,27 @@ export const useTimelinePlayerCard = ({
     available: boxes.miniColumn?.width ?? 0,
     width: boxes.clock?.width ?? 0,
   });
-  const clockShift = timelineCardShift({
-    from: [boxes.content, boxes.topRow, boxes.clock],
-    to: [boxes.miniRow, boxes.miniColumn, boxes.miniClock],
-  });
-  const playShift = timelineCardShift({
-    from: [boxes.content, boxes.controls, boxes.play],
-    to: [boxes.miniRow, boxes.miniPlay],
-  });
-  const speedShift = timelineCardShift({
-    from: [boxes.content, boxes.topRow, boxes.speed],
-    to: [boxes.miniRow, boxes.miniSpeed],
-  });
+  const shifts = useMemo(
+    () => ({
+      clock: timelineCardShift({
+        from: [boxes.content, boxes.topRow, boxes.clock],
+        to: [boxes.miniRow, boxes.miniColumn, boxes.miniClock],
+      }),
+      play: timelineCardShift({
+        from: [boxes.content, boxes.controls, boxes.play],
+        to: [boxes.miniRow, boxes.miniPlay],
+      }),
+      speed: timelineCardShift({
+        from: [boxes.content, boxes.topRow, boxes.speed],
+        to: [boxes.miniRow, boxes.miniSpeed],
+      }),
+    }),
+    [boxes],
+  );
 
-  const clockStyle = useAnimatedStyle(() => sharedMotion(progress.value, clockShift));
-  const playStyle = useAnimatedStyle(() => sharedMotion(progress.value, playShift));
-  const speedStyle = useAnimatedStyle(() => sharedMotion(progress.value, speedShift));
+  const clockStyle = useAnimatedStyle(() => sharedMotion(progress.value, shifts.clock));
+  const playStyle = useAnimatedStyle(() => sharedMotion(progress.value, shifts.play));
+  const speedStyle = useAnimatedStyle(() => sharedMotion(progress.value, shifts.speed));
   const heightStyle = useAnimatedStyle(() => ({
     height: heights.mini + (heights.full - heights.mini) * progress.value,
   }));

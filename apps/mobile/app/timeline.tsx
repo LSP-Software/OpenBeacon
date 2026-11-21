@@ -998,6 +998,7 @@ const TimelineView = ({
                 <Text
                   className="text-3xl font-semibold text-foreground"
                   maxFontSizeMultiplier={1.5}
+                  style={{ fontVariant: ["tabular-nums"] }}
                 >
                   {clockLabel}
                 </Text>

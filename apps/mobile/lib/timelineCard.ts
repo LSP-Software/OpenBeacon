@@ -29,6 +29,13 @@ export const timelineMiniClockScale = ({
   width: number;
 }) => (available > 0 && width > 0 ? Math.min(0.8, available / width) : 0.8);
 
+export const timelineCardBoxMoved = (current: TimelineCardBox | undefined, next: TimelineCardBox) =>
+  !current ||
+  Math.abs(current.height - next.height) >= 0.5 ||
+  Math.abs(current.width - next.width) >= 0.5 ||
+  Math.abs(current.x - next.x) >= 0.5 ||
+  Math.abs(current.y - next.y) >= 0.5;
+
 const centreOf = (chain: ReadonlyArray<TimelineCardBox | undefined>) => {
   const boxes = chain.filter((box) => box !== undefined);
   const last = boxes.at(-1);
