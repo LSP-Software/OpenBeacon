@@ -3,6 +3,7 @@ import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
 import { runStorageCheck } from "@openbeacon/map-tiles";
 import { checkServices, tryCatch, validateEnv } from "@openbeacon/shared";
+import { serverVersion } from "../../backend/src/version.ts";
 import { createMapTilesClient, formatStatus } from "./client.ts";
 import { publish, readMapStatus, repairManifest, rollback } from "./commands.ts";
 import { envSchema, getServiceUrl, parseEnv } from "./env.ts";
@@ -78,10 +79,13 @@ const serve = async () => {
     port: env.MAP_TILES_PORT,
   });
   console.log(
-    `Map tiles API listening on 127.0.0.1:${env.MAP_TILES_PORT} for the map-tiles command`,
-  );
-  console.log(
-    `Checking for a map update in map storage bucket ${env.MAP_S3_BUCKET_NAME} now and whenever the map is ${env.MAP_TILES_UPDATE_INTERVAL_DAYS} days old`,
+    [
+      `OpenBeacon map tiles ${serverVersion} (Bun ${Bun.version}) started at ${new Date().toISOString()}`,
+      `  Listening on ${server.url.host} for the map-tiles command`,
+      `  Map storage bucket: ${env.MAP_S3_BUCKET_NAME}`,
+      `  State directory: ${env.MAP_TILES_STATE_DIR}`,
+      `Checking for a map update now and whenever the map is ${env.MAP_TILES_UPDATE_INTERVAL_DAYS} days old`,
+    ].join("\n"),
   );
   const stopUpdates = handler.scheduleUpdates(env.updateIntervalMs);
 
