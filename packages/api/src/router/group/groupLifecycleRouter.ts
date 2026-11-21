@@ -133,6 +133,7 @@ export const groupLifecycleRouter = {
           name: group.name,
           image: group.image,
           imageKey: null,
+          latestEpochId: input.initialEpoch.epochId,
           members: group.groupMembers.map((member) => ({
             id: member.id,
             userId: member.user.id,

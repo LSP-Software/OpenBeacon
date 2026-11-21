@@ -31,6 +31,7 @@ type Group = {
   name: string;
   image: string | null;
   imageKey: EncryptedImageKey | null;
+  latestEpochId: string | null;
   members: Member[];
 };
 type ReEncryptInput = {
@@ -219,6 +220,7 @@ beforeEach(() => {
     name: "Family",
     image: url(GROUP_FILE),
     imageKey: groupKey("epoch-1"),
+    latestEpochId,
     members: [
       {
         id: "m-a",

@@ -7,6 +7,7 @@ import { errorReason } from "./errorReason.ts";
 import { resolveEpochKey } from "./epochKeys.ts";
 import { uploadEncryptedImage } from "./image-upload.ts";
 import { cachedImageUri, imageFileNameFromUrl, readCachedImage } from "./imageCache.ts";
+import { catchUpGroupImageKeys } from "./imageKeyCatchUp.ts";
 import { confirmGroupImage, getOwnImageKey, storeOwnImageKeyInGroup } from "./imageKeys.ts";
 import type { StoredImageKey } from "./imageKeyTypes.ts";
 import { storage } from "./storage.ts";
@@ -156,6 +157,28 @@ const checkGroupKey = async ({
   return { settled: true, repaired: true };
 };
 
+export const staleImageKeyCiphertexts = ({
+  image,
+  imageKey,
+  latestEpochId,
+  members,
+}: {
+  image: string | null;
+  imageKey: Pick<StoredImageKey, "ciphertext" | "epochId"> | null;
+  latestEpochId?: string | null;
+  members: readonly {
+    image: string | null;
+    imageKey: Pick<StoredImageKey, "ciphertext" | "epochId"> | null;
+  }[];
+}) =>
+  latestEpochId
+    ? [{ image, imageKey }, ...members].flatMap((stored) =>
+        stored.image && stored.imageKey && stored.imageKey.epochId !== latestEpochId
+          ? [stored.imageKey.ciphertext]
+          : [],
+      )
+    : [];
+
 const runCheck = async ({
   check,
   signature,
@@ -229,6 +252,23 @@ const checkAll = async ({ groups, user }: CheckInput) => {
               url,
               userId: user.id,
             }),
+        })) || repaired;
+    }
+    if (currentUserId !== user.id) break;
+    const stale = staleImageKeyCiphertexts(group);
+    if (stale.length > 0) {
+      repaired =
+        (await runCheck({
+          slot: storageKey("staleChecked", user.id, group.id),
+          signature: `${group.latestEpochId}|${stale.join(",")}`,
+          check: async () => {
+            const moved = await catchUpGroupImageKeys({
+              groupId: group.id,
+              groups: async () => groups,
+              userId: user.id,
+            });
+            return { settled: moved > 0, repaired: moved > 0 };
+          },
         })) || repaired;
     }
   }

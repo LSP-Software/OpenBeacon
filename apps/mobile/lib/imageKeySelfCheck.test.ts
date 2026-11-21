@@ -23,6 +23,7 @@ type Group = {
   name: string;
   image: string | null;
   imageKey: EncryptedImageKey | null;
+  latestEpochId: string | null;
   members: {
     id: string;
     userId: string;
@@ -56,6 +57,9 @@ const groupConfirms: {
 }[] = [];
 let confirmError: Error | null = null;
 const storeOwn = mock(async (_groupId: string) => true);
+const catchUp = mock(
+  async (_input: { groupId: string; groups: () => Promise<unknown>; userId: string }) => 1,
+);
 
 const wrap = ({
   epochId = "epoch-2",
@@ -167,16 +171,21 @@ mock.module("./imageKeys.ts", () => ({
   storeOwnImageKeyInGroup: storeOwn,
 }));
 
-const { checkImageKeys, resetImageKeyCheck } = await import("./imageKeySelfCheck.ts");
+mock.module("./imageKeyCatchUp.ts", () => ({ catchUpGroupImageKeys: catchUp }));
+
+const { checkImageKeys, resetImageKeyCheck, staleImageKeyCiphertexts } =
+  await import("./imageKeySelfCheck.ts");
 
 const user = { id: "user-a", image: url(ME_FILE), imageKeySealed: null };
 
 const makeGroup = ({
   groupKey,
+  latestEpochId = "epoch-2",
   ownGroupKey,
   role = "ADMIN",
 }: {
   groupKey?: EncryptedImageKey | null;
+  latestEpochId?: string | null;
   ownGroupKey?: EncryptedImageKey | null;
   role?: "OWNER" | "ADMIN" | "MEMBER";
 }): Group => ({
@@ -192,6 +201,7 @@ const makeGroup = ({
           ownerId: groupId,
         })
       : groupKey,
+  latestEpochId,
   members: [
     {
       id: "m-a",
@@ -254,6 +264,7 @@ beforeEach(() => {
   groupConfirms.length = 0;
   confirmError = null;
   storeOwn.mockClear();
+  catchUp.mockClear();
 });
 
 test("does nothing when this phone's own key and the group key both decrypt", async () => {
@@ -547,4 +558,88 @@ test("looks for this person's own key in the groups being checked", async () => 
   const groups = [makeGroup({ ownGroupKey: null, role: "MEMBER" })];
   await check(groups);
   expect(ownKeyGroups).toEqual([groups]);
+});
+
+const OTHER_FILE = "33333333-3333-4333-8333-333333333333";
+
+const withOldMemberKey = (group: Group) => {
+  epochKeys.set("epoch-1", generateGroupEpochKey());
+  return {
+    ...group,
+    members: [
+      ...group.members,
+      {
+        id: "m-c",
+        userId: "user-c",
+        name: "Cal",
+        image: url(OTHER_FILE),
+        imageKey: wrap({
+          epochId: "epoch-1",
+          fileName: OTHER_FILE,
+          imageKey: generateImageKey(),
+          kind: "profile-image-key" as const,
+          ownerId: "user-c",
+        }),
+        role: "MEMBER" as const,
+      },
+    ],
+  };
+};
+
+test("moves picture keys left on an older epoch as soon as the group list shows a newer one", async () => {
+  const groups = [withOldMemberKey(makeGroup({ role: "MEMBER" }))];
+  expect(await check(groups)).toBe(true);
+  expect(catchUp.mock.calls.map(([input]) => [input.groupId, input.userId])).toEqual([
+    [groupId, "user-a"],
+  ]);
+  expect(await catchUp.mock.calls[0]![0].groups()).toBe(groups);
+});
+
+test("asks for no catch-up when every key is on the latest epoch or the server doesn't name it", async () => {
+  expect(await check([makeGroup({ role: "MEMBER" })])).toBe(false);
+  groupId = `${groupId}-old-server`;
+  expect(await check([withOldMemberKey(makeGroup({ latestEpochId: null, role: "MEMBER" }))])).toBe(
+    false,
+  );
+  expect(catchUp).not.toHaveBeenCalled();
+});
+
+test("a catch-up this phone can't do waits 15 minutes, but a new epoch is tried straight away", async () => {
+  jest.useFakeTimers();
+  try {
+    jest.setSystemTime(new Date("2026-11-16T10:00:00.000Z"));
+    catchUp.mockImplementation(async () => 0);
+    const groups = [withOldMemberKey(makeGroup({ role: "MEMBER" }))];
+    expect(await check(groups)).toBe(false);
+    expect(await check(groups)).toBe(false);
+    expect(catchUp).toHaveBeenCalledTimes(1);
+    expect(await check([{ ...groups[0]!, latestEpochId: "epoch-3" }])).toBe(false);
+    expect(catchUp).toHaveBeenCalledTimes(2);
+    jest.setSystemTime(new Date("2026-11-16T10:15:00.000Z"));
+    expect(await check(groups)).toBe(false);
+    expect(catchUp).toHaveBeenCalledTimes(3);
+  } finally {
+    catchUp.mockImplementation(async () => 1);
+    jest.useRealTimers();
+  }
+});
+
+test("only keys for a picture that's still set and on an older epoch count as stale", () => {
+  const key = (epochId: string) => ({ epochId, ciphertext: `c-${epochId}` });
+  expect(
+    staleImageKeyCiphertexts({
+      image: url(GROUP_FILE),
+      imageKey: key("epoch-1"),
+      latestEpochId: "epoch-2",
+      members: [
+        { image: url(ME_FILE), imageKey: key("epoch-2") },
+        { image: url(OTHER_FILE), imageKey: { epochId: "epoch-0", ciphertext: "c-member" } },
+        { image: null, imageKey: key("epoch-0") },
+        { image: url(OTHER_FILE), imageKey: null },
+      ],
+    }),
+  ).toEqual(["c-epoch-1", "c-member"]);
+  expect(
+    staleImageKeyCiphertexts({ image: url(GROUP_FILE), imageKey: key("epoch-1"), members: [] }),
+  ).toEqual([]);
 });

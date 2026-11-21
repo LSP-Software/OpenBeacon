@@ -71,6 +71,7 @@ const GroupBody = ({ groupId, initialTab }: { groupId: string; initialTab: Group
   const userId = session?.user.id;
   const imageKeyEpochs = group
     ? [
+        group.latestEpochId ?? null,
         group.imageKey?.epochId ?? null,
         ...group.members.map((member) => [member.id, member.imageKey?.epochId ?? null]),
       ]

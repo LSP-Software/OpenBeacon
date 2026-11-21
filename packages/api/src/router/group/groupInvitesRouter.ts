@@ -433,6 +433,7 @@ export const groupInvitesRouter = {
           name: member.group.name,
           image: member.group.image,
           imageKey: toStoredImageKey(member.group),
+          latestEpochId: input.nextEpoch.epochId,
           members: member.group.groupMembers.map((groupMember) => ({
             id: groupMember.id,
             userId: groupMember.user.id,
