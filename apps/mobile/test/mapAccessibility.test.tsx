@@ -20,8 +20,22 @@ mock.module("react-native", () => ({
     accessibilityRole?: string;
     children?: React.ReactNode;
   }) => React.createElement("pressable", { accessibilityLabel, accessibilityRole }, children),
-  View: ({ children }: { children?: React.ReactNode }) =>
-    React.createElement("view", null, children),
+  View: ({
+    accessibilityLabel,
+    accessibilityRole,
+    accessible,
+    children,
+  }: {
+    accessibilityLabel?: string;
+    accessibilityRole?: string;
+    accessible?: boolean;
+    children?: React.ReactNode;
+  }) =>
+    React.createElement(
+      accessible ? "pressable" : "view",
+      accessible ? { accessibilityLabel, accessibilityRole } : null,
+      children,
+    ),
 }));
 mock.module("@maplibre/maplibre-react-native", () => ({
   Marker: Passthrough,

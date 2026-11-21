@@ -1,6 +1,6 @@
-import { Marker, ViewAnnotation, type ViewAnnotationRef } from "@maplibre/maplibre-react-native";
+import { ViewAnnotation, type ViewAnnotationRef } from "@maplibre/maplibre-react-native";
 import { useEffect, useRef } from "react";
-import { type GestureResponderEvent, Platform, Pressable } from "react-native";
+import { Platform } from "react-native";
 import type { MapPlace } from "../../lib/places.ts";
 import { PlacePin } from "./PlacePin.tsx";
 
@@ -9,31 +9,16 @@ export const PlaceAnnotation = ({
   place,
   selected,
 }: {
-  onSelected: (event?: GestureResponderEvent) => void;
+  onSelected: () => void;
   place: MapPlace;
   selected: boolean;
 }) => {
   const annotationRef = useRef<ViewAnnotationRef>(null);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: iOS ViewAnnotation bitmaps need an explicit refresh when the pin changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Android draws ViewAnnotation children into a bitmap that needs an explicit refresh when the pin changes
   useEffect(() => {
     annotationRef.current?.refresh();
   }, [place.emoji, selected]);
-
-  if (Platform.OS === "android") {
-    return (
-      <Marker lngLat={[place.longitude, place.latitude]} anchor="bottom">
-        <Pressable
-          onPress={onSelected}
-          accessibilityRole="button"
-          accessibilityLabel={`${place.name}, ${place.groupName}`}
-          style={{ alignSelf: "flex-start" }}
-        >
-          <PlacePin emoji={place.emoji} selected={selected} />
-        </Pressable>
-      </Marker>
-    );
-  }
 
   return (
     <ViewAnnotation
@@ -42,7 +27,9 @@ export const PlaceAnnotation = ({
       lngLat={[place.longitude, place.latitude]}
       anchor="bottom"
       draggable={false}
-      onSelect={() => onSelected()}
+      {...(Platform.OS === "android"
+        ? { onPress: () => onSelected() }
+        : { onSelect: () => onSelected() })}
     >
       <PlacePin emoji={place.emoji} selected={selected} />
     </ViewAnnotation>

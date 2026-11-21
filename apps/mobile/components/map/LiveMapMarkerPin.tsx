@@ -81,7 +81,7 @@ export const LiveMapMarkerPin = ({
   image: string | null;
   initials: string;
   name: string;
-  onBitmapContentChange?: () => void;
+  onBitmapContentChange?: (() => void) | undefined;
   ringColor: string;
   ringColors?: string[] | undefined;
   status?: MapPersonStatus | null | undefined;
@@ -90,7 +90,7 @@ export const LiveMapMarkerPin = ({
   const isStale = useLocationStale(timestamp);
   const refreshBitmap = useEffectEvent(() => onBitmapContentChange?.());
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: iOS annotation bitmaps need an explicit refresh when the pin's look changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Android draws map pins into a bitmap that needs an explicit refresh when the pin's look changes
   useEffect(() => {
     refreshBitmap();
   }, [hasUnreadableUpdate, isStale]);

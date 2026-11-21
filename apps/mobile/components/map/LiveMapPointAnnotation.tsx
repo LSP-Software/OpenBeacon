@@ -1,6 +1,6 @@
-import { Marker, ViewAnnotation, type ViewAnnotationRef } from "@maplibre/maplibre-react-native";
+import { ViewAnnotation, type ViewAnnotationRef } from "@maplibre/maplibre-react-native";
 import { useEffect, useRef } from "react";
-import { type GestureResponderEvent, Platform, Pressable } from "react-native";
+import { Platform, View } from "react-native";
 import { useLocationStale } from "../../hooks/useLocationStale.ts";
 import { useSelfDeviceHeading } from "../../hooks/useSelfDeviceHeading.ts";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
@@ -19,7 +19,7 @@ export const SelfLiveMapPointAnnotation = ({
   gatherTo?: LiveMapPinOffset | undefined;
   marker: LiveMapMarker;
   onDeselected: () => void;
-  onSelected: (event?: GestureResponderEvent) => void;
+  onSelected: () => void;
 }) => {
   const headingDegrees = useSelfDeviceHeading(true);
 
@@ -48,12 +48,12 @@ export const LiveMapPointAnnotation = ({
   headingDegrees: number | null;
   marker: LiveMapMarker;
   onDeselected: () => void;
-  onSelected: (event?: GestureResponderEvent) => void;
+  onSelected: () => void;
 }) => {
   const annotationRef = useRef<ViewAnnotationRef>(null);
   const isStale = useLocationStale(marker.timestamp);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: iOS ViewAnnotation bitmaps need an explicit refresh when chrome or heading changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Android draws ViewAnnotation children into a bitmap that needs an explicit refresh when the pin's look changes
   useEffect(() => {
     annotationRef.current?.refresh();
   }, [
@@ -68,74 +68,53 @@ export const LiveMapPointAnnotation = ({
     marker.unreadableGroup,
   ]);
 
-  if (Platform.OS === "android") {
-    return (
-      <Marker lngLat={[marker.longitude, marker.latitude]}>
-        <Pressable
-          onPress={onSelected}
-          accessibilityRole="button"
-          accessibilityLabel={[
-            marker.name,
-            ...(marker.mergedDeviceIds && marker.mergedDeviceIds.length > 1
-              ? [`${marker.mergedDeviceIds.length} devices here`]
-              : marker.deviceName
-                ? [marker.deviceName]
-                : []),
-            ...(marker.unreadableGroup !== undefined
-              ? ["Newer location can’t be read"]
-              : isStale
-                ? ["Location is over 10 minutes old"]
-                : []),
-          ].join(", ")}
-          style={{ alignSelf: "flex-start" }}
-        >
-          <LiveMapPinMotion arrival={arrival} gatherTo={gatherTo}>
-            <LiveMapMarkerPin
-              deviceCount={marker.mergedDeviceIds?.length}
-              deviceIcon={marker.deviceIcon}
-              devicePlatform={marker.devicePlatform}
-              hasUnreadableUpdate={marker.unreadableGroup !== undefined}
-              headingDegrees={headingDegrees}
-              image={marker.image}
-              initials={marker.initials}
-              name={marker.name}
-              ringColor={marker.ringColor}
-              ringColors={marker.ringColors}
-              timestamp={marker.timestamp}
-            />
-          </LiveMapPinMotion>
-        </Pressable>
-      </Marker>
-    );
-  }
-
   return (
     <ViewAnnotation
       ref={annotationRef}
       id={marker.deviceId}
       lngLat={[marker.longitude, marker.latitude]}
       anchor="center"
-      onDeselect={onDeselected}
-      onSelect={() => onSelected()}
+      {...(Platform.OS === "android"
+        ? { onPress: () => onSelected() }
+        : { onDeselect: onDeselected, onSelect: () => onSelected() })}
     >
-      <LiveMapPinMotion arrival={arrival} gatherTo={gatherTo}>
-        <LiveMapMarkerPin
-          deviceCount={marker.mergedDeviceIds?.length}
-          deviceIcon={marker.deviceIcon}
-          devicePlatform={marker.devicePlatform}
-          hasUnreadableUpdate={marker.unreadableGroup !== undefined}
-          headingDegrees={headingDegrees}
-          image={marker.image}
-          initials={marker.initials}
-          name={marker.name}
-          ringColor={marker.ringColor}
-          ringColors={marker.ringColors}
-          timestamp={marker.timestamp}
-          onBitmapContentChange={() => {
-            annotationRef.current?.refresh();
-          }}
-        />
-      </LiveMapPinMotion>
+      <View
+        accessible
+        accessibilityRole="button"
+        accessibilityLabel={[
+          marker.name,
+          ...(marker.mergedDeviceIds && marker.mergedDeviceIds.length > 1
+            ? [`${marker.mergedDeviceIds.length} devices here`]
+            : marker.deviceName
+              ? [marker.deviceName]
+              : []),
+          ...(marker.unreadableGroup !== undefined
+            ? ["Newer location can’t be read"]
+            : isStale
+              ? ["Location is over 10 minutes old"]
+              : []),
+        ].join(", ")}
+        collapsable={false}
+      >
+        <LiveMapPinMotion arrival={arrival} gatherTo={gatherTo}>
+          <LiveMapMarkerPin
+            deviceCount={marker.mergedDeviceIds?.length}
+            deviceIcon={marker.deviceIcon}
+            devicePlatform={marker.devicePlatform}
+            hasUnreadableUpdate={marker.unreadableGroup !== undefined}
+            headingDegrees={headingDegrees}
+            image={marker.image}
+            initials={marker.initials}
+            name={marker.name}
+            ringColor={marker.ringColor}
+            ringColors={marker.ringColors}
+            timestamp={marker.timestamp}
+            onBitmapContentChange={() => {
+              annotationRef.current?.refresh();
+            }}
+          />
+        </LiveMapPinMotion>
+      </View>
     </ViewAnnotation>
   );
 };

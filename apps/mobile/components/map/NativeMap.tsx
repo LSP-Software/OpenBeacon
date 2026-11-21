@@ -6,7 +6,7 @@ import {
   AccessibilityInfo,
   ActivityIndicator,
   BackHandler,
-  type GestureResponderEvent,
+  Platform,
   Pressable,
   View,
 } from "react-native";
@@ -108,7 +108,7 @@ export const NativeMap = ({
       })),
     [pins.groups],
   );
-  const lastMarkerPressRef = useRef<{ atMs: number; x: number; y: number } | null>(null);
+  const pinPressAtRef = useRef(0);
   const [stackSheetDeviceIds, setStackSheetDeviceIds] = useState<readonly string[] | null>(null);
   const stackSheetMembers = (stackSheetDeviceIds ?? []).flatMap((deviceId) =>
     pinMarkers.filter((marker) => marker.deviceId === deviceId),
@@ -338,17 +338,8 @@ export const NativeMap = ({
 
   const edgeGroupIds = new Set(edgeMarkers.flatMap((chip) => chip.memberIds));
 
-  const rememberMarkerPress = (event?: GestureResponderEvent) => {
-    if (!event) return;
-    lastMarkerPressRef.current = {
-      atMs: Date.now(),
-      x: event.nativeEvent.pageX,
-      y: event.nativeEvent.pageY,
-    };
-  };
-
-  const pressStack = (group: LiveMapPinGroup, event?: GestureResponderEvent) => {
-    rememberMarkerPress(event);
+  const pressStack = (group: LiveMapPinGroup) => {
+    pinPressAtRef.current = Date.now();
     setSelectedPlaceKey(null);
     setStackSheetDeviceIds(null);
     setGroupMenuOpen(false);
@@ -386,8 +377,8 @@ export const NativeMap = ({
       onDeselected: () => {
         handleAnnotationDeselected(marker.deviceId);
       },
-      onSelected: (event?: GestureResponderEvent) => {
-        rememberMarkerPress(event);
+      onSelected: () => {
+        pinPressAtRef.current = Date.now();
         setSelectedPlaceKey(null);
         setStackSheetDeviceIds(null);
         setGroupMenuOpen(false);
@@ -474,18 +465,9 @@ export const NativeMap = ({
         touchPitch={false}
         touchRotate={false}
         androidView="surface"
-        onPress={(event) => {
-          const lastMarkerPress = lastMarkerPressRef.current;
-          lastMarkerPressRef.current = null;
-          const [x, y] = event.nativeEvent.point;
-          // MapLibre on Android also reports a marker tap to the map ~300ms later, which would close the sheet it opened
-          if (
-            lastMarkerPress &&
-            Date.now() - lastMarkerPress.atMs < 1500 &&
-            Math.hypot(x - lastMarkerPress.x, y - lastMarkerPress.y) < 24
-          ) {
-            return;
-          }
+        onPress={() => {
+          // MapLibre on Android reports every pin tap to the map straight after the pin's own press
+          if (Platform.OS === "android" && Date.now() - pinPressAtRef.current < 500) return;
           setToastGroups([]);
           closeSheets();
         }}
@@ -567,8 +549,8 @@ export const NativeMap = ({
             key={`place:${placeKey(place)}`}
             place={place}
             selected={placeKey(place) === selectedPlaceKey}
-            onSelected={(event) => {
-              rememberMarkerPress(event);
+            onSelected={() => {
+              pinPressAtRef.current = Date.now();
               closeSheets();
               setSelectedPlaceKey(placeKey(place));
             }}
@@ -588,8 +570,8 @@ export const NativeMap = ({
                 arrival={pins.arrivals.get(group.id)}
                 group={group}
                 members={displayOrder(group.members)}
-                onPress={(event) => {
-                  pressStack(group, event);
+                onPress={() => {
+                  pressStack(group);
                 }}
               />
             );

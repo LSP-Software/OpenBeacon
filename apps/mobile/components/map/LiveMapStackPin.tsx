@@ -5,7 +5,13 @@ import { Avatar, AvatarFallback } from "../ui/Avatar.tsx";
 import { Text } from "../ui/Text.tsx";
 import { LiveMapMarkerPin } from "./LiveMapMarkerPin.tsx";
 
-export const LiveMapStackPin = ({ members }: { members: readonly LiveMapMarker[] }) => {
+export const LiveMapStackPin = ({
+  members,
+  onBitmapContentChange,
+}: {
+  members: readonly LiveMapMarker[];
+  onBitmapContentChange?: (() => void) | undefined;
+}) => {
   const [lead, ...others] = members;
   if (!lead) return null;
   const ringColors = [
@@ -34,7 +40,10 @@ export const LiveMapStackPin = ({ members }: { members: readonly LiveMapMarker[]
           }}
         >
           <Avatar alt={member.name} className="size-7">
-            <DecryptedAvatarImage url={member.image} />
+            <DecryptedAvatarImage
+              url={member.image}
+              onLoadingStatusChange={() => onBitmapContentChange?.()}
+            />
             <AvatarFallback>
               <Text className="text-[10px] font-bold">{member.initials}</Text>
             </AvatarFallback>
@@ -46,6 +55,7 @@ export const LiveMapStackPin = ({ members }: { members: readonly LiveMapMarker[]
         image={lead.image}
         initials={lead.initials}
         name={lead.name}
+        onBitmapContentChange={onBitmapContentChange}
         ringColor={lead.ringColor}
         ringColors={ringColors.length > 1 ? ringColors : undefined}
         timestamp={lead.timestamp}

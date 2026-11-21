@@ -39,6 +39,7 @@ const annotationHandlersById = new Map<
   string,
   {
     onDeselected?: () => void;
+    onPressed?: () => void;
     onSelected?: () => void;
   }
 >();
@@ -77,7 +78,6 @@ let latestCameraDefaultSettings: {
 let selfHeadingDegrees: number | null = null;
 let showEveryonePressHandler: (() => void) | null = null;
 let goToCurrentLocationPressHandler: (() => void) | null = null;
-let androidActiveAnnotationId: string | null = null;
 let mapProjectedPoint: [number, number] = [200, 300];
 let mapProjectionWait: Promise<void> | null = null;
 const removedStyleLayerIds: string[] = [];
@@ -120,7 +120,6 @@ export const resetNativeMapHarness = () => {
   selfHeadingDegrees = null;
   showEveryonePressHandler = null;
   goToCurrentLocationPressHandler = null;
-  androidActiveAnnotationId = null;
   mapProjectedPoint = [200, 300];
   mapProjectionWait = null;
   removedStyleLayerIds.length = 0;
@@ -258,17 +257,8 @@ export const emitRemovedAnnotationDeselected = (annotationId: string) => {
 };
 
 export const emitNativeMapAndroidMarkerTap = (annotationId: string) => {
-  const previouslyActiveId = androidActiveAnnotationId;
-
-  if (previouslyActiveId !== null) {
-    androidActiveAnnotationId = null;
-    emitNativeMapAnnotationDeselected(previouslyActiveId);
-  }
-
-  if (previouslyActiveId !== annotationId) {
-    androidActiveAnnotationId = annotationId;
-    emitNativeMapAnnotationSelected(annotationId);
-  }
+  annotationHandlersById.get(annotationId)?.onPressed?.();
+  emitNativeMapPress();
 };
 
 export const createMapLibreMockModule = () => {
@@ -473,51 +463,62 @@ export const createMapLibreMockModule = () => {
       children?: ReactNode;
       id: string;
       onDeselect?: () => void;
+      onPress?: () => void;
       onSelect?: () => void;
       selected?: boolean;
     }
-  >(({ children, id, onDeselect: onDeselected, onSelect: onSelected, selected }, ref) => {
-    useImperativeHandle(ref, () => ({
-      refresh: () => {
-        annotationRefreshCalls.push(id);
-      },
-    }));
-
-    annotationSelectedProps.set(id, selected);
-
-    useEffect(() => {
-      mountedAnnotationIds.add(id);
-      annotationMountCounts.set(id, (annotationMountCounts.get(id) ?? 0) + 1);
-
-      return () => {
-        mountedAnnotationIds.delete(id);
-        if (androidActiveAnnotationId === id) {
-          androidActiveAnnotationId = null;
-        }
-      };
-    }, [id]);
-
-    useEffect(() => {
-      annotationHandlersById.set(id, {
-        ...(onDeselected ? { onDeselected } : {}),
-        ...(onSelected ? { onSelected } : {}),
-      });
-
-      return () => {
-        if (onDeselected) removedAnnotationDeselectionHandlers.set(id, onDeselected);
-        annotationHandlersById.delete(id);
-      };
-    }, [id, onDeselected, onSelected]);
-
-    return React.createElement(
-      "point-annotation",
+  >(
+    (
       {
+        children,
         id,
-        selected: selected ?? false,
+        onDeselect: onDeselected,
+        onPress: onPressed,
+        onSelect: onSelected,
+        selected,
       },
-      children,
-    );
-  });
+      ref,
+    ) => {
+      useImperativeHandle(ref, () => ({
+        refresh: () => {
+          annotationRefreshCalls.push(id);
+        },
+      }));
+
+      annotationSelectedProps.set(id, selected);
+
+      useEffect(() => {
+        mountedAnnotationIds.add(id);
+        annotationMountCounts.set(id, (annotationMountCounts.get(id) ?? 0) + 1);
+
+        return () => {
+          mountedAnnotationIds.delete(id);
+        };
+      }, [id]);
+
+      useEffect(() => {
+        annotationHandlersById.set(id, {
+          ...(onDeselected ? { onDeselected } : {}),
+          ...(onPressed ? { onPressed } : {}),
+          ...(onSelected ? { onSelected } : {}),
+        });
+
+        return () => {
+          if (onDeselected) removedAnnotationDeselectionHandlers.set(id, onDeselected);
+          annotationHandlersById.delete(id);
+        };
+      }, [id, onDeselected, onPressed, onSelected]);
+
+      return React.createElement(
+        "point-annotation",
+        {
+          id,
+          selected: selected ?? false,
+        },
+        children,
+      );
+    },
+  );
   PointAnnotation.displayName = "MockMapLibrePointAnnotation";
 
   return {

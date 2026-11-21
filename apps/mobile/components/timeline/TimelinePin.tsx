@@ -1,6 +1,6 @@
-import { Marker, ViewAnnotation, type ViewAnnotationRef } from "@maplibre/maplibre-react-native";
+import { ViewAnnotation, type ViewAnnotationRef } from "@maplibre/maplibre-react-native";
 import { useEffect, useRef } from "react";
-import { Platform, View } from "react-native";
+import { View } from "react-native";
 import { LiveMapMarkerPin } from "../map/LiveMapMarkerPin.tsx";
 
 export const TimelinePin = ({
@@ -24,37 +24,10 @@ export const TimelinePin = ({
 }) => {
   const annotationRef = useRef<ViewAnnotationRef>(null);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: iOS ViewAnnotation bitmaps need an explicit refresh when the pin's look changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Android draws ViewAnnotation children into a bitmap that needs an explicit refresh when the pin's look changes
   useEffect(() => {
     annotationRef.current?.refresh();
   }, [paused, image, color]);
-
-  const pin = (
-    <LiveMapMarkerPin
-      fillColor={color}
-      image={image}
-      initials={initials}
-      name={name}
-      ringColor={color}
-      status={paused ? "paused" : null}
-      timestamp={null}
-      onBitmapContentChange={() => annotationRef.current?.refresh()}
-    />
-  );
-
-  if (Platform.OS === "android") {
-    return (
-      <Marker lngLat={[longitude, latitude]}>
-        <View
-          accessible
-          accessibilityLabel={paused ? `${name}, sharing paused` : name}
-          style={{ alignSelf: "flex-start" }}
-        >
-          {pin}
-        </View>
-      </Marker>
-    );
-  }
 
   return (
     <ViewAnnotation
@@ -63,7 +36,22 @@ export const TimelinePin = ({
       lngLat={[longitude, latitude]}
       anchor="center"
     >
-      {pin}
+      <View
+        accessible
+        accessibilityLabel={paused ? `${name}, sharing paused` : name}
+        collapsable={false}
+      >
+        <LiveMapMarkerPin
+          fillColor={color}
+          image={image}
+          initials={initials}
+          name={name}
+          ringColor={color}
+          status={paused ? "paused" : null}
+          timestamp={null}
+          onBitmapContentChange={() => annotationRef.current?.refresh()}
+        />
+      </View>
     </ViewAnnotation>
   );
 };
