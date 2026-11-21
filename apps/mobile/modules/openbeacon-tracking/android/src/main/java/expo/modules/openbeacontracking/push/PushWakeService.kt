@@ -7,10 +7,13 @@ import expo.modules.openbeacontracking.capture.TrackingUploadService
 
 class PushWakeService : FirebaseMessagingService() {
   override fun onMessageReceived(message: RemoteMessage) {
-    when (message.data["t"]) {
+    val kind = message.data["t"]
+    when (kind) {
       "sync" -> TrackingUploadService.start(applicationContext, TrackingUploadService.REASON_PUSH)
       "locate" -> TrackingCaptureService.locateNow(applicationContext)
+      else -> return
     }
+    PushRuntime.recordWake(applicationContext, kind)
   }
 
   override fun onNewToken(token: String) {

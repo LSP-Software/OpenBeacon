@@ -137,7 +137,19 @@ class OpenBeaconTrackingModule : Module() {
         PushRuntime.confirm(requireContext(), scope, sent, pushAvailable)
       }
 
-      Function("forgetPushToken") { scope: String ->
+      Function("pushStatus") { scope: String ->
+        val context = requireContext()
+        val status = PushRuntime.tokens(context).status(scope)
+        mapOf(
+          "builtIn" to PushRuntime.builtIn(context),
+          "serverPush" to status.serverPush,
+          "registration" to status.registration.value,
+          "lastWakeAt" to status.lastWakeAt,
+          "lastWakeKind" to status.lastWakeKind,
+        )
+      }
+
+      Function("forgetPushToken") { scope: String? ->
         PushRuntime.forget(requireContext(), scope)
       }
 

@@ -12,6 +12,7 @@ import expo.modules.openbeacontracking.capture.TrackingCaptureService
 import expo.modules.openbeacontracking.capture.TrackingUploadService
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -24,6 +25,18 @@ import org.robolectric.Shadows.shadowOf
 class PushWakeServiceTest {
   private val application: Application = ApplicationProvider.getApplicationContext()
   private val service = Robolectric.buildService(PushWakeService::class.java).create().get()
+  private val tokensField = PushRuntime::class.java.getDeclaredField("tokens").apply { isAccessible = true }
+  private val scope = "[\"https://api.openbeacon.net\",\"user-1\",\"device-1\"]"
+  private val pushState =
+    object : PushTokenStore {
+      var state = PushTokenState()
+
+      override fun load() = state
+
+      override fun save(state: PushTokenState) {
+        this.state = state
+      }
+    }
 
   @Before
   fun setUp() {
@@ -31,11 +44,14 @@ class PushWakeServiceTest {
     application.getSharedPreferences("openbeacon_tracking_queue", Context.MODE_PRIVATE).edit().putString("owner", "test-owner").putString("deviceId", "tablet").commit()
     TrackingRuntime.setSharingState(application, SharingCaptureState(revisionPrefix = "s0.2:"))
     TrackingRuntime.isCaptureRunning = true
+    tokensField.set(PushRuntime, PushTokens(pushState) { 1_000L })
+    PushRuntime.tokens(application).confirm(scope, null, pushAvailable = false)
   }
 
   @After
   fun tearDown() {
     TrackingRuntime.isCaptureRunning = false
+    tokensField.set(PushRuntime, null)
   }
 
   @Test
@@ -60,6 +76,16 @@ class PushWakeServiceTest {
     service.onMessageReceived(wake("other"))
 
     assertTrue(startedServices().isEmpty())
+    assertNull(PushRuntime.tokens(application).status(scope).lastWakeKind)
+  }
+
+  @Test
+  fun eachWakeIsRecordedForTheAboutScreen() {
+    service.onMessageReceived(wake("locate"))
+
+    val status = PushRuntime.tokens(application).status(scope)
+    assertEquals(1_000L, status.lastWakeAt)
+    assertEquals("locate", status.lastWakeKind)
   }
 
   private fun wake(type: String) = RemoteMessage.Builder("openbeacon@fcm.googleapis.com").addData("t", type).build()

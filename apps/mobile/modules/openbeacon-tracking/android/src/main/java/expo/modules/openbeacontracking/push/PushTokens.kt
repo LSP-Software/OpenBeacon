@@ -5,6 +5,8 @@ data class PushTokenState(
   val scope: String? = null,
   val sent: String? = null,
   val pushAvailable: Boolean? = null,
+  val lastWakeAt: Long? = null,
+  val lastWakeKind: String? = null,
 )
 
 interface PushTokenStore {
@@ -29,6 +31,30 @@ class PushTokens(
   }
 
   @Synchronized
+  fun status(scope: String): Status {
+    val slot = slot(scope)
+    val registration =
+      when {
+        slot.token == null -> Registration.NO_TOKEN
+        slot.token == slot.sent -> Registration.REGISTERED
+        else -> Registration.NOT_SENT
+      }
+    return Status(
+      serverPush = slot.pushAvailable,
+      registration = registration,
+      lastWakeAt = slot.lastWakeAt,
+      lastWakeKind = slot.lastWakeKind,
+    )
+  }
+
+  @Synchronized
+  fun recordWake(kind: String) {
+    val current = state()
+    if (current.scope == null) return
+    update(current.copy(lastWakeAt = clock(), lastWakeKind = kind))
+  }
+
+  @Synchronized
   fun confirm(scope: String, sent: String?, pushAvailable: Boolean): Long? {
     val slot = slot(scope)
     update(slot.copy(pushAvailable = pushAvailable, sent = if (pushAvailable) sent ?: slot.sent else null))
@@ -50,11 +76,11 @@ class PushTokens(
   }
 
   @Synchronized
-  fun forget(scope: String, autoInitEnabled: Boolean): Forgotten {
+  fun forget(scope: String?, autoInitEnabled: Boolean): Forgotten {
     val current = state()
     val forgotten =
       Forgotten(
-        clearOnServer = current.scope == scope && current.pushAvailable == true && current.sent != null,
+        clearOnServer = scope != null && current.scope == scope && current.pushAvailable == true && current.sent != null,
         deleteToken = autoInitEnabled || current.token != null || lastRequestAt != null,
       )
     update(PushTokenState())
@@ -62,6 +88,19 @@ class PushTokens(
     generation += 1
     acceptingTokens = false
     return forgotten
+  }
+
+  data class Status(
+    val serverPush: Boolean?,
+    val registration: Registration,
+    val lastWakeAt: Long? = null,
+    val lastWakeKind: String? = null,
+  )
+
+  enum class Registration(val value: String) {
+    NO_TOKEN("noToken"),
+    NOT_SENT("notSent"),
+    REGISTERED("registered"),
   }
 
   data class Forgotten(val clearOnServer: Boolean, val deleteToken: Boolean)

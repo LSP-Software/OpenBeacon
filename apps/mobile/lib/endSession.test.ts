@@ -264,6 +264,7 @@ describe("wiping a removed phone", () => {
     navigations.length = 0;
     queueDeletions.length = 0;
     signOuts = 0;
+    pushTokenForgets = 0;
     googleSignInForgets = 0;
     googleSignOut = async () => {};
     sessionUserId = "user-a";
@@ -507,6 +508,14 @@ describe("wiping a removed phone", () => {
 
     expect(providerRequests).toEqual([]);
     expect(signOuts).toBe(0);
+  });
+
+  test("a lost session without a registration still forgets the push token another account left", async () => {
+    await seedSignedOutPhone();
+
+    await endSession({ reason: "sessionLost" });
+
+    expect(pushTokenForgets).toBe(1);
   });
 
   test("a lost session still deletes decrypted pictures when it stops early", async () => {

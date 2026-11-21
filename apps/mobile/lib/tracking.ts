@@ -1339,11 +1339,18 @@ const revokeUnauthorizedTrackingAccess = async (
   });
 };
 
-export const forgetPushToken = async () => {
+export const getPushStatus = async () => {
   const trackingModule = await loadTrackingModule();
   const device = await getRegisteredDeviceKey();
-  if (!trackingModule || !device) return false;
-  return trackingModule.forgetPushToken(getPushScope(device));
+  if (!trackingModule || !device) return null;
+  return trackingModule.pushStatus(getPushScope(device));
+};
+
+export const forgetPushToken = async () => {
+  const trackingModule = await loadTrackingModule();
+  if (!trackingModule) return false;
+  const device = await getRegisteredDeviceKey();
+  return trackingModule.forgetPushToken(device ? getPushScope(device) : null);
 };
 
 export const prepareTrackingSignOut = async (): Promise<void> => {

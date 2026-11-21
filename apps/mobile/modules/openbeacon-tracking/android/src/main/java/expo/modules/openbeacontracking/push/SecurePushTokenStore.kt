@@ -20,6 +20,8 @@ class SecurePushTokenStore(
         scope = stored.optString("scope").ifEmpty { null },
         sent = stored.optString("sent").ifEmpty { null },
         pushAvailable = if (stored.has("pushAvailable")) stored.getBoolean("pushAvailable") else null,
+        lastWakeAt = if (stored.has("lastWakeAt")) stored.getLong("lastWakeAt") else null,
+        lastWakeKind = stored.optString("lastWakeKind").ifEmpty { null },
       )
     } catch (error: Exception) {
       Log.e(TAG, "Failed to read the push token.", error)
@@ -38,6 +40,8 @@ class SecurePushTokenStore(
         .put("scope", state.scope ?: "")
         .put("sent", state.sent ?: "")
     state.pushAvailable?.let { stored.put("pushAvailable", it) }
+    state.lastWakeAt?.let { stored.put("lastWakeAt", it) }
+    state.lastWakeKind?.let { stored.put("lastWakeKind", it) }
     check(preferences.edit().putString(STATE_JSON, sealer.seal(stored.toString())).commit())
   }
 
