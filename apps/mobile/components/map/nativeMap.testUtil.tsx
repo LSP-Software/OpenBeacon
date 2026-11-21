@@ -539,8 +539,6 @@ export const createMapLibreMockModule = () => {
         urlTransformEvents.push(`remove:${id}:liveMaps=${liveMapViewCount}`);
       },
     },
-    Marker: ({ children, lngLat }: { children?: ReactNode; lngLat: number[] }) =>
-      React.createElement("marker-view", { coordinate: lngLat, allowOverlap: true }, children),
     ViewAnnotation: PointAnnotation,
     GeoJSONSource: ({ children, id }: { children?: ReactNode; id: string }) =>
       React.createElement("geojson-source", { id }, children),

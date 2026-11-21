@@ -1,3 +1,4 @@
+import { useEffect, useEffectEvent, useState } from "react";
 import { View } from "react-native";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
 import { DecryptedAvatarImage } from "../image/DecryptedAvatarImage.tsx";
@@ -12,6 +13,14 @@ export const LiveMapStackPin = ({
   members: readonly LiveMapMarker[];
   onBitmapContentChange?: (() => void) | undefined;
 }) => {
+  const [imageStatusChanges, setImageStatusChanges] = useState(0);
+  const refreshBitmap = useEffectEvent(() => onBitmapContentChange?.());
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Android draws map pins into a bitmap that needs an explicit refresh once an avatar has loaded or fallen back
+  useEffect(() => {
+    if (imageStatusChanges > 0) refreshBitmap();
+  }, [imageStatusChanges]);
+
   const [lead, ...others] = members;
   if (!lead) return null;
   const ringColors = [
@@ -42,7 +51,8 @@ export const LiveMapStackPin = ({
           <Avatar alt={member.name} className="size-7">
             <DecryptedAvatarImage
               url={member.image}
-              onLoadingStatusChange={() => onBitmapContentChange?.()}
+              {...(onBitmapContentChange ? { fadeDuration: 0 } : {})}
+              onLoadingStatusChange={() => setImageStatusChanges((changes) => changes + 1)}
             />
             <AvatarFallback>
               <Text className="text-[10px] font-bold">{member.initials}</Text>

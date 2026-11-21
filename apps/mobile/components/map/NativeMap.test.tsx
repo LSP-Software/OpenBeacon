@@ -325,6 +325,7 @@ mock.module("../../lib/storage.ts", () => ({
 
 mock.module("../../providers/ThemeProvider.tsx", () => ({
   useTheme: () => ({
+    appTheme: "light" as const,
     mapTheme: "light" as const,
   }),
 }));
@@ -376,10 +377,6 @@ mock.module("./LiveMapGroupVisibility.tsx", () => ({
 mock.module("./LiveMapPlaceSheet.tsx", () => ({
   LiveMapPlaceSheet: ({ here }: { here: readonly LiveMapMarker[] }) =>
     React.createElement("live-map-place-sheet", { here: here.map((marker) => marker.userId) }),
-}));
-
-mock.module("./PlaceAnnotation.tsx", () => ({
-  PlaceAnnotation: () => null,
 }));
 
 mock.module("./LiveMapStackSheet.tsx", () => ({
@@ -630,6 +627,7 @@ describe("NativeMap over a fake MapLibre", () => {
   });
 
   afterEach(async () => {
+    setSystemTime();
     if (root) {
       await act(async () => {
         root?.unmount();
@@ -2463,9 +2461,10 @@ describe("NativeMap over a fake MapLibre", () => {
       name: "Bob",
     });
     const selectionHistory: Array<string | null> = [];
+    const startedAt = Date.now();
+    setSystemTime(new Date(startedAt));
     await renderSelectableNativeMap([alice, bob], selectionHistory);
 
-    expect(root?.container.queryAll((instance) => instance.type === "marker-view")).toEqual([]);
     expect(getNativeMapMountedAnnotationIds().sort()).toEqual(["alice", "bob"]);
 
     const tap = async (id: string) => {
@@ -2481,12 +2480,59 @@ describe("NativeMap over a fake MapLibre", () => {
     await tap("bob");
     expect(selectionHistory).toEqual(["alice", null, "alice", "bob"]);
 
-    await new Promise((resolve) => setTimeout(resolve, 600));
+    setSystemTime(new Date(startedAt + 600));
     await act(async () => emitNativeMapPress([300, 400]));
     expect(selectionHistory).toEqual(["alice", null, "alice", "bob", null]);
   });
 
-  test("clears selection when Android emits annotation deselect", async () => {
+  test("Android keeps a tapped place open through the map press that follows", async () => {
+    testPlatform.OS = "android";
+    const home = {
+      canManage: true,
+      emoji: "🏠",
+      groupId: "family",
+      groupName: "Family",
+      id: "home",
+      latitude: 51.5,
+      longitude: -0.12,
+      memberUserIds: ["alice"],
+      name: "Home",
+      radiusMeters: 250,
+    };
+    setSystemTime(new Date(Date.now()));
+    await renderNativeMap({ places: [home] });
+    await flushEffects();
+    const placeSheets = () =>
+      root?.container.queryAll((node) => node.type === "live-map-place-sheet") ?? [];
+    expect(placeSheets()).toHaveLength(0);
+
+    await act(async () => emitNativeMapAndroidMarkerTap("place:family:home"));
+    await flushEffects();
+
+    expect(placeSheets()).toHaveLength(1);
+  });
+
+  test("refreshes a stack's drawing when the people in it change", async () => {
+    const alice = createLiveMapMarkerFixture({ userId: "alice", name: "Alice" });
+    const bob = createLiveMapMarkerFixture({ userId: "bob", name: "Bob" });
+    await renderNativeMap({ markers: [alice, bob] });
+    await flushEffects();
+    const [stackId] = getNativeMapMountedAnnotationIds();
+    const stackRefreshes = () =>
+      getNativeMapAnnotationRefreshCalls().filter((id) => id === stackId).length;
+    const refreshesWithTwo = stackRefreshes();
+    expect(refreshesWithTwo).toBeGreaterThan(0);
+
+    await renderNativeMap({
+      markers: [alice, bob, createLiveMapMarkerFixture({ userId: "carol", name: "Carol" })],
+    });
+    await flushEffects();
+
+    expect(getNativeMapMountedAnnotationIds()).toEqual([stackId ?? ""]);
+    expect(stackRefreshes()).toBeGreaterThan(refreshesWithTwo);
+  });
+
+  test("clears selection when iOS emits annotation deselect", async () => {
     const selections: Array<string | null> = [];
     const alice = createLiveMapMarkerFixture({ userId: "alice" });
 
@@ -2533,7 +2579,7 @@ describe("NativeMap over a fake MapLibre", () => {
     expect(selectionHistory).toEqual(["alice", null, "alice"]);
   });
 
-  test("does not pass a controlled selected prop on Android", async () => {
+  test("does not pass a controlled selected prop to annotations", async () => {
     const alice = createLiveMapMarkerFixture({ userId: "alice" });
 
     await renderNativeMap({
@@ -2544,7 +2590,8 @@ describe("NativeMap over a fake MapLibre", () => {
     expect(getNativeMapAnnotationSelectedProp("alice")).toBeUndefined();
   });
 
-  test("observes Android annotation refresh after async self heading changes", async () => {
+  test("redraws the Android self pin once its heading moves by five degrees", async () => {
+    testPlatform.OS = "android";
     const self = createLiveMapMarkerFixture({
       initials: "ME",
       isSelf: true,
@@ -2552,26 +2599,29 @@ describe("NativeMap over a fake MapLibre", () => {
       userId: "self",
     });
 
+    const selfRefreshes = () =>
+      getNativeMapAnnotationRefreshCalls().filter((id) => id === "self").length;
+    const showHeading = async (headingDegrees: number) => {
+      await act(async () => {
+        await Promise.resolve();
+        setNativeMapSelfHeadingDegrees(headingDegrees);
+        root?.render(<NativeMap markers={[self]} />);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+    };
+
     setNativeMapSelfHeadingDegrees(10);
     await renderNativeMap({ markers: [self] });
     await flushEffects();
-
-    const refreshCountAfterMount = getNativeMapAnnotationRefreshCalls().filter(
-      (id) => id === "self",
-    ).length;
+    const refreshCountAfterMount = selfRefreshes();
     expect(refreshCountAfterMount).toBeGreaterThan(0);
 
-    await act(async () => {
-      await Promise.resolve();
-      setNativeMapSelfHeadingDegrees(45);
-      root?.render(<NativeMap markers={[self]} />);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await showHeading(11.5);
+    expect(selfRefreshes()).toBe(refreshCountAfterMount);
 
-    expect(
-      getNativeMapAnnotationRefreshCalls().filter((id) => id === "self").length,
-    ).toBeGreaterThan(refreshCountAfterMount);
+    await showHeading(16);
+    expect(selfRefreshes()).toBeGreaterThan(refreshCountAfterMount);
   });
 
   test("refreshes the self annotation when heading clears after focus loss", async () => {

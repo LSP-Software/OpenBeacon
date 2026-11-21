@@ -1,5 +1,5 @@
 import { ClockIcon, EyeOffIcon, HourglassIcon, PauseIcon } from "lucide-react-native";
-import { useEffect, useEffectEvent } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import { View } from "react-native";
 import Svg, { Circle, Defs, Path, RadialGradient, Stop } from "react-native-svg";
 import { useLocationStale } from "../../hooks/useLocationStale.ts";
@@ -88,12 +88,13 @@ export const LiveMapMarkerPin = ({
   timestamp: string | null;
 }) => {
   const isStale = useLocationStale(timestamp);
+  const [imageStatusChanges, setImageStatusChanges] = useState(0);
   const refreshBitmap = useEffectEvent(() => onBitmapContentChange?.());
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: Android draws map pins into a bitmap that needs an explicit refresh when the pin's look changes
   useEffect(() => {
     refreshBitmap();
-  }, [hasUnreadableUpdate, isStale]);
+  }, [hasUnreadableUpdate, imageStatusChanges, isStale]);
   const showHeading = headingDegrees !== null;
   const size = showHeading ? OUTER_SIZE : PIN_SIZE;
   const badgeIcon = deviceIcon ? deviceIconFor(deviceIcon, devicePlatform) : null;
@@ -153,9 +154,8 @@ export const LiveMapMarkerPin = ({
         <Avatar alt={name} className="size-10" style={status ? { opacity: 0.45 } : undefined}>
           <DecryptedAvatarImage
             url={image}
-            onLoadingStatusChange={(_status: "error" | "loaded") => {
-              onBitmapContentChange?.();
-            }}
+            {...(onBitmapContentChange ? { fadeDuration: 0 } : {})}
+            onLoadingStatusChange={() => setImageStatusChanges((changes) => changes + 1)}
           />
           <AvatarFallback
             className={status ? "bg-neutral-500" : ""}
