@@ -82,7 +82,7 @@ mock.module("../lib/api.ts", () => ({
   trpcClient: {},
 }));
 mock.module("../lib/auth.ts", () => ({
-  isNativeGoogleSignInConfigured: true,
+  useCanOfferGoogleSignIn: (providers: { google: boolean }) => providers.google,
   signInWithGoogle: async () => {
     events.push("google");
     return { data: {} };

@@ -52,7 +52,7 @@ mock.module("../lib/api.ts", () => ({
 }));
 mock.module("../lib/auth.ts", () => ({
   completeAuthenticatedSessionSetup: async () => ({}),
-  isNativeGoogleSignInConfigured: false,
+  useCanOfferGoogleSignIn: () => false,
 }));
 mock.module("../lib/auth-client.ts", () => ({
   authClient: { signUp: { email: async () => ({}) } },

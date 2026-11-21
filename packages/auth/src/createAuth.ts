@@ -13,7 +13,7 @@ import {
 import { type EmailCodes, normalizeEmail } from "./emailCode.ts";
 import { emailCodePlugin } from "./emailCodePlugin.ts";
 import { env } from "./env.ts";
-import { verifyGoogleIdToken } from "./googleIdToken.ts";
+import { googleRefusalReason, verifyGoogleIdToken } from "./googleIdToken.ts";
 import {
   createGoogleSignInChallenges,
   googleSignInChallengePlugin,
@@ -283,19 +283,20 @@ export const createAuth = ({
             mapProfileToUser: () => ({ image: undefined }),
             verifyIdToken: async (token, challenge) => {
               if (!challenge || !google.challenges.isGenuine(challenge)) return false;
-              const payload = await verifyGoogleIdToken({
+              const result = await verifyGoogleIdToken({
                 token,
                 audience: google.clientId,
                 nonce: googleSignInNonce({ serverUrl: env.BETTER_AUTH_URL, challenge }),
               });
-              if (payload === "wrong-nonce") {
+              if (!result.ok) {
                 console.warn(
-                  `[google-sign-in] refused a Google sign-in because the phone asked Google for it on behalf of a different server address. If phones can't sign in with Google, set BETTER_AUTH_URL to the exact address phones use, with the same scheme, host and port. It is ${new URL(env.BETTER_AUTH_URL).origin} now.`,
+                  `[google-sign-in] refused a Google sign-in ${googleRefusalReason({ result, clientId: google.clientId, serverUrl: env.BETTER_AUTH_URL })}`,
                 );
                 return false;
               }
               return (
-                payload?.["email_verified"] === true && (await google.challenges.use(challenge))
+                result.payload["email_verified"] === true &&
+                (await google.challenges.use(challenge))
               );
             },
           },

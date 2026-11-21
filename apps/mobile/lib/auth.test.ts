@@ -170,6 +170,29 @@ describe("auth Google sign-in configuration", () => {
     delete process.env[GOOGLE_WEB_CLIENT_ID_ENV];
   });
 
+  test("offers Google sign-in only when the server's client ID matches this build's", async () => {
+    process.env[GOOGLE_WEB_CLIENT_ID_ENV] = "web-client-id";
+    const { canOfferGoogleSignIn } = await importAuthModule();
+
+    expect(canOfferGoogleSignIn({ google: true, googleClientId: "web-client-id" })).toBe(true);
+    expect(canOfferGoogleSignIn({ google: true, googleClientId: "other-client-id" })).toBe(false);
+    expect(canOfferGoogleSignIn({ google: false, googleClientId: null })).toBe(false);
+    expect(canOfferGoogleSignIn(undefined)).toBe(false);
+  });
+
+  test("offers Google sign-in on an older server that doesn't say its client ID", async () => {
+    process.env[GOOGLE_WEB_CLIENT_ID_ENV] = "web-client-id";
+    const { canOfferGoogleSignIn } = await importAuthModule();
+
+    expect(canOfferGoogleSignIn({ google: true })).toBe(true);
+  });
+
+  test("doesn't offer Google sign-in in a build without a web client ID", async () => {
+    const { canOfferGoogleSignIn } = await importAuthModule();
+
+    expect(canOfferGoogleSignIn({ google: true, googleClientId: "web-client-id" })).toBe(false);
+  });
+
   test("offers Google sign-in on Android only, and only with a web client id", async () => {
     const { isNativeGoogleSignInConfiguredForPlatform } = await importAuthModule();
 
@@ -364,10 +387,6 @@ describe("auth Google sign-in configuration", () => {
 
   test.each([
     [
-      "a developer error",
-      new GoogleSignInError("DEVELOPER_ERROR", "Wrong SHA-1\n\tat com.example.Kotlin(File.kt:1)"),
-    ],
-    [
       "a failed sign-in",
       new GoogleSignInError("ONE_TAP_START_FAILED", "Credential Manager failed"),
     ],
@@ -389,7 +408,7 @@ describe("auth Google sign-in configuration", () => {
 
   test("a Google setup that throws straight away resolves with an error", async () => {
     process.env[GOOGLE_WEB_CLIENT_ID_ENV] = "web-client-id";
-    configureError = new GoogleSignInError("DEVELOPER_ERROR", "Invalid webClientId");
+    configureError = new GoogleSignInError("ONE_TAP_START_FAILED", "Credential Manager failed");
 
     const { signInWithGoogle } = await importAuthModule();
 
@@ -398,6 +417,37 @@ describe("auth Google sign-in configuration", () => {
     });
     expect(presentExplicitSignInMock).not.toHaveBeenCalled();
   });
+
+  test.each([
+    [
+      "while opening Google",
+      () => {
+        presentExplicitSignInMock.mockImplementationOnce(async () => {
+          throw new GoogleSignInError("DEVELOPER_ERROR", "Wrong SHA-1\n\tat Foo.kt:1");
+        });
+      },
+    ],
+    [
+      "while setting Google up",
+      () => {
+        configureError = new GoogleSignInError("DEVELOPER_ERROR", "Invalid webClientId");
+      },
+    ],
+  ])(
+    "a Google developer error %s quietly hides Google sign-in for the rest of the run",
+    async (_name, fail) => {
+      process.env[GOOGLE_WEB_CLIENT_ID_ENV] = "web-client-id";
+      fail();
+
+      const { canOfferGoogleSignIn, signInWithGoogle } = await importAuthModule();
+      const providers = { google: true, googleClientId: "web-client-id" };
+      expect(canOfferGoogleSignIn(providers)).toBe(true);
+
+      expect(await signInWithGoogle()).toEqual({ cancelled: true });
+      expect(socialSignInMock).not.toHaveBeenCalled();
+      expect(canOfferGoogleSignIn(providers)).toBe(false);
+    },
+  );
 
   test("hides the detail of a thrown social sign-in", async () => {
     process.env[GOOGLE_WEB_CLIENT_ID_ENV] = "web-client-id";

@@ -35,6 +35,8 @@ With no map tiles manifest in the bucket yet, the backend starts anyway, the app
 
 Google sign-in isn't released yet. To try it, set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, and add `<BETTER_AUTH_URL>/api/auth/google-deletion-callback` as an authorised redirect URI on that Google web client. Account deletion uses it to confirm the person is the account owner.
 
+`GOOGLE_CLIENT_ID` must be the same web client ID the app was built with (`EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`), and that web client must be in the same Google Cloud project as the app's Android client. The app only shows Continue with Google when its client ID matches the server's. At startup the server asks Google whether it accepts the client ID and secret, and logs an error if it doesn't. When the server refuses a Google sign-in, it logs why, such as a token issued for a different client ID.
+
 `BETTER_AUTH_URL` must be the exact address phones use, with the same scheme, host and port, because Google sign-in tokens are bound to it. For local development that's the address in the app's `EXPO_PUBLIC_DEV_API_URL`, not localhost. If they differ, Google sign-in fails and the backend logs a warning naming `BETTER_AUTH_URL`.
 
 The app offers Google sign-in on Android only for now.

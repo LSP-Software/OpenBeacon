@@ -9,7 +9,7 @@ import { z } from "zod";
 import { Alert } from "../lib/alert.ts";
 import { confirmWithPhoneLock, phoneScreenLockQueryOptions } from "../lib/appLock.ts";
 import { trpc } from "../lib/api.ts";
-import { isNativeGoogleSignInConfigured, signInWithGoogle } from "../lib/auth.ts";
+import { signInWithGoogle, useCanOfferGoogleSignIn } from "../lib/auth.ts";
 import { authClient, saveSessionTokenToRevoke } from "../lib/auth-client.ts";
 import { ensureDeviceKeyRegistration } from "../lib/deviceKeys.ts";
 import { endSession } from "../lib/endSession.ts";
@@ -39,7 +39,7 @@ export const ConfirmIdentity = ({ onConfirmed }: { onConfirmed: () => void }) =>
     ),
     defaultValues: { password: "" },
   });
-  const google = methods.data?.google === true && isNativeGoogleSignInConfigured;
+  const google = useCanOfferGoogleSignIn({ google: methods.data?.google === true });
 
   const finishConfirming = async (previous: { token: string; userId: string }) => {
     const current = await tryCatch(authClient.getSession());

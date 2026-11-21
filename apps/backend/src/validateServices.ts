@@ -1,6 +1,6 @@
 import { checkImageStorage } from "@openbeacon/api/checkStorage.ts";
 import { checkMapStorage } from "@openbeacon/api/mapStorage.ts";
-import { fcm } from "@openbeacon/auth";
+import { checkGoogleSignIn, fcm } from "@openbeacon/auth";
 import { checkEmail, emailEnabled, emailUnreachableCode } from "@openbeacon/email";
 import { checkServices, errorCode } from "@openbeacon/shared";
 import { pingRedis } from "@openbeacon/cache";
@@ -45,3 +45,16 @@ await checkOptionalServices({
       }
     : {}),
 });
+
+if (checkGoogleSignIn) {
+  const google = await checkGoogleSignIn();
+  if (google.status === "valid") console.log("  Google sign-in: valid");
+  else if (google.status === "rejected")
+    console.error(
+      `  Google sign-in: Google rejected GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET (${google.detail}). Set them to the client ID and secret of the same "Web application" OAuth client, the one the app was built with. Starting anyway, but Google sign-in and deleting Google accounts won't work until this is fixed.`,
+    );
+  else
+    console.warn(
+      `  Google sign-in: couldn't check the OAuth client with Google (${google.detail}), starting anyway`,
+    );
+}
