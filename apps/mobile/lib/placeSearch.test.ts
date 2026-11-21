@@ -27,21 +27,14 @@ const whetstone: PlaceSearchAddress = {
 };
 
 describe("placeSearchLabel", () => {
-  test("uses the address line without the country", () => {
-    expect(placeSearchLabel(tescoBarnet)).toBe("64-66 High St, Chipping Barnet, Barnet EN5 5SJ");
-  });
-
-  test("keeps an area-only result readable", () => {
-    expect(placeSearchLabel(whetstone)).toBe("Whetstone, London");
-  });
-
-  test("keeps a postcode in the last part of the line", () => {
-    expect(
-      placeSearchLabel({
-        ...tescoBarnet,
-        addressLine: "1600 Amphitheatre Pkwy, Mountain View, CA 94043",
-      }),
-    ).toBe("1600 Amphitheatre Pkwy, Mountain View, CA 94043");
+  test("uses the address line as the phone returned it", () => {
+    expect(placeSearchLabel(tescoBarnet)).toBe(
+      "64-66 High St, Chipping Barnet, Barnet EN5 5SJ, UK",
+    );
+    expect(placeSearchLabel(whetstone)).toBe("Whetstone, London, UK");
+    expect(placeSearchLabel({ ...whetstone, addressLine: " High St, Barnet " })).toBe(
+      "High St, Barnet",
+    );
   });
 
   test("never uses the feature name when there is no address line", () => {
@@ -68,7 +61,7 @@ describe("placeSearchState", () => {
   test("moves to the first result with its label", () => {
     expect(placeSearchState({ status: "results", results: [tescoBarnet, whetstone] })).toEqual({
       kind: "move",
-      label: "64-66 High St, Chipping Barnet, Barnet EN5 5SJ",
+      label: "64-66 High St, Chipping Barnet, Barnet EN5 5SJ, UK",
       latitude: 51.6531509,
       longitude: -0.1997625,
     });
@@ -80,7 +73,7 @@ describe("placeSearchState", () => {
         status: "results",
         results: [{ ...tescoBarnet, latitude: Number.NaN }, whetstone],
       }),
-    ).toMatchObject({ kind: "move", label: "Whetstone, London" });
+    ).toMatchObject({ kind: "move", label: "Whetstone, London, UK" });
     expect(
       placeSearchState({ status: "results", results: [{ ...whetstone, latitude: 91 }] }),
     ).toEqual({ kind: "noResults" });

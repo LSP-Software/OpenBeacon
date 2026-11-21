@@ -6,6 +6,7 @@ import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { LocateFixedIcon, SearchIcon, XIcon } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  AccessibilityInfo,
   ActivityIndicator,
   BackHandler,
   KeyboardAvoidingView,
@@ -48,6 +49,11 @@ import { userMessage } from "../lib/userMessage.ts";
 import { thisDeviceNoun } from "../lib/thisDeviceNoun.ts";
 
 const PIN_ABOVE_CENTER = 150;
+
+const SEARCH_MESSAGES = {
+  error: "Search isn’t working right now. You can still move the map to the spot.",
+  noResults: "Couldn’t find that. Try a postcode, or move the map to the spot.",
+};
 
 const PlaceScreen = () => {
   const { groupId, placeId } = useLocalSearchParams<{ groupId: string; placeId?: string }>();
@@ -284,12 +290,25 @@ const PlaceEditor = ({
       cameraRef.current?.flyTo({ center: cameraCenterFor(next, atZoom), zoom: atZoom });
     }
     setSearch(next);
+    AccessibilityInfo.announceForAccessibility(
+      next.kind === "move"
+        ? `Moved to ${next.label}. Move the map if it isn’t quite right.`
+        : next.kind === "unavailable"
+          ? `Address search isn’t available on this ${thisDeviceNoun()}`
+          : SEARCH_MESSAGES[next.kind],
+    );
   };
 
   const clearSearch = () => {
     searchRound.current += 1;
     setSearchText("");
     setSearch(null);
+  };
+
+  const goToNaming = () => {
+    searchRound.current += 1;
+    if (search?.kind === "searching") setSearch(null);
+    setStep(2);
   };
 
   const refreshPlaces = (quietPlaceIds: readonly string[]) =>
@@ -524,9 +543,7 @@ const PlaceEditor = ({
               accessibilityRole="alert"
               className="text-foreground"
             >
-              {search.kind === "noResults"
-                ? "Couldn’t find that. Try a postcode, or move the map to the spot."
-                : "Search isn’t working right now. You can still move the map to the spot."}
+              {SEARCH_MESSAGES[search.kind]}
             </Text>
           </View>
         ) : null}
@@ -584,7 +601,7 @@ const PlaceEditor = ({
                   </Text>
                 )}
                 <PlaceSizeSlider radiusMeters={radiusMeters} onChange={setRadiusMeters} />
-                <Button disabled={!center} onPress={() => setStep(2)}>
+                <Button disabled={!center} onPress={goToNaming}>
                   <Text>Next</Text>
                 </Button>
               </View>

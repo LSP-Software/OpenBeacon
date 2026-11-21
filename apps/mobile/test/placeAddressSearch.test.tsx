@@ -10,7 +10,10 @@ import type { PlaceSearchBox, PlaceSearchOutcome } from "../modules/openbeacon-t
 let placeId: string | undefined;
 let searchAvailable = true;
 let searchOutcome: PlaceSearchOutcome = { status: "results", results: [] };
+let heldSearch: (() => void) | null = null;
+let holdSearches = false;
 const searches: { box: PlaceSearchBox | null; query: string }[] = [];
+const announcements: string[] = [];
 const flights: { center: [number, number]; zoom: number }[] = [];
 const saved: { geometry: { latitude: number; longitude: number } }[] = [];
 const element =
@@ -39,6 +42,9 @@ mock.module("lucide-react-native", () => ({
   XIcon: () => null,
 }));
 mock.module("react-native", () => ({
+  AccessibilityInfo: {
+    announceForAccessibility: (message: string) => announcements.push(message),
+  },
   ActivityIndicator: element("activity-indicator"),
   BackHandler: { addEventListener: () => ({ remove: () => {} }) },
   KeyboardAvoidingView: element("keyboard-avoiding-view"),
@@ -107,6 +113,7 @@ mock.module("../lib/trackingModule.ts", () => ({
     isPlaceSearchAvailable: () => searchAvailable,
     searchPlaces: async (query: string, box: PlaceSearchBox | null) => {
       searches.push({ box, query });
+      if (holdSearches) await new Promise<void>((resolve) => (heldSearch = resolve));
       return searchOutcome;
     },
   }),
@@ -159,12 +166,16 @@ const searchFor = async (root: Root, query: string) => {
   await act(async () => searchBar(root).props["onSubmitEditing"]());
 };
 
+const pressButton = async (root: Root, label: string) => {
+  const button = root.container
+    .queryAll((node) => node.type === "button")
+    .find((node) => JSON.stringify(node.toJSON()).includes(label));
+  await act(async () => button?.props["onPress"]());
+};
+
 const saveFromStepTwo = async (root: Root) => {
-  const buttons = () => root.container.queryAll((node) => node.type === "button");
-  const next = buttons().find((node) => JSON.stringify(node.toJSON()).includes("Next"));
-  await act(async () => next?.props["onPress"]());
-  const save = buttons().find((node) => JSON.stringify(node.toJSON()).includes("Save place"));
-  await act(async () => save?.props["onPress"]());
+  await pressButton(root, "Next");
+  await pressButton(root, "Save place");
 };
 
 beforeEach(() => {
@@ -173,7 +184,10 @@ beforeEach(() => {
   searchOutcome = { status: "results", results: [] };
   searches.length = 0;
   flights.length = 0;
+  announcements.length = 0;
   saved.length = 0;
+  heldSearch = null;
+  holdSearches = false;
 });
 
 test("a phone without an address lookup service shows the bar disabled with the reason", async () => {
@@ -204,6 +218,9 @@ test("a result moves the map there and says where it landed", async () => {
   expect(flights[0]?.center[0]).toBeCloseTo(-0.1275662, 6);
   expect(text(root)).toContain("10 Downing St, London SW1A 2AA");
   expect(text(root)).toContain("Move the map if it isn’t quite right.");
+  expect(announcements).toEqual([
+    "Moved to 10 Downing St, London SW1A 2AA, UK. Move the map if it isn’t quite right.",
+  ]);
   await act(async () => root.unmount());
 });
 
@@ -233,5 +250,20 @@ test("no matches and failed lookups say what to do instead", async () => {
   expect(text(root)).toContain(
     "Search isn’t working right now. You can still move the map to the spot.",
   );
+  await act(async () => root.unmount());
+});
+
+test("a result that arrives after moving on to naming the place is ignored", async () => {
+  placeId = "home";
+  holdSearches = true;
+  searchOutcome = { status: "results", results: [downingStreet] };
+  const root = await render();
+  await searchFor(root, "10 Downing Street, London");
+  await pressButton(root, "Next");
+  await act(async () => heldSearch?.());
+
+  expect(flights).toHaveLength(0);
+  await pressButton(root, "Save place");
+  expect(saved).toHaveLength(0);
   await act(async () => root.unmount());
 });

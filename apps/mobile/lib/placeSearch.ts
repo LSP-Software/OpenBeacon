@@ -4,12 +4,8 @@ import type {
 } from "../modules/openbeacon-tracking/index.ts";
 
 export const placeSearchLabel = (address: PlaceSearchAddress) => {
-  const parts = (address.addressLine ?? "")
-    .split(",")
-    .map((part) => part.trim())
-    .filter((part) => part !== "");
-  if (parts.length > 1 && !/\d/.test(parts.at(-1) ?? "")) parts.pop();
-  if (parts.length > 0) return parts.join(", ");
+  const line = address.addressLine?.trim();
+  if (line) return line;
   return [
     [address.houseNumber, address.street].filter(Boolean).join(" "),
     address.subLocality ?? address.locality,
