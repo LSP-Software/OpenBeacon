@@ -8,9 +8,10 @@ import type { LiveMapMarker } from "../lib/buildLiveMapMarkers.ts";
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 const Passthrough = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
+const testPlatform = { OS: "ios" as "ios" | "android" };
 mock.module("react-native", () => ({
   AppState: { currentState: "active", addEventListener: () => ({ remove: () => {} }) },
-  Platform: { OS: "android" },
+  Platform: testPlatform,
   Pressable: ({
     accessibilityLabel,
     accessibilityRole,
@@ -20,13 +21,27 @@ mock.module("react-native", () => ({
     accessibilityRole?: string;
     children?: React.ReactNode;
   }) => React.createElement("pressable", { accessibilityLabel, accessibilityRole }, children),
-  View: ({ children }: { children?: React.ReactNode }) =>
-    React.createElement("view", null, children),
+  View: ({
+    accessibilityLabel,
+    accessibilityRole,
+    accessible,
+    children,
+    importantForAccessibility,
+  }: {
+    accessibilityLabel?: string;
+    accessibilityRole?: string;
+    accessible?: boolean;
+    children?: React.ReactNode;
+    importantForAccessibility?: string;
+  }) =>
+    React.createElement(
+      accessible ? "accessible-view" : "view",
+      accessible ? { accessibilityLabel, accessibilityRole } : { importantForAccessibility },
+      children,
+    ),
 }));
-mock.module("@maplibre/maplibre-react-native", () => ({
-  Marker: Passthrough,
-  ViewAnnotation: Passthrough,
-}));
+mock.module("@maplibre/maplibre-react-native", () => ({ ViewAnnotation: Passthrough }));
+mock.module("../providers/ThemeProvider.tsx", () => ({ useTheme: () => ({ appTheme: "light" }) }));
 mock.module("expo-router", () => ({ Link: Passthrough }));
 mock.module("lucide-react-native", () => ({
   GaugeIcon: () => null,
@@ -74,6 +89,10 @@ mock.module("../components/ui/Avatar.tsx", () => ({
   AvatarImage: () => null,
 }));
 mock.module("../components/ui/Icon.tsx", () => ({ Icon: () => null }));
+mock.module("../components/map/refreshViewAnnotation.ts", () => ({
+  refreshViewAnnotation: (annotationRef: { current: { refresh: () => void } | null }) =>
+    annotationRef.current?.refresh(),
+}));
 mock.module("../components/ui/Text.tsx", () => ({ Text: Passthrough }));
 
 const { LiveMapPointAnnotation } = await import("../components/map/LiveMapPointAnnotation.tsx");
@@ -82,14 +101,15 @@ const { LiveMapPersonSheet } = await import("../components/map/LiveMapPersonShee
 let root: Root | null = null;
 
 afterEach(async () => {
+  testPlatform.OS = "ios";
   if (root) await act(async () => root?.unmount());
   root = null;
 });
 
-const pressables = async (element: React.ReactElement) => {
+const elements = async (element: React.ReactElement, type: string) => {
   root = createRoot();
   await act(async () => root?.render(element));
-  return (root?.container.queryAll((item) => item.type === "pressable") ?? []).map((item) => {
+  return (root?.container.queryAll((item) => item.type === type) ?? []).map((item) => {
     const { accessibilityLabel, accessibilityRole } = item.props as {
       accessibilityLabel?: string;
       accessibilityRole?: string;
@@ -97,6 +117,8 @@ const pressables = async (element: React.ReactElement) => {
     return { accessibilityLabel, accessibilityRole };
   });
 };
+
+const pressables = (element: React.ReactElement) => elements(element, "pressable");
 
 const marker = (overrides: Partial<LiveMapMarker>): LiveMapMarker => ({
   battery: null,
@@ -129,19 +151,35 @@ test.each([
     "Alice, Work phone, Newer location can’t be read",
   ],
 ] satisfies [Partial<LiveMapMarker>, string][])(
-  "map pin %p is announced as %p",
+  "map pin %p is announced on iOS as %p",
   async (overrides, label) => {
-    const [pin] = await pressables(
+    const [pin] = await elements(
       <LiveMapPointAnnotation
         headingDegrees={null}
         marker={marker(overrides)}
-        onDeselected={() => {}}
         onSelected={() => {}}
       />,
+      "accessible-view",
     );
-    expect(pin?.accessibilityLabel).toBe(label);
+    expect(pin).toEqual({ accessibilityLabel: label, accessibilityRole: "button" });
   },
 );
+
+test("an Android map pin, drawn into the map as a picture, hides its views from accessibility", async () => {
+  testPlatform.OS = "android";
+  root = createRoot();
+  await act(async () =>
+    root?.render(
+      <LiveMapPointAnnotation headingDegrees={null} marker={marker({})} onSelected={() => {}} />,
+    ),
+  );
+  expect(root.container.queryAll((item) => item.type === "accessible-view")).toEqual([]);
+  expect(
+    root.container.queryAll(
+      (item) => item.props["importantForAccessibility"] === "no-hide-descendants",
+    ),
+  ).toHaveLength(1);
+});
 
 test("a device row without a location on the map isn't a button", async () => {
   const device = {

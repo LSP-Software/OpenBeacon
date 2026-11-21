@@ -33,6 +33,7 @@ mock.module("react-native", () => ({
       };
     },
   },
+  Platform: { OS: "ios" },
   View: ({
     children,
     accessibilityLabel,

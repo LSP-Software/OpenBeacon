@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Platform } from "react-native";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
 import {
   groupLiveMapPins,
@@ -35,7 +36,10 @@ export const useLiveMapPinGroups = (markers: readonly LiveMapMarker[]) => {
       computed?.markers === markers && computed.zoom === zoom
         ? computed.groups
         : groupLiveMapPins({ markers, zoom, previous: previous.groups });
-    const transition = liveMapPinTransition({ next: groups, previous: previous.groups, zoom });
+    const transition =
+      Platform.OS === "android"
+        ? { arrivals: new Map<string, LiveMapPinOffset>(), gathering: [] }
+        : liveMapPinTransition({ next: groups, previous: previous.groups, zoom });
     const stackedDeviceIds = new Set(
       groups.flatMap((group) =>
         group.members.length > 1 ? group.members.map((member) => member.deviceId) : [],

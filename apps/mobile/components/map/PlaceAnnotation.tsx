@@ -1,39 +1,28 @@
-import { Marker, ViewAnnotation, type ViewAnnotationRef } from "@maplibre/maplibre-react-native";
+import { ViewAnnotation, type ViewAnnotationRef } from "@maplibre/maplibre-react-native";
 import { useEffect, useRef } from "react";
-import { type GestureResponderEvent, Platform, Pressable } from "react-native";
+import { Platform, View } from "react-native";
 import type { MapPlace } from "../../lib/places.ts";
+import { useTheme } from "../../providers/ThemeProvider.tsx";
 import { PlacePin } from "./PlacePin.tsx";
+import { refreshViewAnnotation } from "./refreshViewAnnotation.ts";
 
 export const PlaceAnnotation = ({
   onSelected,
   place,
   selected,
 }: {
-  onSelected: (event?: GestureResponderEvent) => void;
+  onSelected: () => void;
   place: MapPlace;
   selected: boolean;
 }) => {
   const annotationRef = useRef<ViewAnnotationRef>(null);
+  const { appTheme } = useTheme();
+  const accessibilityLabel = `${place.name}, ${place.groupName}`;
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: iOS ViewAnnotation bitmaps need an explicit refresh when the pin changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Android draws ViewAnnotation children into a bitmap that needs an explicit refresh when the pin changes
   useEffect(() => {
-    annotationRef.current?.refresh();
-  }, [place.emoji, selected]);
-
-  if (Platform.OS === "android") {
-    return (
-      <Marker lngLat={[place.longitude, place.latitude]} anchor="bottom">
-        <Pressable
-          onPress={onSelected}
-          accessibilityRole="button"
-          accessibilityLabel={`${place.name}, ${place.groupName}`}
-          style={{ alignSelf: "flex-start" }}
-        >
-          <PlacePin emoji={place.emoji} selected={selected} />
-        </Pressable>
-      </Marker>
-    );
-  }
+    refreshViewAnnotation(annotationRef);
+  }, [appTheme, place.emoji, selected]);
 
   return (
     <ViewAnnotation
@@ -42,9 +31,21 @@ export const PlaceAnnotation = ({
       lngLat={[place.longitude, place.latitude]}
       anchor="bottom"
       draggable={false}
-      onSelect={() => onSelected()}
+      onPress={onSelected}
+      {...(Platform.OS === "ios" ? { title: accessibilityLabel } : {})}
     >
-      <PlacePin emoji={place.emoji} selected={selected} />
+      <View
+        {...(Platform.OS === "ios"
+          ? { accessible: true, accessibilityRole: "button" as const, accessibilityLabel }
+          : { importantForAccessibility: "no-hide-descendants" as const })}
+        collapsable={false}
+      >
+        <PlacePin
+          drawnAsBitmap={Platform.OS === "android"}
+          emoji={place.emoji}
+          selected={selected}
+        />
+      </View>
     </ViewAnnotation>
   );
 };

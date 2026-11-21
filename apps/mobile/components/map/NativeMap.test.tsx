@@ -9,9 +9,7 @@ import {
   createLiveMapMarkerFixture,
   createMapLibreMockModule,
   emitNativeMapAndroidMarkerTap,
-  emitRemovedAnnotationDeselected,
-  emitNativeMapAnnotationDeselected,
-  emitNativeMapAnnotationSelected,
+  emitNativeMapIosAnnotationTap,
   emitNativeMapDidFailLoadingMap,
   emitNativeMapLog,
   emitNativeMapDidFinishLoadingStyle,
@@ -20,7 +18,6 @@ import {
   emitNativeMapRegionDidChange,
   emitNativeMapRegionIsChanging,
   emitNativeMapShowEveryone,
-  getNativeMapAnnotationMountCount,
   getNativeMapAnnotationRefreshCalls,
   getNativeMapAnnotationSelectedProp,
   getNativeMapCameraCommands,
@@ -323,8 +320,14 @@ mock.module("../../lib/storage.ts", () => ({
   storage: { getBoolean: () => undefined, set: () => {} },
 }));
 
+mock.module("./refreshViewAnnotation.ts", () => ({
+  refreshViewAnnotation: (annotationRef: { current: { refresh: () => void } | null }) =>
+    annotationRef.current?.refresh(),
+}));
+
 mock.module("../../providers/ThemeProvider.tsx", () => ({
   useTheme: () => ({
+    appTheme: "light" as const,
     mapTheme: "light" as const,
   }),
 }));
@@ -378,10 +381,6 @@ mock.module("./LiveMapPlaceSheet.tsx", () => ({
     React.createElement("live-map-place-sheet", { here: here.map((marker) => marker.userId) }),
 }));
 
-mock.module("./PlaceAnnotation.tsx", () => ({
-  PlaceAnnotation: () => null,
-}));
-
 mock.module("./LiveMapStackSheet.tsx", () => ({
   LiveMapStackSheet: ({ members }: { members: readonly LiveMapMarker[] }) =>
     React.createElement("live-map-stack-sheet", { count: members.length }),
@@ -390,6 +389,10 @@ mock.module("./LiveMapStackSheet.tsx", () => ({
 mock.module("./LiveMapStackPin.tsx", () => ({
   LiveMapStackPin: ({ members }: { members: readonly LiveMapMarker[] }) =>
     React.createElement("live-map-stack-pin", { count: members.length }),
+}));
+
+mock.module("./PlacePin.tsx", () => ({
+  PlacePin: () => React.createElement("place-pin"),
 }));
 
 mock.module("./LiveMapMarkerPin.tsx", () => ({
@@ -630,6 +633,7 @@ describe("NativeMap over a fake MapLibre", () => {
   });
 
   afterEach(async () => {
+    setSystemTime();
     if (root) {
       await act(async () => {
         root?.unmount();
@@ -666,9 +670,7 @@ describe("NativeMap over a fake MapLibre", () => {
             instance.type === "pressable" && instance.props["accessibilityLabel"] === "Go to Alice",
         ) ?? [];
       const nativePins = () =>
-        platform === "ios"
-          ? getNativeMapMountedAnnotationIds().filter((id) => id === "alice").length
-          : (root?.container.queryAll((instance) => instance.type === "marker-view") ?? []).length;
+        getNativeMapMountedAnnotationIds().filter((id) => id === "alice").length;
       expect(edgePins()).toHaveLength(1);
       expect(nativePins()).toBe(0);
       setNativeMapProjectedPoint([200, 300]);
@@ -680,36 +682,6 @@ describe("NativeMap over a fake MapLibre", () => {
       expect(nativePins()).toBe(1);
     },
   );
-
-  test("keeps the selection when a native annotation is replaced by an edge pin", async () => {
-    const selections: Array<string | null> = [];
-    const marker = createLiveMapMarkerFixture({ userId: "alice" });
-    setNativeMapProjectedPoint([-10, 300]);
-    await renderNativeMap({
-      markers: [marker],
-      selectedDeviceId: "alice",
-      onSelectDeviceId: (id) => selections.push(id),
-    });
-    const views =
-      root?.container.queryAll(
-        (instance) => instance.type === "view" && typeof instance.props["onLayout"] === "function",
-      ) ?? [];
-    await act(async () => {
-      (views[0]?.props["onLayout"] as ((event: unknown) => void) | undefined)?.({
-        nativeEvent: { layout: { width: 400, height: 600, x: 0, y: 0 } },
-      });
-      (views[1]?.props["onLayout"] as ((event: unknown) => void) | undefined)?.({
-        nativeEvent: { layout: { width: 44, height: 96, x: 344, y: 56 } },
-      });
-      await new Promise((resolve) => setTimeout(resolve, 60));
-    });
-    expect(getRenderedOutput()).toContain("Go to Alice");
-    await act(async () => {
-      emitRemovedAnnotationDeselected("alice");
-      await Promise.resolve();
-    });
-    expect(selections).toEqual([]);
-  });
 
   test("merges people at the same off-screen position into one chip", async () => {
     setNativeMapProjectedPoint([-100, 300]);
@@ -2403,9 +2375,9 @@ describe("NativeMap over a fake MapLibre", () => {
 
     expect(getNativeMapMountedAnnotationIds().sort()).toEqual(["alice", "bob"]);
 
-    emitNativeMapAnnotationSelected("alice");
+    emitNativeMapIosAnnotationTap("alice");
     emitNativeMapPress();
-    emitNativeMapAnnotationSelected("bob");
+    emitNativeMapIosAnnotationTap("bob");
 
     expect(selections).toEqual(["alice", null, "bob"]);
   });
@@ -2421,23 +2393,14 @@ describe("NativeMap over a fake MapLibre", () => {
       selectionHistory,
     );
 
-    expect(root?.container.queryAll((instance) => instance.type === "marker-view")).toHaveLength(1);
-    const stack = root?.container.queryAll(
-      (instance) =>
-        instance.type === "pressable" &&
-        instance.props["accessibilityLabel"] === "2 people: Alice, Bob",
-    )[0];
-    await act(async () =>
-      (stack?.props["onPress"] as ((event: unknown) => void) | undefined)?.({
-        nativeEvent: { pageX: 100, pageY: 200 },
-      }),
-    );
-    await act(async () => emitNativeMapPress([100, 200]));
+    const [stackId, ...others] = getNativeMapMountedAnnotationIds();
+    expect(others).toEqual([]);
+    await act(async () => emitNativeMapAndroidMarkerTap(stackId ?? ""));
 
     expect(
       root?.container.queryAll((instance) => instance.type === "live-map-stack-sheet")[0]?.props,
     ).toMatchObject({ count: 2 });
-    expect(selectionHistory).toEqual([null]);
+    expect(selectionHistory.filter((deviceId) => deviceId !== null)).toEqual([]);
   });
 
   test("closes a stack sheet for good when another action takes over", async () => {
@@ -2451,16 +2414,8 @@ describe("NativeMap over a fake MapLibre", () => {
     );
     const stackSheets = () =>
       root?.container.queryAll((instance) => instance.type === "live-map-stack-sheet") ?? [];
-    const stack = root?.container.queryAll(
-      (instance) =>
-        instance.type === "pressable" &&
-        String(instance.props["accessibilityLabel"]).startsWith("2 people"),
-    )[0];
-    await act(async () =>
-      (stack?.props["onPress"] as ((event: unknown) => void) | undefined)?.({
-        nativeEvent: { pageX: 100, pageY: 200 },
-      }),
-    );
+    const [stackId] = getNativeMapMountedAnnotationIds();
+    await act(async () => emitNativeMapAndroidMarkerTap(stackId ?? ""));
     expect(stackSheets()).toHaveLength(1);
 
     await act(async () => emitNativeMapGoToCurrentLocation());
@@ -2472,7 +2427,7 @@ describe("NativeMap over a fake MapLibre", () => {
     expect(stackSheets()).toHaveLength(0);
   });
 
-  test("Android marker views render and select without bitmap annotations", async () => {
+  test("Android draws pins inside the map, toggles a tapped person and ignores the map press that follows", async () => {
     testPlatform.OS = "android";
     const alice = createLiveMapMarkerFixture({ userId: "alice" });
     const bob = createLiveMapMarkerFixture({
@@ -2482,125 +2437,108 @@ describe("NativeMap over a fake MapLibre", () => {
       name: "Bob",
     });
     const selectionHistory: Array<string | null> = [];
+    const startedAt = Date.now();
+    setSystemTime(new Date(startedAt));
     await renderSelectableNativeMap([alice, bob], selectionHistory);
 
-    const pressMarker = async (name: string) => {
-      const marker = root?.container.queryAll(
-        (instance) =>
-          instance.type === "pressable" &&
-          String(instance.props["accessibilityLabel"]).split(", ")[0] === name,
-      )[0];
-      if (!marker) throw new Error(`Missing marker ${name}`);
-      await act(async () =>
-        (marker.props as { onPress: (event: unknown) => void }).onPress({
-          nativeEvent: { pageX: 100, pageY: 200 },
-        }),
-      );
+    expect(getNativeMapMountedAnnotationIds().sort()).toEqual(["alice", "bob"]);
+
+    const tap = async (id: string) => {
+      await act(async () => {
+        emitNativeMapAndroidMarkerTap(id);
+        await Promise.resolve();
+      });
+      await flushEffects();
     };
+    await tap("alice");
+    await tap("alice");
+    await tap("alice");
+    await tap("bob");
+    expect(selectionHistory).toEqual(["alice", null, "alice", "bob"]);
 
-    expect(root?.container.queryAll((instance) => instance.type === "marker-view")).toHaveLength(2);
-    expect(getNativeMapMountedAnnotationIds()).toEqual([]);
-    await pressMarker("Alice");
-    await pressMarker("Alice");
-    await pressMarker("Bob");
-    await act(async () => emitNativeMapPress([100, 200]));
-    expect(selectionHistory).toEqual(["alice", null, "bob"]);
-
+    setSystemTime(new Date(startedAt + 600));
     await act(async () => emitNativeMapPress([300, 400]));
-    await pressMarker("Alice");
-    expect(selectionHistory).toEqual(["alice", null, "bob", null, "alice"]);
+    expect(selectionHistory).toEqual(["alice", null, "alice", "bob", null]);
   });
 
-  test("clears selection when Android emits annotation deselect", async () => {
-    const selections: Array<string | null> = [];
-    const alice = createLiveMapMarkerFixture({ userId: "alice" });
+  test("Android keeps a tapped place open through the map press that follows", async () => {
+    testPlatform.OS = "android";
+    const home = {
+      canManage: true,
+      emoji: "🏠",
+      groupId: "family",
+      groupName: "Family",
+      id: "home",
+      latitude: 51.5,
+      longitude: -0.12,
+      memberUserIds: ["alice"],
+      name: "Home",
+      radiusMeters: 250,
+    };
+    setSystemTime(new Date(Date.now()));
+    await renderNativeMap({ places: [home] });
+    await flushEffects();
+    const placeSheets = () =>
+      root?.container.queryAll((node) => node.type === "live-map-place-sheet") ?? [];
+    expect(placeSheets()).toHaveLength(0);
+
+    await act(async () => emitNativeMapAndroidMarkerTap("place:family:home"));
+    await flushEffects();
+
+    expect(placeSheets()).toHaveLength(1);
+  });
+
+  test("refreshes a stack's drawing when the people in it change", async () => {
+    const alice = createLiveMapMarkerFixture({ userId: "alice", name: "Alice" });
+    const bob = createLiveMapMarkerFixture({ userId: "bob", name: "Bob" });
+    await renderNativeMap({ markers: [alice, bob] });
+    await flushEffects();
+    const [stackId] = getNativeMapMountedAnnotationIds();
+    const stackRefreshes = () =>
+      getNativeMapAnnotationRefreshCalls().filter((id) => id === stackId).length;
+    const refreshesWithTwo = stackRefreshes();
+    expect(refreshesWithTwo).toBeGreaterThan(0);
 
     await renderNativeMap({
-      markers: [alice],
-      onSelectDeviceId: (userId) => {
-        selections.push(userId);
-      },
-      selectedDeviceId: "alice",
+      markers: [alice, bob, createLiveMapMarkerFixture({ userId: "carol", name: "Carol" })],
     });
-
-    emitNativeMapAnnotationDeselected("alice");
     await flushEffects();
 
-    expect(selections).toEqual([null]);
+    expect(getNativeMapMountedAnnotationIds()).toEqual([stackId ?? ""]);
+    expect(stackRefreshes()).toBeGreaterThan(refreshesWithTwo);
   });
 
-  test("Android marker taps select, toggle off once, and switch people without extra taps", async () => {
+  test("iOS toggles a tapped person, switches people in one tap and closes on a map press", async () => {
     const alice = createLiveMapMarkerFixture({ userId: "alice" });
     const bob = createLiveMapMarkerFixture({
-      initials: "BO",
       latitude: 40,
       longitude: 20,
-      name: "Bob",
       userId: "bob",
+      name: "Bob",
     });
     const selectionHistory: Array<string | null> = [];
-
     await renderSelectableNativeMap([alice, bob], selectionHistory);
 
-    await act(async () => {
-      emitNativeMapAndroidMarkerTap("alice");
-      await Promise.resolve();
-    });
-    await flushEffects();
-    expect(selectionHistory).toEqual(["alice"]);
-
-    await act(async () => {
-      emitNativeMapAndroidMarkerTap("alice");
-      await Promise.resolve();
-    });
-    await flushEffects();
-    expect(selectionHistory).toEqual(["alice", null]);
-
-    await act(async () => {
-      emitNativeMapAndroidMarkerTap("alice");
-      await Promise.resolve();
-    });
-    await flushEffects();
-    expect(selectionHistory).toEqual(["alice", null, "alice"]);
-
-    await act(async () => {
-      emitNativeMapAndroidMarkerTap("bob");
-      await Promise.resolve();
-    });
-    await flushEffects();
+    const tap = async (id: string) => {
+      await act(async () => {
+        emitNativeMapIosAnnotationTap(id);
+        await Promise.resolve();
+      });
+      await flushEffects();
+    };
+    await tap("alice");
+    await tap("alice");
+    await tap("alice");
+    await tap("bob");
     expect(selectionHistory).toEqual(["alice", null, "alice", "bob"]);
+
+    await act(async () => emitNativeMapPress([300, 400]));
+    await flushEffects();
+    await tap("bob");
+    expect(selectionHistory).toEqual(["alice", null, "alice", "bob", null, "bob"]);
   });
 
-  test("map-background press remounts the prior annotation so the next Android tap selects", async () => {
-    const alice = createLiveMapMarkerFixture({ userId: "alice" });
-    const selectionHistory: Array<string | null> = [];
-
-    await renderSelectableNativeMap([alice], selectionHistory);
-    await act(async () => {
-      emitNativeMapAndroidMarkerTap("alice");
-      await Promise.resolve();
-    });
-    await flushEffects();
-    expect(selectionHistory).toEqual(["alice"]);
-    expect(getNativeMapAnnotationMountCount("alice")).toBe(1);
-
-    await act(async () => {
-      emitNativeMapPress();
-      await Promise.resolve();
-    });
-    await flushEffects();
-    expect(selectionHistory).toEqual(["alice", null]);
-    expect(getNativeMapAnnotationMountCount("alice")).toBe(2);
-
-    await act(async () => {
-      emitNativeMapAndroidMarkerTap("alice");
-      await Promise.resolve();
-    });
-    await flushEffects();
-    expect(selectionHistory).toEqual(["alice", null, "alice"]);
-  });
-
-  test("does not pass a controlled selected prop on Android", async () => {
+  test("does not pass a controlled selected prop to annotations", async () => {
     const alice = createLiveMapMarkerFixture({ userId: "alice" });
 
     await renderNativeMap({
@@ -2611,7 +2549,8 @@ describe("NativeMap over a fake MapLibre", () => {
     expect(getNativeMapAnnotationSelectedProp("alice")).toBeUndefined();
   });
 
-  test("observes Android annotation refresh after async self heading changes", async () => {
+  test("redraws the Android self pin once its heading moves by five degrees", async () => {
+    testPlatform.OS = "android";
     const self = createLiveMapMarkerFixture({
       initials: "ME",
       isSelf: true,
@@ -2619,26 +2558,29 @@ describe("NativeMap over a fake MapLibre", () => {
       userId: "self",
     });
 
+    const selfRefreshes = () =>
+      getNativeMapAnnotationRefreshCalls().filter((id) => id === "self").length;
+    const showHeading = async (headingDegrees: number) => {
+      await act(async () => {
+        await Promise.resolve();
+        setNativeMapSelfHeadingDegrees(headingDegrees);
+        root?.render(<NativeMap markers={[self]} />);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+    };
+
     setNativeMapSelfHeadingDegrees(10);
     await renderNativeMap({ markers: [self] });
     await flushEffects();
-
-    const refreshCountAfterMount = getNativeMapAnnotationRefreshCalls().filter(
-      (id) => id === "self",
-    ).length;
+    const refreshCountAfterMount = selfRefreshes();
     expect(refreshCountAfterMount).toBeGreaterThan(0);
 
-    await act(async () => {
-      await Promise.resolve();
-      setNativeMapSelfHeadingDegrees(45);
-      root?.render(<NativeMap markers={[self]} />);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await showHeading(11.5);
+    expect(selfRefreshes()).toBe(refreshCountAfterMount);
 
-    expect(
-      getNativeMapAnnotationRefreshCalls().filter((id) => id === "self").length,
-    ).toBeGreaterThan(refreshCountAfterMount);
+    await showHeading(16);
+    expect(selfRefreshes()).toBeGreaterThan(refreshCountAfterMount);
   });
 
   test("refreshes the self annotation when heading clears after focus loss", async () => {
@@ -3254,7 +3196,7 @@ describe("NativeMap over a fake MapLibre", () => {
 
       await press(groupsButton());
       expect(findOne("live-map-group-menu")).toBeDefined();
-      await act(async () => emitNativeMapAnnotationSelected("alice"));
+      await act(async () => emitNativeMapIosAnnotationTap("alice"));
       expect(findOne("live-map-group-menu")).toBeUndefined();
 
       testPlatform.OS = "android";
@@ -3264,12 +3206,8 @@ describe("NativeMap over a fake MapLibre", () => {
       });
       await press(groupsButton());
       expect(findOne("live-map-group-menu")).toBeDefined();
-      const stack = root?.container.queryAll(
-        (instance) =>
-          instance.type === "pressable" &&
-          instance.props["accessibilityLabel"] === "2 people: Alice, Bob",
-      )[0];
-      await press(stack);
+      const [stackId] = getNativeMapMountedAnnotationIds();
+      await act(async () => emitNativeMapAndroidMarkerTap(stackId ?? ""));
       expect(findOne("live-map-group-menu")).toBeUndefined();
     });
 
