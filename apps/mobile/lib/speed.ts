@@ -46,6 +46,9 @@ export const defaultSpeedUnit = ({
   return measurementSystem === "us" || measurementSystem === "uk" ? "mph" : "kmh";
 };
 
+export const parseSpeedPreference = (stored: string | undefined): SpeedUnit | "auto" =>
+  stored === "mph" || stored === "kmh" ? stored : "auto";
+
 export const speedUnitName = (unit: SpeedUnit) =>
   unit === "mph" ? "Miles per hour (mph)" : "Kilometres per hour (km/h)";
 

@@ -25,7 +25,7 @@ const UnitsScreen = () => {
             options={[
               {
                 value: "auto",
-                title: `Match ${thisDeviceNoun()} region`,
+                title: `Match this ${thisDeviceNoun()}’s region`,
                 description: `Currently ${speedUnitName(regionUnit)}`,
               },
               { value: "mph", title: speedUnitName("mph") },

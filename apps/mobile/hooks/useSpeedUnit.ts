@@ -1,12 +1,12 @@
 import { useLocales } from "expo-localization";
 import { useMMKVString } from "react-native-mmkv";
-import { defaultSpeedUnit, type SpeedUnit } from "../lib/speed.ts";
+import { defaultSpeedUnit, parseSpeedPreference, type SpeedUnit } from "../lib/speed.ts";
 import { storage } from "../lib/storage.ts";
 
 export const useSpeedUnit = () => {
   const [stored, setStored] = useMMKVString("units.speed", storage);
   const [locale] = useLocales();
-  const preference: SpeedUnit | "auto" = stored === "mph" || stored === "kmh" ? stored : "auto";
+  const preference = parseSpeedPreference(stored);
   const regionUnit = defaultSpeedUnit(locale);
   return {
     preference,

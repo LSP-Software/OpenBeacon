@@ -5,6 +5,7 @@ import {
   liveSpeedHidesAt,
   liveSpeedLabel,
   movingSpeedLabel,
+  parseSpeedPreference,
   timelineSpeedLabel,
 } from "./speed.ts";
 
@@ -119,5 +120,15 @@ describe("timelineSpeedLabel", () => {
     expect(timelineSpeedLabel({ position: { speed: null }, state: "moving" }, "kmh")).toBeNull();
     expect(timelineSpeedLabel({ position: { speed: 0.5 }, state: "moving" }, "kmh")).toBeNull();
     expect(timelineSpeedLabel({ position: { speed: 95 }, state: "moving" }, "kmh")).toBeNull();
+  });
+});
+
+describe("parseSpeedPreference", () => {
+  test("reads a stored unit and falls back to the phone's region for anything else", () => {
+    expect(parseSpeedPreference("mph")).toBe("mph");
+    expect(parseSpeedPreference("kmh")).toBe("kmh");
+    expect(parseSpeedPreference(undefined)).toBe("auto");
+    expect(parseSpeedPreference("knots")).toBe("auto");
+    expect(parseSpeedPreference("km/h")).toBe("auto");
   });
 });

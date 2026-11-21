@@ -84,6 +84,7 @@ const AccountScreen = () => {
   const historyShare = useHistoryShare();
   const { appThemePreference } = useTheme();
   const speedUnit = useSpeedUnit();
+  const speedUnitLabel = speedUnit.unit === "mph" ? "mph" : "km/h";
   const [signOutPhase, setSignOutPhase] = useState<"uploading" | "signingOut" | null>(null);
   const signingOut = useRef(false);
   const recoveryStatus = useQuery({
@@ -435,7 +436,10 @@ const AccountScreen = () => {
                     label: "Units",
                     icon: GaugeIcon,
                     href: "/account/units",
-                    value: speedUnit.unit === "mph" ? "mph" : "km/h",
+                    value:
+                      speedUnit.preference === "auto"
+                        ? `${speedUnitLabel} (${thisDeviceNoun()} region)`
+                        : speedUnitLabel,
                   },
                 ],
               },
