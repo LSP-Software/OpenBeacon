@@ -34,13 +34,20 @@ const wrapUnderLatestEpoch = async ({
   kind: ImageKeyKind;
   ownerId: string;
 }) => {
-  const latest = await trpcClient.groupEpoch.getLatest.query({ groupId });
+  const readLatest = async () => {
+    const latest = await trpcClient.groupEpoch.getLatest.query({ groupId });
+    const epochKey = latest
+      ? await resolveEpochKey({ device, epochId: latest.epochId, groupId })
+      : null;
+    return latest && epochKey ? { epochId: latest.epochId, epochKey } : null;
+  };
+  const latest =
+    (await readLatest()) ??
+    ((await tryCatch(rotateGroupEpochIfRequired(groupId))).data ? await readLatest() : null);
   if (!latest) throw new GroupKeyUnavailableError();
-  const epochKey = await resolveEpochKey({ device, epochId: latest.epochId, groupId });
-  if (!epochKey) throw new GroupKeyUnavailableError();
   return encryptImageKey({
     epochId: latest.epochId,
-    epochKey,
+    epochKey: latest.epochKey,
     fileName,
     groupId,
     imageKey,

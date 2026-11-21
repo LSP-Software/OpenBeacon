@@ -263,6 +263,25 @@ describe("confirmProfileImage", () => {
     expect(profileConfirms[0]!.wraps.map(({ groupId }) => groupId)).toEqual(["family"]);
   });
 
+  test("finishes a key rotation a new phone is waiting for, then wraps for that group too", async () => {
+    groups = ["family", "friends"];
+    latestEpochs = new Map([
+      ["family", ["family-epoch-3"]],
+      ["friends", ["friends-epoch-1", "friends-epoch-2"]],
+    ]);
+    unreadableEpochs = new Set(["friends-epoch-1"]);
+
+    await confirmProfileImage({ fileName, imageKey: generateImageKey(), userId: "user-a" });
+
+    expect(rotate.mock.calls).toEqual([["friends"]]);
+    expect(
+      profileConfirms[0]!.wraps.map(({ groupId, epochId }) => [groupId, epochId]).sort(),
+    ).toEqual([
+      ["family", "family-epoch-3"],
+      ["friends", "friends-epoch-2"],
+    ]);
+  });
+
   test("adds the sealed personal copy when this phone holds the history key", async () => {
     const imageKey = generateImageKey();
 
@@ -574,6 +593,18 @@ describe("storeOwnImageKeyInGroup", () => {
         wrap: store.key,
       }),
     ).toEqual(imageKey.expose());
+  });
+
+  test("finishes a key rotation this phone is waiting for before storing its key", async () => {
+    ownKeys.set("user-a", { fileName, key: generateImageKey() });
+    sessions = [{ id: "user-a", image: pictureUrl(fileName), imageKeySealed: null }];
+    latestEpochs = new Map([["family", ["epoch-4", "epoch-5"]]]);
+    unreadableEpochs = new Set(["epoch-4"]);
+
+    expect(await storeOwnImageKeyInGroup("family")).toBe(true);
+
+    expect(rotate.mock.calls).toEqual([["family"]]);
+    expect(stores.map(({ key }) => key.epochId)).toEqual(["epoch-5"]);
   });
 
   test("opens the sealed copy when this phone doesn't have the key", async () => {
