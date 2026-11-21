@@ -400,6 +400,9 @@ const TimelineView = ({
   const selectedPin = selectedPerson ? (pins[0] ?? null) : null;
   const card = useTimelinePlayerCard({
     canCollapse: timeline !== null && routes.length > 0,
+    loading: days
+      ? day !== null && (timeline === null || dayQuery.isPending) && !dayQuery.isError
+      : !daysQuery.isError,
     reduceMotion,
   });
   const panelHeight = card.height === 0 ? 0 : card.height + insets.bottom + 8;
@@ -798,11 +801,11 @@ const TimelineView = ({
           touchPitch={false}
           touchRotate={false}
           androidView="surface"
-          onPress={() => card.setExpanded(false)}
+          onPress={card.collapse}
           onRegionWillChange={(event) => {
             if (!event.nativeEvent.userInteraction) return;
             setFollowing(false);
-            card.setExpanded(false);
+            card.collapse();
             fittedView.current.moved = true;
           }}
           onRegionDidChange={(event) => {
@@ -938,7 +941,7 @@ const TimelineView = ({
       <TimelinePlayerCard
         bottom={insets.bottom + 8}
         card={card}
-        miniDate={timeline ? formatDate(timeline.day.start) : ""}
+        miniDate={day ? formatDate(day.start) : ""}
         miniScrubber={
           timeline ? (
             <TimelineMiniScrubber
@@ -950,7 +953,11 @@ const TimelineView = ({
               valueLabel={status ? `${clockLabel}, ${status.title}` : clockLabel}
               onScrub={scrubTo}
             />
-          ) : null
+          ) : (
+            <View className="h-11 items-center justify-center">
+              <ActivityIndicator size="small" />
+            </View>
+          )
         }
       >
         {daysQuery.isError && !days ? (
@@ -960,7 +967,9 @@ const TimelineView = ({
             onRetry={() => void daysQuery.refetch()}
           />
         ) : !days ? (
-          <ActivityIndicator className="py-6" />
+          <Animated.View {...card.fullOnly}>
+            <ActivityIndicator className="py-6" />
+          </Animated.View>
         ) : !day ? (
           <View className="gap-1 py-4">
             {timelineEmptyLines({
@@ -980,7 +989,9 @@ const TimelineView = ({
             onRetry={() => void dayQuery.refetch()}
           />
         ) : !timeline ? (
-          <ActivityIndicator className="py-6" />
+          <Animated.View {...card.fullOnly}>
+            <ActivityIndicator className="py-6" />
+          </Animated.View>
         ) : (
           <View className="gap-3">
             {daysQuery.isError || dayQuery.isError ? (

@@ -1,10 +1,27 @@
 import { describe, expect, test } from "bun:test";
 import {
   timelineCardBoxMoved,
+  timelineCardIsOpen,
   timelineCardOpens,
   timelineCardShift,
   timelineMiniClockScale,
 } from "./timelineCard.ts";
+
+describe("timelineCardIsOpen", () => {
+  test("a collapsed card stays at mini size while the next day loads", () => {
+    expect(timelineCardIsOpen({ canCollapse: false, expanded: false, loading: true })).toBe(false);
+    expect(timelineCardIsOpen({ canCollapse: true, expanded: false, loading: false })).toBe(false);
+  });
+
+  test("an error or an empty day always shows the full card", () => {
+    expect(timelineCardIsOpen({ canCollapse: false, expanded: false, loading: false })).toBe(true);
+  });
+
+  test("an expanded card stays open whatever is loading", () => {
+    expect(timelineCardIsOpen({ canCollapse: false, expanded: true, loading: true })).toBe(true);
+    expect(timelineCardIsOpen({ canCollapse: true, expanded: true, loading: false })).toBe(true);
+  });
+});
 
 describe("timelineCardBoxMoved", () => {
   const box = { height: 36, width: 92, x: 0, y: 4 };

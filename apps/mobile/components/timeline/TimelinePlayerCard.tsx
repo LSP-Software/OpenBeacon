@@ -38,13 +38,13 @@ export const TimelinePlayerCard = ({
   >
     <Animated.View className="overflow-hidden rounded-2xl" style={card.heightStyle}>
       <View
-        className={card.canCollapse ? "px-4 pb-3" : "px-4 pb-3 pt-3"}
+        className={card.collapsible ? "px-4 pb-3" : "px-4 pb-3 pt-3"}
         onLayout={card.onFullLayout}
       >
-        {card.canCollapse ? <View className="h-5" /> : null}
+        {card.collapsible ? <View className="h-5" /> : null}
         <View onLayout={card.measure("content")}>{children}</View>
       </View>
-      {card.canCollapse ? (
+      {card.collapsible ? (
         <Animated.View
           {...card.miniOnly}
           className="absolute inset-x-0 top-0 px-4 pb-1 pt-5"
@@ -83,7 +83,7 @@ export const TimelinePlayerCard = ({
           {miniScrubber}
         </Animated.View>
       ) : null}
-      {card.canCollapse ? (
+      {card.collapsible ? (
         <View pointerEvents="box-none" className="absolute inset-x-0 top-0 items-center">
           <Pressable
             accessibilityRole="button"

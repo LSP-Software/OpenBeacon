@@ -11,6 +11,7 @@ import {
 import {
   type TimelineCardBox,
   timelineCardBoxMoved,
+  timelineCardIsOpen,
   timelineCardOpens,
   timelineCardShift,
   timelineMiniClockScale,
@@ -34,15 +35,18 @@ type BoxName =
 
 export const useTimelinePlayerCard = ({
   canCollapse,
+  loading,
   reduceMotion,
 }: {
   canCollapse: boolean;
+  loading: boolean;
   reduceMotion: boolean;
 }) => {
   const [expanded, setExpanded] = useState(true);
   const [heights, setHeights] = useState({ full: 0, mini: 0 });
   const [boxes, setBoxes] = useState<Partial<Record<BoxName, TimelineCardBox>>>({});
-  const open = expanded || !canCollapse;
+  const open = timelineCardIsOpen({ canCollapse, expanded, loading });
+  const collapsible = canCollapse || !open;
   const progress = useSharedValue(1);
   const restingOpen = useSharedValue(true);
   const target = useRef(true);
@@ -70,15 +74,15 @@ export const useTimelinePlayerCard = ({
     if (target.current !== open) settle(open);
   });
 
-  const latest = useRef({ canCollapse, open, range, settle });
+  const latest = useRef({ collapsible, open, range, settle });
   useLayoutEffect(() => {
-    latest.current = { canCollapse, open, range, settle };
+    latest.current = { collapsible, open, range, settle };
   });
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => latest.current.canCollapse && !latest.current.open,
+      onStartShouldSetPanResponder: () => !latest.current.open,
       onMoveShouldSetPanResponder: (_event, gesture) =>
-        latest.current.canCollapse &&
+        latest.current.collapsible &&
         Math.abs(gesture.dy) > TAP_SLOP &&
         Math.abs(gesture.dy) > Math.abs(gesture.dx),
       onPanResponderGrant: () => {
@@ -151,7 +155,10 @@ export const useTimelinePlayerCard = ({
   }));
 
   return {
-    canCollapse,
+    collapse: () => {
+      if (canCollapse) setExpanded(false);
+    },
+    collapsible,
     fullOnly: {
       accessibilityElementsHidden: !open,
       importantForAccessibility: open ? ("auto" as const) : ("no-hide-descendants" as const),

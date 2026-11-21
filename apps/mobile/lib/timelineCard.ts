@@ -8,6 +8,16 @@ export const timelineCardOpens = ({
   velocity: number;
 }) => (Math.abs(velocity) > 0.3 ? velocity < 0 : progress > 0.5);
 
+export const timelineCardIsOpen = ({
+  canCollapse,
+  expanded,
+  loading,
+}: {
+  canCollapse: boolean;
+  expanded: boolean;
+  loading: boolean;
+}) => expanded || (!canCollapse && !loading);
+
 export const timelineCardShift = ({
   from,
   to,
