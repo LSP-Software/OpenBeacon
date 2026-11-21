@@ -166,6 +166,7 @@ export const endSession = async ({
   const clears = endSessionClears[reason];
   const registered = await readRegisteredDevice();
   if (reason === "sessionLost") {
+    await tryCatch((await import("./tracking.ts")).forgetPushToken());
     if (!registered) return { signedOut: false };
     stopDeviceKeyRegistrations();
     const removed = await isRemovedAfterSessionLoss(registered);

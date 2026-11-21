@@ -185,4 +185,87 @@ class PushTokensTest {
     tokens.confirm(scope, "token-1", pushAvailable = true)
     assertEquals(saves, store.saves)
   }
+
+  @Test
+  fun statusFollowsTheTokenFromFetchToServer() {
+    assertEquals(PushTokens.Status(serverPush = null, registration = PushTokens.Registration.NO_TOKEN), tokens.status(scope))
+    registered()
+    assertEquals(PushTokens.Status(serverPush = true, registration = PushTokens.Registration.NOT_SENT), tokens.status(scope))
+    tokens.confirm(scope, "token-1", pushAvailable = true)
+    assertEquals(PushTokens.Status(serverPush = true, registration = PushTokens.Registration.REGISTERED), tokens.status(scope))
+    tokens.receive("token-2")
+    assertEquals(PushTokens.Registration.NOT_SENT, tokens.status(scope).registration)
+  }
+
+  @Test
+  fun statusForAnotherDeviceDoesntBorrowTheLastServersAnswer() {
+    registered()
+    tokens.confirm(scope, "token-1", pushAvailable = true)
+    val next = "[\"https://self-hosted.example\",\"user-1\",\"device-2\"]"
+    assertEquals(PushTokens.Status(serverPush = null, registration = PushTokens.Registration.NOT_SENT), tokens.status(next))
+  }
+
+  @Test
+  fun aWakeIsRecordedWithItsTimeAndKindForThatAccount() {
+    registered()
+    tokens.recordWake("locate")
+    val status = tokens.status(scope)
+    assertEquals(now, status.lastWakeAt)
+    assertEquals("locate", status.lastWakeKind)
+  }
+
+  @Test
+  fun anotherAccountDoesntSeeTheLastWake() {
+    registered()
+    tokens.recordWake("sync")
+    val next = "[\"https://api.openbeacon.net\",\"user-2\",\"device-3\"]"
+    assertNull(tokens.status(next).lastWakeAt)
+    assertNull(tokens.status(next).lastWakeKind)
+    tokens.confirm(next, null, pushAvailable = true)
+    assertNull(tokens.status(next).lastWakeAt)
+    assertNull(tokens.status(scope).lastWakeAt)
+  }
+
+  @Test
+  fun noWakeIsRecordedWithoutAnAccount() {
+    tokens.recordWake("sync")
+    assertEquals(PushTokenState(), store.state)
+    assertEquals(0, store.saves)
+  }
+
+  @Test
+  fun signingOutClearsTheLastWakeAndIgnoresLaterOnes() {
+    registered()
+    tokens.recordWake("sync")
+    tokens.forget(scope, autoInitEnabled = false)
+    assertEquals(PushTokenState(), store.state)
+    tokens.recordWake("locate")
+    assertEquals(PushTokenState(), store.state)
+    assertNull(tokens.status(scope).lastWakeAt)
+  }
+
+  @Test
+  fun theLastWakeSurvivesARestartAndTokenChanges() {
+    registered()
+    tokens.recordWake("locate")
+    val at = now
+    now += 1_000
+    val restarted = PushTokens(store) { now }
+    restarted.confirm(scope, "token-1", pushAvailable = true)
+    assertTrue(restarted.receive("token-2"))
+    restarted.confirm(scope, "token-2", pushAvailable = false)
+    val status = restarted.status(scope)
+    assertEquals(at, status.lastWakeAt)
+    assertEquals("locate", status.lastWakeKind)
+  }
+
+  @Test
+  fun forgettingWithoutAScopeClearsEverythingButLeavesTheServerAlone() {
+    registered()
+    tokens.confirm(scope, "token-1", pushAvailable = true)
+    tokens.recordWake("sync")
+    assertEquals(PushTokens.Forgotten(clearOnServer = false, deleteToken = true), tokens.forget(null, autoInitEnabled = false))
+    assertEquals(PushTokenState(), store.state)
+    assertEquals(PushTokens.Status(serverPush = null, registration = PushTokens.Registration.NO_TOKEN), tokens.status(scope))
+  }
 }

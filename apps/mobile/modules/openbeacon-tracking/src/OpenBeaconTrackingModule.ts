@@ -93,7 +93,14 @@ declare class OpenBeaconTrackingModule extends NativeModule<{
   listProvisionedEpochKeys(): ProvisionedEpochKeyInfo[];
   pendingPushToken(scope: string): string | null;
   confirmPushToken(scope: string, sent: string | null, pushAvailable: boolean): void;
-  forgetPushToken(scope: string): boolean;
+  pushStatus(scope: string): {
+    builtIn: boolean;
+    serverPush: boolean | null;
+    registration: "noToken" | "notSent" | "registered";
+    lastWakeAt: number | null;
+    lastWakeKind: "sync" | "locate" | null;
+  };
+  forgetPushToken(scope: string | null): boolean;
   startCapture(intervalMs?: number | null): Promise<void>;
   refreshCapture(): Promise<void>;
   stopCapture(): Promise<void>;

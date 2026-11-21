@@ -123,7 +123,11 @@ public class OpenBeaconTrackingModule: Module {
     Function("confirmPushToken") { (_: String, _: String?, _: Bool) in
     }
 
-    Function("forgetPushToken") { (_: String) -> Bool in
+    Function("pushStatus") { (_: String) -> [String: Any] in
+      ["builtIn": false, "serverPush": NSNull(), "registration": "noToken", "lastWakeAt": NSNull(), "lastWakeKind": NSNull()]
+    }
+
+    Function("forgetPushToken") { (_: String?) -> Bool in
       false
     }
 

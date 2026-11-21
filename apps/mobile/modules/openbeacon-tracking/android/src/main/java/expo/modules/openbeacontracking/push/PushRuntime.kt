@@ -52,7 +52,13 @@ object PushRuntime {
     if (tokens(context).receive(token, requested)) TrackingUploadService.start(context, TrackingUploadService.REASON_PUSH)
   }
 
-  fun forget(context: Context, scope: String): Boolean {
+  fun builtIn(context: Context): Boolean = options(context) != null
+
+  fun recordWake(context: Context, kind: String) {
+    tokens(context).recordWake(kind)
+  }
+
+  fun forget(context: Context, scope: String?): Boolean {
     val messaging = if (initialize(context)) FirebaseMessaging.getInstance() else null
     val forgotten = tokens(context).forget(scope, autoInitEnabled = messaging?.isAutoInitEnabled == true)
     if (messaging != null && forgotten.deleteToken) {

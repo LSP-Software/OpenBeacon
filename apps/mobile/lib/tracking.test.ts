@@ -59,7 +59,7 @@ const uploadsBatchedWithSync: boolean[] = [];
 const shownAccountNotices: Array<{ notices: unknown; round: { userId: string } }> = [];
 let pushHeldByServer = false;
 const pushConfirms: Array<{ scope: string; sent: string | null; pushAvailable: boolean }> = [];
-const pushForgets: string[] = [];
+const pushForgets: (string | null)[] = [];
 let queuedTransitions: {
   clientId: string;
   senderDeviceId: string;
@@ -585,7 +585,7 @@ mock.module("../modules/openbeacon-tracking/index.ts", () => ({
     confirmPushToken: (scope: string, sent: string | null, pushAvailable: boolean) => {
       pushConfirms.push({ scope, sent, pushAvailable });
     },
-    forgetPushToken: (scope: string) => {
+    forgetPushToken: (scope: string | null) => {
       pushForgets.push(scope);
       const held = pushHeldByServer;
       pendingPushToken = null;
@@ -944,6 +944,12 @@ describe("tracking service", () => {
       expect(uploadCalls).toEqual([]);
       expect(pushConfirms).toEqual([]);
       expect(shownAccountNotices).toEqual([]);
+    });
+
+    test("a phone whose registration is already gone still forgets its push token", async () => {
+      registeredDevice = null;
+      await prepareTrackingSignOut();
+      expect(pushForgets).toEqual([null]);
     });
 
     test("signing out sends no null when the server never had the token", async () => {
