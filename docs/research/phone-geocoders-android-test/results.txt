@@ -1,0 +1,47 @@
+isPresent=true
+CASE Tesco Barnet | box=none | 1058ms | n=1
+  R feature=64-66 premises=null subThoroughfare=64-66 thoroughfare=High Street subLocality=Chipping Barnet locality=null subAdmin=Greater London admin=England postal=EN5 5SJ country=GB lat=51.6531509 lon=-0.19976249999999998 line0=64-66 High St, Chipping Barnet, Barnet EN5 5SJ, UK
+CASE Tesco Barnet | box=51.5,-0.5,52.0,0.0 | 104ms | n=1
+  R feature=64-66 premises=null subThoroughfare=64-66 thoroughfare=High Street subLocality=Chipping Barnet locality=null subAdmin=Greater London admin=England postal=EN5 5SJ country=GB lat=51.6531509 lon=-0.19976249999999998 line0=64-66 High St, Chipping Barnet, Barnet EN5 5SJ, UK
+CASE Tesco | box=51.5,-0.5,52.0,0.0 | 111ms | n=0
+CASE Sainsbury's | box=51.5,-0.5,52.0,0.0 | 107ms | n=0
+CASE Tesco Extra | box=53.25,-2.5,53.75,-2.0 | 106ms | n=0
+CASE Underhill School | box=51.5,-0.5,52.0,0.0 | 103ms | n=1
+  R feature=215 premises=null subThoroughfare=215 thoroughfare=Mays Lane subLocality=null locality=null subAdmin=Greater London admin=England postal=EN5 2LZ country=GB lat=51.645182299999995 lon=-0.2063112 line0=215 Mays Ln, Barnet EN5 2LZ, UK
+CASE Underhill School Barnet | box=none | 74ms | n=1
+  R feature=215 premises=null subThoroughfare=215 thoroughfare=Mays Lane subLocality=null locality=null subAdmin=Greater London admin=England postal=EN5 2LZ country=GB lat=51.645182299999995 lon=-0.2063112 line0=215 Mays Ln, Barnet EN5 2LZ, UK
+CASE St John's Church of England Primary School Whetstone | box=none | 106ms | n=1
+  R feature=Whetstone premises=null subThoroughfare=null thoroughfare=null subLocality=Whetstone locality=null subAdmin=Greater London admin=England postal=null country=GB lat=51.6300102 lon=-0.1747954 line0=Whetstone, London, UK
+CASE primary school | box=51.5,-0.5,52.0,0.0 | 53ms | n=0
+CASE Barnet Hospital | box=none | 128ms | n=1
+  R feature=Wellhouse Lane premises=null subThoroughfare=null thoroughfare=Wellhouse Lane subLocality=null locality=null subAdmin=Greater London admin=England postal=EN5 3DJ country=GB lat=51.6504237 lon=-0.2146381 line0=Wellhouse Ln, Barnet EN5 3DJ, UK
+CASE British Museum | box=none | 101ms | n=1
+  R feature=Great Russell Street premises=null subThoroughfare=null thoroughfare=Great Russell Street subLocality=null locality=null subAdmin=Greater London admin=England postal=WC1B 3DG country=GB lat=51.5194133 lon=-0.1269566 line0=Great Russell St, London WC1B 3DG, UK
+CASE EN5 3DJ | box=none | 97ms | n=1
+  R feature=EN5 3DJ premises=null subThoroughfare=null thoroughfare=null subLocality=null locality=null subAdmin=Greater London admin=England postal=EN5 3DJ country=GB lat=51.6506433 lon=-0.2146469 line0=Barnet EN5 3DJ, UK
+CASE SW1A 1AA | box=none | 92ms | n=1
+  R feature=SW1A 1AA premises=null subThoroughfare=null thoroughfare=null subLocality=null locality=null subAdmin=Greater London admin=England postal=SW1A 1AA country=GB lat=51.501008999999996 lon=-0.14158759999999998 line0=London SW1A 1AA, UK
+CASE M1 1AE | box=none | 112ms | n=1
+  R feature=M1 1AE premises=null subThoroughfare=null thoroughfare=Newton Street subLocality=null locality=null subAdmin=Greater Manchester admin=England postal=M1 1AE country=GB lat=53.4834714 lon=-2.2311842 line0=Newton St, Manchester M1 1AE, UK
+CASE EN5 | box=none | 67ms | n=1
+  R feature=EN5 premises=null subThoroughfare=null thoroughfare=null subLocality=null locality=null subAdmin=null admin=England postal=EN5 country=GB lat=51.6569023 lon=-0.2067639 line0=Barnet EN5, UK
+CASE 10 Downing Street, London | box=none | 117ms | n=1
+  R feature=10 premises=null subThoroughfare=10 thoroughfare=Downing Street subLocality=null locality=null subAdmin=Greater London admin=England postal=SW1A 2AA country=GB lat=51.503339499999996 lon=-0.1275662 line0=10 Downing St, London SW1A 2AA, UK
+CASE 221B Baker Street | box=none | 105ms | n=1
+  R feature=Baker Street premises=null subThoroughfare=null thoroughfare=Baker Street subLocality=null locality=null subAdmin=Greater London admin=England postal=null country=GB lat=51.5205631 lon=-0.1568041 line0=Baker St, London, UK
+CASE 12 Wood Street | box=51.5,-0.5,52.0,0.0 | 98ms | n=1
+  R feature=12 premises=null subThoroughfare=12 thoroughfare=Wood Street subLocality=null locality=null subAdmin=Greater London admin=England postal=E17 3HT country=GB lat=51.591263899999994 lon=-0.0050869 line0=12 Wood St, London E17 3HT, UK
+CASE High Street | box=none | 94ms | n=0
+CASE High Street | box=51.5,-0.5,52.0,0.0 | 81ms | n=0
+CASE High Street | box=53.25,-2.5,53.75,-2.0 | 69ms | n=3
+  R feature=High Street premises=null subThoroughfare=null thoroughfare=High Street subLocality=null locality=Tyldesley subAdmin=Greater Manchester admin=England postal=null country=GB lat=53.514544 lon=-2.4694598 line0=High St, Tyldesley, Manchester, UK
+  R feature=High Street premises=null subThoroughfare=null thoroughfare=High Street subLocality=null locality=null subAdmin=Lancashire admin=England postal=null country=GB lat=53.7391458 lon=-2.3860543 line0=High St, United Kingdom
+  R feature=High Street premises=null subThoroughfare=null thoroughfare=High Street subLocality=null locality=null subAdmin=Greater Manchester admin=England postal=null country=GB lat=53.4842479 lon=-2.2378783 line0=High St, Manchester, UK
+CASE Eden Project | box=none | 102ms | n=1
+  R feature=Bodelva premises=null subThoroughfare=null thoroughfare=null subLocality=null locality=Bodelva subAdmin=Cornwall admin=England postal=PL24 2SG country=GB lat=50.3601344 lon=-4.7447178 line0=Bodelva, Par PL24 2SG, UK
+CASE Eden Project | box=51.5,-0.5,52.0,0.0 | 85ms | n=0
+CASE Eden Project | box=50.0,-5.0,50.5,-4.5 | 84ms | n=1
+  R feature=Bodelva premises=null subThoroughfare=null thoroughfare=null subLocality=null locality=Bodelva subAdmin=Cornwall admin=England postal=PL24 2SG country=GB lat=50.3601344 lon=-4.7447178 line0=Bodelva, Par PL24 2SG, UK
+CASE Tesco Barnet | box=53.25,-2.5,53.75,-2.0 | 107ms | n=0
+CASE asdkjhqwe | box=none | 98ms | n=0
+DONE
