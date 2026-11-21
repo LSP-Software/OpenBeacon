@@ -45,7 +45,6 @@ import { LiveMapStackSheet } from "./LiveMapStackSheet.tsx";
 import { useLiveMapEdgeMarkers } from "./useLiveMapEdgeMarkers.ts";
 import { useLiveMapCamera } from "./useLiveMapCamera.ts";
 import { useLiveMapPinGroups } from "./useLiveMapPinGroups.ts";
-import { useLiveMapSelection } from "./useLiveMapSelection.ts";
 import { useNativeMapStyle } from "./useNativeMapStyle.ts";
 
 export const NativeMap = ({
@@ -197,22 +196,14 @@ export const NativeMap = ({
     topInset: insets.top + 48,
   });
   const { edgeMarkers, mapRef } = edge;
-  const selection = useLiveMapSelection({
-    selectedDeviceId,
-    onSelectDeviceId,
-    isMarkerReplaced: (deviceId) => {
-      const group = pins.groups.find((item) =>
-        item.members.some((member) => member.deviceId === deviceId),
-      );
-      return group !== undefined && (group.members.length > 1 || edge.isEdgeMarker(group.id));
-    },
-  });
+  const clearSelection = () => onSelectDeviceId?.(null);
+  const selectDevice = (deviceId: string) => onSelectDeviceId?.(deviceId);
   const closeSheets = () => {
     setSelectedPlaceKey(null);
     setStackSheetDeviceIds(null);
     setMissingUserId(null);
     setGroupMenuOpen(false);
-    selection.clearSelectionFromReact();
+    clearSelection();
   };
   const openGroupMenu = () => {
     closeSheets();
@@ -230,7 +221,7 @@ export const NativeMap = ({
     mapRevision: map.mapRevision,
     markers,
     onClearSelection: closeSheets,
-    onSelectDevice: selection.handleAnnotationSelected,
+    onSelectDevice: selectDevice,
     pmtilesUrl,
     reduceMotion,
     selectedMarker,
@@ -250,12 +241,6 @@ export const NativeMap = ({
     maybeSuspendFollowFromRegionChange,
     zoomIntoStack,
   } = camera;
-  const {
-    annotationRemountTokens,
-    clearSelectionFromReact,
-    handleAnnotationDeselected,
-    handleAnnotationSelected,
-  } = selection;
   const displayOrder = (members: readonly LiveMapMarker[]) =>
     [...members].sort(
       (first, second) =>
@@ -345,7 +330,7 @@ export const NativeMap = ({
     setGroupMenuOpen(false);
     const zoomLevel = liveMapStackExpansionZoom({ group, zoom: pins.getZoom() });
     if (zoomLevel === null) {
-      clearSelectionFromReact();
+      clearSelection();
       setStackSheetDeviceIds(group.members.map((member) => member.deviceId));
       return;
     }
@@ -374,22 +359,18 @@ export const NativeMap = ({
     const annotationProps = {
       ...motion,
       marker,
-      onDeselected: () => {
-        handleAnnotationDeselected(marker.deviceId);
-      },
       onSelected: () => {
         pinPressAtRef.current = Date.now();
         setSelectedPlaceKey(null);
         setStackSheetDeviceIds(null);
         setGroupMenuOpen(false);
-        handleAnnotationSelected(marker.deviceId);
+        selectDevice(marker.deviceId);
       },
     };
-    const key = `${marker.deviceId}:${annotationRemountTokens[marker.deviceId] ?? 0}`;
     return marker.isSelf ? (
-      <SelfLiveMapPointAnnotation key={key} {...annotationProps} />
+      <SelfLiveMapPointAnnotation key={marker.deviceId} {...annotationProps} />
     ) : (
-      <LiveMapPointAnnotation key={key} headingDegrees={null} {...annotationProps} />
+      <LiveMapPointAnnotation key={marker.deviceId} headingDegrees={null} {...annotationProps} />
     );
   };
 
@@ -851,7 +832,7 @@ export const NativeMap = ({
           onHeightChange={(height) => {
             edge.onSheetHeightChange(height);
           }}
-          onDismiss={clearSelectionFromReact}
+          onDismiss={clearSelection}
           onRequestUpdate={
             onRequestUpdate &&
             (selectedPersonDevices.length === 0 ||
@@ -879,7 +860,7 @@ export const NativeMap = ({
           }}
           onSelectDevice={(deviceId) => {
             setStackSheetDeviceIds(null);
-            handleAnnotationSelected(deviceId);
+            selectDevice(deviceId);
           }}
         />
       ) : missingPerson ? (

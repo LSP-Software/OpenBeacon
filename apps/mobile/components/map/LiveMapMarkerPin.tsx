@@ -1,6 +1,6 @@
 import { ClockIcon, EyeOffIcon, HourglassIcon, PauseIcon } from "lucide-react-native";
 import { useEffect, useEffectEvent, useState } from "react";
-import { View } from "react-native";
+import { Platform, View } from "react-native";
 import Svg, { Circle, Defs, Path, RadialGradient, Stop } from "react-native-svg";
 import { useLocationStale } from "../../hooks/useLocationStale.ts";
 import { cn } from "../../lib/cn.ts";
@@ -134,6 +134,30 @@ export const LiveMapMarkerPin = ({
             <Path d={SPOTLIGHT_PATH} fill="url(#selfHeadingSpotlight)" />
           </Svg>
         </View>
+      ) : null}
+      {Platform.OS === "android" && onBitmapContentChange ? (
+        <Svg
+          width={52}
+          height={52}
+          pointerEvents="none"
+          style={{ position: "absolute", left: size / 2 - 26, top: size / 2 - 24 }}
+        >
+          <Defs>
+            <RadialGradient
+              id="pinShadow"
+              gradientUnits="userSpaceOnUse"
+              cx={26}
+              cy={26}
+              rx={26}
+              ry={26}
+            >
+              <Stop offset="77%" stopColor="#000000" stopOpacity="0.2" />
+              <Stop offset="88%" stopColor="#000000" stopOpacity="0.1" />
+              <Stop offset="100%" stopColor="#000000" stopOpacity="0" />
+            </RadialGradient>
+          </Defs>
+          <Circle cx={26} cy={26} r={26} fill="url(#pinShadow)" />
+        </Svg>
       ) : null}
       <View
         collapsable={false}

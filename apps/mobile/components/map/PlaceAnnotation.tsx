@@ -30,9 +30,8 @@ export const PlaceAnnotation = ({
       lngLat={[place.longitude, place.latitude]}
       anchor="bottom"
       draggable={false}
-      {...(Platform.OS === "android"
-        ? { onPress: onSelected }
-        : { onSelect: onSelected, title: accessibilityLabel })}
+      onPress={onSelected}
+      {...(Platform.OS === "ios" ? { title: accessibilityLabel } : {})}
     >
       <View
         {...(Platform.OS === "ios"
@@ -40,7 +39,11 @@ export const PlaceAnnotation = ({
           : { importantForAccessibility: "no-hide-descendants" as const })}
         collapsable={false}
       >
-        <PlacePin emoji={place.emoji} selected={selected} />
+        <PlacePin
+          drawnAsBitmap={Platform.OS === "android"}
+          emoji={place.emoji}
+          selected={selected}
+        />
       </View>
     </ViewAnnotation>
   );

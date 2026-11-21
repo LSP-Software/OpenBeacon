@@ -153,7 +153,6 @@ test.each([
       <LiveMapPointAnnotation
         headingDegrees={null}
         marker={marker(overrides)}
-        onDeselected={() => {}}
         onSelected={() => {}}
       />,
       "accessible-view",
@@ -167,12 +166,7 @@ test("an Android map pin, drawn into the map as a picture, hides its views from 
   root = createRoot();
   await act(async () =>
     root?.render(
-      <LiveMapPointAnnotation
-        headingDegrees={null}
-        marker={marker({})}
-        onDeselected={() => {}}
-        onSelected={() => {}}
-      />,
+      <LiveMapPointAnnotation headingDegrees={null} marker={marker({})} onSelected={() => {}} />,
     ),
   );
   expect(root.container.queryAll((item) => item.type === "accessible-view")).toEqual([]);

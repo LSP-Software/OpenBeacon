@@ -9,9 +9,7 @@ import {
   createLiveMapMarkerFixture,
   createMapLibreMockModule,
   emitNativeMapAndroidMarkerTap,
-  emitRemovedAnnotationDeselected,
-  emitNativeMapAnnotationDeselected,
-  emitNativeMapAnnotationSelected,
+  emitNativeMapIosAnnotationTap,
   emitNativeMapDidFailLoadingMap,
   emitNativeMapLog,
   emitNativeMapDidFinishLoadingStyle,
@@ -20,7 +18,6 @@ import {
   emitNativeMapRegionDidChange,
   emitNativeMapRegionIsChanging,
   emitNativeMapShowEveryone,
-  getNativeMapAnnotationMountCount,
   getNativeMapAnnotationRefreshCalls,
   getNativeMapAnnotationSelectedProp,
   getNativeMapCameraCommands,
@@ -389,6 +386,10 @@ mock.module("./LiveMapStackPin.tsx", () => ({
     React.createElement("live-map-stack-pin", { count: members.length }),
 }));
 
+mock.module("./PlacePin.tsx", () => ({
+  PlacePin: () => React.createElement("place-pin"),
+}));
+
 mock.module("./LiveMapMarkerPin.tsx", () => ({
   LiveMapMarkerPin: ({ onBitmapContentChange }: { onBitmapContentChange?: () => void }) => {
     if (onBitmapContentChange) {
@@ -676,36 +677,6 @@ describe("NativeMap over a fake MapLibre", () => {
       expect(nativePins()).toBe(1);
     },
   );
-
-  test("keeps the selection when a native annotation is replaced by an edge pin", async () => {
-    const selections: Array<string | null> = [];
-    const marker = createLiveMapMarkerFixture({ userId: "alice" });
-    setNativeMapProjectedPoint([-10, 300]);
-    await renderNativeMap({
-      markers: [marker],
-      selectedDeviceId: "alice",
-      onSelectDeviceId: (id) => selections.push(id),
-    });
-    const views =
-      root?.container.queryAll(
-        (instance) => instance.type === "view" && typeof instance.props["onLayout"] === "function",
-      ) ?? [];
-    await act(async () => {
-      (views[0]?.props["onLayout"] as ((event: unknown) => void) | undefined)?.({
-        nativeEvent: { layout: { width: 400, height: 600, x: 0, y: 0 } },
-      });
-      (views[1]?.props["onLayout"] as ((event: unknown) => void) | undefined)?.({
-        nativeEvent: { layout: { width: 44, height: 96, x: 344, y: 56 } },
-      });
-      await new Promise((resolve) => setTimeout(resolve, 60));
-    });
-    expect(getRenderedOutput()).toContain("Go to Alice");
-    await act(async () => {
-      emitRemovedAnnotationDeselected("alice");
-      await Promise.resolve();
-    });
-    expect(selections).toEqual([]);
-  });
 
   test("merges people at the same off-screen position into one chip", async () => {
     setNativeMapProjectedPoint([-100, 300]);
@@ -2399,9 +2370,9 @@ describe("NativeMap over a fake MapLibre", () => {
 
     expect(getNativeMapMountedAnnotationIds().sort()).toEqual(["alice", "bob"]);
 
-    emitNativeMapAnnotationSelected("alice");
+    emitNativeMapIosAnnotationTap("alice");
     emitNativeMapPress();
-    emitNativeMapAnnotationSelected("bob");
+    emitNativeMapIosAnnotationTap("bob");
 
     expect(selections).toEqual(["alice", null, "bob"]);
   });
@@ -2532,51 +2503,34 @@ describe("NativeMap over a fake MapLibre", () => {
     expect(stackRefreshes()).toBeGreaterThan(refreshesWithTwo);
   });
 
-  test("clears selection when iOS emits annotation deselect", async () => {
-    const selections: Array<string | null> = [];
+  test("iOS toggles a tapped person, switches people in one tap and closes on a map press", async () => {
     const alice = createLiveMapMarkerFixture({ userId: "alice" });
-
-    await renderNativeMap({
-      markers: [alice],
-      onSelectDeviceId: (userId) => {
-        selections.push(userId);
-      },
-      selectedDeviceId: "alice",
+    const bob = createLiveMapMarkerFixture({
+      latitude: 40,
+      longitude: 20,
+      userId: "bob",
+      name: "Bob",
     });
-
-    emitNativeMapAnnotationDeselected("alice");
-    await flushEffects();
-
-    expect(selections).toEqual([null]);
-  });
-
-  test("map-background press remounts the prior annotation so the next iOS tap selects", async () => {
-    const alice = createLiveMapMarkerFixture({ userId: "alice" });
     const selectionHistory: Array<string | null> = [];
+    await renderSelectableNativeMap([alice, bob], selectionHistory);
 
-    await renderSelectableNativeMap([alice], selectionHistory);
-    await act(async () => {
-      emitNativeMapAnnotationSelected("alice");
-      await Promise.resolve();
-    });
-    await flushEffects();
-    expect(selectionHistory).toEqual(["alice"]);
-    expect(getNativeMapAnnotationMountCount("alice")).toBe(1);
+    const tap = async (id: string) => {
+      await act(async () => {
+        emitNativeMapIosAnnotationTap(id);
+        await Promise.resolve();
+      });
+      await flushEffects();
+    };
+    await tap("alice");
+    await tap("alice");
+    await tap("alice");
+    await tap("bob");
+    expect(selectionHistory).toEqual(["alice", null, "alice", "bob"]);
 
-    await act(async () => {
-      emitNativeMapPress();
-      await Promise.resolve();
-    });
+    await act(async () => emitNativeMapPress([300, 400]));
     await flushEffects();
-    expect(selectionHistory).toEqual(["alice", null]);
-    expect(getNativeMapAnnotationMountCount("alice")).toBe(2);
-
-    await act(async () => {
-      emitNativeMapAnnotationSelected("alice");
-      await Promise.resolve();
-    });
-    await flushEffects();
-    expect(selectionHistory).toEqual(["alice", null, "alice"]);
+    await tap("bob");
+    expect(selectionHistory).toEqual(["alice", null, "alice", "bob", null, "bob"]);
   });
 
   test("does not pass a controlled selected prop to annotations", async () => {
@@ -3237,7 +3191,7 @@ describe("NativeMap over a fake MapLibre", () => {
 
       await press(groupsButton());
       expect(findOne("live-map-group-menu")).toBeDefined();
-      await act(async () => emitNativeMapAnnotationSelected("alice"));
+      await act(async () => emitNativeMapIosAnnotationTap("alice"));
       expect(findOne("live-map-group-menu")).toBeUndefined();
 
       testPlatform.OS = "android";

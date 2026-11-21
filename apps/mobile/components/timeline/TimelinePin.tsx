@@ -45,6 +45,7 @@ export const TimelinePin = ({
           ? { accessible: true, accessibilityLabel }
           : { importantForAccessibility: "no-hide-descendants" as const })}
         collapsable={false}
+        style={{ padding: 4 }}
       >
         <LiveMapMarkerPin
           fillColor={color}

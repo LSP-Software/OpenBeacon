@@ -13,13 +13,11 @@ export const SelfLiveMapPointAnnotation = ({
   arrival,
   gatherTo,
   marker,
-  onDeselected,
   onSelected,
 }: {
   arrival?: LiveMapPinOffset | undefined;
   gatherTo?: LiveMapPinOffset | undefined;
   marker: LiveMapMarker;
-  onDeselected: () => void;
   onSelected: () => void;
 }) => {
   const headingDegrees = useSelfDeviceHeading(true);
@@ -30,7 +28,6 @@ export const SelfLiveMapPointAnnotation = ({
       gatherTo={gatherTo}
       headingDegrees={headingDegrees}
       marker={marker}
-      onDeselected={onDeselected}
       onSelected={onSelected}
     />
   );
@@ -41,14 +38,12 @@ export const LiveMapPointAnnotation = ({
   gatherTo,
   headingDegrees,
   marker,
-  onDeselected,
   onSelected,
 }: {
   arrival?: LiveMapPinOffset | undefined;
   gatherTo?: LiveMapPinOffset | undefined;
   headingDegrees: number | null;
   marker: LiveMapMarker;
-  onDeselected: () => void;
   onSelected: () => void;
 }) => {
   const annotationRef = useRef<ViewAnnotationRef>(null);
@@ -94,9 +89,8 @@ export const LiveMapPointAnnotation = ({
       id={marker.deviceId}
       lngLat={[marker.longitude, marker.latitude]}
       anchor="center"
-      {...(Platform.OS === "android"
-        ? { onPress: onSelected }
-        : { onDeselect: onDeselected, onSelect: onSelected, title: accessibilityLabel })}
+      onPress={onSelected}
+      {...(Platform.OS === "ios" ? { title: accessibilityLabel } : {})}
     >
       <View
         {...(Platform.OS === "ios"
