@@ -3,7 +3,7 @@ import { placeEmojiSchema, placeNameSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
-import { LocateFixedIcon, XIcon } from "lucide-react-native";
+import { LocateFixedIcon, SearchIcon, XIcon } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -41,6 +41,8 @@ import {
   groupPlacesQueryOptions,
   savePlace,
 } from "../lib/placeSync.ts";
+import { placeSearchState } from "../lib/placeSearch.ts";
+import { loadTrackingModule } from "../lib/trackingModule.ts";
 import { syncGroupPlaces } from "../lib/placeBackgroundSync.ts";
 import { userMessage } from "../lib/userMessage.ts";
 import { thisDeviceNoun } from "../lib/thisDeviceNoun.ts";
@@ -189,6 +191,12 @@ const PlaceEditor = ({
   const [busy, setBusy] = useState<"deleting" | "saving" | null>(null);
   const busyRef = useRef(false);
   const [movedByUser, setMovedByUser] = useState(false);
+  const [searchAvailable, setSearchAvailable] = useState(true);
+  const [searchText, setSearchText] = useState("");
+  const [search, setSearch] = useState<
+    ReturnType<typeof placeSearchState> | { kind: "searching" } | null
+  >(null);
+  const searchRound = useRef(0);
   const unsaved = place
     ? center !== null &&
       !isPlaceEditUnchanged({
@@ -246,6 +254,43 @@ const PlaceEditor = ({
     setCenter({ latitude: selfLocation.latitude, longitude: selfLocation.longitude });
     cameraRef.current?.jumpTo({ center: cameraCenterFor(selfLocation, 16), zoom: 16 });
   }, [center, place, selfLocation]);
+
+  useEffect(() => {
+    let active = true;
+    void loadTrackingModule().then((tracking) => {
+      if (active) setSearchAvailable(tracking?.isPlaceSearchAvailable() ?? false);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const runSearch = async () => {
+    const query = searchText.trim();
+    if (query === "" || !searchAvailable) return;
+    const round = ++searchRound.current;
+    setSearch({ kind: "searching" });
+    const tracking = await loadTrackingModule();
+    const outcome = tracking
+      ? await tryCatch(tracking.searchPlaces(query, null))
+      : { data: { status: "unavailable" as const }, error: null };
+    if (round !== searchRound.current) return;
+    const next = outcome.error ? { kind: "error" as const } : placeSearchState(outcome.data);
+    if (next.kind === "unavailable") setSearchAvailable(false);
+    if (next.kind === "move") {
+      const atZoom = Math.max(zoom, 16);
+      setMovedByUser(true);
+      setCenter({ latitude: next.latitude, longitude: next.longitude });
+      cameraRef.current?.flyTo({ center: cameraCenterFor(next, atZoom), zoom: atZoom });
+    }
+    setSearch(next);
+  };
+
+  const clearSearch = () => {
+    searchRound.current += 1;
+    setSearchText("");
+    setSearch(null);
+  };
 
   const refreshPlaces = (quietPlaceIds: readonly string[]) =>
     Promise.all([
@@ -350,6 +395,7 @@ const PlaceEditor = ({
     );
   }
 
+  const title = place ? `Edit ${place.name}` : `Add place to ${groupName}`;
   const circleDiameter = center
     ? (2 * radiusMeters) / metersPerPixel({ latitude: center.latitude, zoom })
     : 0;
@@ -406,39 +452,100 @@ const PlaceEditor = ({
         </View>
       </View>
       <View
-        className="absolute left-4 right-4 flex-row items-center gap-3"
+        pointerEvents="box-none"
+        className="absolute left-4 right-4 gap-3"
         style={{ top: insets.top + 12 }}
       >
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Close"
-          onPress={onClose}
-          className="size-12 items-center justify-center rounded-full bg-card shadow-md shadow-black/15"
-        >
-          <Icon as={XIcon} size={22} className="text-foreground" />
-        </Pressable>
-        <View className="shrink rounded-full bg-card px-5 py-3 shadow-md shadow-black/15">
-          <Text className="text-foreground font-bold" numberOfLines={1}>
-            {place ? `Edit ${place.name}` : `Add place to ${groupName}`}
-          </Text>
+        <View className="flex-row items-center gap-3">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close"
+            onPress={onClose}
+            className="size-12 items-center justify-center rounded-full bg-card shadow-md shadow-black/15"
+          >
+            <Icon as={XIcon} size={22} className="text-foreground" />
+          </Pressable>
+          {step === 1 ? (
+            <View
+              className={cn(
+                "h-12 flex-1 flex-row items-center gap-2 rounded-full bg-card pl-4 shadow-md shadow-black/15",
+                searchText === "" && "pr-4",
+                !searchAvailable && "opacity-70",
+              )}
+            >
+              {search?.kind === "searching" ? (
+                <ActivityIndicator accessibilityLabel="Searching" />
+              ) : (
+                <Icon as={SearchIcon} size={20} className="text-tertiary" />
+              )}
+              <TextInput
+                accessibilityLabel="Search for an address"
+                accessibilityState={{ disabled: !searchAvailable }}
+                editable={searchAvailable}
+                value={searchText}
+                onChangeText={(text) => {
+                  setSearchText(text);
+                  if (search?.kind === "noResults" || search?.kind === "error") setSearch(null);
+                }}
+                onSubmitEditing={() => void runSearch()}
+                placeholder={
+                  searchAvailable
+                    ? "Search address or postcode"
+                    : `Address search isn’t available on this ${thisDeviceNoun()}`
+                }
+                returnKeyType="search"
+                autoCorrect={false}
+                numberOfLines={1}
+                className="flex-1 py-0 text-base text-foreground"
+              />
+              {searchText !== "" ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear search"
+                  onPress={clearSearch}
+                  className="h-12 items-center justify-center pl-1 pr-4"
+                >
+                  <Icon as={XIcon} size={18} className="text-tertiary" />
+                </Pressable>
+              ) : null}
+            </View>
+          ) : (
+            <View className="shrink rounded-full bg-card px-5 py-3 shadow-md shadow-black/15">
+              <Text className="text-foreground font-bold" numberOfLines={1}>
+                {title}
+              </Text>
+            </View>
+          )}
         </View>
+        {step === 1 && (search?.kind === "noResults" || search?.kind === "error") ? (
+          <View className="rounded-2xl bg-card px-4 py-3 shadow-md shadow-black/15">
+            <Text
+              accessibilityLiveRegion="polite"
+              accessibilityRole="alert"
+              className="text-foreground"
+            >
+              {search.kind === "noResults"
+                ? "Couldn’t find that. Try a postcode, or move the map to the spot."
+                : "Search isn’t working right now. You can still move the map to the spot."}
+            </Text>
+          </View>
+        ) : null}
+        {selfLocation ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Go to current location"
+            onPress={() =>
+              cameraRef.current?.flyTo({
+                center: cameraCenterFor(selfLocation, Math.max(zoom, 15)),
+                zoom: Math.max(zoom, 15),
+              })
+            }
+            className="size-12 items-center justify-center self-end rounded-full bg-card shadow-md shadow-black/15"
+          >
+            <Icon as={LocateFixedIcon} size={22} className="text-foreground" />
+          </Pressable>
+        ) : null}
       </View>
-      {selfLocation ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Go to current location"
-          onPress={() =>
-            cameraRef.current?.flyTo({
-              center: cameraCenterFor(selfLocation, Math.max(zoom, 15)),
-              zoom: Math.max(zoom, 15),
-            })
-          }
-          className="absolute right-4 size-12 items-center justify-center rounded-full bg-card shadow-md shadow-black/15"
-          style={{ top: insets.top + 76 }}
-        >
-          <Icon as={LocateFixedIcon} size={22} className="text-foreground" />
-        </Pressable>
-      ) : null}
       <KeyboardAvoidingView
         behavior="padding"
         pointerEvents="box-none"
@@ -449,7 +556,9 @@ const PlaceEditor = ({
             accessibilityLabel={step === 1 ? "Where is it?" : "Name it"}
             header={
               <View className="gap-1">
-                <Text className="text-secondary text-sm font-semibold">Step {step} of 2</Text>
+                <Text className="text-secondary text-sm font-semibold" numberOfLines={1}>
+                  {step === 1 ? `${title} · Step 1 of 2` : "Step 2 of 2"}
+                </Text>
                 <Text className="text-foreground text-2xl font-bold">
                   {step === 1 ? "Where is it?" : "Name it"}
                 </Text>
@@ -458,11 +567,22 @@ const PlaceEditor = ({
           >
             {step === 1 ? (
               <View className="gap-4 pt-2">
-                <Text className="text-tertiary">
-                  {center
-                    ? "Move the map so the pin sits on the place."
-                    : "Finding your location. You can also move the map to the place."}
-                </Text>
+                {search?.kind === "move" ? (
+                  <View className="rounded-xl bg-primary-soft px-4 py-3">
+                    <Text accessibilityLiveRegion="polite" className="text-foreground">
+                      Moved to <Text className="font-bold text-foreground">{search.label}</Text>.
+                      Move the map if it isn’t quite right.
+                    </Text>
+                  </View>
+                ) : (
+                  <Text accessibilityLiveRegion="polite" className="text-tertiary">
+                    {!searchAvailable
+                      ? `Your ${thisDeviceNoun()} has no address lookup service. Move the map to the spot instead.`
+                      : center
+                        ? "Search, or move the map so the pin sits on the place."
+                        : "Finding your location. You can also search, or move the map to the place."}
+                  </Text>
+                )}
                 <PlaceSizeSlider radiusMeters={radiusMeters} onChange={setRadiusMeters} />
                 <Button disabled={!center} onPress={() => setStep(2)}>
                   <Text>Next</Text>

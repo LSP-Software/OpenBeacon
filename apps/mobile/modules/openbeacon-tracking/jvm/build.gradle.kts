@@ -34,6 +34,7 @@ sourceSets {
       exclude("**/SharingResumeWorker.kt")
       exclude("**/BatteryReader.kt")
       exclude("**/Notices.kt")
+      exclude("**/PlaceSearch.kt")
       exclude("**/SecureEpochKeyStore.kt")
       exclude("**/Base64Codec.kt")
       exclude("**/CiphertextQueueEntity.kt")
