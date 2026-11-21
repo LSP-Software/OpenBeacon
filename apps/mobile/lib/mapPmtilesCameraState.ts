@@ -1,4 +1,4 @@
-import { liveMapMarkersCenter } from "./fitLiveMapMarkers.ts";
+import { liveMapMarkersCenter, SINGLE_MARKER_FIT_ZOOM } from "./fitLiveMapMarkers.ts";
 
 export const INITIAL_MAP_CAMERA = {
   centerCoordinate: [0, 0] as [number, number],
@@ -40,7 +40,7 @@ export const mapCameraAfterFittingMarkers = ({
     return mapCameraFromRegionChange({
       latitude: firstMarker.latitude,
       longitude: firstMarker.longitude,
-      zoomLevel: 14,
+      zoomLevel: SINGLE_MARKER_FIT_ZOOM,
     });
   }
 

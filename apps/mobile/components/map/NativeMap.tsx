@@ -52,6 +52,7 @@ export const NativeMap = ({
   devices = [],
   focusPlaceId = null,
   groupOptions = null,
+  locationsLoading = false,
   markers = [],
   now = 0,
   onFocusPlaceHandled,
@@ -69,6 +70,7 @@ export const NativeMap = ({
   devices?: readonly (MapMemberDevice & { paused: boolean; unreadable: boolean })[];
   focusPlaceId?: string | null;
   groupOptions?: readonly MapGroupOption[] | null;
+  locationsLoading?: boolean;
   markers?: readonly LiveMapMarker[];
   now?: number;
   onFocusPlaceHandled?: () => void;
@@ -219,6 +221,7 @@ export const NativeMap = ({
   const camera = useLiveMapCamera({
     bottomOverlayHeight: trayPeople ? trayHeight : 0,
     edge,
+    locationsLoading,
     mapStyle,
     mapRevision: map.mapRevision,
     markers,

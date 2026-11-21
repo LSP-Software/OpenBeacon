@@ -417,6 +417,11 @@ const MapScreen = () => {
           if (!selfUserId) return;
           setMapGroupHidden({ groupId, hidden, userId: selfUserId });
         }}
+        locationsLoading={
+          trackingStatus.membership === "loading" ||
+          (trackingStatus.membership === "loaded" &&
+            (groups ?? []).some((group) => trackingStatus.groups[group.id] === undefined))
+        }
         markers={markers}
         now={now}
         people={people}

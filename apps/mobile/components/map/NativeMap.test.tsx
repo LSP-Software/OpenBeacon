@@ -1505,6 +1505,40 @@ describe("NativeMap over a fake MapLibre", () => {
     ).toHaveLength(1);
   });
 
+  test("jumps to the first location and frames people whose locations load later", async () => {
+    const self = createLiveMapMarkerFixture({
+      isSelf: true,
+      latitude: 51.5,
+      longitude: -0.12,
+      userId: "self",
+    });
+    const alice = createLiveMapMarkerFixture({
+      latitude: 50.8,
+      longitude: -1.1,
+      userId: "alice",
+    });
+
+    await renderNativeMap({ locationsLoading: true, markers: [self] });
+    await finishLoadingStyle();
+    await flushEffects();
+    expect(getNativeMapCameraCommands()[0]).toMatchObject({
+      type: "setCamera",
+      stop: { animationDuration: 0, centerCoordinate: [-0.12, 51.5], zoomLevel: 14 },
+    });
+
+    await renderNativeMap({ locationsLoading: false, markers: [self, alice] });
+    await flushEffects();
+    expect(getNativeMapCameraCommands().filter((command) => command.type === "fitBounds")).toEqual([
+      {
+        type: "fitBounds",
+        ne: [-0.12, 51.5],
+        sw: [-1.1, 50.8],
+        padding: expect.any(Array),
+        duration: 600,
+      },
+    ]);
+  });
+
   test("preserves programmatic fit camera across remount without region events", async () => {
     const alice = createLiveMapMarkerFixture({
       latitude: 51.5,

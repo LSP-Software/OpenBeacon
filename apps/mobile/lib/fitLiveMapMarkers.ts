@@ -3,13 +3,15 @@ import type { LiveMapMarker } from "./buildLiveMapMarkers.ts";
 
 const ANIMATION_DURATION_MS = 600;
 const MIN_FIT_SPAN_DEGREES = 0.02;
+export const SINGLE_MARKER_FIT_ZOOM = 14;
 
 export const fitLiveMapMarkers = ({
+  animate,
   camera,
   markers,
   padding,
-  reduceMotion,
 }: {
+  animate: boolean;
   camera: CameraRef | null;
   markers: readonly LiveMapMarker[];
   padding: {
@@ -18,7 +20,6 @@ export const fitLiveMapMarkers = ({
     paddingRight: number;
     paddingTop: number;
   };
-  reduceMotion: boolean;
 }) => {
   if (!camera) {
     return null;
@@ -30,7 +31,7 @@ export const fitLiveMapMarkers = ({
     return null;
   }
 
-  const duration = reduceMotion ? 0 : ANIMATION_DURATION_MS;
+  const duration = animate ? ANIMATION_DURATION_MS : 0;
   const paddingConfig = {
     top: padding.paddingTop,
     right: padding.paddingRight,
@@ -43,10 +44,10 @@ export const fitLiveMapMarkers = ({
       duration,
       center: [firstMarker.longitude, firstMarker.latitude] as [number, number],
       padding: paddingConfig,
-      zoom: 14,
+      zoom: SINGLE_MARKER_FIT_ZOOM,
     };
-    if (reduceMotion) camera.jumpTo(stop);
-    else camera.easeTo(stop);
+    if (animate) camera.easeTo(stop);
+    else camera.jumpTo(stop);
     return duration;
   }
 
@@ -54,6 +55,7 @@ export const fitLiveMapMarkers = ({
   camera.fitBounds([bounds.sw[0], bounds.sw[1], bounds.ne[0], bounds.ne[1]], {
     padding: paddingConfig,
     duration,
+    easing: "ease",
   });
   return duration;
 };

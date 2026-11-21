@@ -25,16 +25,17 @@ const marker = (
   ...overrides,
 });
 
-const fit = (markers: readonly LiveMapMarker[]) => {
+const fit = (markers: readonly LiveMapMarker[], animate = true) => {
   const setCamera = mock(() => {});
+  const jumpTo = mock(() => {});
   const fitBounds = mock(() => {});
   const animationDuration = fitLiveMapMarkers({
-    camera: { easeTo: setCamera, fitBounds } as never,
+    animate,
+    camera: { easeTo: setCamera, fitBounds, jumpTo } as never,
     markers,
     padding,
-    reduceMotion: false,
   });
-  return { animationDuration, fitBounds, setCamera };
+  return { animationDuration, fitBounds, jumpTo, setCamera };
 };
 
 describe("fitLiveMapMarkers", () => {
@@ -43,17 +44,17 @@ describe("fitLiveMapMarkers", () => {
     const fitBounds = mock(() => {});
 
     fitLiveMapMarkers({
+      animate: true,
       camera: null,
       markers: [marker({ latitude: 51.5, longitude: -0.12, userId: "alice" })],
       padding,
-      reduceMotion: false,
     });
 
     fitLiveMapMarkers({
+      animate: true,
       camera: { easeTo: setCamera, fitBounds } as never,
       markers: [],
       padding,
-      reduceMotion: false,
     });
 
     expect(setCamera).not.toHaveBeenCalled();
@@ -142,6 +143,7 @@ describe("fitLiveMapMarkers", () => {
     expect(fitBounds).toHaveBeenCalledWith([...expectedSw, ...expectedNe], {
       padding: { top: 56, right: 32, bottom: 48, left: 32 },
       duration: 600,
+      easing: "ease",
     });
     expect(setCamera).not.toHaveBeenCalled();
   });
@@ -196,5 +198,38 @@ describe("fitLiveMapMarkers", () => {
     expect(lonSpan).toBeGreaterThan(0.019);
     expect((north + south) / 2).toBeCloseTo(center.latitude, 5);
     expect(lonCenter).toBeCloseTo(center.longitude, 5);
+  });
+
+  test("jumps straight to one person without animating", () => {
+    const { animationDuration, jumpTo, setCamera } = fit(
+      [marker({ latitude: 51.5, longitude: -0.12, userId: "alice" })],
+      false,
+    );
+
+    expect(animationDuration).toBe(0);
+    expect(setCamera).not.toHaveBeenCalled();
+    expect(jumpTo).toHaveBeenCalledWith({
+      duration: 0,
+      center: [-0.12, 51.5],
+      padding: { top: 56, right: 32, bottom: 48, left: 32 },
+      zoom: 14,
+    });
+  });
+
+  test("frames everyone at once without animating", () => {
+    const { animationDuration, fitBounds } = fit(
+      [
+        marker({ latitude: 51.5, longitude: -0.12, userId: "alice" }),
+        marker({ latitude: 50.8, longitude: -1.1, userId: "bob" }),
+      ],
+      false,
+    );
+
+    expect(animationDuration).toBe(0);
+    expect(fitBounds).toHaveBeenCalledWith([-1.1, 50.8, -0.12, 51.5], {
+      padding: { top: 56, right: 32, bottom: 48, left: 32 },
+      duration: 0,
+      easing: "ease",
+    });
   });
 });
