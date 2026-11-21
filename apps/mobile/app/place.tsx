@@ -51,6 +51,7 @@ import {
 } from "../lib/placeSearch.ts";
 import { loadTrackingModule } from "../lib/trackingModule.ts";
 import type { PlaceSearchBox, PlaceSearchOutcome } from "../modules/openbeacon-tracking/index.ts";
+import { nextPlaceEditorSelfCentring } from "../lib/placeEditorSelfCentring.ts";
 import { syncGroupPlaces } from "../lib/placeBackgroundSync.ts";
 import { userMessage } from "../lib/userMessage.ts";
 import { thisDeviceNoun } from "../lib/thisDeviceNoun.ts";
@@ -180,7 +181,7 @@ const PlaceEditor = ({
   const map = useNativeMapStyle();
   const cameraRef = useRef<CameraRef>(null);
   const selfLocation = useSelfDeviceLocation(place === null);
-  const movedToSelf = useRef(false);
+  const selfCentring = useRef<"nothing" | "cached" | "live">("nothing");
   const [zoom, setZoom] = useState(16);
   const [center, setCenter] = useState<{ latitude: number; longitude: number } | null>(
     place ? { latitude: place.geometry.latitude, longitude: place.geometry.longitude } : null,
@@ -266,11 +267,17 @@ const PlaceEditor = ({
   }, [step]);
 
   useEffect(() => {
-    if (place || center || !selfLocation || movedToSelf.current) return;
-    movedToSelf.current = true;
+    if (place || !selfLocation) return;
+    const next = nextPlaceEditorSelfCentring({
+      centredOn: selfCentring.current,
+      location: selfLocation,
+      movedByUser,
+    });
+    if (!next) return;
+    selfCentring.current = next;
     setCenter({ latitude: selfLocation.latitude, longitude: selfLocation.longitude });
     cameraRef.current?.jumpTo({ center: cameraCenterFor(selfLocation, 16), zoom: 16 });
-  }, [center, place, selfLocation]);
+  }, [movedByUser, place, selfLocation]);
 
   useEffect(() => {
     let active = true;

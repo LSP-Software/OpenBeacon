@@ -7,7 +7,7 @@ import { watchPositionWithLastKnown } from "../lib/watchPositionWithLastKnown.ts
 
 export const useSelfDeviceLocation = (enabled: boolean) => {
   const isFocused = useIsFocused();
-  const [location, setLocation] = useState<SelfDeviceLocation | null>(null);
+  const [location, setLocation] = useState<(SelfDeviceLocation & { cached: boolean }) | null>(null);
 
   useEffect(() => {
     if (!enabled || !isFocused) {
@@ -21,8 +21,9 @@ export const useSelfDeviceLocation = (enabled: boolean) => {
           getLastKnownPosition: () =>
             Location.getLastKnownPositionAsync({ maxAge: 2 * 60_000, requiredAccuracy: 100 }),
           isWanted,
-          onPosition: (position) => {
+          onPosition: (position, cached) => {
             setLocation({
+              cached,
               latitude: position.coords.latitude,
               longitude: position.coords.longitude,
               timestamp: new Date(position.timestamp).toISOString(),

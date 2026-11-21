@@ -33,7 +33,8 @@ const start = ({
   const subscription = watchPositionWithLastKnown<Position>({
     getLastKnownPosition: () => lastKnown,
     isWanted: wanted,
-    onPosition: (position) => delivered.push(position.label),
+    onPosition: (position, cached) =>
+      delivered.push(cached ? `${position.label} (cached)` : position.label),
     watchPosition: (onPosition) => {
       emitWatch = onPosition;
       return watchResult;
@@ -51,11 +52,11 @@ describe("watchPositionWithLastKnown", () => {
     });
 
     await flushAsync();
-    expect(delivered).toEqual(["cached"]);
+    expect(delivered).toEqual(["cached (cached)"]);
 
     watch.resolve({ remove: () => undefined });
     emitWatch({ label: "fix", timestamp: 2_000 });
-    expect(delivered).toEqual(["cached", "fix"]);
+    expect(delivered).toEqual(["cached (cached)", "fix"]);
   });
 
   test("ignores a last known position that resolves after a newer watch fix", async () => {
