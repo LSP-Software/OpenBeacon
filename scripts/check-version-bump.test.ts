@@ -34,6 +34,8 @@ describe("findMissingVersionBumps", () => {
           "README.md",
           ".github/workflows/pre-merge-checks.yml",
           "apps/mobile/lib/map.test.ts",
+          "apps/mobile/test/secretLeaks.testUtil.ts",
+          "apps/mobile/test/preload.ts",
           "packages/api/src/router/accountRouter.test.ts",
           "apps/mobile/modules/openbeacon-tracking/jvm/src/test/kotlin/Queue.kt",
           "apps/mobile/modules/openbeacon-tracking/android/src/androidTest/java/Queue.kt",
