@@ -16,6 +16,18 @@ describe("expectNoSecretsIn", () => {
     ).not.toThrow();
   });
 
+  test("passes when a phrase word only appears in a storage key name", () => {
+    expect(() =>
+      expectNoSecretsIn(
+        {
+          storage: new Map([[`group.${words[0]}.household`, "1"]]),
+          settings: { [`${words[1]}.enabled`]: true },
+        },
+        { secrets: [key], phrases: [phrase] },
+      ),
+    ).not.toThrow();
+  });
+
   test.each([
     ["a raw Uint8Array", { privateKey: key }],
     ["a typed array view on a larger buffer", { privateKey: new Uint16Array(key.buffer) }],
@@ -38,6 +50,8 @@ describe("expectNoSecretsIn", () => {
     ["the phrase joined by nothing", { phrase: words.join("") }],
     ["the phrase as an array", { phrase: words }],
     ["the phrase words as object keys", words.map((word) => ({ [word]: true }))],
+    ["one phrase word as a storage value", new Map([["recovery.hint", words[3]]])],
+    ["one phrase word as an object value", { hint: `${words[3]} first` }],
     ["a redacted key object", { privateKey: "[REDACTED]" }],
   ])("catches %s", (_name, leak) => {
     expect(() => expectNoSecretsIn(leak, { secrets: [key], phrases: [phrase] })).toThrow();

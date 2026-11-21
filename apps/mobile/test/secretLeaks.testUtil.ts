@@ -3,7 +3,7 @@ import { expect } from "bun:test";
 
 const WINDOW_BYTES = 9;
 
-const serialize = (value: unknown) =>
+const serialize = (value: unknown, { withKeys }: { withKeys: boolean }) =>
   typeof value === "string"
     ? value
     : JSON.stringify(value, (_key, item: unknown) => {
@@ -11,8 +11,16 @@ const serialize = (value: unknown) =>
         if (ArrayBuffer.isView(item)) {
           return Array.from(new Uint8Array(item.buffer, item.byteOffset, item.byteLength));
         }
-        if (item instanceof Map) return [...item.entries()];
+        if (item instanceof Map) return withKeys ? [...item.entries()] : [...item.values()];
         if (item instanceof Set) return [...item.values()];
+        if (
+          !withKeys &&
+          typeof item === "object" &&
+          item !== null &&
+          Object.getPrototypeOf(item) === Object.prototype
+        ) {
+          return Object.values(item);
+        }
         return item;
       });
 
@@ -27,7 +35,8 @@ export const expectNoSecretsIn = (
   value: unknown,
   { secrets, phrases }: { secrets: Uint8Array[]; phrases: RecoveryPhrase[] },
 ) => {
-  const serialized = serialize(value);
+  const serialized = serialize(value, { withKeys: true });
+  const valuesOnly = serialize(value, { withKeys: false });
   const lowerCase = serialized.toLowerCase();
   const lettersOnly = lowerCase.replace(/[^a-z]/g, "");
   const letterRuns = lowerCase.match(/[a-z]+/g) ?? [];
@@ -52,7 +61,7 @@ export const expectNoSecretsIn = (
     );
     expect(wordsInOrder).toBeLessThan(phraseWords.length);
     for (const word of phrase.words()) {
-      expect(serialized).not.toMatch(
+      expect(valuesOnly).not.toMatch(
         new RegExp(`(?<![A-Za-z0-9+/_:-])${word}(?![A-Za-z0-9+/=_-]|\\\\*":)`),
       );
     }
