@@ -111,7 +111,7 @@ const TimelineScreen = () => {
   if (isPending || !selfUserId) {
     return (
       <View className="flex-1 items-center justify-center bg-background">
-        <ActivityIndicator />
+        <ActivityIndicator className="text-primary" />
       </View>
     );
   }
@@ -913,7 +913,7 @@ const TimelineView = ({
               </Button>
             </>
           ) : (
-            <ActivityIndicator />
+            <ActivityIndicator className="text-primary" />
           )}
         </View>
       )}
@@ -978,7 +978,7 @@ const TimelineView = ({
             />
           ) : (
             <View className="h-11 items-center justify-center">
-              <ActivityIndicator size="small" />
+              <ActivityIndicator size="small" className="text-primary" />
             </View>
           )
         }
@@ -991,7 +991,7 @@ const TimelineView = ({
           />
         ) : !days ? (
           <Animated.View {...card.fullOnly}>
-            <ActivityIndicator className="py-6" />
+            <ActivityIndicator className="py-6 text-primary" />
           </Animated.View>
         ) : !day ? (
           <View className="gap-1 py-4">
@@ -1013,7 +1013,7 @@ const TimelineView = ({
           />
         ) : !timeline ? (
           <Animated.View {...card.fullOnly}>
-            <ActivityIndicator className="py-6" />
+            <ActivityIndicator className="py-6 text-primary" />
           </Animated.View>
         ) : (
           <View className="gap-3">
