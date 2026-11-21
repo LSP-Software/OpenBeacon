@@ -10,4 +10,4 @@ run() {
 
 run bun run apps/backend/src/validateEnv.ts || exit
 run bun run --cwd packages/database prisma migrate deploy || exit
-run bun run apps/backend/src/index.ts
+run env OPENBEACON_ENV_ALREADY_VALIDATED=1 bun run apps/backend/src/index.ts
