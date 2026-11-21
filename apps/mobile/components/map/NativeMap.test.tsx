@@ -2124,6 +2124,38 @@ describe("NativeMap over a fake MapLibre", () => {
     expect(getNativeMapCameraCommands()).toHaveLength(commandsAfterRelease);
   });
 
+  test("fits everyone clear of the top chips and the map buttons", async () => {
+    const alice = createLiveMapMarkerFixture({ latitude: 51.5, longitude: -0.12, userId: "alice" });
+    const bob = createLiveMapMarkerFixture({ latitude: 50.8, longitude: -1.1, userId: "bob" });
+
+    await renderNativeMap({ markers: [alice, bob] });
+    await finishLoadingStyle();
+    await flushEffects();
+    const chips = root?.container.queryAll(
+      (node) =>
+        node.type === "view" &&
+        typeof node.props["onLayout"] === "function" &&
+        node.queryAll(
+          (child) =>
+            child.type === "pressable" &&
+            child.props["accessibilityLabel"] === "Show map names and symbols",
+        ).length > 0,
+    );
+    await act(async () => {
+      (chips?.at(-1)?.props["onLayout"] as ((event: unknown) => void) | undefined)?.({
+        nativeEvent: { layout: { height: 88, width: 380, x: 12, y: 8 } },
+      });
+    });
+    emitNativeMapShowEveryone();
+    await flushEffects();
+
+    const fits = getNativeMapCameraCommands().filter((command) => command.type === "fitBounds");
+    expect(fits.map((command) => command.padding)).toEqual([
+      [76, 88, 48, 32],
+      [124, 88, 48, 32],
+    ]);
+  });
+
   test("releases MapLibre's retained Show everyone bounds before native marker updates can replay them", async () => {
     const alice = createLiveMapMarkerFixture({
       latitude: 51.5,

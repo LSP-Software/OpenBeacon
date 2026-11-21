@@ -141,6 +141,7 @@ export const NativeMap = ({
   const trayPeople = isTrayOpen ? people : null;
   const [trayHeight, setTrayHeight] = useState(0);
   const [mapHeight, setMapHeight] = useState(0);
+  const [chipsBottom, setChipsBottom] = useState<number | null>(null);
   const [groupMenuOpen, setGroupMenuOpen] = useState(false);
   const [toastGroups, setToastGroups] = useState<readonly { id: string; name: string }[]>([]);
   const [screenReaderEnabled, setScreenReaderEnabled] = useState(false);
@@ -237,6 +238,7 @@ export const NativeMap = ({
     sheetOpen:
       selectedPlace !== null || isStackSheetOpen || missingUserId !== null || focusPlaceId !== null,
     topInset: insets.top,
+    topOverlayBottom: chipsBottom ?? insets.top + 48,
   });
   const {
     cameraRef,
@@ -666,6 +668,10 @@ export const NativeMap = ({
         pointerEvents="box-none"
         className="absolute left-3 right-3 flex-row flex-wrap gap-2"
         style={{ top: insets.top + 8 }}
+        onLayout={(event) => {
+          const { height, y } = event.nativeEvent.layout;
+          setChipsBottom(y + height);
+        }}
       >
         {canHideGroups ? (
           <Pressable

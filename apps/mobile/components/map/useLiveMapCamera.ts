@@ -37,6 +37,7 @@ export const useLiveMapCamera = ({
   selectedDeviceId,
   sheetOpen,
   topInset,
+  topOverlayBottom,
 }: {
   awaitingLiveSelfFix: boolean;
   bottomOverlayHeight: number;
@@ -53,6 +54,7 @@ export const useLiveMapCamera = ({
   selectedDeviceId: string | null;
   sheetOpen: boolean;
   topInset: number;
+  topOverlayBottom: number;
 }) => {
   const cameraRef = useRef<CameraRef>(null);
   const { scheduleRelease, setCamera } = useLiveMapCameraCommands(cameraRef, reduceMotion);
@@ -97,10 +99,10 @@ export const useLiveMapCamera = ({
     () => ({
       paddingBottom: 48 + bottomOverlayHeight,
       paddingLeft: 32,
-      paddingRight: 32,
-      paddingTop: topInset + 56,
+      paddingRight: MAP_BUTTONS_RIGHT_EDGE + FITTED_PIN_CLEARANCE,
+      paddingTop: topOverlayBottom + FITTED_PIN_CLEARANCE,
     }),
-    [bottomOverlayHeight, topInset],
+    [bottomOverlayHeight, topOverlayBottom],
   );
   const cameraPaddingRef = useRef(cameraPadding);
   cameraPaddingRef.current = cameraPadding;
@@ -355,7 +357,9 @@ export const useLiveMapCamera = ({
 
     if (result.fit) {
       suppressUserCameraControlFor(suppressUserCameraControlUntilMsRef, 600);
-      if (fitLiveMapMarkers({ animate: false, camera, markers, padding: cameraPadding }) !== null) {
+      if (
+        fitLiveMapMarkers({ animate: false, camera, markers, padding: fitEveryonePadding }) !== null
+      ) {
         scheduleCameraRelease(0);
       }
       preservedCameraRef.current = mapCameraAfterFittingMarkers({
@@ -365,7 +369,7 @@ export const useLiveMapCamera = ({
     }
   }, [
     awaitingLiveSelfFix,
-    cameraPadding,
+    fitEveryonePadding,
     initialFitRevision,
     isStyleLoaded,
     locationsLoading,
@@ -503,6 +507,9 @@ export const useLiveMapCamera = ({
     onStyleLoaded,
   };
 };
+
+const MAP_BUTTONS_RIGHT_EDGE = 60;
+const FITTED_PIN_CLEARANCE = 28;
 
 const clearLiveMapInitialFitTimer = (timerRef: {
   current: ReturnType<typeof setTimeout> | null;
