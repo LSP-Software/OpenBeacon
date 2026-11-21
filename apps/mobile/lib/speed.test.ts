@@ -34,6 +34,14 @@ describe("movingSpeedLabel", () => {
     expect(movingSpeedLabel(1, "kmh")).toBe("4 km/h");
     expect(movingSpeedLabel(30, "mph")).toBe("67 mph");
   });
+
+  test("hides speeds too fast to be real, such as a GPS jump", () => {
+    expect(movingSpeedLabel(90, "mph")).toBe("201 mph");
+    expect(movingSpeedLabel(90, "kmh")).toBe("324 km/h");
+    expect(movingSpeedLabel(90.1, "mph")).toBeNull();
+    expect(movingSpeedLabel(120, "mph")).toBeNull();
+    expect(movingSpeedLabel(Number.POSITIVE_INFINITY, "kmh")).toBeNull();
+  });
 });
 
 describe("liveSpeedLabel", () => {

@@ -1,6 +1,7 @@
 export type SpeedUnit = "mph" | "kmh";
 
 export const MOVING_SPEED_MPS = 1;
+const MAX_SHOWN_SPEED_MPS = 90;
 export const LIVE_SPEED_MAX_AGE_MS = 3 * 60_000;
 
 const MPH_REGIONS = new Set([
@@ -54,7 +55,7 @@ export const formatSpeed = (metersPerSecond: number, unit: SpeedUnit) =>
     : `${Math.round(metersPerSecond * 3.6)} km/h`;
 
 export const movingSpeedLabel = (speed: number | null, unit: SpeedUnit) =>
-  speed !== null && Number.isFinite(speed) && speed >= MOVING_SPEED_MPS
+  speed !== null && speed >= MOVING_SPEED_MPS && speed <= MAX_SHOWN_SPEED_MPS
     ? formatSpeed(speed, unit)
     : null;
 
