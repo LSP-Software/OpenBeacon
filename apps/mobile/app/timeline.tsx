@@ -484,6 +484,32 @@ const TimelineView = ({
     routeIds: routes.map((route) => route.deviceId),
     shownUserIds: budget?.shown ?? [],
   });
+
+  const followLongitude = selectedPin?.position.longitude;
+  const followLatitude = selectedPin?.position.latitude;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: following tracks the pin's position, and padding changes are picked up on the next move
+  useEffect(() => {
+    if (!following || followLongitude === undefined || followLatitude === undefined) return;
+    if (timeState?.key !== timeline?.day.key || fittedView.current.view !== fit.view) return;
+    cameraRef.current?.jumpTo({
+      center: [followLongitude, followLatitude],
+      padding: cameraPadding,
+    });
+  }, [followLatitude, followLongitude, following]);
+
+  const followedOpen = useRef(card.open);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only the card opening or closing re-centres the followed pin, with the padding for its new size
+  useEffect(() => {
+    if (followedOpen.current === card.open) return;
+    followedOpen.current = card.open;
+    if (!following || followLongitude === undefined || followLatitude === undefined) return;
+    cameraRef.current?.easeTo({
+      center: [followLongitude, followLatitude],
+      duration: 300,
+      padding: cameraPadding,
+    });
+  }, [card.open]);
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: the camera moves only when the day, people or layout change, not on every frame
   useEffect(() => {
     if (!styleLoaded || topHeight === 0 || panelHeight === 0) return;
@@ -505,31 +531,6 @@ const TimelineView = ({
       padding: cameraPadding,
     });
   }, [fit.key]);
-
-  const followLongitude = selectedPin?.position.longitude;
-  const followLatitude = selectedPin?.position.latitude;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: following tracks the pin's position, and padding changes are picked up on the next move
-  useEffect(() => {
-    if (!following || followLongitude === undefined || followLatitude === undefined) return;
-    if (timeState?.key !== timeline?.day.key) return;
-    cameraRef.current?.jumpTo({
-      center: [followLongitude, followLatitude],
-      padding: cameraPadding,
-    });
-  }, [followLatitude, followLongitude, following]);
-
-  const followedOpen = useRef(card.open);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: only the card opening or closing re-centres the followed pin, with the padding for its new size
-  useEffect(() => {
-    if (followedOpen.current === card.open) return;
-    followedOpen.current = card.open;
-    if (!following || followLongitude === undefined || followLatitude === undefined) return;
-    cameraRef.current?.easeTo({
-      center: [followLongitude, followLatitude],
-      duration: 300,
-      padding: cameraPadding,
-    });
-  }, [card.open]);
 
   const selectedRoute = selectedPerson ? routes[0] : undefined;
   const selectedSegment = selectedPerson?.device.segments.find(
