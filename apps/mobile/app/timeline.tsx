@@ -189,7 +189,7 @@ const TimelineView = ({
   const [pickedDayKey, setPickedDayKey] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(60);
-  const [following, setFollowing] = useState(true);
+  const [following, setFollowing] = useState(false);
   const fittedView = useRef({ moved: false, view: "" });
   const [timeState, setTimeState] = useState<{ key: string; time: number } | null>(null);
   const [drawIn, setDrawIn] = useState<{ clock: number; starts: Record<string, number> }>({
@@ -484,45 +484,13 @@ const TimelineView = ({
     routeIds: routes.map((route) => route.deviceId),
     shownUserIds: budget?.shown ?? [],
   });
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the camera moves only when the day, people or layout change, not on every frame
-  useEffect(() => {
-    if (!styleLoaded || topHeight === 0 || panelHeight === 0) return;
-    if (fittedView.current.view === fit.view && fittedView.current.moved) return;
-    fittedView.current = { moved: false, view: fit.view };
-    if (selectedPerson) {
-      setFollowing(true);
-      const at = timelinePositionAt(selectedPerson.device.segments, timeRef.current);
-      if (at.position) {
-        cameraRef.current?.easeTo({
-          center: [at.position.longitude, at.position.latitude],
-          duration: 600,
-          padding: cameraPadding,
-          zoom: 15,
-        });
-        return;
-      }
-    }
-    const coordinates = routes.flatMap((route) => [
-      ...[...route.line, ...route.pauses.flat()].map(([longitude, latitude]) => ({
-        latitude,
-        longitude,
-      })),
-      ...route.stops,
-    ]);
-    if (coordinates.length === 0) return;
-    const { ne, sw } = mapFitBounds(coordinates);
-    cameraRef.current?.fitBounds([sw[0], sw[1], ne[0], ne[1]], {
-      duration: 600,
-      padding: cameraPadding,
-    });
-  }, [fit.key]);
 
   const followLongitude = selectedPin?.position.longitude;
   const followLatitude = selectedPin?.position.latitude;
   // biome-ignore lint/correctness/useExhaustiveDependencies: following tracks the pin's position, and padding changes are picked up on the next move
   useEffect(() => {
     if (!following || followLongitude === undefined || followLatitude === undefined) return;
-    if (timeState?.key !== timeline?.day.key) return;
+    if (fittedView.current.view !== fit.view) return;
     cameraRef.current?.jumpTo({
       center: [followLongitude, followLatitude],
       padding: cameraPadding,
@@ -541,6 +509,29 @@ const TimelineView = ({
       padding: cameraPadding,
     });
   }, [card.open]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the camera moves only when the day, people or layout change, not on every frame
+  useEffect(() => {
+    if (!styleLoaded || topHeight === 0 || panelHeight === 0) return;
+    const sameView = fittedView.current.view === fit.view;
+    if (sameView && (fittedView.current.moved || (following && selectedPerson))) return;
+    fittedView.current = { moved: false, view: fit.view };
+    setFollowing(false);
+    const coordinates = routes.flatMap((route) => [
+      ...[...route.line, ...route.pauses.flat()].map(([longitude, latitude]) => ({
+        latitude,
+        longitude,
+      })),
+      ...route.stops,
+    ]);
+    const framed = coordinates.length > 0 ? coordinates : pins.map((pin) => pin.position);
+    if (framed.length === 0) return;
+    const { ne, sw } = mapFitBounds(framed);
+    cameraRef.current?.fitBounds([sw[0], sw[1], ne[0], ne[1]], {
+      duration: 600,
+      padding: cameraPadding,
+    });
+  }, [fit.key]);
 
   const selectedRoute = selectedPerson ? routes[0] : undefined;
   const selectedSegment = selectedPerson?.device.segments.find(
@@ -768,7 +759,6 @@ const TimelineView = ({
               selected={member.userId === personId}
               onPress={() => {
                 setPersonId(member.userId);
-                setFollowing(true);
               }}
             />
           ))}
@@ -1145,6 +1135,8 @@ const TimelineView = ({
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={playing ? "Pause" : "Play"}
+                    accessibilityState={{ disabled: !styleLoaded }}
+                    disabled={!styleLoaded}
                     onPress={() => {
                       if (playing) {
                         setPlaying(false);
