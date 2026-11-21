@@ -1,4 +1,5 @@
 import "./env.ts";
+import { serverVersion } from "@openbeacon/backend/version.ts";
 import { tryCatch } from "@openbeacon/shared";
 import { startHealthServer } from "./health.ts";
 import { jobs } from "./jobs/index.ts";
@@ -14,7 +15,12 @@ if (result.error) {
 
 const stop = startScheduler(jobs);
 const healthServer = startHealthServer(3000);
-console.log("Scheduled job runner started");
+console.log(
+  [
+    `OpenBeacon scheduled jobs ${serverVersion} (Bun ${Bun.version}) started at ${new Date().toISOString()}`,
+    `  Health check listening on ${healthServer.url.host}`,
+  ].join("\n"),
+);
 
 const shutdown = async () => {
   await healthServer.stop();

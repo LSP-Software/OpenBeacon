@@ -20,6 +20,7 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/apps/map-tiles ./apps/map-tiles
 COPY --from=build /app/packages/map-tiles ./packages/map-tiles
 COPY --from=build /app/packages/shared ./packages/shared
+COPY --from=build /app/apps/backend/src/version.ts ./apps/backend/src/
 USER bun
 ENV NODE_ENV=production
 ENV MAP_TILES_STATE_DIR=/state

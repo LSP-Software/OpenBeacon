@@ -10,6 +10,8 @@ They live in `packages/shared/src/apiCompatibilityLevel.ts`. The app and the ser
 - `minClientApiCompatibilityLevel` is the oldest app this server serves.
 - `minServerApiCompatibilityLevel` is the oldest server this app works with.
 
+`oldestSupportedAppVersion` in `apps/backend/src/version.ts` is the oldest app version this server accepts: the first release on `minClientApiCompatibilityLevel`. The backend logs it at startup so self-hosters can see which apps it serves. Whenever `minClientApiCompatibilityLevel` goes up, update it: to the new `expo.version` for a brand-new level, otherwise to the first app version that reached that level.
+
 The app is too old when its `apiCompatibilityLevel` is below the server's `minClientApiCompatibilityLevel`. The server is too old when its `apiCompatibilityLevel` is below the app's `minServerApiCompatibilityLevel`. Both minimums are always at most `apiCompatibilityLevel`, so both can't be true at once.
 
 Every app talks to other apps through the server, so the client minimum also covers changes between apps. If a new encrypted format can't be read by older apps, raising `minClientApiCompatibilityLevel` makes everyone in the family update.
@@ -38,7 +40,9 @@ Anything else needs no change. That includes:
 - levels never go down;
 - `apiCompatibilityLevel` goes up by at most 1;
 - neither minimum is above `apiCompatibilityLevel`;
-- any level change comes with at least a minor bump of both the app and the server.
+- any level change comes with at least a minor bump of both the app and the server;
+- `oldestSupportedAppVersion` is set, never goes down, is never above `expo.version`, and only changes when `minClientApiCompatibilityLevel` goes up;
+- when `minClientApiCompatibilityLevel` goes up to a brand-new level, `oldestSupportedAppVersion` equals the new `expo.version`, and when it goes up to an existing level, `oldestSupportedAppVersion` goes up too.
 
 It can't tell whether a change needed a new level. That's up to whoever makes the branch, and reviewers check it.
 
