@@ -565,6 +565,7 @@ const PlaceEditor = ({
       </View>
       <KeyboardAvoidingView
         behavior="padding"
+        enabled={step === 2}
         pointerEvents="box-none"
         className="absolute inset-0 justify-end"
       >
