@@ -4,7 +4,8 @@ mock.module("./storage.ts", () => ({
   storage: { getString: () => undefined },
 }));
 
-const { inviteLink, joinInviteFromInput, joinInviteFromLink } = await import("./inviteLink.ts");
+const { inviteLink, joinCodeCharacters, joinInviteFromInput, joinInviteFromLink } =
+  await import("./inviteLink.ts");
 
 const code = "0123456789ABCDEF0123456789ABCDEF";
 const server = "https://beacon.example.com/openbeacon";
@@ -77,6 +78,10 @@ describe("invite links", () => {
     expect(joinInviteFromLink(link)).toBeNull();
   });
 
+  test("a link followed by more text keeps its server", () => {
+    expect(joinInviteFromInput(`${linkTo(server)} see you soon`)).toEqual(found({ code, server }));
+  });
+
   test("a server address carrying its own query is unusable, not cut short", () => {
     expect(
       joinInviteFromLink(
@@ -119,14 +124,28 @@ describe("invite links", () => {
     expect(joinInviteFromLink(link)).toBeNull();
   });
 
-  test.each([code, ` ${code.toLowerCase()} `, `openbeacon://join?code=${code}`])(
-    "accepts a typed or scanned %s",
-    (input) => {
-      expect(joinInviteFromInput(input)).toEqual(found({ code, server: null }));
-    },
-  );
+  test.each([
+    code,
+    ` ${code.toLowerCase()} `,
+    "0123 4567 89AB CDEF\n0123 4567 89ab cdef",
+    `openbeacon://join?code=${code}`,
+    `Join my OpenBeacon group. Install OpenBeacon, then open this link: openbeacon://join?code=${code}`,
+    `Open this link: openbeacon://join?code=${code}\nSee you soon`,
+    `here's the code ${code} thanks`,
+  ])("accepts a typed or scanned %s", (input) => {
+    expect(joinInviteFromInput(input)).toEqual(found({ code, server: null }));
+  });
 
   test.each(["", "ABC123", `${code}0`, "https://example.test/"])("rejects %s", (input) => {
     expect(joinInviteFromInput(input)).toBeNull();
+  });
+
+  test.each([
+    ["0123 4567-89ab", "0123456789AB"],
+    ["O0 G1 fF", "01FF"],
+    [`${code} ${code}`, code],
+    ["", ""],
+  ])("keeps only the code characters of %s", (input, expected) => {
+    expect(joinCodeCharacters(input)).toBe(expected);
   });
 });

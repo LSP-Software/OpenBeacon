@@ -36,6 +36,8 @@ mock.module("expo-camera", () => ({
     React.createElement("camera", props),
   useCameraPermissions: () => [{ granted: true }, async () => ({ granted: true })],
 }));
+let clipboard = "";
+mock.module("expo-clipboard", () => ({ getStringAsync: async () => clipboard }));
 mock.module("expo-router", () => ({
   Link: ({ children, href }: { children: React.ReactNode; href: unknown }) => {
     links.push(href);
@@ -51,7 +53,12 @@ mock.module("expo-router", () => ({
 }));
 mock.module("react-native", () => {
   const module = createReactNativeTestModule();
-  return { ...module, ScrollView: module.View, TextInput: () => null };
+  return {
+    ...module,
+    ScrollView: module.View,
+    TextInput: (props: { onChangeText: (text: string) => void; value: string }) =>
+      React.createElement("input", props),
+  };
 });
 mock.module("react-native-safe-area-context", () => ({
   SafeAreaView: ({ children }: { children: React.ReactNode }) => children,
@@ -116,20 +123,37 @@ mock.module("../components/InviteConfirmation.tsx", () => ({
 }));
 mock.module("../components/ui/Button.tsx", () => ({
   Button: ({
+    accessibilityLabel,
     children,
+    disabled,
     loading,
     onPress,
   }: {
+    accessibilityLabel?: string;
     children: React.ReactNode;
+    disabled?: boolean;
     loading?: boolean;
     onPress?: () => void;
-  }) => React.createElement("pressable", { loading, onPress }, children),
+  }) =>
+    React.createElement("pressable", { accessibilityLabel, disabled, loading, onPress }, children),
 }));
 mock.module("../components/headers/ScreenHeader.tsx", () => ({
   ScreenHeader: () => null,
 }));
 mock.module("../components/ui/Icon.tsx", () => ({ Icon: () => null }));
-mock.module("lucide-react-native", () => ({ QrCodeIcon: () => null }));
+mock.module("lucide-react-native", () => ({
+  CheckIcon: () => null,
+  ClipboardPasteIcon: () => null,
+  QrCodeIcon: () => null,
+  XIcon: () => null,
+}));
+mock.module("../components/KeyboardFormScrollView.tsx", () => ({
+  KeyboardFormScrollView: ({
+    children,
+  }: {
+    children: (form: { ref: { current: null }; onLayout: () => void }) => React.ReactNode;
+  }) => children({ ref: { current: null }, onLayout: () => {} }),
+}));
 mock.module("../components/ui/Text.tsx", () => ({
   Text: ({ children }: { children: React.ReactNode }) =>
     React.createElement("text", null, children),
@@ -166,7 +190,7 @@ const openJoin = async () => {
 
 const openScanner = async () => {
   const root = await openJoin();
-  await pressButton(root, "Scan QR code");
+  await pressButton(root, "Scan");
   const camera = root.container.queryAll((node) => node.type === "camera")[0];
   const onBarcodeScanned = camera?.props["onBarcodeScanned"];
   if (typeof onBarcodeScanned !== "function") throw new Error("Scanner didn't open");
@@ -193,6 +217,7 @@ beforeEach(() => {
   savedServer = "";
   session = { user: { id: "user-1" } };
   params = {};
+  clipboard = "";
 });
 
 test("a QR code that isn't an invite is reported once, however many frames see it", async () => {
@@ -328,10 +353,10 @@ test("an opened invite whose server can't be used explains why and offers to go 
 test("repeated link parameters are treated as no invite instead of crashing", async () => {
   params = { code: [code, code], server: selfHosted };
   const root = await openJoin();
-  expect(screenText(root)).toContain("Scan QR code");
+  expect(screenText(root)).toContain("Scan a QR code");
   params = { code, server: [selfHosted, "https://evil.example"] };
   const second = await openJoin();
-  expect(screenText(second)).toContain("Scan QR code");
+  expect(screenText(second)).toContain("Scan a QR code");
   expect(confirming).toEqual([]);
 });
 
@@ -459,4 +484,86 @@ test("only an invite for a server other than the hosted one warns about who runs
   expect(screenText(await openInviteFrom(selfHosted))).toContain(warning);
   savedServer = selfHosted;
   expect(screenText(await openInviteFrom(hosted))).not.toContain(warning);
+});
+
+const typeCode = async (root: ReturnType<typeof createRoot>, text: string) => {
+  const input = root.container.queryAll((node) => node.type === "input")[0];
+  if (!input) throw new Error("No join code field");
+  await act(async () => input.props["onChangeText"](text));
+};
+
+test("a typed code fills the grid in groups and Continue waits for all 32 characters", async () => {
+  const root = await openJoin();
+  expect(findButton(root, "Continue").props["disabled"]).toBe(true);
+
+  await typeCode(root, "0123 4567 89ab");
+  await typeCode(root, "0123456789ABO");
+  expect(screenText(root)).toContain("12 of 32");
+  expect(findButton(root, "Continue").props["disabled"]).toBe(true);
+
+  await typeCode(root, code.toLowerCase());
+  expect(screenText(root)).toContain("32 of 32");
+  await pressButton(root, "Continue");
+
+  expect(alerts).toEqual([]);
+  expect(confirming.at(-1)).toEqual({ kind: "code", code });
+});
+
+test("an invite link typed or pasted into the code field opens its invite", async () => {
+  const root = await openJoin();
+  await typeCode(root, `openbeacon://join?code=${code}`);
+  expect(confirming.at(-1)).toEqual({ kind: "code", code });
+});
+
+test("a link added after some typed characters opens its invite rather than filling the grid with junk", async () => {
+  const root = await openJoin();
+  await typeCode(root, "01");
+  await typeCode(root, `01openbeacon://join?code=${code}&server=${encodeURIComponent(selfHosted)}`);
+  expect(screenText(root)).toContain("This invite is for another server");
+
+  const other = await openJoin();
+  await typeCode(other, "01");
+  await typeCode(other, "01https://example.test/");
+  expect(alerts.map(({ title }) => title)).toEqual(["Invalid code"]);
+  expect(screenText(other)).toContain("2 of 32");
+});
+
+test("a message with a code pasted into the field opens that code, not its stray letters", async () => {
+  const root = await openJoin();
+  await typeCode(root, `here's the code ${code} thanks`);
+  expect(confirming.at(-1)).toEqual({ kind: "code", code });
+
+  const other = await openJoin();
+  await typeCode(other, "abc");
+  await typeCode(other, "abcdeadbeef");
+  expect(screenText(other)).toContain("11 of 32");
+});
+
+test("Clear empties the field and brings Paste back", async () => {
+  const root = await openJoin();
+  await typeCode(root, "0123");
+  await pressButton(root, "Clear");
+  expect(screenText(root)).not.toContain("of 32");
+  expect(findButton(root, "Paste")).toBeDefined();
+});
+
+test("Paste opens a copied invite link or spaced code, and says when the clipboard holds neither", async () => {
+  clipboard = "nothing useful";
+  const root = await openJoin();
+  await pressButton(root, "Paste");
+  expect(alerts.map(({ title }) => title)).toEqual(["Invalid code"]);
+  expect(confirming).toEqual([]);
+
+  clipboard = "0123 4567 89AB CDEF 0123 4567 89AB CDEF";
+  await pressButton(root, "Paste");
+  expect(confirming.at(-1)).toEqual({ kind: "code", code });
+});
+
+test("Paste takes the link out of a whole shared message, including another server's", async () => {
+  clipboard = `Join my OpenBeacon group on beacon.example.com. Install OpenBeacon, then open this link: openbeacon://join?code=${code}&server=${encodeURIComponent(selfHosted)}`;
+  const root = await openJoin();
+  await pressButton(root, "Paste");
+  expect(alerts).toEqual([]);
+  expect(screenText(root)).toContain("This invite is for another server");
+  expect(serverChanges).toEqual([]);
 });

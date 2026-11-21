@@ -47,13 +47,32 @@ export const joinInviteFromLink = (link: string): ReadInvite | null => {
 
 export const joinInviteFromInput = (input: string): ReadInvite | null => {
   const trimmed = input.trim();
-  if (JOIN_CODE.test(trimmed))
+  const compact = trimmed.replace(/\s+/g, "");
+  if (JOIN_CODE.test(compact))
     return {
-      invite: { code: trimmed.toUpperCase(), server: null },
+      invite: { code: compact.toUpperCase(), server: null },
       error: null,
     };
-  return joinInviteFromLink(trimmed);
+  const reads = trimmed
+    .split(/\s+/)
+    .map((word) =>
+      JOIN_CODE.test(word)
+        ? { invite: { code: word.toUpperCase(), server: null }, error: null }
+        : joinInviteFromLink(word),
+    );
+  return (
+    reads.find((read) => read?.invite) ??
+    joinInviteFromLink(trimmed) ??
+    reads.find((read) => read !== null) ??
+    null
+  );
 };
+
+export const joinCodeCharacters = (input: string) =>
+  input
+    .replace(/[^0-9a-f]/gi, "")
+    .toUpperCase()
+    .slice(0, 32);
 
 export const inviteLink = ({ code, server }: { code: string; server: string }) =>
   `openbeacon://join?code=${code}&server=${encodeURIComponent(server)}`;
