@@ -45,6 +45,17 @@ mock.module("../ui/Button.tsx", () => ({
   Button: ({ children, onPress }: { children: React.ReactNode; onPress?: () => void }) =>
     React.createElement("button", { type: "button", onClick: onPress }, children),
 }));
+mock.module("../ui/Icon.tsx", () => ({ Icon: () => null }));
+mock.module("lucide-react-native", () => ({
+  CheckIcon: () => null,
+  ClockIcon: () => null,
+  CopyIcon: () => null,
+  LinkIcon: () => null,
+  PlusIcon: () => null,
+  QrCodeIcon: () => null,
+  Share2Icon: () => null,
+  UsersIcon: () => null,
+}));
 mock.module("../ui/Text.tsx", () => ({
   Text: ({ children }: { children: React.ReactNode }) =>
     React.createElement("text", null, children),
@@ -161,7 +172,7 @@ describe("shared invitation dialog", () => {
     const copyButton = () => {
       const button = root.container
         .queryAll((item) => item.type === "button")
-        .find((item) => /Copy code|Copied/.test(JSON.stringify(item.children)));
+        .find((item) => /"Copy"|Copied/.test(JSON.stringify(item.children)));
       if (!button) throw new Error("Copy code button not found");
       return button;
     };
@@ -172,7 +183,7 @@ describe("shared invitation dialog", () => {
     expect(copied).toEqual(["1".repeat(32)]);
     expect(JSON.stringify(copyButton().children)).toContain("Copied");
     await createInvite(root);
-    expect(JSON.stringify(copyButton().children)).toContain("Copy code");
+    expect(JSON.stringify(copyButton().children)).toContain('"Copy"');
     await act(async () => root.unmount());
   });
   test("checks the latest invite only when someone joins, and closes once it is used", async () => {
@@ -264,10 +275,10 @@ describe("shared invitation dialog", () => {
     const root = createRoot();
     await render(root, "link");
     await createInvite(root);
-    expect(JSON.stringify(root.container.toJSON())).toContain("Valid for 30 minutes and one use.");
+    expect(JSON.stringify(root.container.toJSON())).toContain("Expires in 30 min");
     await render(root, "qr");
     await createInvite(root);
-    expect(JSON.stringify(root.container.toJSON())).toContain("Valid for 5 minutes and one use.");
+    expect(JSON.stringify(root.container.toJSON())).toContain("Expires in 5 min");
     expect(requestedKinds).toEqual(["link", "qr"]);
     await act(async () => root.unmount());
   });
@@ -275,13 +286,13 @@ describe("shared invitation dialog", () => {
     const root = createRoot();
     await render(root, "link");
     await createInvite(root);
-    expect(JSON.stringify(root.container.toJSON())).toContain("Valid for 30 minutes");
+    expect(JSON.stringify(root.container.toJSON())).toContain("Expires in 30 min");
     await render(root, "qr");
     const qrCodes = root.container.queryAll((item) => item.type === "qr").length;
     const qrTab = JSON.stringify(root.container.toJSON());
     await act(async () => root.unmount());
     expect(qrCodes).toBe(0);
-    expect(qrTab).not.toContain("Valid for");
+    expect(qrTab).not.toContain("Expires in");
   });
   test("a hosted invite's message names no host but its link still names the server", async () => {
     const root = createRoot();

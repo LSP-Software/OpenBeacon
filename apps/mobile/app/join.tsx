@@ -1,13 +1,16 @@
 import { tryCatch } from "@openbeacon/shared";
 import { Alert } from "../lib/alert.ts";
 import { CameraView, useCameraPermissions } from "expo-camera";
+import * as Clipboard from "expo-clipboard";
 import { Link, router, useLocalSearchParams } from "expo-router";
-import { QrCodeIcon } from "lucide-react-native";
+import { CheckIcon, ClipboardPasteIcon, QrCodeIcon, XIcon } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
 import { ScrollView, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenHeader } from "../components/headers/ScreenHeader.tsx";
 import { InviteConfirmation } from "../components/InviteConfirmation.tsx";
+import { JoinCodeGrid } from "../components/JoinCodeGrid.tsx";
+import { KeyboardFormScrollView } from "../components/KeyboardFormScrollView.tsx";
 import { Button } from "../components/ui/Button.tsx";
 import { Icon } from "../components/ui/Icon.tsx";
 import { Text } from "../components/ui/Text.tsx";
@@ -16,7 +19,8 @@ import { authClient } from "../lib/auth-client.ts";
 import { getSelectedServerUrl, isHostedServer, normaliseServerUrl } from "../lib/currentServer.ts";
 import type { InviteToConfirm, ReadInvite } from "../lib/inviteTypes.ts";
 import { withOwnScreen } from "../lib/ownScreen.ts";
-import { joinInviteFromInput } from "../lib/inviteLink.ts";
+import { cn } from "../lib/cn.ts";
+import { joinCodeCharacters, joinInviteFromInput } from "../lib/inviteLink.ts";
 import { clearInviteForSignIn, saveInviteForSignIn } from "../lib/pendingJoinCode.ts";
 import { thisDeviceNoun } from "../lib/thisDeviceNoun.ts";
 
@@ -48,7 +52,8 @@ const Join = () => {
   const codeParam = plainParam(params.code);
   const serverParam = plainParam(params.server);
   const inviteId = plainParam(params.inviteId);
-  const [code, setCode] = useState(codeParam ?? "");
+  const [code, setCode] = useState(joinCodeCharacters(codeParam ?? ""));
+  const [codeFocused, setCodeFocused] = useState(false);
   const [opened, setOpened] = useState(() => inviteFromParams(codeParam, serverParam));
   const [switching, setSwitching] = useState(false);
   const busy = useRef(false);
@@ -68,7 +73,7 @@ const Join = () => {
   }, []);
   useEffect(() => {
     if (codeParam === undefined) return;
-    setCode(codeParam ?? "");
+    setCode(joinCodeCharacters(codeParam ?? ""));
     shownInvite.current += 1;
     setOpened(inviteFromParams(codeParam, serverParam));
     setScanning(false);
@@ -89,6 +94,28 @@ const Join = () => {
     shownInvite.current += 1;
     setCode(read.invite.code);
     setOpened(read);
+  };
+  const enterCode = (text: string) => {
+    const added = text.startsWith(code) ? text.slice(code.length) : text;
+    if (added.length <= 1 || /^[0-9a-f\s-]*$/i.test(added)) {
+      setCode(joinCodeCharacters(text));
+      return;
+    }
+    if (joinInviteFromInput(added)) review(added, "typed");
+    else Alert.alert("Invalid code", "That isn’t a join code or invite link.");
+  };
+  const paste = async () => {
+    const pasted = await tryCatch(Clipboard.getStringAsync());
+    const text = pasted.data?.trim();
+    if (pasted.error || !text) {
+      Alert.alert("Nothing to paste", "Copy the join code or invite link first.");
+      return;
+    }
+    if (joinInviteFromInput(text)) {
+      review(text, "typed");
+      return;
+    }
+    Alert.alert("Invalid code", "That isn’t a join code or invite link.");
   };
   const leave = () => (router.canGoBack() ? router.back() : router.replace(fallback));
   const switchServer = async ({ code: inviteCode, server }: { code: string; server: string }) => {
@@ -208,7 +235,10 @@ const Join = () => {
         <InviteConfirmation
           key={JSON.stringify(invite)}
           invite={invite}
-          onTryAnotherCode={() => setOpened(null)}
+          onTryAnotherCode={() => {
+            setCode("");
+            setOpened(null);
+          }}
         />
       </SafeAreaView>
     );
@@ -216,64 +246,145 @@ const Join = () => {
   return (
     <View className="flex-1 bg-background">
       <ScreenHeader title="Join a group" fallback={fallback} />
-      <View className="gap-4 px-4 pt-2">
-        {isPending ? (
-          <Text>Loading...</Text>
-        ) : !session ? (
-          <>
-            <Text className="text-secondary" accessibilityLiveRegion="polite">
-              {isHostedServer(currentServer)
-                ? "Sign in to join this group."
-                : `Sign in or create an account on ${currentName} to join this group. An account on another server won’t work here.`}
-            </Text>
-            <Link href={{ pathname: "/signIn", params: { joinCode: code } }} asChild>
-              <Button>
-                <Text>Sign in</Text>
-              </Button>
-            </Link>
-            <Link href={{ pathname: "/signUp", params: { joinCode: code } }} asChild>
-              <Button variant="secondary">
-                <Text>Create account</Text>
-              </Button>
-            </Link>
-          </>
-        ) : (
-          <>
-            {scanning ? (
-              <View className="overflow-hidden rounded-2xl">
-                <CameraView
-                  style={{ height: 300 }}
-                  barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-                  onBarcodeScanned={({ data }) => {
-                    if (scanned.current) return;
-                    scanned.current = true;
-                    setScanning(false);
-                    review(data, "scan");
-                  }}
-                />
-              </View>
-            ) : null}
-            <Button variant="secondary" onPress={scan}>
-              <Icon as={QrCodeIcon} className="text-foreground size-5" />
-              <Text>{scanning ? "Close scanner" : "Scan QR code"}</Text>
-            </Button>
-            <View className="gap-2 pt-2">
-              <Text variant="label">Or enter a join code</Text>
-              <TextInput
-                accessibilityLabel="Join code"
-                value={code}
-                onChangeText={setCode}
-                autoCapitalize="characters"
-                autoCorrect={false}
-                className="h-[52px] rounded-lg border border-border-strong bg-input px-4 text-base text-foreground"
-              />
-            </View>
-            <Button onPress={() => review(code, "typed")}>
-              <Text>Continue</Text>
-            </Button>
-          </>
+      <KeyboardFormScrollView contentContainerClassName="px-4 pb-8 pt-4">
+        {(form) => (
+          <View ref={form.ref} onLayout={form.onLayout} className="gap-4">
+            {isPending ? (
+              <Text>Loading...</Text>
+            ) : !session ? (
+              <>
+                <Text className="text-secondary" accessibilityLiveRegion="polite">
+                  {isHostedServer(currentServer)
+                    ? "Sign in to join this group."
+                    : `Sign in or create an account on ${currentName} to join this group. An account on another server won’t work here.`}
+                </Text>
+                <Link href={{ pathname: "/signIn", params: { joinCode: code } }} asChild>
+                  <Button>
+                    <Text>Sign in</Text>
+                  </Button>
+                </Link>
+                <Link href={{ pathname: "/signUp", params: { joinCode: code } }} asChild>
+                  <Button variant="secondary">
+                    <Text>Create account</Text>
+                  </Button>
+                </Link>
+              </>
+            ) : (
+              <>
+                <View className="gap-3 rounded-2xl border border-border bg-card p-4">
+                  <View className="flex-row items-center gap-3">
+                    <View className="size-12 items-center justify-center rounded-lg bg-primary-soft">
+                      <Icon as={QrCodeIcon} className="text-primary-text size-6" />
+                    </View>
+                    <View className="flex-1">
+                      <Text className="font-semibold">Scan a QR code</Text>
+                      <Text className="text-sm text-secondary">
+                        Point your camera at their invite
+                      </Text>
+                    </View>
+                    <Button variant="secondary" size="sm" hitSlop={8} onPress={scan}>
+                      <Text>{scanning ? "Close" : "Scan"}</Text>
+                    </Button>
+                  </View>
+                  {scanning ? (
+                    <View className="overflow-hidden rounded-lg">
+                      <CameraView
+                        style={{ height: 300 }}
+                        barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+                        onBarcodeScanned={({ data }) => {
+                          if (scanned.current) return;
+                          scanned.current = true;
+                          setScanning(false);
+                          review(data, "scan");
+                        }}
+                      />
+                    </View>
+                  ) : null}
+                </View>
+                <View className="flex-row items-center gap-3">
+                  <View className="h-px flex-1 bg-border" />
+                  <Text className="text-sm text-tertiary">or</Text>
+                  <View className="h-px flex-1 bg-border" />
+                </View>
+                <View className="gap-2">
+                  <View className="flex-row items-center justify-between">
+                    <Text variant="label">Join code</Text>
+                    {code.length === 32 ? (
+                      <View className="flex-row items-center gap-1">
+                        <Icon as={CheckIcon} className="text-success size-4" />
+                        <Text className="text-sm text-secondary">32 of 32</Text>
+                      </View>
+                    ) : code ? (
+                      <Text className="text-sm text-tertiary">{`${code.length} of 32`}</Text>
+                    ) : null}
+                  </View>
+                  <View
+                    className={cn(
+                      "flex-row items-center gap-2 rounded-lg border bg-input py-3 pl-4 pr-1",
+                      codeFocused ? "border-primary" : "border-border-strong",
+                    )}
+                  >
+                    <View className="flex-1">
+                      <JoinCodeGrid code={code} hidden />
+                      <TextInput
+                        accessibilityLabel="Join code"
+                        accessibilityHint="32 characters, 0 to 9 and A to F"
+                        value={code}
+                        selection={{ start: code.length, end: code.length }}
+                        // Fabric treats a colour of 0 ("transparent") as unset, so the default would show
+                        selectionColor="#00000001"
+                        contextMenuHidden
+                        onChangeText={enterCode}
+                        onFocus={() => setCodeFocused(true)}
+                        onBlur={() => setCodeFocused(false)}
+                        onSubmitEditing={() => review(code, "typed")}
+                        autoCapitalize="characters"
+                        autoCorrect={false}
+                        spellCheck={false}
+                        autoComplete="off"
+                        importantForAutofill="no"
+                        caretHidden
+                        className="absolute inset-0"
+                        style={{ color: "#00000001", fontSize: 1 }}
+                      />
+                    </View>
+                    {code ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="px-3"
+                        hitSlop={8}
+                        accessibilityLabel="Clear join code"
+                        onPress={() => setCode("")}
+                      >
+                        <Icon as={XIcon} className="text-primary-text size-5" />
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="px-3"
+                        hitSlop={8}
+                        onPress={paste}
+                      >
+                        <Icon as={ClipboardPasteIcon} className="text-primary-text size-4" />
+                        <Text>Paste</Text>
+                      </Button>
+                    )}
+                  </View>
+                  <Text className="text-sm text-secondary">
+                    32 characters, 0–9 and A–F, from the person inviting you. You can paste their
+                    invite link or message too.
+                  </Text>
+                </View>
+                <Button disabled={code.length !== 32} onPress={() => review(code, "typed")}>
+                  <Text>Continue</Text>
+                </Button>
+              </>
+            )}
+          </View>
         )}
-      </View>
+      </KeyboardFormScrollView>
     </View>
   );
 };
