@@ -64,6 +64,7 @@ const MapScreen = () => {
   const {
     dropRemovedDevices,
     positions: livePositions,
+    refreshingAfterForeground,
     status: trackingStatus,
   } = useLiveTrackingPositions();
   const { data: session } = authClient.useSession();
@@ -418,6 +419,7 @@ const MapScreen = () => {
           setMapGroupHidden({ groupId, hidden, userId: selfUserId });
         }}
         locationsLoading={
+          refreshingAfterForeground ||
           trackingStatus.membership === "loading" ||
           (trackingStatus.membership === "loaded" &&
             (groups ?? []).some((group) => trackingStatus.groups[group.id] === undefined))

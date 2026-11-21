@@ -175,6 +175,7 @@ const live = (
   undecryptable: readonly { deviceId: string; groupId: string; userId: string }[] = [],
 ) => ({
   dropRemovedDevices: () => {},
+  refreshingAfterForeground: false,
   positions,
   status: {
     connection: "ok" as const,
