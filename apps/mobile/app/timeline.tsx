@@ -522,6 +522,19 @@ const TimelineView = ({
     });
   }, [followLatitude, followLongitude, following]);
 
+  const followedOpen = useRef(card.open);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only the card opening or closing re-centres the followed pin, with the padding for its new size
+  useEffect(() => {
+    if (followedOpen.current === card.open) return;
+    followedOpen.current = card.open;
+    if (!following || followLongitude === undefined || followLatitude === undefined) return;
+    cameraRef.current?.easeTo({
+      center: [followLongitude, followLatitude],
+      duration: 300,
+      padding: cameraPadding,
+    });
+  }, [card.open]);
+
   const selectedRoute = selectedPerson ? routes[0] : undefined;
   const selectedSegment = selectedPerson?.device.segments.find(
     (segment) => segment.start <= time && time <= segment.end,
