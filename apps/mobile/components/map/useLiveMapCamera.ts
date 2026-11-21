@@ -339,7 +339,7 @@ export const useLiveMapCamera = ({
 
     const result = reduceLiveMapInitialFit(initialFitStateRef.current, {
       locationsLoading,
-      markerIds: markers.map((marker) => marker.deviceId),
+      markers,
       nowMs: Date.now(),
       type: "markers",
     });
@@ -348,29 +348,15 @@ export const useLiveMapCamera = ({
 
     if (result.fit) {
       suppressUserCameraControlFor(suppressUserCameraControlUntilMsRef, 600);
-      const animationDuration = fitLiveMapMarkers({
-        animate: result.fit === "animate" && !reduceMotion,
-        camera,
-        markers,
-        padding: cameraPadding,
-      });
-      if (animationDuration !== null) {
-        scheduleCameraRelease(animationDuration);
+      if (fitLiveMapMarkers({ animate: false, camera, markers, padding: cameraPadding }) !== null) {
+        scheduleCameraRelease(0);
       }
       preservedCameraRef.current = mapCameraAfterFittingMarkers({
         markers,
         previousCamera: preservedCameraRef.current,
       });
     }
-  }, [
-    cameraPadding,
-    initialFitRevision,
-    isStyleLoaded,
-    locationsLoading,
-    mapStyle,
-    markers,
-    reduceMotion,
-  ]);
+  }, [cameraPadding, initialFitRevision, isStyleLoaded, locationsLoading, mapStyle, markers]);
 
   useEffect(() => {
     if (!mapStyle || !cameraRef.current) return;

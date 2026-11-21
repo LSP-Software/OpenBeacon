@@ -1,14 +1,18 @@
+import { hasValidCoordinate, isWithinMapFitBounds, mapFitBounds } from "./fitLiveMapMarkers.ts";
+
 export const LIVE_MAP_INITIAL_FIT_SETTLE_MS = 3_000;
 export const LIVE_MAP_REFIT_AFTER_BACKGROUND_MS = 5 * 60_000;
 
 type LiveMapInitialFitState = {
   fittedMarkerIds: string[];
+  framedBounds: ReturnType<typeof mapFitBounds> | null;
   phase: "waiting" | "fitting" | "closed";
   settledAtMs: number | null;
 };
 
 export const createLiveMapInitialFitState = (): LiveMapInitialFitState => ({
   fittedMarkerIds: [],
+  framedBounds: null,
   phase: "waiting",
   settledAtMs: null,
 });
@@ -16,36 +20,39 @@ export const createLiveMapInitialFitState = (): LiveMapInitialFitState => ({
 export const reduceLiveMapInitialFit = (
   state: LiveMapInitialFitState,
   event: LiveMapInitialFitEvent,
-): { fit: "jump" | "animate" | null; state: LiveMapInitialFitState } => {
+): { fit: boolean; state: LiveMapInitialFitState } => {
   if (event.type === "user_camera_control" || event.type === "show_everyone") {
-    return { fit: null, state: { ...state, phase: "closed" } };
+    return { fit: false, state: { ...state, phase: "closed" } };
   }
 
   if (event.type === "foreground") {
     if (event.following || event.awayMs < LIVE_MAP_REFIT_AFTER_BACKGROUND_MS) {
-      return { fit: null, state };
+      return { fit: false, state };
     }
-    return { fit: null, state: createLiveMapInitialFitState() };
+    return { fit: false, state: createLiveMapInitialFitState() };
   }
 
   if (state.phase === "closed") {
-    return { fit: null, state };
+    return { fit: false, state };
   }
 
   if (event.type === "settle_elapsed") {
-    return { fit: null, state: hasSettled(state, event.nowMs) ? closed(state) : state };
+    return { fit: false, state: hasSettled(state, event.nowMs) ? closed(state) : state };
   }
 
-  const markerIds = [...new Set(event.markerIds)];
+  const markerIds = [...new Set(event.markers.map((marker) => marker.deviceId))];
+  const validMarkers = event.markers.filter(hasValidCoordinate);
+  const framedBounds = validMarkers.length > 0 ? mapFitBounds(validMarkers) : null;
 
   if (state.phase === "waiting") {
     if (markerIds.length === 0) {
-      return { fit: null, state };
+      return { fit: false, state };
     }
     return {
-      fit: "jump",
+      fit: true,
       state: {
         fittedMarkerIds: markerIds,
+        framedBounds,
         phase: "fitting",
         settledAtMs: event.locationsLoading ? null : event.nowMs,
       },
@@ -53,18 +60,27 @@ export const reduceLiveMapInitialFit = (
   }
 
   if (hasSettled(state, event.nowMs)) {
-    return { fit: null, state: closed(state) };
+    return { fit: false, state: closed(state) };
   }
 
   const settledAtMs = event.locationsLoading ? null : (state.settledAtMs ?? event.nowMs);
+  const previousBounds = state.framedBounds;
+  const hasNewMarker = markerIds.some((markerId) => !state.fittedMarkerIds.includes(markerId));
+  const hasMovedOutOfFrame =
+    previousBounds !== null &&
+    validMarkers.some(
+      (marker) =>
+        state.fittedMarkerIds.includes(marker.deviceId) &&
+        !isWithinMapFitBounds({ bounds: previousBounds, marginFraction: 0.1, point: marker }),
+    );
 
-  if (!markerIds.some((markerId) => !state.fittedMarkerIds.includes(markerId))) {
-    return { fit: null, state: { ...state, settledAtMs } };
+  if (!hasNewMarker && !hasMovedOutOfFrame) {
+    return { fit: false, state: { ...state, settledAtMs } };
   }
 
   return {
-    fit: "animate",
-    state: { fittedMarkerIds: markerIds, phase: "fitting", settledAtMs },
+    fit: true,
+    state: { fittedMarkerIds: markerIds, framedBounds, phase: "fitting", settledAtMs },
   };
 };
 
@@ -79,7 +95,12 @@ const closed = (state: LiveMapInitialFitState): LiveMapInitialFitState => ({
 });
 
 type LiveMapInitialFitEvent =
-  | { type: "markers"; markerIds: readonly string[]; locationsLoading: boolean; nowMs: number }
+  | {
+      type: "markers";
+      markers: readonly { deviceId: string; latitude: number; longitude: number }[];
+      locationsLoading: boolean;
+      nowMs: number;
+    }
   | { type: "settle_elapsed"; nowMs: number }
   | { type: "foreground"; awayMs: number; following: boolean }
   | { type: "user_camera_control" }

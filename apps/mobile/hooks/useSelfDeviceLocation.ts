@@ -19,7 +19,7 @@ export const useSelfDeviceLocation = (enabled: boolean) => {
       createSubscription: (isWanted) =>
         watchPositionWithLastKnown({
           getLastKnownPosition: () =>
-            Location.getLastKnownPositionAsync({ maxAge: 10 * 60_000, requiredAccuracy: 100 }),
+            Location.getLastKnownPositionAsync({ maxAge: 2 * 60_000, requiredAccuracy: 100 }),
           isWanted,
           onPosition: (position) => {
             setLocation({

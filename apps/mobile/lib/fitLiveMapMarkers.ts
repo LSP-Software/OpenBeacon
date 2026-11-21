@@ -60,7 +60,7 @@ export const fitLiveMapMarkers = ({
   return duration;
 };
 
-const hasValidCoordinate = (marker: LiveMapMarker) =>
+export const hasValidCoordinate = (marker: { latitude: number; longitude: number }) =>
   Number.isFinite(marker.latitude) &&
   Number.isFinite(marker.longitude) &&
   marker.latitude >= -90 &&
@@ -107,6 +107,27 @@ export const mapFitBounds = (markers: readonly { latitude: number; longitude: nu
     ne: [east, north] as [number, number],
     sw: [west, south] as [number, number],
   };
+};
+
+export const isWithinMapFitBounds = ({
+  bounds,
+  marginFraction,
+  point,
+}: {
+  bounds: ReturnType<typeof mapFitBounds>;
+  marginFraction: number;
+  point: { latitude: number; longitude: number };
+}) => {
+  const [west, south] = bounds.sw;
+  const [east, north] = bounds.ne;
+  const latitudeMargin = (north - south) * marginFraction;
+  if (point.latitude < south - latitudeMargin || point.latitude > north + latitudeMargin) {
+    return false;
+  }
+  const span = longitudeSpan(west, east);
+  const longitudeMargin = span * marginFraction;
+  const eastOfWest = (((normalizeLongitude(point.longitude) - west) % 360) + 360) % 360;
+  return eastOfWest <= span + longitudeMargin || eastOfWest >= 360 - longitudeMargin;
 };
 
 const shortestLongitudeBounds = (longitudes: readonly number[]) => {

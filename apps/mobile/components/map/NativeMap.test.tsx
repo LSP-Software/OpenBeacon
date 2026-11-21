@@ -1505,7 +1505,7 @@ describe("NativeMap over a fake MapLibre", () => {
     ).toHaveLength(1);
   });
 
-  test("jumps to the first location and frames people whose locations load later", async () => {
+  test("jumps to the first location and jumps again to frame people whose locations load later", async () => {
     const self = createLiveMapMarkerFixture({
       isSelf: true,
       latitude: 51.5,
@@ -1534,8 +1534,35 @@ describe("NativeMap over a fake MapLibre", () => {
         ne: [-0.12, 51.5],
         sw: [-1.1, 50.8],
         padding: expect.any(Array),
-        duration: 600,
+        duration: 0,
       },
+    ]);
+  });
+
+  test("follows your own pin from a stale cached position to the first live fix", async () => {
+    const cached = createLiveMapMarkerFixture({
+      isSelf: true,
+      latitude: 51.5,
+      longitude: -0.12,
+      userId: "self",
+    });
+
+    await renderNativeMap({ locationsLoading: true, markers: [cached] });
+    await finishLoadingStyle();
+    await flushEffects();
+    await renderNativeMap({
+      locationsLoading: true,
+      markers: [{ ...cached, latitude: 51.4, longitude: -0.3 }],
+    });
+    await flushEffects();
+
+    expect(
+      getNativeMapCameraCommands()
+        .filter((command) => command.type === "setCamera")
+        .map((command) => command.stop),
+    ).toEqual([
+      expect.objectContaining({ animationDuration: 0, centerCoordinate: [-0.12, 51.5] }),
+      expect.objectContaining({ animationDuration: 0, centerCoordinate: [-0.3, 51.4] }),
     ]);
   });
 

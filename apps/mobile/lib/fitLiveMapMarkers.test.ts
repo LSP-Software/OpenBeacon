@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { LiveMapMarker } from "./buildLiveMapMarkers.ts";
-import { fitLiveMapMarkers, mapFitBounds } from "./fitLiveMapMarkers.ts";
+import { fitLiveMapMarkers, isWithinMapFitBounds, mapFitBounds } from "./fitLiveMapMarkers.ts";
 
 const padding = {
   paddingBottom: 48,
@@ -256,5 +256,39 @@ describe("mapFitBounds", () => {
         { latitude: 51.75, longitude: -1.25 },
       ]),
     ).toEqual({ ne: [-0.12, 51.75], sw: [-1.25, 51.5] });
+  });
+});
+
+describe("isWithinMapFitBounds", () => {
+  const bounds = mapFitBounds([
+    { latitude: 51.4, longitude: -0.2 },
+    { latitude: 51.6, longitude: 0 },
+  ]);
+
+  test.each([
+    { name: "inside", point: { latitude: 51.5, longitude: -0.1 }, within: true },
+    { name: "inside the margin", point: { latitude: 51.61, longitude: 0.01 }, within: true },
+    { name: "past the margin north", point: { latitude: 51.7, longitude: -0.1 }, within: false },
+    { name: "past the margin east", point: { latitude: 51.5, longitude: 0.1 }, within: false },
+  ])("$name", ({ point, within }) => {
+    expect(isWithinMapFitBounds({ bounds, marginFraction: 0.1, point })).toBe(within);
+  });
+
+  test("handles a frame that crosses 180°", () => {
+    const crossing = mapFitBounds([
+      { latitude: -17, longitude: 179 },
+      { latitude: -18, longitude: -179 },
+    ]);
+    const within = (longitude: number) =>
+      isWithinMapFitBounds({
+        bounds: crossing,
+        marginFraction: 0.1,
+        point: { latitude: -17.5, longitude },
+      });
+
+    expect(within(180)).toBe(true);
+    expect(within(-179.1)).toBe(true);
+    expect(within(0)).toBe(false);
+    expect(within(178)).toBe(false);
   });
 });
