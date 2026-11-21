@@ -9,8 +9,11 @@ let root: Root | null = null;
 let now = Date.parse("2026-07-19T12:00:00.000Z");
 let appStateListener: ((state: string) => void) | null = null;
 let circles: Array<{
+  cx: number;
+  cy: number;
+  r: number;
   stroke: string;
-  strokeDasharray: string;
+  strokeDasharray?: string;
   strokeDashoffset: number;
   rotation: number;
 }> = [];
@@ -41,8 +44,11 @@ mock.module("react-native", () => ({
 mock.module("react-native-svg", () => ({
   default: ({ children }: { children: React.ReactNode }) => children,
   Circle: (props: {
+    cx: number;
+    cy: number;
+    r: number;
     stroke: string;
-    strokeDasharray: string;
+    strokeDasharray?: string;
     strokeDashoffset: number;
     rotation: number;
   }) => {
@@ -164,7 +170,7 @@ describe("LiveMapMarkerPin", () => {
       expect(circles).toHaveLength(count);
       for (let index = 0; index < count; index++) {
         const circle = circles[index]!;
-        const [segment, gap] = circle.strokeDasharray.split(" ").map(Number);
+        const [segment, gap] = (circle.strokeDasharray ?? "").split(" ").map(Number);
         expect(circle.stroke).toBe(colors[index]!);
         expect(segment).toBeCloseTo((2 * Math.PI * 20.5) / count);
         expect(gap).toBeCloseTo(2 * Math.PI * 20.5);
@@ -174,7 +180,8 @@ describe("LiveMapMarkerPin", () => {
     }
     circles = [];
     await renderPin(null);
-    expect(circles).toHaveLength(0);
+    expect(circles).toEqual([expect.objectContaining({ cx: 23, cy: 23, r: 20.5, stroke: "#fff" })]);
+    expect(circles[0]?.strokeDasharray).toBeUndefined();
   });
 
   test("shows a clock after the threshold and clears it when a new point arrives", async () => {
@@ -240,7 +247,9 @@ describe("LiveMapMarkerPin", () => {
     const pin = JSON.stringify(root.container.toJSON());
     expect(pin).toContain("Newer location can’t be read");
     expect(pin).not.toContain("Location is over");
-    expect(circles).toEqual([]);
+    expect(circles.map((circle) => [circle.stroke, circle.strokeDasharray])).toEqual([
+      ["#fff", undefined],
+    ]);
   });
 
   test("names the device badge after the phone's platform", async () => {

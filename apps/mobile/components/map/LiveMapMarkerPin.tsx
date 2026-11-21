@@ -19,6 +19,8 @@ const BEAM_COLOR = "#FF1464";
 const OUTER_RADIUS = PIN_RADIUS + SPOT_LENGTH;
 const OUTER_SIZE = 2 * OUTER_RADIUS;
 const CENTER = OUTER_SIZE / 2;
+const RING_RADIUS = 20.5;
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
 const polar = (radius: number, angleRad: number) => ({
   x: CENTER + radius * Math.sin(angleRad),
@@ -138,8 +140,6 @@ export const LiveMapMarkerPin = ({
           width: 46,
           height: 46,
           borderRadius: 23,
-          borderWidth: 1,
-          borderColor: "#FFFFFF",
           backgroundColor: "#FFFFFF",
           shadowColor: "#000000",
           shadowOffset: { width: 0, height: 2 },
@@ -150,65 +150,64 @@ export const LiveMapMarkerPin = ({
           justifyContent: "center",
         }}
       >
-        <View
-          style={{
-            width: 44,
-            height: 44,
-            borderRadius: 22,
-            borderWidth: 3,
-            borderColor: ringColors || status ? "transparent" : ringColor,
-            overflow: "hidden",
-            backgroundColor: "#FFFFFF",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
+        <Avatar alt={name} className="size-10" style={status ? { opacity: 0.45 } : undefined}>
+          <DecryptedAvatarImage
+            url={image}
+            onLoadingStatusChange={(_status: "error" | "loaded") => {
+              onBitmapContentChange?.();
+            }}
+          />
+          <AvatarFallback
+            className={status ? "bg-neutral-500" : ""}
+            style={fillColor && !status ? { backgroundColor: fillColor } : undefined}
+          >
+            <Text className="font-bold">{initials}</Text>
+          </AvatarFallback>
+        </Avatar>
+        <Svg
+          width={46}
+          height={46}
+          viewBox="0 0 46 46"
+          style={{ position: "absolute", left: 0, top: 0 }}
+          pointerEvents="none"
         >
-          <Avatar alt={name} className="size-10" style={status ? { opacity: 0.45 } : undefined}>
-            <DecryptedAvatarImage
-              url={image}
-              onLoadingStatusChange={(_status: "error" | "loaded") => {
-                onBitmapContentChange?.();
-              }}
-            />
-            <AvatarFallback
-              className={status ? "bg-neutral-500" : ""}
-              style={fillColor && !status ? { backgroundColor: fillColor } : undefined}
-            >
-              <Text className="font-bold">{initials}</Text>
-            </AvatarFallback>
-          </Avatar>
-        </View>
-        {status ? (
-          <Svg width={44} height={44} style={{ position: "absolute" }} pointerEvents="none">
+          {status ? (
             <Circle
-              cx={22}
-              cy={22}
-              r={20.5}
+              cx={23}
+              cy={23}
+              r={RING_RADIUS}
               fill="none"
               stroke="#8A8299"
               strokeWidth={3}
               strokeDasharray="5 4"
             />
-          </Svg>
-        ) : ringColors ? (
-          <Svg width={44} height={44} style={{ position: "absolute" }} pointerEvents="none">
-            {ringColors.map((color, index) => (
+          ) : ringColors ? (
+            ringColors.map((color, index) => (
               <Circle
                 key={color}
-                cx={22}
-                cy={22}
-                r={20.5}
+                cx={23}
+                cy={23}
+                r={RING_RADIUS}
                 fill="none"
                 stroke={color}
                 strokeWidth={3}
-                strokeDasharray={`${(2 * Math.PI * 20.5) / ringColors.length} ${2 * Math.PI * 20.5}`}
-                strokeDashoffset={(-index * 2 * Math.PI * 20.5) / ringColors.length}
+                strokeDasharray={`${RING_CIRCUMFERENCE / ringColors.length} ${RING_CIRCUMFERENCE}`}
+                strokeDashoffset={(-index * RING_CIRCUMFERENCE) / ringColors.length}
                 rotation={-90}
-                origin="22, 22"
+                origin="23, 23"
               />
-            ))}
-          </Svg>
-        ) : null}
+            ))
+          ) : (
+            <Circle
+              cx={23}
+              cy={23}
+              r={RING_RADIUS}
+              fill="none"
+              stroke={ringColor}
+              strokeWidth={3}
+            />
+          )}
+        </Svg>
         {status === "paused" ? (
           <StatusBadge label="Location sharing paused">
             <Icon as={PauseIcon} size={12} className="text-foreground" />
