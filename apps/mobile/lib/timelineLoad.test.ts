@@ -433,7 +433,7 @@ describe("loadTimelineDay", () => {
     });
     expect(timelinePositionAt(timeline.devices[0]?.segments ?? [], dayStart + 7 * HOUR_MS)).toEqual(
       {
-        position: { accuracy: 10, latitude: 51.5, longitude: -0.1 },
+        position: { accuracy: 10, latitude: 51.5, longitude: -0.1, speed: null },
         state: "stay",
       },
     );

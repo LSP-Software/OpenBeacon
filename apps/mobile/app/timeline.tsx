@@ -45,6 +45,7 @@ import { Icon } from "../components/ui/Icon.tsx";
 import { Text } from "../components/ui/Text.tsx";
 import { useCachedGroup } from "../hooks/useCachedGroup.ts";
 import { useReducedMotion } from "../hooks/useReducedMotion.ts";
+import { useSpeedUnit } from "../hooks/useSpeedUnit.ts";
 import { useUses24HourClock } from "../hooks/useUses24HourClock.ts";
 import { useTimelineDay, useTimelineDays } from "../hooks/useTimeline.ts";
 import { trpc } from "../lib/api.ts";
@@ -57,6 +58,7 @@ import { GROUP_COLOR_PALETTE, getGroupColor } from "../lib/groupColor.ts";
 import { loadPersonalNicknames } from "../lib/personalNicknames.ts";
 import { groupPlacesQueryOptions } from "../lib/placeSync.ts";
 import { getSymbolVisibility } from "../lib/protomaps-style.ts";
+import { movingSpeedLabel } from "../lib/speed.ts";
 import {
   pickPersonDevices,
   timelineDayStats,
@@ -190,6 +192,7 @@ const TimelineView = ({
   const [chosenPeople, setChosenPeople] = useState<string[] | null>(null);
   const [chooserOpen, setChooserOpen] = useState(false);
   const reduceMotion = useReducedMotion();
+  const { unit: speedUnit } = useSpeedUnit();
   const timeRef = useRef(0);
   const dayStripRef = useRef<ScrollView>(null);
 
@@ -560,8 +563,13 @@ const TimelineView = ({
       };
     }
     switch (selectedSegment.kind) {
-      case "moving":
-        return { title: "Moving", detail: date };
+      case "moving": {
+        const speedLabel =
+          selectedPin?.state === "moving"
+            ? movingSpeedLabel(selectedPin.position.speed, speedUnit)
+            : null;
+        return { title: "Moving", detail: speedLabel ? `${speedLabel} · ${date}` : date };
+      }
       case "stay": {
         const stop = selectedStop ?? selectedSegment;
         const name = selectedStop ? placeName(selectedStop.placeId) : null;

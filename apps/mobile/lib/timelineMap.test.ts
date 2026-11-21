@@ -13,6 +13,7 @@ const at = (latitude: number, longitude = 0): TimelinePosition => ({
   accuracy: 5,
   latitude,
   longitude,
+  speed: null,
 });
 
 const moving = (start: number, from: TimelinePosition, to: TimelinePosition): TimelineSegment => ({

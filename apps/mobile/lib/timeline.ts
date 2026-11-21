@@ -13,10 +13,11 @@ import type {
 export const SAME_STOP_METERS = 100;
 export const NO_LOCATION_AFTER_MS = 10 * 60_000;
 
-const positionOf = ({ accuracy, latitude, longitude }: TimelinePoint): TimelinePosition => ({
+const positionOf = ({ accuracy, latitude, longitude, speed }: TimelinePoint): TimelinePosition => ({
   accuracy,
   latitude,
   longitude,
+  speed,
 });
 
 const deviceSegments = (unsorted: readonly TimelinePoint[]) => {
@@ -60,13 +61,13 @@ const interpolate = (
 ): TimelinePosition => {
   const fraction = (time - segment.start) / (segment.end - segment.start);
   const { from, to } = segment;
+  const between = (start: number | null, end: number | null) =>
+    start === null || end === null ? null : start + (end - start) * fraction;
   return {
-    accuracy:
-      from.accuracy === null || to.accuracy === null
-        ? null
-        : from.accuracy + (to.accuracy - from.accuracy) * fraction,
+    accuracy: between(from.accuracy, to.accuracy),
     latitude: from.latitude + (to.latitude - from.latitude) * fraction,
     longitude: from.longitude + (to.longitude - from.longitude) * fraction,
+    speed: between(from.speed, to.speed),
   };
 };
 
