@@ -33,6 +33,7 @@ const isShippedFile = (file: string) =>
   !/\.test\.tsx?$/.test(file) &&
   !file.endsWith(".md") &&
   !file.includes("/src/test/") &&
+  !file.startsWith("apps/mobile/test/") &&
   !file.includes("/src/androidTest/");
 
 const parseSemver = (version: string) => {
