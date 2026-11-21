@@ -28,7 +28,7 @@ export const TimelinePlayerCard = ({
   bottom: number;
   card: PlayerCard;
   children: ReactNode;
-  miniStatus: string;
+  miniStatus: { date: string; speed: string | null; title: string | null };
   miniScrubber: ReactNode;
 }) => (
   <View
@@ -66,14 +66,35 @@ export const TimelinePlayerCard = ({
               onLayout={card.measure("miniColumn")}
             >
               <View style={card.miniSlots.clock} onLayout={card.measure("miniClock")} />
-              <Text
-                accessibilityLiveRegion="polite"
-                className="text-xs text-secondary"
-                maxFontSizeMultiplier={1.5}
-                numberOfLines={1}
-              >
-                {miniStatus}
-              </Text>
+              <View className="flex-row">
+                {miniStatus.title ? (
+                  <Text
+                    accessibilityLiveRegion="polite"
+                    className="max-w-[70%] shrink-0 text-xs text-secondary"
+                    maxFontSizeMultiplier={1.5}
+                    numberOfLines={1}
+                  >
+                    {miniStatus.title}
+                  </Text>
+                ) : null}
+                {miniStatus.speed ? (
+                  <Text
+                    className="shrink-0 text-xs text-secondary"
+                    maxFontSizeMultiplier={1.5}
+                    numberOfLines={1}
+                  >
+                    {` · ${miniStatus.speed}`}
+                  </Text>
+                ) : null}
+                <Text
+                  accessibilityLiveRegion="polite"
+                  className="min-w-0 shrink text-xs text-secondary"
+                  maxFontSizeMultiplier={1.5}
+                  numberOfLines={1}
+                >
+                  {miniStatus.title ? ` · ${miniStatus.date}` : miniStatus.date}
+                </Text>
+              </View>
             </View>
             <View
               pointerEvents="none"

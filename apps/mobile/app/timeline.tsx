@@ -588,7 +588,11 @@ const TimelineView = ({
     switch (selectedSegment.kind) {
       case "moving": {
         const speedLabel = timelineSpeedLabel(selectedPin, speedUnit);
-        return { title: "Moving", detail: speedLabel ? `${speedLabel} · ${date}` : date };
+        return {
+          title: "Moving",
+          detail: speedLabel ? `${speedLabel} · ${date}` : date,
+          speed: speedLabel,
+        };
       }
       case "stay": {
         const stop = selectedStop ?? selectedSegment;
@@ -962,9 +966,11 @@ const TimelineView = ({
       <TimelinePlayerCard
         bottom={insets.bottom + 8}
         card={card}
-        miniStatus={
-          status && status.title !== dayLabel ? `${status.title} · ${dayLabel}` : dayLabel
-        }
+        miniStatus={{
+          date: dayLabel,
+          speed: status && "speed" in status ? status.speed : null,
+          title: status && status.title !== dayLabel ? status.title : null,
+        }}
         miniScrubber={
           timeline ? (
             <TimelineMiniScrubber
