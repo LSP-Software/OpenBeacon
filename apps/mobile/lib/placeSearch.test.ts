@@ -256,6 +256,20 @@ describe("placeSearchArea", () => {
     });
   });
 
+  test("never sends an area narrower than the box", () => {
+    expect(placeSearchArea(view([-0.13, 51.51], [-0.2, 51.2, -0.06, 51.82]))).toEqual({
+      south: 51.2,
+      west: -0.5,
+      north: 51.82,
+      east: 0,
+    });
+  });
+
+  test("sends no area for a view across the 180th meridian", () => {
+    expect(placeSearchArea(view([179.9, -17], [179.8, -17.1, -179.9, -16.9]))).toBeNull();
+    expect(placeSearchArea(view([180.1, -17], [180, -17.1, 180.2, -16.9]))).toBeNull();
+  });
+
   test("sends no area at world scale", () => {
     expect(placeSearchArea(view([0, 20], [-180, -60, 180, 80]))).toBeNull();
     expect(placeSearchArea(view([-3, 54], [-15, 49, 9, 59]))).toBeNull();
@@ -299,6 +313,9 @@ describe("suggestPlaceName", () => {
     ).toBeNull();
     expect(suggestPlaceName("12 Wood Street", found("12 Wood St, London E17 3HT, UK"))).toBeNull();
     expect(suggestPlaceName("215 mays lane", found("215 Mays Ln, Barnet EN5 2LZ, UK"))).toBeNull();
+    expect(
+      suggestPlaceName("Saint Mary's Road", found("St Mary's Rd, London W5 5RH, UK")),
+    ).toBeNull();
   });
 
   test("a result's own name comes first", () => {

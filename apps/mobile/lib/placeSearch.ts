@@ -80,26 +80,31 @@ export const placeSearchState = ({
   return results.length === 1 ? { kind: "move", result: first } : { kind: "choose", results };
 };
 
-export const placeSearchArea = (
-  view: {
-    bounds: readonly [west: number, south: number, east: number, north: number];
-    center: readonly [longitude: number, latitude: number];
-  } | null,
-): PlaceSearchBox | null => {
+export type PlaceSearchView = {
+  bounds: [west: number, south: number, east: number, north: number];
+  center: [longitude: number, latitude: number];
+};
+
+export const placeSearchArea = (view: PlaceSearchView | null): PlaceSearchBox | null => {
   if (!view) return null;
   const [west, south, east, north] = view.bounds;
-  const width = east >= west ? east - west : east - west + 360;
-  const height = north - south;
-  if (width > 20 || height > 20) return null;
-  if (width > 0.5 || height > 0.5) return { south, west, north, east };
+  if (west > east || west < -180 || east > 180) return null;
+  if (east - west > 20 || north - south > 20) return null;
   const snap = (value: number) => Math.round(value / 0.25) * 0.25 + 0;
   const latitude = snap(view.center[1]);
   const longitude = snap(view.center[0]);
-  return {
+  const box = {
     south: Math.max(-90, latitude - 0.25),
     west: Math.max(-180, longitude - 0.25),
     north: Math.min(90, latitude + 0.25),
     east: Math.min(180, longitude + 0.25),
+  };
+  if (east - west <= 0.5 && north - south <= 0.5) return box;
+  return {
+    south: Math.min(box.south, south),
+    west: Math.min(box.west, west),
+    north: Math.max(box.north, north),
+    east: Math.max(box.east, east),
   };
 };
 
@@ -116,8 +121,11 @@ export const suggestPlaceName = (query: string, result: PlaceSearchResult) => {
     gardens: "gdns",
     grove: "gr",
     lane: "ln",
+    mount: "mt",
     place: "pl",
+    park: "pk",
     road: "rd",
+    saint: "st",
     square: "sq",
     street: "st",
     terrace: "ter",

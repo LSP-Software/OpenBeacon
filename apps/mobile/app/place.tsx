@@ -44,6 +44,7 @@ import {
 } from "../lib/placeSync.ts";
 import {
   type PlaceSearchResult,
+  type PlaceSearchView,
   placeSearchArea,
   placeSearchState,
   suggestPlaceName,
@@ -210,12 +211,9 @@ const PlaceEditor = ({
   >(null);
   const searchRound = useRef(0);
   const searchedQuery = useRef("");
-  const nameSuggestion = useRef<string | null>(null);
-  const suggestedName = useRef("");
-  const mapView = useRef<{
-    bounds: [number, number, number, number];
-    center: [number, number];
-  } | null>(null);
+  const pickedResultName = useRef<string | null>(null);
+  const autoFilledName = useRef("");
+  const mapView = useRef<PlaceSearchView | null>(null);
   const unsaved = place
     ? center !== null &&
       !isPlaceEditUnchanged({
@@ -324,7 +322,7 @@ const PlaceEditor = ({
     setCenter({ latitude: result.latitude, longitude: result.longitude });
     cameraRef.current?.flyTo({ center: cameraCenterFor(result, atZoom), zoom: atZoom });
     setSearch({ kind: "move", result });
-    nameSuggestion.current = suggestPlaceName(searchedQuery.current, result);
+    pickedResultName.current = suggestPlaceName(searchedQuery.current, result);
     AccessibilityInfo.announceForAccessibility(
       `Moved to ${result.label}. Move the map if it isn’t quite right.`,
     );
@@ -339,9 +337,9 @@ const PlaceEditor = ({
   const goToNaming = () => {
     searchRound.current += 1;
     if (search?.kind === "searching" || search?.kind === "choose") setSearch(null);
-    if (!place && (name === "" || name === suggestedName.current)) {
-      suggestedName.current = nameSuggestion.current ?? "";
-      setName(suggestedName.current);
+    if (!place && (name === "" || name === autoFilledName.current)) {
+      autoFilledName.current = pickedResultName.current ?? "";
+      setName(autoFilledName.current);
     }
     setStep(2);
   };
