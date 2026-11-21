@@ -11,8 +11,10 @@ const element =
   ({ children, ...props }: { children?: ReactNode }) =>
     React.createElement(type, props, children);
 
+let fontScale = 1;
 mock.module("react-native", () => ({
   PanResponder: { create: () => ({ panHandlers: {} }) },
+  useWindowDimensions: () => ({ fontScale }),
   View: element("view"),
 }));
 mock.module("react-native-svg", () => ({
@@ -30,7 +32,8 @@ mock.module("../components/ui/Text.tsx", () => ({ Text: element("text") }));
 const { TimelineKey, TimelineScrubber } =
   await import("../components/timeline/TimelineScrubber.tsx");
 
-const ticksFor = async (uses24HourClock: boolean) => {
+const ticksFor = async (uses24HourClock: boolean, scale = 1, trackWidth = 320) => {
+  fontScale = scale;
   const start = new Date(2026, 10, 19).getTime();
   const end = new Date(2026, 10, 20).getTime();
   const root = createRoot();
@@ -54,7 +57,7 @@ const ticksFor = async (uses24HourClock: boolean) => {
   )[0];
   const onLayout = track?.props["onLayout"] as
     ((event: { nativeEvent: { layout: { width: number } } }) => void) | undefined;
-  await act(async () => onLayout?.({ nativeEvent: { layout: { width: 320 } } }));
+  await act(async () => onLayout?.({ nativeEvent: { layout: { width: trackWidth } } }));
   const ticks = root.container
     .queryAll(
       (node) =>
@@ -62,12 +65,19 @@ const ticksFor = async (uses24HourClock: boolean) => {
     )
     .map((node) => String(node.children.join("")).replace(/\s/g, " "));
   await act(async () => root.unmount());
+  fontScale = 1;
   return ticks;
 };
 
 test("the scrubber's hour marks follow the phone's 12 or 24-hour clock", async () => {
   expect(await ticksFor(true)).toEqual(["00", "06", "12", "18", "24"]);
   expect(await ticksFor(false)).toEqual(["12 AM", "6 AM", "12 PM", "6 PM", "12 AM"]);
+});
+
+test("at large text sizes the 12-hour marks thin out so they never collide", async () => {
+  expect(await ticksFor(true, 2, 300)).toEqual(["00", "06", "12", "18", "24"]);
+  expect(await ticksFor(false, 2, 300)).toEqual(["12 AM", "12 PM", "12 AM"]);
+  expect(await ticksFor(false, 1, 300)).toEqual(["12 AM", "6 AM", "12 PM", "6 PM", "12 AM"]);
 });
 
 test("time before history starts is drawn apart from the no-location hatch", async () => {

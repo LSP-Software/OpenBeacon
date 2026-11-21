@@ -3,10 +3,11 @@ import {
   type AccessibilityActionEvent,
   type LayoutChangeEvent,
   PanResponder,
+  useWindowDimensions,
   View,
 } from "react-native";
 import Svg, { Defs, Line, Pattern, Rect } from "react-native-svg";
-import { formatTimelineHourTick } from "../../lib/timelineClock.ts";
+import { formatTimelineHourTick, timelineHourTicks } from "../../lib/timelineClock.ts";
 import type { TimelineSegment } from "../../lib/timelineTypes.ts";
 import { useColors } from "../../lib/theme.ts";
 import { Text } from "../ui/Text.tsx";
@@ -16,6 +17,7 @@ const STOPPED_HEIGHT = 8;
 const KNOB_SIZE = 20;
 const LANE_GAP = 8;
 const AVATAR_WIDTH = 30;
+const TICK_MAX_FONT_SCALE = 2;
 
 type Lane = {
   color: string;
@@ -53,11 +55,12 @@ export const TimelineScrubber = ({
   const { trackProps, width, xOf } = useScrubTrack(scrub);
   const height = lanes.length * (LANE_HEIGHT + LANE_GAP) - LANE_GAP;
   const date = new Date(day.start);
-  const ticks = [0, 6, 12, 18, 24].map((hour) => ({
+  const tickScale = Math.min(useWindowDimensions().fontScale, TICK_MAX_FONT_SCALE);
+  const tickWidth = Math.ceil((uses24HourClock ? 16 : 40) * tickScale);
+  const ticks = timelineHourTicks({ labelWidth: tickWidth, trackWidth: width }).map((hour) => ({
     hour,
     at: new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour).getTime(),
   }));
-  const tickWidth = uses24HourClock ? 16 : 40;
 
   return (
     <View>
@@ -115,12 +118,17 @@ export const TimelineScrubber = ({
           ) : null}
         </View>
       </View>
-      <View className="flex-row" style={{ marginLeft: AVATAR_WIDTH, height: 16 }}>
+      <View
+        className="flex-row"
+        style={{ marginLeft: AVATAR_WIDTH, height: Math.ceil(16 * tickScale) }}
+      >
         {width > 0
           ? ticks.map((tick) => (
               <Text
                 key={tick.hour}
                 className="absolute text-xs text-secondary"
+                maxFontSizeMultiplier={TICK_MAX_FONT_SCALE}
+                numberOfLines={1}
                 style={{
                   left: Math.min(Math.max(xOf(tick.at) - tickWidth / 2, 0), width - tickWidth),
                   width: tickWidth,

@@ -16,6 +16,14 @@ export const formatTimelineHourTick = (hour: number, uses24HourClock: boolean) =
         hourCycle: "h12",
       });
 
+export const timelineHourTicks = ({
+  labelWidth,
+  trackWidth,
+}: {
+  labelWidth: number;
+  trackWidth: number;
+}) => (trackWidth / 4 >= labelWidth ? [0, 6, 12, 18, 24] : [0, 12, 24]);
+
 export const localeUses24HourClock = () => {
   const { hourCycle } = new Intl.DateTimeFormat(undefined, { hour: "numeric" }).resolvedOptions();
   return hourCycle === "h23" || hourCycle === "h24";

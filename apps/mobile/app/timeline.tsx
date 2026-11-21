@@ -20,7 +20,14 @@ import {
   SkipForwardIcon,
 } from "lucide-react-native";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, BackHandler, Pressable, ScrollView, View } from "react-native";
+import {
+  ActivityIndicator,
+  BackHandler,
+  Pressable,
+  ScrollView,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNativeMapStyle } from "../components/map/useNativeMapStyle.ts";
@@ -1087,7 +1094,7 @@ const TimelineView = ({
               ) : null}
               {selectedPerson && selectedRoute ? (
                 <>
-                  <View className="flex-row gap-2">
+                  <View className="flex-row flex-wrap gap-2">
                     <StatCard
                       value={formatDistance(selectedRoute.stats.distanceMeters)}
                       label="travelled"
@@ -1269,12 +1276,26 @@ const PersonChip = ({
   </Pressable>
 );
 
-const StatCard = ({ label, value }: { label: string; value: string }) => (
-  <View className="flex-1 rounded-xl bg-background px-3 py-2">
-    <Text className="text-lg font-semibold text-foreground">{value}</Text>
-    <Text className="text-xs text-secondary">{label}</Text>
-  </View>
-);
+const StatCard = ({ label, value }: { label: string; value: string }) => {
+  const { fontScale } = useWindowDimensions();
+  return (
+    <View
+      className="flex-1 rounded-xl bg-background px-3 py-2"
+      style={{ minWidth: 72 * Math.max(fontScale, 1) }}
+    >
+      <Text
+        adjustsFontSizeToFit
+        className="text-lg font-semibold text-foreground"
+        numberOfLines={1}
+      >
+        {value}
+      </Text>
+      <Text adjustsFontSizeToFit className="text-xs text-secondary" numberOfLines={1}>
+        {label}
+      </Text>
+    </View>
+  );
+};
 
 const DeviceSwitch = ({
   current,
