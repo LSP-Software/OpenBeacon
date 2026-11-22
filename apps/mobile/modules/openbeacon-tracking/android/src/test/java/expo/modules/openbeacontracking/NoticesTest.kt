@@ -169,6 +169,17 @@ class NoticesTest {
   }
 
   @Test
+  fun eventNoticesAreNotMarkedAsCalendarEventsSoWatchesShowTheAppIcon() {
+    EventNoticeKind.entries.forEach {
+      Notices.showEvent(application, it, "${it.kind}-1", "Arrived at Home", "Mum’s Pixel 8", "Family", "openbeacon:///map")
+    }
+
+    val events = shadowOf(manager).allNotifications.filter { it.flags and Notification.FLAG_GROUP_SUMMARY == 0 }
+    assertEquals(EventNoticeKind.entries.size, events.size)
+    assertFalse(events.any { it.category == Notification.CATEGORY_EVENT })
+  }
+
+  @Test
   fun theAccountChannelIsNamedSecurityAlerts() {
     Notices.showEvent(application, EventNoticeKind.ACCOUNT_ALERT, "notice-1", "Password reset", "Your password was reset.", null, "openbeacon:///account/password")
 
