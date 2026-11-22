@@ -32,11 +32,11 @@ export const TimelinePlayerCard = ({
   miniScrubber: ReactNode;
 }) => (
   <View
-    className="absolute left-3 right-3 rounded-2xl border border-border bg-card shadow-md shadow-black/15"
+    className="absolute left-3 right-3 rounded-3xl bg-card shadow-md shadow-black/15"
     style={{ bottom }}
     {...card.panHandlers}
   >
-    <Animated.View className="overflow-hidden rounded-2xl" style={card.heightStyle}>
+    <Animated.View className="overflow-hidden rounded-3xl" style={card.heightStyle}>
       <View
         className={card.collapsible ? "px-4 pb-3" : "px-4 pb-3 pt-3"}
         onLayout={card.onFullLayout}

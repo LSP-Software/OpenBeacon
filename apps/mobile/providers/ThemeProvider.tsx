@@ -1,7 +1,9 @@
 import { StatusBar } from "expo-status-bar";
 import type React from "react";
 import { createContext, useContext, useState } from "react";
-import { useColorScheme, View } from "react-native";
+import { vars } from "nativewind";
+import { Platform, useColorScheme, View } from "react-native";
+import { getPalette, paletteCssVariables } from "../lib/palette.ts";
 import {
   getStoredAppThemePreference,
   getStoredMapThemePreference,
@@ -56,7 +58,14 @@ export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
       }}
     >
       <StatusBar style={appTheme === "dark" ? "light" : "dark"} />
-      <View className={`flex-1 theme ${appTheme === "dark" ? "dark" : ""}`}>{children}</View>
+      <View
+        className={`flex-1 ${appTheme === "dark" ? "dark" : ""}`}
+        style={vars(
+          paletteCssVariables(getPalette(Platform.OS === "ios" ? "ios" : "android", appTheme)),
+        )}
+      >
+        {children}
+      </View>
     </ThemeContext.Provider>
   );
 };
@@ -69,3 +78,5 @@ export const useTheme = () => {
 
   return context;
 };
+
+export const useAppTheme = () => useContext(ThemeContext)?.appTheme ?? "light";

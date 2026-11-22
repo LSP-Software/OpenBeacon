@@ -32,7 +32,7 @@ mock.module("@tanstack/react-query", () => ({
         ? { data: memberDevices, isPending: false }
         : { data: options.select?.([group]), isPending: false },
 }));
-mock.module("expo-router", () => ({ useRouter: () => ({ replace: () => {} }) }));
+mock.module("expo-router", () => ({ useRouter: () => ({ dismissTo: () => {} }) }));
 mock.module("@react-navigation/native", () => ({ useIsFocused: () => true }));
 mock.module("lucide-react-native", () => ({
   CirclePauseIcon: () => null,
@@ -57,6 +57,7 @@ mock.module("lucide-react-native", () => ({
   WatchIcon: () => null,
 }));
 mock.module("react-native", () => ({
+  Platform: { OS: "android" },
   View: ({ accessibilityLabel, children }: { accessibilityLabel?: string; children?: ReactNode }) =>
     React.createElement("view", { accessibilityLabel }, children),
   ScrollView: passthrough,
@@ -126,6 +127,21 @@ mock.module("../components/ui/Avatar.tsx", () => ({
   AvatarImage: () => null,
 }));
 mock.module("../components/ui/Icon.tsx", () => ({ Icon: () => null }));
+mock.module("../components/ui/List.tsx", () => ({
+  ListSection: passthrough,
+  ListRow: ({
+    title,
+    disabled = false,
+    onPress,
+  }: {
+    title: string;
+    disabled?: boolean;
+    onPress: () => void;
+  }) => {
+    buttons.push({ label: title, disabled, onPress });
+    return null;
+  },
+}));
 mock.module("../components/dialogs/InviteMemberToGroupDialog.tsx", () => ({
   InviteMemberToGroupDialog: () => null,
 }));

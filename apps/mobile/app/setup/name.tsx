@@ -105,7 +105,7 @@ const NameThisPhoneScreen = () => {
       ) : (
         <View className="gap-6">
           <View
-            className="overflow-hidden rounded-2xl border border-border bg-card"
+            className="overflow-hidden rounded-3xl bg-card"
             importantForAccessibility="no-hide-descendants"
             accessibilityElementsHidden
           >

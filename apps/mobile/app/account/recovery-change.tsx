@@ -64,12 +64,13 @@ const RecoveryPhraseChangeScreen = () => {
       >
         <ScrollView
           className="flex-1"
-          contentContainerClassName="gap-6 px-4 pb-32 pt-2"
+          contentInsetAdjustmentBehavior="automatic"
+          contentContainerClassName="gap-6 px-4 pb-10 pt-2"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
           {step !== "done" && (
-            <Text className="text-secondary text-base">
+            <Text className="text-secondary px-1 text-[15px] leading-5">
               You’ll get a new 12-word phrase to write down. Your old phrase stops working as soon
               as the new one is saved. Your groups and location history aren’t affected.
             </Text>
@@ -95,8 +96,10 @@ const RecoveryPhraseChangeScreen = () => {
 
           {step === "done" && (
             <View className="gap-4">
-              <Text className="text-foreground text-2xl font-bold">Your phrase is changed</Text>
-              <Text className="text-secondary text-base">
+              <Text className="text-foreground px-1 text-2xl font-bold">
+                Your phrase is changed
+              </Text>
+              <Text className="text-secondary px-1 text-[15px] leading-5">
                 Use your new phrase to read your history on a new phone. Your old phrase no longer
                 works.
               </Text>

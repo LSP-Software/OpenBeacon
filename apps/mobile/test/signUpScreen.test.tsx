@@ -25,7 +25,7 @@ mock.module("@tanstack/react-query", () => ({
     },
   }),
 }));
-mock.module("react-native", () => ({ Pressable: View, View }));
+mock.module("react-native", () => ({ Platform: { OS: "android" }, Pressable: View, View }));
 mock.module("react-native-safe-area-context", () => ({ SafeAreaView: View }));
 mock.module("../components/EmailCodeEntry.tsx", () => ({ EmailCodeEntry: () => null }));
 mock.module("../components/KeyboardFormScrollView.tsx", () => ({

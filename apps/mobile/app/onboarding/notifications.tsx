@@ -20,7 +20,7 @@ import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 const ExampleNotification = ({ title, body }: { title: string; body?: string }) => {
   const colors = useColors();
   return (
-    <View className="flex-row gap-3 rounded-2xl border border-border bg-card p-3">
+    <View className="flex-row gap-3 rounded-3xl bg-card p-3">
       <View className="size-9 items-center justify-center rounded-lg bg-primary-soft">
         <BeaconIcon size={24} color={colors.primary} />
       </View>

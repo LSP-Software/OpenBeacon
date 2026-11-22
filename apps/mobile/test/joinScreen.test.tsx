@@ -39,6 +39,7 @@ mock.module("expo-camera", () => ({
 let clipboard = "";
 mock.module("expo-clipboard", () => ({ getStringAsync: async () => clipboard }));
 mock.module("expo-router", () => ({
+  Stack: { Screen: () => null },
   Link: ({ children, href }: { children: React.ReactNode; href: unknown }) => {
     links.push(href);
     return children;

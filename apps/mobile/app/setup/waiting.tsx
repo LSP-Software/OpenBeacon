@@ -27,10 +27,11 @@ const WaitingForPhraseScreen = () => {
       <ScreenHeader title="Set up" />
       <ScrollView
         className="flex-1"
+        contentInsetAdjustmentBehavior="automatic"
         contentContainerClassName="gap-6 px-4 pb-16 pt-2"
         showsVerticalScrollIndicator={false}
       >
-        <Text className="text-foreground text-2xl font-bold">
+        <Text className="text-foreground text-2xl font-semibold">
           Create a phrase on your other device
         </Text>
         <View className="gap-3">

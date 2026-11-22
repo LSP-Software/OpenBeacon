@@ -2,7 +2,8 @@ import { Alert } from "../../lib/alert.ts";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Link, router } from "expo-router";
+import { router } from "expo-router";
+import { DownloadIcon } from "lucide-react-native";
 import * as WebBrowser from "expo-web-browser";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -12,6 +13,7 @@ import { z } from "zod";
 import { ScreenHeader } from "../../components/headers/ScreenHeader.tsx";
 import { Button } from "../../components/ui/Button.tsx";
 import { Input } from "../../components/ui/Input.tsx";
+import { ListRow, ListSection } from "../../components/ui/List.tsx";
 import { ChoiceList } from "../../components/ui/ChoiceList.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { trpc } from "../../lib/api.ts";
@@ -111,30 +113,31 @@ const DeleteAccountScreen = () => {
     <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
       <ScreenHeader title="Delete account" />
       <ScrollView
-        contentContainerClassName="gap-4 px-4 pb-6 pt-2"
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerClassName="gap-6 px-4 pb-6 pt-2"
         automaticallyAdjustKeyboardInsets
         keyboardShouldPersistTaps="handled"
       >
-        <Text>
-          You will be signed out on all devices. Your account and its data will be permanently
-          deleted and cannot be recovered after deletion.
-        </Text>
-        <Text>
-          Groups where you are the only member will be deleted. Transfer ownership or delete groups
-          where you are the only owner before continuing.
-        </Text>
-        <Text>
-          Your location history is deleted too. To keep a copy, save it from Location history first.
-        </Text>
-        <Link href="/account/location-history" asChild>
-          <Button variant="secondary">
-            <Text>Save a copy of my history</Text>
-          </Button>
-        </Link>
-        <Text variant="label" className="pt-2">
-          When to delete your account
-        </Text>
+        <View className="gap-3 px-4">
+          <Text className="text-[15px] leading-5">
+            You will be signed out on all devices. Your account and its data will be permanently
+            deleted and cannot be recovered after deletion.
+          </Text>
+          <Text className="text-[15px] leading-5">
+            Groups where you are the only member will be deleted. Transfer ownership or delete
+            groups where you are the only owner before continuing.
+          </Text>
+        </View>
+        <ListSection footer="Your location history is deleted too. To keep a copy, save it from Location history first.">
+          <ListRow
+            title="Save a copy of my history"
+            icon={DownloadIcon}
+            iconColor="blue"
+            href="/account/location-history"
+          />
+        </ListSection>
         <ChoiceList
+          title="When to delete your account"
           accessibilityLabel="Deletion timing"
           options={[
             {

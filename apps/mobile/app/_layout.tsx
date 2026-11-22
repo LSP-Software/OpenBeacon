@@ -9,6 +9,7 @@ import {
 } from "../components/ApiCompatibilityGate.tsx";
 import { AppLockScreen } from "../components/AppLockScreen.tsx";
 import { InAppNoticeBanner } from "../components/InAppNoticeBanner.tsx";
+import { useHeaderOptions } from "../components/headers/useHeaderOptions.ts";
 import { AlertHost } from "../components/ui/Alert.tsx";
 import { Button } from "../components/ui/Button.tsx";
 import { Text } from "../components/ui/Text.tsx";
@@ -47,11 +48,7 @@ const RootLayout = () => {
                 }
                 accessibilityElementsHidden={compatibilityGateShown || covered}
               >
-                <Stack
-                  screenOptions={{
-                    headerShown: false,
-                  }}
-                >
+                <RootStack>
                   <Stack.Screen name="index" />
                   <Stack.Protected
                     guard={
@@ -91,7 +88,7 @@ const RootLayout = () => {
                     <Stack.Screen name="account/location-history" />
                     <Stack.Screen name="account/who-can-see-me" />
                   </Stack.Protected>
-                </Stack>
+                </RootStack>
               </View>
               <View
                 className="absolute inset-0"
@@ -120,6 +117,10 @@ const RootLayout = () => {
     </QueryClientProvider>
   );
 };
+
+const RootStack = ({ children }: { children: React.ReactNode }) => (
+  <Stack screenOptions={useHeaderOptions()}>{children}</Stack>
+);
 
 export const ErrorBoundary = ({ retry }: ErrorBoundaryProps) => (
   <View className="flex-1 justify-center gap-4 bg-background px-6">

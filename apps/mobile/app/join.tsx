@@ -2,7 +2,7 @@ import { tryCatch } from "@openbeacon/shared";
 import { Alert } from "../lib/alert.ts";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Clipboard from "expo-clipboard";
-import { Link, router, useLocalSearchParams } from "expo-router";
+import { Link, router, useLocalSearchParams, Stack } from "expo-router";
 import { CheckIcon, ClipboardPasteIcon, QrCodeIcon, XIcon } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
 import { ScrollView, TextInput, View } from "react-native";
@@ -204,7 +204,7 @@ const Join = () => {
             </Text>
           ) : null}
           {isHostedServer(inviteServer) ? null : (
-            <View className="rounded-2xl border border-warning-border bg-warning p-4">
+            <View className="rounded-3xl bg-warning p-4">
               <Text className="text-warning-text">
                 Only change server if someone you know runs it and sent you this invite themselves.
                 Never use the password from another account there.
@@ -232,6 +232,7 @@ const Join = () => {
   if (session && invite) {
     return (
       <SafeAreaView className="flex-1 bg-background p-6">
+        <Stack.Screen options={{ headerShown: false }} />
         <InviteConfirmation
           key={JSON.stringify(invite)}
           invite={invite}
@@ -271,7 +272,7 @@ const Join = () => {
               </>
             ) : (
               <>
-                <View className="gap-3 rounded-2xl border border-border bg-card p-4">
+                <View className="gap-3 rounded-3xl bg-card p-4">
                   <View className="flex-row items-center gap-3">
                     <View className="size-12 items-center justify-center rounded-lg bg-primary-soft">
                       <Icon as={QrCodeIcon} className="text-primary-text size-6" />

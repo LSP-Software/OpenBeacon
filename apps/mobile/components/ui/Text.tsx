@@ -1,7 +1,7 @@
 import * as Slot from "@rn-primitives/slot";
 import { cva, type VariantProps } from "class-variance-authority";
 import * as React from "react";
-import { Text as RNText } from "react-native";
+import { Platform, Text as RNText } from "react-native";
 import { cn } from "../../lib/cn.ts";
 
 const textVariants = cva("text-foreground text-base", {
@@ -9,7 +9,10 @@ const textVariants = cva("text-foreground text-base", {
     variant: {
       default: "",
       h3: "text-2xl font-semibold tracking-tight",
-      label: "text-secondary text-sm font-semibold",
+      label:
+        Platform.OS === "ios"
+          ? "px-4 text-[13px] uppercase text-secondary"
+          : "px-4 text-sm font-semibold text-primary-text",
     },
   },
   defaultVariants: {

@@ -84,7 +84,7 @@ mock.module("../lib/deviceActivation.ts", () => ({
 }));
 mock.module("../lib/trackingEvents.ts", () => ({ requestTrackingSync: () => {} }));
 mock.module("../lib/resealPersonalData.ts", () => ({ resealPersonalData: async () => {} }));
-mock.module("../components/headers/BackButton.tsx", () => ({ BackButton: () => null }));
+mock.module("../components/headers/ScreenHeader.tsx", () => ({ ScreenHeader: () => null }));
 mock.module("../components/RecoveryPhraseGrid.tsx", () => ({
   RecoveryPhraseGrid: ({ onChangeWords }: { onChangeWords: (words: string[]) => void }) =>
     React.createElement("phrase-grid", { onChangeWords }),

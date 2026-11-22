@@ -1,37 +1,92 @@
-import { Modal, Pressable, View } from "react-native";
+import {
+  ModalBottomSheet,
+  type ModalBottomSheetRef,
+  RNHostView as ComposeRNHostView,
+} from "@expo/ui/jetpack-compose";
+import { RNHostView, BottomSheet as SwiftBottomSheet } from "@expo/ui/swift-ui";
+import { tryCatch } from "@openbeacon/shared";
+import { useEffect, useRef, useState } from "react";
+import { Platform, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useColors } from "../../lib/theme.ts";
+import { AndroidHost, IosHost } from "./NativeHost.tsx";
 
 export const BottomSheet = ({
   visible,
   onClose,
-  closeLabel,
   children,
 }: {
   visible: boolean;
   onClose: () => void;
-  closeLabel: string;
   children: React.ReactNode;
 }) => {
   const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
+  const { palette } = useColors();
+  const sheet = useRef<ModalBottomSheetRef>(null);
+  const [mounted, setMounted] = useState(visible);
+  const latestVisible = useRef(visible);
+  latestVisible.current = visible;
+
+  useEffect(() => {
+    if (visible) {
+      setMounted(true);
+      return;
+    }
+    if (!sheet.current) {
+      setMounted(false);
+      return;
+    }
+    void tryCatch(sheet.current.hide()).then(() => {
+      if (!latestVisible.current) setMounted(false);
+    });
+  }, [visible]);
+
+  const content = (
+    <View
+      accessibilityViewIsModal
+      className="gap-4 bg-background px-5"
+      style={{
+        width,
+        paddingTop: Platform.OS === "ios" ? 24 : 0,
+        paddingBottom: Math.max(insets.bottom, 20),
+      }}
+    >
+      {children}
+    </View>
+  );
+
+  if (Platform.OS === "ios") {
+    return (
+      <IosHost style={{ position: "absolute", width: 0, height: 0 }}>
+        <SwiftBottomSheet
+          isPresented={visible}
+          onIsPresentedChange={(presented) => {
+            if (!presented) onClose();
+          }}
+          fitToContents
+        >
+          <RNHostView matchContents>{content}</RNHostView>
+        </SwiftBottomSheet>
+      </IosHost>
+    );
+  }
+
+  if (!mounted) return null;
 
   return (
-    <Modal transparent visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View className="flex-1 justify-end bg-black/50">
-        <Pressable
-          className="absolute inset-0"
-          accessibilityRole="button"
-          accessibilityLabel={closeLabel}
-          onPress={onClose}
-        />
-        <View
-          accessibilityViewIsModal
-          className="max-h-[90%] gap-4 rounded-t-3xl bg-card px-5 pt-3"
-          style={{ paddingBottom: Math.max(insets.bottom, 20) }}
+    <View pointerEvents="none" style={{ position: "absolute", left: 0, top: 0, width, height }}>
+      <AndroidHost style={{ width, height }}>
+        <ModalBottomSheet
+          ref={sheet}
+          onDismissRequest={onClose}
+          containerColor={palette.background}
+          showDragHandle
+          skipPartiallyExpanded
         >
-          <View className="h-1 w-9 self-center rounded-full bg-border-strong" />
-          {children}
-        </View>
-      </View>
-    </Modal>
+          <ComposeRNHostView matchContents>{content}</ComposeRNHostView>
+        </ModalBottomSheet>
+      </AndroidHost>
+    </View>
   );
 };

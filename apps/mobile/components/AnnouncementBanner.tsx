@@ -56,8 +56,8 @@ export const AnnouncementBanner = ({ className }: { className?: string }) => {
       accessibilityRole="alert"
       accessibilityLiveRegion="polite"
       className={cn(
-        "flex-row items-start gap-3 rounded-xl border p-4",
-        warning ? "border-warning-border bg-warning" : "border-border bg-card",
+        "flex-row items-start gap-3 rounded-3xl border p-4",
+        warning ? "border-warning-border bg-warning" : "border-transparent bg-card",
         className,
       )}
     >

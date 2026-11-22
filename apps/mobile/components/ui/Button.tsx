@@ -1,24 +1,28 @@
 import { cva, type VariantProps } from "class-variance-authority";
 import { isValidElement, type ReactNode } from "react";
-import { ActivityIndicator, Pressable, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, View } from "react-native";
 import { cn } from "../../lib/cn.ts";
 import { TextClassContext } from "./Text.tsx";
 
+const ios = Platform.OS === "ios";
+
 const buttonVariants = cva(
-  "group shrink-0 flex-row items-center justify-center gap-2 rounded-lg [&_svg:not([class*='size-'])]:size-4 [&_svg]:shrink-0",
+  "group shrink-0 flex-row items-center justify-center gap-2 rounded-full [&_svg:not([class*='size-'])]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
         default: "bg-action active:bg-action/90",
         destructive: "bg-destructive active:bg-destructive/90",
-        danger: "bg-destructive-soft active:bg-destructive-soft/80",
+        danger: ios
+          ? "bg-card active:bg-container"
+          : "border border-border-strong active:bg-destructive-soft",
         secondary: "bg-secondary active:bg-secondary/70",
         ghost: "active:bg-secondary",
         link: "",
       },
       size: {
-        default: "min-h-[52px] px-6 py-2",
-        sm: "min-h-10 gap-1.5 px-4 py-1",
+        default: ios ? "min-h-[50px] px-6 py-2" : "min-h-12 px-6 py-2",
+        sm: ios ? "min-h-9 gap-1.5 px-4 py-1" : "min-h-10 gap-1.5 px-4 py-1",
       },
     },
     defaultVariants: {
@@ -28,26 +32,31 @@ const buttonVariants = cva(
   },
 );
 
-const buttonTextVariants = cva("text-center text-base font-semibold", {
-  variants: {
-    variant: {
-      default: "text-white",
-      destructive: "text-destructive-foreground",
-      danger: "text-destructive-text",
-      secondary: "text-secondary-foreground",
-      ghost: "text-primary-text",
-      link: "text-primary-text group-active:underline",
+const buttonTextVariants = cva(
+  ios
+    ? "text-center text-[17px] font-semibold"
+    : "text-center text-sm font-medium tracking-[0.1px]",
+  {
+    variants: {
+      variant: {
+        default: "text-white",
+        destructive: "text-destructive-foreground",
+        danger: "text-destructive-text",
+        secondary: "text-secondary-foreground",
+        ghost: "text-primary-text",
+        link: "text-primary-text group-active:underline",
+      },
+      size: {
+        default: "",
+        sm: ios ? "text-[15px]" : "text-sm",
+      },
     },
-    size: {
-      default: "",
-      sm: "text-sm",
+    defaultVariants: {
+      variant: "default",
+      size: "default",
     },
   },
-  defaultVariants: {
-    variant: "default",
-    size: "default",
-  },
-});
+);
 
 const spinnerColors = {
   default: "text-white",
@@ -92,7 +101,10 @@ function Button({
             ? undefined
             : textOf(props.children).replace(/\s+/g, " ").trim() || undefined)
         }
-        accessibilityState={{ disabled: !!(loading || disabled), busy: !!loading }}
+        accessibilityState={{
+          disabled: !!(loading || disabled),
+          busy: !!loading,
+        }}
         {...props}
       >
         {loading ? (

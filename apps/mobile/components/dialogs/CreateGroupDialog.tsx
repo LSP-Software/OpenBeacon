@@ -135,7 +135,7 @@ export const CreateGroupDialog = ({
               disabled={picturePicker.isPending || createGroupSubmission.isPending}
               accessibilityRole="button"
               accessibilityLabel={pictureUri ? "Change group picture" : "Choose group picture"}
-              className={`size-20 items-center justify-center overflow-hidden rounded-lg ${pictureUri ? "" : "border-border border-2 border-dashed"}`}
+              className={`size-20 items-center justify-center overflow-hidden rounded-full ${pictureUri ? "" : "border-border border-2 border-dashed"}`}
             >
               {pictureUri ? (
                 <Image source={{ uri: pictureUri }} className="size-full" />

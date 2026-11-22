@@ -326,6 +326,7 @@ mock.module("./refreshViewAnnotation.ts", () => ({
 }));
 
 mock.module("../../providers/ThemeProvider.tsx", () => ({
+  useAppTheme: () => "light" as const,
   useTheme: () => ({
     appTheme: "light" as const,
     mapTheme: "light" as const,
@@ -2108,9 +2109,7 @@ describe("NativeMap over a fake MapLibre", () => {
         node.type === "view" &&
         typeof node.props["onLayout"] === "function" &&
         node.queryAll(
-          (child) =>
-            child.type === "pressable" &&
-            child.props["accessibilityLabel"] === "Show map names and symbols",
+          (child) => child.type === "pressable" && child.props["accessibilityLabel"] === "People",
         ).length > 0,
     );
     await act(async () => {

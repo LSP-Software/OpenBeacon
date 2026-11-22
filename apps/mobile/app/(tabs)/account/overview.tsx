@@ -9,6 +9,7 @@ import {
   BellIcon,
   BellOffIcon,
   BookOpenIcon,
+  ChevronRightIcon,
   EyeIcon,
   GaugeIcon,
   HistoryIcon,
@@ -18,6 +19,7 @@ import {
   LogOutIcon,
   MailIcon,
   MapPinIcon,
+  PencilIcon,
   ScanFaceIcon,
   SmartphoneIcon,
   SunIcon,
@@ -25,11 +27,12 @@ import {
 } from "lucide-react-native";
 import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
-import { ScrollView, View } from "react-native";
+import { Platform, Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { z } from "zod";
 import { AnnouncementBanner } from "../../../components/AnnouncementBanner.tsx";
 import { SettingsContainer } from "../../../components/containers/settingsContainer.tsx";
+import { TabHeader, tabScreenEdges } from "../../../components/headers/TabHeader.tsx";
 import { LocationSharingCard } from "../../../components/LocationSharingCard.tsx";
 import { ProfileImage } from "../../../components/image/ProfileImage.tsx";
 import { PromptCard } from "../../../components/PromptCard.tsx";
@@ -40,7 +43,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../../components/ui/Dialog.tsx";
+import { Icon } from "../../../components/ui/Icon.tsx";
 import { Input } from "../../../components/ui/Input.tsx";
+import { ListRow } from "../../../components/ui/List.tsx";
 import { Text } from "../../../components/ui/Text.tsx";
 import { useHeldHistoryKeyVersions } from "../../../hooks/useHeldHistoryKeyVersions.ts";
 import { useHistoryShare } from "../../../hooks/useHistoryShare.ts";
@@ -229,8 +234,13 @@ const AccountScreen = () => {
       ],
     );
 
+  const editName = () => {
+    form.reset({ name: session?.user.name ?? "" });
+    setNameOpen(true);
+  };
+
   return (
-    <SafeAreaView edges={["top"]} className="flex-1 bg-background">
+    <SafeAreaView edges={tabScreenEdges} className="flex-1 bg-background">
       <Dialog
         open={nameOpen}
         onOpenChange={(open) => {
@@ -257,39 +267,76 @@ const AccountScreen = () => {
 
       <ScrollView
         className="flex-1"
-        contentContainerClassName="gap-3 px-4 pb-40"
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerClassName="gap-6 px-4 pb-10 pt-2"
         showsVerticalScrollIndicator={false}
       >
-        <Text
-          accessibilityRole="header"
-          className="text-foreground px-1 pb-1 pt-3 text-3xl font-bold"
-        >
-          Account
-        </Text>
+        <TabHeader title="Account" />
         <AnnouncementBanner />
-        <View className="flex-row items-center gap-4 rounded-2xl border border-border bg-card p-4">
+        <View
+          className={
+            Platform.OS === "ios"
+              ? "flex-row items-center gap-4 rounded-[26px] bg-card p-4"
+              : "flex-row items-center gap-4 rounded-[28px] bg-primary-soft p-5"
+          }
+        >
           <ProfileImage imageUrl={session?.user?.image ?? null} />
-          <View className="flex-1">
-            <Text className="text-foreground text-xl font-bold" numberOfLines={1}>
-              {session?.user.name}
-            </Text>
-            <Text className="text-secondary text-sm" numberOfLines={1}>
-              {session?.user.email}
-            </Text>
-          </View>
-          <Button
-            variant="secondary"
-            size="sm"
-            accessibilityLabel="Edit name"
-            onPress={() => {
-              form.reset({ name: session?.user.name ?? "" });
-              setNameOpen(true);
-            }}
+          <Pressable
+            className="min-w-0 flex-1 flex-row items-center gap-2"
+            accessibilityRole="button"
+            accessibilityLabel={`Edit name, ${session?.user.name ?? ""}`}
+            onPress={editName}
           >
-            <Text>Edit name</Text>
-          </Button>
+            <View className="min-w-0 flex-1">
+              <Text
+                className={
+                  Platform.OS === "ios"
+                    ? "text-foreground text-[22px] font-semibold"
+                    : "text-[22px] text-primary-soft-foreground"
+                }
+                numberOfLines={1}
+              >
+                {session?.user.name}
+              </Text>
+              <Text
+                className={
+                  Platform.OS === "ios"
+                    ? "text-secondary text-[15px]"
+                    : "text-sm text-primary-soft-foreground"
+                }
+                numberOfLines={1}
+              >
+                {session?.user.email}
+              </Text>
+            </View>
+            {Platform.OS === "ios" ? (
+              <Icon as={ChevronRightIcon} size={20} className="text-border-strong" />
+            ) : null}
+          </Pressable>
+          {Platform.OS === "ios" ? null : (
+            <Button size="sm" accessibilityLabel="Edit name" onPress={editName}>
+              <Icon as={PencilIcon} size={16} className="text-white" />
+              <Text>Edit</Text>
+            </Button>
+          )}
         </View>
-        <LocationSharingCard />
+        <LocationSharingCard>
+          <ListRow
+            title="Who can see me"
+            icon={EyeIcon}
+            iconColor="blue"
+            href="/account/who-can-see-me"
+          />
+          <ListRow
+            title="Location history"
+            icon={HistoryIcon}
+            iconColor="indigo"
+            href="/account/location-history"
+            value={
+              historyShare.setting ? historyShareLabel(historyShare.setting.account) : undefined
+            }
+          />
+        </LocationSharingCard>
         {permissionState?.shouldShowAccountWarning && (
           <PromptCard
             icon={MapPinIcon}
@@ -315,7 +362,6 @@ const AccountScreen = () => {
             </Button>
           </PromptCard>
         )}
-
         {showRecoveryPrompt && (
           <PromptCard
             icon={KeyRoundIcon}
@@ -375,101 +421,117 @@ const AccountScreen = () => {
           </PromptCard>
         )}
 
-        <View className="pt-3">
-          <SettingsContainer
-            categories={[
-              {
-                label: "Privacy",
-                settings: [
-                  { label: "Who can see me", icon: EyeIcon, href: "/account/who-can-see-me" },
-                  {
-                    label: "Location history",
-                    icon: HistoryIcon,
-                    href: "/account/location-history",
-                    value: historyShare.setting
-                      ? historyShareLabel(historyShare.setting.account)
-                      : undefined,
-                  },
-                ],
-              },
-              {
-                label: "Account and security",
-                settings: [
-                  { label: "Notifications", icon: BellIcon, href: "/account/notifications" },
-                  {
-                    label: "Devices",
-                    icon: SmartphoneIcon,
-                    href: "/account/devices",
-                    value: devices.data ? String(devices.data.length) : undefined,
-                  },
-                  { label: "Password and security", icon: LockIcon, href: "/account/password" },
-                  {
-                    label: "App lock",
-                    icon: ScanFaceIcon,
-                    href: "/account/app-lock",
-                    value: appLock.enabled ? "On" : "Off",
-                  },
-                  {
-                    label: "Recovery phrase",
-                    icon: KeyRoundIcon,
-                    href: "/account/recovery",
-                    value: recoveryStatus.data
-                      ? recoveryStatus.data.recoveryKey
-                        ? "Set up"
-                        : "Not set up"
-                      : undefined,
-                  },
-                ],
-              },
-              {
-                label: "App",
-                settings: [
-                  {
-                    label: "Theme",
-                    icon: SunIcon,
-                    href: "/account/theme",
-                    value: { system: `Match ${thisDeviceNoun()}`, light: "Light", dark: "Dark" }[
-                      appThemePreference
-                    ],
-                  },
-                  {
-                    label: "Units",
-                    icon: GaugeIcon,
-                    href: "/account/units",
-                    value:
-                      speedUnit.preference === "auto"
-                        ? `${speedUnitLabel} (${thisDeviceNoun()} region)`
-                        : speedUnitLabel,
-                  },
-                ],
-              },
-              {
-                label: "Help",
-                settings: [
-                  { label: "Help centre", icon: BookOpenIcon, href: "https://docs.openbeacon.net" },
-                  { label: "Contact us", icon: MailIcon, href: "/account/contact-us" },
-                  { label: "About", icon: InfoIcon, href: "/account/about", value: appVersion },
-                ],
-              },
-              {
-                settings: [
-                  {
-                    label: signOutPhase ? "Signing out…" : "Sign out",
-                    icon: LogOutIcon,
-                    onPress: confirmSignOut,
-                    disabled: !!signOutPhase,
-                  },
-                  {
-                    label: "Delete account",
-                    icon: Trash2Icon,
-                    href: "/account/delete",
-                    tone: "danger",
-                  },
-                ],
-              },
-            ]}
-          />
-        </View>
+        <SettingsContainer
+          categories={[
+            {
+              label: "Account",
+              settings: [
+                {
+                  label: "Notifications",
+                  icon: BellIcon,
+                  color: "red",
+                  href: "/account/notifications",
+                },
+                {
+                  label: "Devices",
+                  icon: SmartphoneIcon,
+                  color: "gray",
+                  href: "/account/devices",
+                  value: devices.data ? String(devices.data.length) : undefined,
+                },
+                {
+                  label: "Password and security",
+                  icon: LockIcon,
+                  color: "green",
+                  href: "/account/password",
+                },
+                {
+                  label: "App lock",
+                  icon: ScanFaceIcon,
+                  color: "teal",
+                  href: "/account/app-lock",
+                  value: appLock.enabled ? "On" : "Off",
+                },
+                {
+                  label: "Recovery phrase",
+                  icon: KeyRoundIcon,
+                  color: "orange",
+                  href: "/account/recovery",
+                  value: recoveryStatus.data
+                    ? recoveryStatus.data.recoveryKey
+                      ? "Set up"
+                      : "Not set up"
+                    : undefined,
+                },
+              ],
+            },
+            {
+              label: "Preferences",
+              settings: [
+                {
+                  label: "Theme",
+                  icon: SunIcon,
+                  color: "purple",
+                  href: "/account/theme",
+                  value: { system: `Match ${thisDeviceNoun()}`, light: "Light", dark: "Dark" }[
+                    appThemePreference
+                  ],
+                },
+                {
+                  label: "Units",
+                  icon: GaugeIcon,
+                  color: "blue",
+                  href: "/account/units",
+                  value:
+                    speedUnit.preference === "auto"
+                      ? `${speedUnitLabel} (${thisDeviceNoun()} region)`
+                      : speedUnitLabel,
+                },
+              ],
+            },
+            {
+              label: "Help",
+              settings: [
+                {
+                  label: "Help centre",
+                  icon: BookOpenIcon,
+                  color: "blue",
+                  href: "https://docs.openbeacon.net",
+                },
+                {
+                  label: "Contact us",
+                  icon: MailIcon,
+                  color: "green",
+                  href: "/account/contact-us",
+                },
+                {
+                  label: "About",
+                  icon: InfoIcon,
+                  color: "gray",
+                  href: "/account/about",
+                  value: appVersion,
+                },
+              ],
+            },
+            {
+              settings: [
+                {
+                  label: signOutPhase ? "Signing out…" : "Sign out",
+                  icon: LogOutIcon,
+                  color: "gray",
+                  onPress: confirmSignOut,
+                  disabled: !!signOutPhase,
+                },
+                {
+                  label: "Delete account",
+                  icon: Trash2Icon,
+                  href: "/account/delete",
+                  tone: "danger",
+                },
+              ],
+            },
+          ]}
+        />
         {signOutPhase && (
           <Text accessibilityLiveRegion="polite" className="text-secondary px-1 text-sm">
             {signOutPhase === "uploading"

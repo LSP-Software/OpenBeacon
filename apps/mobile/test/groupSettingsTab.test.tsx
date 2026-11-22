@@ -15,7 +15,7 @@ const host =
   ({ children, ...props }: { children?: React.ReactNode }) =>
     React.createElement(type, props, children);
 
-mock.module("expo-router", () => ({ useRouter: () => ({ replace: () => {} }) }));
+mock.module("expo-router", () => ({ useRouter: () => ({ dismissTo: () => {} }) }));
 mock.module("@react-navigation/native", () => ({ useIsFocused: () => true }));
 mock.module("@tanstack/react-query", () => ({
   skipToken: Symbol("skipToken"),
@@ -24,6 +24,7 @@ mock.module("@tanstack/react-query", () => ({
   useQueryClient: () => ({ invalidateQueries: async () => {} }),
 }));
 mock.module("react-native", () => ({
+  Platform: { OS: "android" },
   Pressable: View,
   ScrollView: View,
   TextInput: host("text-input"),
@@ -42,6 +43,14 @@ mock.module("../components/map/GroupMapColorPicker.tsx", () => ({
 }));
 mock.module("../components/ui/Button.tsx", () => ({ Button: host("mock-button") }));
 mock.module("../components/ui/Switch.tsx", () => ({ Switch: () => null }));
+mock.module("../components/ui/Icon.tsx", () => ({ Icon: () => null }));
+mock.module("../components/ui/List.tsx", () => ({ ListRow: View, ListSection: View }));
+mock.module("../components/image/GroupImage.tsx", () => ({ GroupImage: () => null }));
+mock.module("lucide-react-native", () => ({
+  LogOutIcon: () => null,
+  MapIcon: () => null,
+  Trash2Icon: () => null,
+}));
 mock.module("../components/ui/Text.tsx", () => ({ Text: View }));
 mock.module("../hooks/useCachedGroup.ts", () => ({
   useCachedGroup: () => ({

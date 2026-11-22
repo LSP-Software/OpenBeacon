@@ -58,6 +58,7 @@ mock.module("expo-router", () => ({
 }));
 mock.module("@react-navigation/native", () => ({ useIsFocused: () => true }));
 mock.module("react-native", () => ({
+  Platform: { OS: "ios" },
   AppState: { currentState: "active", addEventListener: () => ({ remove: () => {} }) },
   ScrollView: passThrough,
   View: passThrough,

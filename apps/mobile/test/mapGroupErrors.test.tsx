@@ -77,6 +77,7 @@ mock.module("../lib/placeSync.ts", () => ({
 }));
 mock.module("@react-navigation/native", () => ({ useIsFocused: () => true }));
 mock.module("react-native", () => ({
+  Platform: { OS: "ios" },
   AppState: { currentState: "active", addEventListener: () => ({ remove: () => {} }) },
   View: ({ children }: { children: React.ReactNode }) =>
     React.createElement("view", null, children),

@@ -59,6 +59,7 @@ const ContactUsScreen = () => {
     <View className="flex-1 bg-background">
       <ScreenHeader title="Contact us" />
       <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
         contentContainerClassName="gap-5 px-4 pb-6 pt-2"
         automaticallyAdjustKeyboardInsets
         keyboardShouldPersistTaps="handled"
@@ -88,7 +89,11 @@ const ContactUsScreen = () => {
             onChangeText={setMessage}
             placeholder="How can we help?"
             textAlignVertical="top"
-            className="min-h-40 rounded-lg border border-border bg-input p-4 text-foreground placeholder:text-tertiary"
+            className={
+              Platform.OS === "ios"
+                ? "min-h-40 rounded-[12px] bg-card p-4 text-[17px] text-foreground placeholder:text-tertiary"
+                : "min-h-40 rounded-[4px] border border-border-strong bg-input p-4 text-base text-foreground placeholder:text-tertiary"
+            }
           />
           <Text className="self-end text-sm text-tertiary">
             {message.length}/{FEEDBACK_MESSAGE_MAX_LENGTH}
@@ -100,9 +105,13 @@ const ContactUsScreen = () => {
           onPress={() => setIncludeEmail(!includeEmail)}
           className="flex-row items-center gap-3"
         >
-          <View className="size-6 items-center justify-center rounded border border-border">
-            {includeEmail && <Icon as={CheckIcon} className="size-4 text-foreground" />}
-          </View>
+          {includeEmail ? (
+            <View className="size-6 items-center justify-center rounded-md bg-primary">
+              <Icon as={CheckIcon} className="size-4 text-white" strokeWidth={3} />
+            </View>
+          ) : (
+            <View className="size-6 rounded-md border-2 border-border-strong" />
+          )}
           <Text className="flex-1">
             Include my account email so the OpenBeacon team can follow up
           </Text>

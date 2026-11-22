@@ -10,7 +10,11 @@ const host =
   (type: string) =>
   ({ children, ...props }: { children?: React.ReactNode }) =>
     React.createElement(type, props, children);
-mock.module("react-native", () => ({ Text: host("text"), View: host("view") }));
+mock.module("react-native", () => ({
+  Platform: { OS: "android" },
+  Text: host("text"),
+  View: host("view"),
+}));
 mock.module("@rn-primitives/slot", () => ({ Text: host("text") }));
 mock.module("@rn-primitives/tabs", () => ({
   Content: host("tab-content"),

@@ -7,7 +7,9 @@ import { ConfirmIdentity } from "../../components/ConfirmIdentity.tsx";
 import { EmailCodeEntry } from "../../components/EmailCodeEntry.tsx";
 import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
 import { ScreenHeader } from "../../components/headers/ScreenHeader.tsx";
+import { MailCheckIcon } from "lucide-react-native";
 import { Button } from "../../components/ui/Button.tsx";
+import { ListRow, ListSection } from "../../components/ui/List.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { useIdentityGate } from "../../hooks/useIdentityGate.ts";
 import { Alert } from "../../lib/alert.ts";
@@ -91,17 +93,18 @@ const SignInCodesScreen = () => {
       >
         <ScrollView
           className="flex-1"
-          contentContainerClassName="gap-6 px-4 pb-32 pt-2"
+          contentInsetAdjustmentBehavior="automatic"
+          contentContainerClassName="gap-6 px-4 pb-10 pt-2"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View className="gap-2">
-            <Text className="text-secondary text-base">
+          <View className="gap-2 px-4">
+            <Text className="text-secondary text-[15px] leading-5">
               With sign-in codes on, signing in with your password also needs a 6-digit code we
               email you. Someone who learns your password can’t sign in unless they can also read
               your email.
             </Text>
-            <Text className="text-secondary text-base">
+            <Text className="text-secondary text-[15px] leading-5">
               Phones and tablets that are already signed in stay signed in, and confirming it’s you
               on them still only needs your password.
             </Text>
@@ -119,7 +122,7 @@ const SignInCodesScreen = () => {
             </View>
           )}
           {status.data && !on && !status.data.canTurnOn && (
-            <Text className="text-secondary text-base">
+            <Text className="text-secondary px-1 text-[15px] leading-5">
               Sign-in codes are only for accounts that sign in with a password, on servers that can
               send email.
             </Text>
@@ -127,9 +130,15 @@ const SignInCodesScreen = () => {
 
           {status.data && (on || status.data.canTurnOn) && (
             <>
-              <Text className="text-foreground text-lg font-semibold">
-                {on ? "Sign-in codes are on" : "Sign-in codes are off"}
-              </Text>
+              <ListSection>
+                <ListRow
+                  title="Sign-in codes"
+                  icon={MailCheckIcon}
+                  iconColor="blue"
+                  value={on ? "On" : "Off"}
+                  accessibilityLabel={on ? "Sign-in codes are on" : "Sign-in codes are off"}
+                />
+              </ListSection>
 
               {step.name === "verify" && gate.decision === null && <LoadingIndicator />}
               {step.name === "verify" && gate.decision === "confirm" && (
@@ -171,7 +180,7 @@ const SignInCodesScreen = () => {
               )}
 
               {(step.name === "ready" || step.name === "saving") && !on && (
-                <Text className="text-tertiary text-sm leading-5">
+                <Text className="text-tertiary px-4 text-sm leading-5">
                   We’ll email you a code first to check it arrives.
                 </Text>
               )}

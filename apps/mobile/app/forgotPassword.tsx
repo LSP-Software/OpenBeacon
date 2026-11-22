@@ -28,6 +28,7 @@ import {
 } from "../lib/emailCodes.ts";
 import { getBaseUrl } from "../lib/currentServer.ts";
 import { finishAuthentication } from "../lib/finishAuthentication.ts";
+import { screenTitleClass } from "../components/onboarding/screenTitleClass.ts";
 
 const resetFormSchema = signInSchema
   .extend({ confirmPassword: z.string() })
@@ -170,7 +171,7 @@ const ForgotPassword = () => {
           <>
             <ReturnToHomeHeader />
             <View className="gap-2">
-              <Text accessibilityRole="header" className="text-3xl font-bold">
+              <Text accessibilityRole="header" className={screenTitleClass}>
                 {step.name === "code" || step.name === "signInCode"
                   ? "Check your email"
                   : "Reset your password"}

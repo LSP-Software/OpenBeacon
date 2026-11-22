@@ -1,6 +1,5 @@
-import type { Href } from "expo-router";
+import { type Href, Stack, useNavigation } from "expo-router";
 import { View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { Text } from "../ui/Text.tsx";
 import { BackButton } from "./BackButton.tsx";
 
@@ -14,30 +13,39 @@ export const ScreenHeader = ({
   subtitle?: string | undefined;
   hideBack?: boolean;
   fallback?: Href;
-}) => (
-  <SafeAreaView edges={["top"]} className="bg-background">
-    <View className="min-h-14 flex-row items-center gap-1 px-2 py-1">
-      {hideBack ? (
-        <View className="w-2" />
-      ) : fallback ? (
-        <BackButton fallback={fallback} />
-      ) : (
-        <BackButton />
-      )}
-      <View className="min-w-0 flex-1">
-        <Text
-          accessibilityRole="header"
-          className="text-foreground text-xl font-semibold"
-          numberOfLines={1}
-        >
-          {title}
-        </Text>
-        {subtitle ? (
-          <Text className="text-tertiary text-sm" numberOfLines={1}>
-            {subtitle}
-          </Text>
-        ) : null}
-      </View>
-    </View>
-  </SafeAreaView>
-);
+}) => {
+  const navigation = useNavigation();
+  const backMissing = !hideBack && (navigation.getState()?.index ?? 0) === 0;
+
+  return (
+    <Stack.Screen
+      options={{
+        headerShown: true,
+        title,
+        headerBackVisible: !hideBack,
+        gestureEnabled: !hideBack,
+        ...(backMissing
+          ? { headerLeft: () => (fallback ? <BackButton fallback={fallback} /> : <BackButton />) }
+          : {}),
+        ...(subtitle
+          ? {
+              headerTitle: () => (
+                <View>
+                  <Text
+                    accessibilityRole="header"
+                    className="text-lg font-semibold"
+                    numberOfLines={1}
+                  >
+                    {title}
+                  </Text>
+                  <Text className="text-xs text-secondary" numberOfLines={1}>
+                    {subtitle}
+                  </Text>
+                </View>
+              ),
+            }
+          : {}),
+      }}
+    />
+  );
+};

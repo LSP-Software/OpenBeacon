@@ -23,6 +23,7 @@ import { emailCodeErrorMessage, emailCodes } from "../lib/emailCodes.ts";
 import { finishAuthentication } from "../lib/finishAuthentication.ts";
 import { performGoogleAuth } from "../lib/googleAuth.ts";
 import { signUpFormSchema } from "../lib/signUpSchema.ts";
+import { screenTitleClass } from "../components/onboarding/screenTitleClass.ts";
 
 const SignUp = () => {
   const { joinCode } = useLocalSearchParams<{ joinCode?: string }>();
@@ -192,7 +193,7 @@ const SignUp = () => {
             <HeldKeysNotice />
 
             <View className="gap-2">
-              <Text accessibilityRole="header" className="text-3xl font-bold">
+              <Text accessibilityRole="header" className={screenTitleClass}>
                 {step.name === "code" ? "Check your email" : "Create your account"}
               </Text>
               <Text className="text-secondary text-base">

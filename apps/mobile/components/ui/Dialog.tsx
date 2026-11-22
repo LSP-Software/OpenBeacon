@@ -58,7 +58,7 @@ const DialogContent = ({
       <DialogOverlay>
         <DialogPrimitive.Content
           className={cn(
-            "bg-background border-border z-50 mx-auto flex w-full max-w-full flex-col gap-4 rounded-3xl border p-6 sm:max-w-lg",
+            "bg-background z-50 mx-auto flex w-full max-w-full flex-col gap-4 rounded-[28px] p-6 sm:max-w-lg",
             className,
           )}
           {...props}
@@ -66,7 +66,7 @@ const DialogContent = ({
           {children}
           {showClose && (
             <DialogPrimitive.Close
-              className="absolute right-3 top-3 size-10 items-center justify-center rounded-full bg-secondary"
+              className="absolute right-3 top-3 size-10 items-center justify-center rounded-full bg-container"
               hitSlop={4}
               accessibilityRole="button"
               accessibilityLabel="Close"
@@ -100,10 +100,7 @@ const DialogTitle = ({
   ...props
 }: DialogPrimitive.TitleProps & React.RefAttributes<DialogPrimitive.TitleRef>) => {
   return (
-    <DialogPrimitive.Title
-      className={cn("text-foreground pr-10 text-xl font-bold", className)}
-      {...props}
-    />
+    <DialogPrimitive.Title className={cn("text-foreground pr-10 text-2xl", className)} {...props} />
   );
 };
 

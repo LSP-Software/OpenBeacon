@@ -1,9 +1,15 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { RefreshControl, ScrollView } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { type Edge, SafeAreaView } from "react-native-safe-area-context";
 
-export const RefreshablePage = ({ children }: { children: React.ReactNode }) => {
+export const RefreshablePage = ({
+  children,
+  edges = ["top"],
+}: {
+  children: React.ReactNode;
+  edges?: readonly Edge[];
+}) => {
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
 
@@ -14,10 +20,11 @@ export const RefreshablePage = ({ children }: { children: React.ReactNode }) => 
   };
 
   return (
-    <SafeAreaView edges={["top"]} className="flex-1 bg-background">
+    <SafeAreaView edges={edges} className="flex-1 bg-background">
       <ScrollView
         className="flex-1"
         nestedScrollEnabled
+        contentInsetAdjustmentBehavior="automatic"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         {children}

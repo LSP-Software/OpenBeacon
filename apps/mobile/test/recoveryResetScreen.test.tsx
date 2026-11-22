@@ -103,7 +103,7 @@ mock.module("../hooks/useIdentityGate.ts", () => ({
 mock.module("../components/ConfirmIdentity.tsx", () => ({ ConfirmIdentity: () => null }));
 mock.module("../components/EmailCodeEntry.tsx", () => ({ EmailCodeEntry: () => null }));
 mock.module("../components/LoadingIndicator.tsx", () => ({ LoadingIndicator: () => null }));
-mock.module("../components/headers/BackButton.tsx", () => ({ BackButton: () => null }));
+mock.module("../components/headers/ScreenHeader.tsx", () => ({ ScreenHeader: () => null }));
 mock.module("../components/NewRecoveryPhrase.tsx", () => ({
   NewRecoveryPhrase: ({ onConfirm }: { onConfirm: (phrase: Uint8Array) => Promise<void> }) =>
     React.createElement("new-phrase", { onConfirm }),

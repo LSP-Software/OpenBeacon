@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   BackHandler,
   KeyboardAvoidingView,
+  Platform,
   Pressable,
   TextInput,
   View,
@@ -673,7 +674,7 @@ const PlaceEditor = ({
             {step === 1 ? (
               <View className="gap-4 pt-2">
                 {search?.kind === "move" ? (
-                  <View className="rounded-xl bg-primary-soft px-4 py-3">
+                  <View className="rounded-2xl bg-primary-soft px-4 py-3">
                     <Text accessibilityLiveRegion="polite" className="text-foreground">
                       Moved to{" "}
                       <Text className="font-bold text-foreground">{search.result.label}</Text>. Move
@@ -704,7 +705,7 @@ const PlaceEditor = ({
                   maxLength={50}
                   placeholder="Home"
                   autoFocus={place === null}
-                  className="rounded-lg border border-border bg-input p-4 text-foreground"
+                  className={fieldClassName}
                 />
                 <Text className="text-foreground font-semibold">Emoji</Text>
                 <View
@@ -725,8 +726,10 @@ const PlaceEditor = ({
                           setEmoji(choice);
                         }}
                         className={cn(
-                          "h-12 items-center justify-center rounded-xl border",
-                          selected ? "border-2 border-primary bg-primary-soft" : "border-border",
+                          "h-12 items-center justify-center rounded-2xl border-2",
+                          selected
+                            ? "border-primary-text bg-primary-soft"
+                            : "border-transparent bg-container",
                         )}
                         style={{ width: "15%" }}
                       >
@@ -743,7 +746,7 @@ const PlaceEditor = ({
                     maxLength={32}
                     placeholder="Type one emoji"
                     autoFocus
-                    className="rounded-lg border border-border bg-input p-4 text-2xl text-foreground"
+                    className={cn(fieldClassName, "text-2xl")}
                   />
                 ) : (
                   <Pressable
@@ -816,3 +819,8 @@ const cameraCenterFor = (
 ];
 
 export default PlaceScreen;
+
+const fieldClassName =
+  Platform.OS === "ios"
+    ? "rounded-[12px] bg-container px-4 py-3.5 text-[17px] text-foreground"
+    : "rounded-[4px] border border-border-strong bg-card px-4 py-4 text-base text-foreground";

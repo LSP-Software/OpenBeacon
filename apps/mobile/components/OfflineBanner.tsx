@@ -16,7 +16,7 @@ export const OfflineBanner = () => {
         left: 0,
         right: 0,
         paddingTop: insets.top,
-        backgroundColor: "#b91c1c",
+        backgroundColor: "#C2290A",
         alignItems: "center",
         paddingBottom: 8,
       }}

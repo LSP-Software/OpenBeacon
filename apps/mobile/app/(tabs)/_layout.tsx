@@ -1,10 +1,11 @@
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Redirect, Tabs } from "expo-router";
+import { Redirect } from "expo-router";
+import { NativeTabs } from "expo-router/unstable-native-tabs";
+import { Platform } from "react-native";
 import { useCallback, useEffect, useRef } from "react";
 import { HistoryShareNotice } from "../../components/HistoryShareNotice.tsx";
 import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
-import { TabBar } from "../../components/TabBar.tsx";
 import { useAppForeground } from "../../hooks/useAppForeground.ts";
 import { useRefetchWhileFocused } from "../../hooks/useRefetchWhileFocused.ts";
 import { useUnseenGroupHistory } from "../../hooks/useUnseenGroupHistory.ts";
@@ -12,12 +13,14 @@ import { queryClient, trpc } from "../../lib/api.ts";
 import { authClient } from "../../lib/auth-client.ts";
 import { groupColorSyncQueryOptions } from "../../lib/groupColorSync.ts";
 import { checkImageKeys } from "../../lib/imageKeySelfCheck.ts";
+import { useColors } from "../../lib/theme.ts";
 
 const TabsLayout = () => {
   const { data: session, isPending } = authClient.useSession();
   useQuery(groupColorSyncQueryOptions(session?.user.id));
   const { data: providers } = useQuery(trpc.auth.providers.queryOptions());
   const { unseenGroupIds } = useUnseenGroupHistory();
+  const { palette } = useColors();
   useRefetchWhileFocused([trpc.groupHistory.latest.queryKey()], 60_000);
   const { mutate: setTimezone } = useMutation({
     ...trpc.emailAlerts.setTimezone.mutationOptions(),
@@ -80,25 +83,48 @@ const TabsLayout = () => {
 
   return (
     <>
-      <Tabs
-        initialRouteName="groups/list"
+      <NativeTabs
         backBehavior="history"
-        tabBar={(props) => <TabBar {...props} groupsBadge={unseenGroupIds.size > 0} />}
-        screenOptions={{
-          headerShown: false,
-          sceneStyle: { backgroundColor: "transparent" },
-          tabBarStyle: {
-            position: "absolute",
-            backgroundColor: "transparent",
-            borderTopWidth: 0,
-            elevation: 0,
-          },
-        }}
+        tintColor={palette["primary-text"]}
+        {...(Platform.OS === "ios"
+          ? {}
+          : {
+              backgroundColor: palette["tab-bar"],
+              indicatorColor: palette["tab-indicator"],
+              iconColor: {
+                default: palette["text-secondary"],
+                selected: palette["secondary-foreground"],
+              },
+              labelStyle: {
+                default: { color: palette["text-secondary"] },
+                selected: { color: palette.foreground },
+              },
+              badgeBackgroundColor: palette.action,
+              labelVisibilityMode: "labeled" as const,
+              rippleColor: palette.container,
+            })}
       >
-        <Tabs.Screen name="groups/list" />
-        <Tabs.Screen name="map/index" />
-        <Tabs.Screen name="account/overview" />
-      </Tabs>
+        <NativeTabs.Trigger
+          name="groups"
+          {...(Platform.OS === "android" && unseenGroupIds.size > 0
+            ? { unstable_nativeProps: { badgeValue: "" } }
+            : {})}
+        >
+          <NativeTabs.Trigger.Icon sf="person.2" md="group" />
+          <NativeTabs.Trigger.Label>Groups</NativeTabs.Trigger.Label>
+          {Platform.OS === "ios" ? (
+            <NativeTabs.Trigger.Badge hidden={unseenGroupIds.size === 0} />
+          ) : null}
+        </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="map">
+          <NativeTabs.Trigger.Icon sf="map" md="map" />
+          <NativeTabs.Trigger.Label>Map</NativeTabs.Trigger.Label>
+        </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="account">
+          <NativeTabs.Trigger.Icon sf="person.crop.circle" md="person" />
+          <NativeTabs.Trigger.Label>Account</NativeTabs.Trigger.Label>
+        </NativeTabs.Trigger>
+      </NativeTabs>
       <HistoryShareNotice userId={session.user.id} />
     </>
   );

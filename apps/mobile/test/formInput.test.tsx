@@ -12,6 +12,7 @@ const host =
   ({ children, ...props }: { children?: React.ReactNode }) =>
     React.createElement(type, props, children);
 mock.module("react-native", () => ({
+  Platform: { OS: "android" },
   Pressable: host("pressable"),
   TextInput: host("text-input"),
   View: host("view"),
@@ -24,6 +25,7 @@ mock.module("../components/ui/Field.tsx", () => ({
   FieldLabel: host("view"),
 }));
 mock.module("../components/ui/Icon.tsx", () => ({ Icon: () => null }));
+mock.module("../components/ui/Text.tsx", () => ({ Text: host("text") }));
 
 const { Input } = await import("../components/ui/Input.tsx");
 

@@ -12,6 +12,7 @@ const host =
     React.createElement(type, props, children);
 mock.module("react-native", () => ({
   ActivityIndicator: host("spinner"),
+  Platform: { OS: "android" },
   Pressable: host("button"),
   Text: host("text"),
   View: host("view"),

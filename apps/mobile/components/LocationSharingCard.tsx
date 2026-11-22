@@ -6,12 +6,11 @@ import {
 } from "@openbeacon/shared";
 import { useIsFocused } from "@react-navigation/native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { MapPinIcon, PauseIcon } from "lucide-react-native";
+import { MapPinIcon, PauseIcon, TimerIcon } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { trpc } from "../lib/api.ts";
 import { useApiCompatibility } from "../lib/apiCompatibility.ts";
-import { cn } from "../lib/cn.ts";
 import {
   changeLocationSharing,
   getPendingSharingChanges,
@@ -29,17 +28,19 @@ import { loadTrackingModule } from "../lib/trackingModule.ts";
 import { useLocationPermissions } from "../providers/LocationPermissionProvider.tsx";
 import { BottomSheet } from "./ui/BottomSheet.tsx";
 import { Button } from "./ui/Button.tsx";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/Card.tsx";
 import { ChoiceList } from "./ui/ChoiceList.tsx";
-import { Icon } from "./ui/Icon.tsx";
+import { ListRow, ListSection } from "./ui/List.tsx";
 import { SegmentedControl } from "./ui/SegmentedControl.tsx";
+import { Switch } from "./ui/Switch.tsx";
 import { Text } from "./ui/Text.tsx";
 import { useLoadedSharingState } from "../hooks/useLoadedSharingState.ts";
 
 export const LocationSharingCard = ({
   device,
+  children,
 }: {
   device?: SharingPreference & { id: string; name: string; isCurrent: boolean };
+  children?: React.ReactNode;
 }) => {
   const queryClient = useQueryClient();
   useLoadedSharingState();
@@ -197,141 +198,124 @@ export const LocationSharingCard = ({
     );
   };
 
+  const sharingOn = !(device ? devicePaused || accountPaused : paused);
+  const blockedByAccountPause = !!device && accountPaused && !devicePaused;
+  const status = accountPaused
+    ? "Paused on all your devices"
+    : paused
+      ? `Paused on ${target}`
+      : missingPermission
+        ? getLocationPermissionWarningTitle(missingPermission)
+        : notSharing === "appTooOld"
+          ? "Not sharing until you update OpenBeacon"
+          : notSharing === "outOfSync"
+            ? "Not sharing until the app and server match"
+            : notSharing === "noGroups"
+              ? "Not sharing: you’re not in any groups"
+              : notSharing === "noKeys"
+                ? `Not sharing: this ${noun} is waiting for its keys`
+                : sharing.isPending
+                  ? "Checking sharing status…"
+                  : sharing.isError
+                    ? "Couldn’t check sharing status"
+                    : `Sharing enabled on ${target}`;
+  const openPause = () => {
+    selectScope(resumeAccount ? "account" : "device");
+    setMessage(null);
+    setOpen(true);
+  };
+  const notes = [
+    paused
+      ? stoppedLocally
+        ? update.isPending
+          ? "Pausing…"
+          : pendingAccount
+            ? `Sharing stopped on this ${thisDeviceNoun()}. Your groups and other devices will update when we can reach the server.`
+            : `Sharing stopped on this ${thisDeviceNoun()}. Your groups will update when we can reach the server.`
+        : `${
+            until && until.getTime() > now
+              ? formatResumeTime(toDeviceClock(until), toDeviceClock(new Date(now)))
+              : "Until you turn it back on"
+          }.${thisDevice ? " You can still see your groups’ locations." : ""}`
+      : pendingHere && thisDevice && !update.isPending
+        ? `Sharing resumed on this ${thisDeviceNoun()}. We’ll update your groups when you’re back online.`
+        : null,
+    notSharing === "noGroups"
+      ? `Create or join a group to start sharing from this ${noun}.`
+      : notSharing === "noKeys"
+        ? `This ${noun} doesn’t have the keys it needs to share with your groups yet. It keeps trying while it’s online.`
+        : null,
+    rejectedHere && !update.isPending
+      ? "Your last change to location sharing couldn’t be applied, so this shows the current setting. Try again if you still want to change it."
+      : null,
+    !thisDevice && pending?.account
+      ? "Your change to all devices is waiting to reach your other devices."
+      : null,
+    accountPaused && devicePaused
+      ? `${device?.name ?? `This ${thisDeviceNoun()}`} also has its own pause. It will stay paused when the account resumes.`
+      : null,
+  ].filter((note): note is string => note !== null);
+
   return (
-    <Card>
-      <CardHeader className="flex-row items-center gap-3">
-        <View
-          className={cn(
-            "size-10 items-center justify-center rounded-full",
-            paused || notSharing || missingPermission ? "bg-warning" : "bg-success-soft",
-          )}
-        >
-          <Icon
-            as={paused ? PauseIcon : MapPinIcon}
-            className={cn(
-              "size-5",
-              paused || notSharing || missingPermission ? "text-warning-text" : "text-success",
-            )}
-          />
-        </View>
-        <View className="flex-1 gap-1">
-          <CardTitle>Location sharing{paused ? " paused" : ""}</CardTitle>
-          <Text className="text-sm text-secondary">
-            {accountPaused
-              ? "Paused on all your devices"
-              : paused
-                ? `Paused on ${target}`
-                : missingPermission
-                  ? getLocationPermissionWarningTitle(missingPermission)
-                  : notSharing === "appTooOld"
-                    ? "Not sharing until you update OpenBeacon"
-                    : notSharing === "outOfSync"
-                      ? "Not sharing until the app and server match"
-                      : notSharing === "noGroups"
-                        ? "Not sharing: you’re not in any groups"
-                        : notSharing === "noKeys"
-                          ? `Not sharing: this ${noun} is waiting for its keys`
-                          : sharing.isPending
-                            ? "Checking sharing status…"
-                            : sharing.isError
-                              ? "Couldn’t check sharing status"
-                              : `Sharing enabled on ${target}`}
-          </Text>
-        </View>
-      </CardHeader>
-      <CardContent className="gap-3">
-        {paused ? (
-          <Text className="text-sm text-tertiary">
-            {stoppedLocally
-              ? update.isPending
-                ? "Pausing…"
-                : pendingAccount
-                  ? `Sharing stopped on this ${thisDeviceNoun()}. Your groups and other devices will update when we can reach the server.`
-                  : `Sharing stopped on this ${thisDeviceNoun()}. Your groups will update when we can reach the server.`
-              : `${
-                  until && until.getTime() > now
-                    ? formatResumeTime(toDeviceClock(until), toDeviceClock(new Date(now)))
-                    : "Until you turn it back on"
-                }.${thisDevice ? " You can still see your groups’ locations." : ""}`}
-          </Text>
-        ) : pendingHere && thisDevice && !update.isPending ? (
-          <Text className="text-sm text-tertiary">
-            Sharing resumed on this {thisDeviceNoun()}. We’ll update your groups when you’re back
-            online.
-          </Text>
-        ) : null}
-        {notSharing === "noGroups" ? (
-          <Text className="text-sm text-tertiary">
-            {`Create or join a group to start sharing from this ${noun}.`}
-          </Text>
-        ) : notSharing === "noKeys" ? (
-          <Text className="text-sm text-tertiary">
-            {`This ${noun} doesn’t have the keys it needs to share with your groups yet. It keeps trying while it’s online.`}
-          </Text>
-        ) : null}
-        {rejectedHere && !update.isPending ? (
-          <Text className="text-sm text-tertiary">
-            Your last change to location sharing couldn’t be applied, so this shows the current
-            setting. Try again if you still want to change it.
-          </Text>
-        ) : null}
-        {!thisDevice && pending?.account ? (
-          <Text className="text-sm text-tertiary">
-            Your change to all devices is waiting to reach your other devices.
-          </Text>
-        ) : null}
-        {message ? (
-          <Text accessibilityLiveRegion="polite" className="text-sm text-foreground">
-            {message}
-          </Text>
-        ) : null}
-        <View className="flex-row flex-wrap gap-2">
-          {(device ? devicePaused : paused) ? (
-            <Button
-              size="sm"
-              loading={update.isPending}
-              onPress={() => save(false, resumeAccount ? "account" : "device")}
-            >
-              <Text>
-                {device && accountPaused
-                  ? "Remove device pause"
-                  : resumeAccount
-                    ? "Resume all devices"
-                    : "Resume sharing"}
-              </Text>
-            </Button>
-          ) : null}
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={update.isPending}
-            onPress={() => {
-              selectScope(resumeAccount ? "account" : "device");
-              setMessage(null);
-              setOpen(true);
-            }}
-          >
-            <Text>
-              {device && accountPaused && !devicePaused
-                ? `Pause this ${thisDeviceNoun()} separately`
-                : paused
-                  ? "Change pause"
-                  : "Pause sharing"}
-            </Text>
-          </Button>
-        </View>
-        {accountPaused && devicePaused ? (
-          <Text className="text-sm text-tertiary">
-            {device?.name ?? `This ${thisDeviceNoun()}`} also has its own pause. It will stay paused
-            when the account resumes.
-          </Text>
-        ) : null}
-      </CardContent>
-      <BottomSheet
-        visible={open && !locked && !away}
-        onClose={() => setOpen(false)}
-        closeLabel="Cancel pause"
+    <>
+      <ListSection
+        title="Location sharing"
+        footer={
+          notes.length > 0 || message ? (
+            <View className="gap-1.5">
+              {notes.map((note) => (
+                <Text key={note} className="text-[13px] leading-[18px] text-secondary">
+                  {note}
+                </Text>
+              ))}
+              {message ? (
+                <Text
+                  accessibilityLiveRegion="polite"
+                  className="text-[13px] leading-[18px] text-foreground"
+                >
+                  {message}
+                </Text>
+              ) : null}
+            </View>
+          ) : null
+        }
       >
+        <ListRow
+          title={device && !device.isCurrent ? `Share from ${device.name}` : "Share my location"}
+          subtitle={status}
+          icon={paused ? PauseIcon : MapPinIcon}
+          iconColor={paused || notSharing || missingPermission ? "orange" : "pink"}
+          trailing={
+            <Switch
+              accessibilityLabel={
+                device && !device.isCurrent ? `Share from ${device.name}` : "Share my location"
+              }
+              value={sharingOn}
+              disabled={update.isPending || blockedByAccountPause}
+              onValueChange={(on) => {
+                if (on) {
+                  void save(false, resumeAccount ? "account" : "device");
+                  return;
+                }
+                openPause();
+              }}
+            />
+          }
+        />
+        {(device ? devicePaused : paused) || (device && accountPaused) ? (
+          <ListRow
+            title={
+              device && !devicePaused ? `Pause this ${thisDeviceNoun()} separately` : "Change pause"
+            }
+            icon={TimerIcon}
+            iconColor="orange"
+            disabled={update.isPending}
+            onPress={openPause}
+          />
+        ) : null}
+        {children}
+      </ListSection>
+      <BottomSheet visible={open && !locked && !away} onClose={() => setOpen(false)}>
         <View className="flex-row items-center justify-between gap-3">
           <Text accessibilityRole="header" className="flex-1 text-xl font-bold">
             Pause location sharing
@@ -367,22 +351,20 @@ export const LocationSharingCard = ({
               the account resumes.
             </Text>
           ) : null}
-          <View className="gap-2">
-            <Text variant="label">For</Text>
-            <ChoiceList
-              accessibilityLabel="Pause duration"
-              options={[
-                { value: 15, title: "15 minutes" },
-                { value: 60, title: "1 hour" },
-                { value: 480, title: "8 hours" },
-                { value: 1440, title: "24 hours" },
-                { value: null, title: "Until I turn it back on" },
-              ]}
-              selected={duration}
-              disabled={update.isPending}
-              onChange={setDuration}
-            />
-          </View>
+          <ChoiceList
+            title="For"
+            accessibilityLabel="Pause duration"
+            options={[
+              { value: 15, title: "15 minutes" },
+              { value: 60, title: "1 hour" },
+              { value: 480, title: "8 hours" },
+              { value: 1440, title: "24 hours" },
+              { value: null, title: "Until I turn it back on" },
+            ]}
+            selected={duration}
+            disabled={update.isPending}
+            onChange={setDuration}
+          />
           {duration !== null ? (
             <Text className="text-sm text-secondary">
               {formatResumeTime(
@@ -401,6 +383,6 @@ export const LocationSharingCard = ({
           <Text>Pause sharing</Text>
         </Button>
       </BottomSheet>
-    </Card>
+    </>
   );
 };

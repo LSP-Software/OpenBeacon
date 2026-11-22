@@ -58,7 +58,10 @@ mock.module("../providers/LocationPermissionProvider.tsx", () => ({
   LocationPermissionProvider: Passthrough,
 }));
 mock.module("../providers/SessionDataCleanup.tsx", () => ({ SessionDataCleanup: () => null }));
-mock.module("../providers/ThemeProvider.tsx", () => ({ ThemeProvider: Passthrough }));
+mock.module("../providers/ThemeProvider.tsx", () => ({
+  ThemeProvider: Passthrough,
+  useAppTheme: () => "light",
+}));
 mock.module("../providers/TrackingProvider.tsx", () => ({ TrackingProvider: Passthrough }));
 
 const { default: RootLayout, ErrorBoundary } = await import("../app/_layout.tsx");

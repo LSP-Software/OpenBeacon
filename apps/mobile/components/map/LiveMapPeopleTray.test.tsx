@@ -11,6 +11,7 @@ let root: Root | null = null;
 const now = Date.parse("2026-07-19T12:00:00.000Z");
 
 mock.module("react-native", () => ({
+  Platform: { OS: "ios" },
   ActivityIndicator: () => React.createElement("activity-indicator"),
   Pressable: ({
     accessibilityLabel,
@@ -31,6 +32,12 @@ mock.module("../ui/Text.tsx", () => ({
 mock.module("./LiveMapMarkerPin.tsx", () => ({
   LiveMapMarkerPin: ({ status }: { status?: string | null }) =>
     React.createElement("pin", { status: status ?? "none" }),
+}));
+mock.module("./MapSurface.tsx", () => ({
+  MapBottomInset: React.createContext(0),
+  MapSurface: ({ children }: { children?: React.ReactNode }) =>
+    React.createElement("map-surface", null, children),
+  useMapBottomInset: () => 0,
 }));
 const { LiveMapPeopleTray } = await import("./LiveMapPeopleTray.tsx");
 

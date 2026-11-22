@@ -3,10 +3,14 @@ import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { TextInput, View } from "react-native";
+import { LogOutIcon, MapIcon, Trash2Icon } from "lucide-react-native";
+import { Platform, TextInput, View } from "react-native";
 import { HistoryShareChoices } from "../HistoryShareChoices.tsx";
+import { GroupImage } from "../image/GroupImage.tsx";
 import { GroupMapColorPicker } from "../map/GroupMapColorPicker.tsx";
 import { Button } from "../ui/Button.tsx";
+import { Icon } from "../ui/Icon.tsx";
+import { ListRow, ListSection } from "../ui/List.tsx";
 import { Switch } from "../ui/Switch.tsx";
 import { Text } from "../ui/Text.tsx";
 import { useCachedGroup } from "../../hooks/useCachedGroup.ts";
@@ -21,6 +25,8 @@ import { canHideMapGroups } from "../../lib/mapGroupVisibility.ts";
 import { requestTrackingSync } from "../../lib/trackingEvents.ts";
 import { userMessage } from "../../lib/userMessage.ts";
 import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
+
+const ios = Platform.OS === "ios";
 
 const SettingsTab = ({ groupId }: { groupId: string }) => {
   const { data: session } = authClient.useSession();
@@ -38,18 +44,40 @@ const SettingsTab = ({ groupId }: { groupId: string }) => {
   const role = group?.members.find((member) => member.userId === session?.user.id)?.role;
 
   return (
-    <View className="gap-3">
+    <View className="gap-6">
+      {group ? (
+        <View className="items-center">
+          <GroupImage
+            groupId={groupId}
+            imageUrl={group.image ?? null}
+            editable={role === "OWNER" || role === "ADMIN"}
+          />
+        </View>
+      ) : null}
       {(role === "OWNER" || role === "ADMIN") && (
         <View className="gap-3">
-          <Text variant="label">Group name</Text>
-          <TextInput
-            accessibilityLabel="Group name"
-            value={name}
-            onChangeText={setName}
-            maxLength={100}
-            className="h-[52px] rounded-lg border border-border-strong bg-input px-4 text-base text-foreground placeholder:text-tertiary"
-          />
+          {ios ? <Text variant="label">Group name</Text> : null}
+          <View>
+            <TextInput
+              accessibilityLabel="Group name"
+              value={name}
+              onChangeText={setName}
+              maxLength={100}
+              className={
+                ios
+                  ? "h-[50px] rounded-[12px] bg-card px-4 text-[17px] text-foreground placeholder:text-tertiary"
+                  : "h-14 rounded-[4px] border border-border-strong bg-input px-4 text-base text-foreground placeholder:text-tertiary"
+              }
+            />
+            {ios ? null : (
+              <View pointerEvents="none" className="absolute -top-2 left-3 bg-background px-1">
+                <Text className="text-xs text-secondary">Group name</Text>
+              </View>
+            )}
+          </View>
           <Button
+            variant="secondary"
+            className="self-start"
             disabled={!name.trim()}
             loading={rename.isPending}
             onPress={async () => {
@@ -71,10 +99,6 @@ const SettingsTab = ({ groupId }: { groupId: string }) => {
       {historyShare.setting ? (
         <View className="gap-2">
           <Text variant="label">Your location history</Text>
-          <Text className="text-secondary text-sm">
-            How much of your history members of {group?.name ?? "this group"} can play back in
-            Timeline. Only you can change this.
-          </Text>
           <HistoryShareChoices
             accountShare={historyShare.setting.account}
             value={groupHistoryShare(historyShare.setting, groupId).override}
@@ -87,37 +111,58 @@ const SettingsTab = ({ groupId }: { groupId: string }) => {
               })
             }
           />
+          <Text className="px-4 text-[13px] leading-[18px] text-secondary">
+            How much of your history members of {group?.name ?? "this group"} can play back in
+            Timeline. Only you can change this.
+          </Text>
         </View>
       ) : null}
-      <Text variant="label">Appearance</Text>
-      <GroupMapColorPicker groupId={groupId} />
+      <View className="gap-2">
+        <Text variant="label">Appearance</Text>
+        <GroupMapColorPicker groupId={groupId} />
+      </View>
       {session && canHideMapGroups(groupCount) && (
-        <View className="flex-row items-center gap-4 rounded-2xl border border-border bg-card p-4">
-          <View className="flex-1 gap-1">
-            <Text className="text-foreground font-medium">Show on map</Text>
-            <Text className="text-tertiary text-sm">
-              Only changes this {thisDeviceNoun()}. Members can still see you, and you keep sharing
-              your location with them.
-            </Text>
-          </View>
-          <Switch
+        <ListSection
+          footer={`Only changes this ${thisDeviceNoun()}. Members can still see you, and you keep sharing your location with them.`}
+        >
+          <ListRow
+            title="Show on map"
+            icon={MapIcon}
+            iconColor="green"
+            accessibilityRole="switch"
             accessibilityLabel={`Show ${group?.name ?? "this group"} on the map`}
-            value={shownOnMap}
-            onValueChange={(shown) =>
-              setMapGroupHidden({ groupId, hidden: !shown, userId: session.user.id })
+            accessibilityState={{ checked: shownOnMap }}
+            onPress={() =>
+              setMapGroupHidden({ groupId, hidden: shownOnMap, userId: session.user.id })
+            }
+            trailing={
+              <Switch
+                accessibilityLabel={`Show ${group?.name ?? "this group"} on the map`}
+                value={shownOnMap}
+                onValueChange={(shown) =>
+                  setMapGroupHidden({ groupId, hidden: !shown, userId: session.user.id })
+                }
+              />
             }
           />
-        </View>
+        </ListSection>
       )}
       {leaving.successorDialog}
       {role && (
-        <Button variant="danger" loading={leaving.isPending} onPress={leaving.leave}>
+        <Button
+          variant="danger"
+          className={ios ? "" : "self-start"}
+          loading={leaving.isPending}
+          onPress={leaving.leave}
+        >
+          {ios ? null : <Icon as={LogOutIcon} size={18} className="text-destructive-text" />}
           <Text>Leave group</Text>
         </Button>
       )}
       {role === "OWNER" && (
         <Button
           variant="danger"
+          className={ios ? "" : "self-start"}
           loading={deleteGroup.isPending}
           onPress={() =>
             Alert.alert(
@@ -135,7 +180,7 @@ const SettingsTab = ({ groupId }: { groupId: string }) => {
                       return;
                     }
                     if (session) forgetHiddenMapGroup({ groupId, userId: session.user.id });
-                    router.replace("/(tabs)/groups/list");
+                    router.dismissTo("/(tabs)/groups/list");
                     await queryClient.invalidateQueries({
                       queryKey: trpc.groupMembership.list.queryKey(),
                     });
@@ -146,6 +191,7 @@ const SettingsTab = ({ groupId }: { groupId: string }) => {
             )
           }
         >
+          {ios ? null : <Icon as={Trash2Icon} size={18} className="text-destructive-text" />}
           <Text>Delete group</Text>
         </Button>
       )}

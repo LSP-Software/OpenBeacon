@@ -7,11 +7,15 @@ export const HistoryShareChoices = ({
   disabled = false,
   onChange,
   value,
+  title,
+  footer,
 }: {
   accountShare?: HistoryShare;
   disabled?: boolean;
   onChange: (value: HistoryShare | null) => void;
   value: HistoryShare | null;
+  title?: string | undefined;
+  footer?: React.ReactNode;
 }) => {
   const options = [
     ...(accountShare
@@ -28,6 +32,8 @@ export const HistoryShareChoices = ({
   return (
     <ChoiceList
       accessibilityLabel="Location history to share"
+      title={title}
+      footer={footer}
       options={options}
       selected={value}
       disabled={disabled}

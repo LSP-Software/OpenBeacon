@@ -28,7 +28,7 @@ const signOutAfterRefusedSessionLink = mock(async () => {
 const View = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
 mock.module("expo-router", () => ({
   Link: View,
-  router: { back: () => steps.push("back") },
+  router: { back: () => steps.push("back"), replace: () => {} },
 }));
 mock.module("@tanstack/react-query", () => ({
   useQuery: () => ({ data: [{ providerId: "credential" }], isError: false }),
@@ -73,7 +73,9 @@ mock.module("../lib/sessionLink.ts", () => ({
     error instanceof TRPCClientError && error.data?.code === "FORBIDDEN",
   signOutAfterRefusedSessionLink,
 }));
-mock.module("../components/headers/BackButton.tsx", () => ({ BackButton: () => null }));
+mock.module("lucide-react-native", () => ({ LogOutIcon: View, MailCheckIcon: View }));
+mock.module("../components/headers/ScreenHeader.tsx", () => ({ ScreenHeader: () => null }));
+mock.module("../components/ui/List.tsx", () => ({ ListRow: () => null, ListSection: View }));
 mock.module("../components/ui/Button.tsx", () => ({
   Button: ({ children, onPress }: { children?: React.ReactNode; onPress?: () => void }) =>
     React.createElement("mock-button", { onPress }, children),

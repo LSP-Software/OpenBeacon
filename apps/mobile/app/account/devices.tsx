@@ -3,6 +3,7 @@ import { deviceIconSchema, deviceNameSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "expo-router";
+import { PlusIcon } from "lucide-react-native";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { Pressable, ScrollView, View } from "react-native";
@@ -15,6 +16,7 @@ import { Button } from "../../components/ui/Button.tsx";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/Dialog.tsx";
 import { Icon } from "../../components/ui/Icon.tsx";
 import { Input } from "../../components/ui/Input.tsx";
+import { ListRow, ListSection } from "../../components/ui/List.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { useLiveTrackingPositions } from "../../hooks/useLiveTrackingPositions.ts";
 import { Alert } from "../../lib/alert.ts";
@@ -88,13 +90,13 @@ const DevicesScreen = () => {
                     accessibilityState={{ checked: selected }}
                     onPress={() => form.setValue("icon", icon)}
                     className={cn(
-                      "size-12 items-center justify-center rounded-2xl border",
-                      selected ? "border-primary bg-primary-soft" : "border-border bg-background",
+                      "size-12 items-center justify-center rounded-full",
+                      selected ? "bg-primary-soft" : "bg-container",
                     )}
                   >
                     <Icon
                       as={option.icon}
-                      className={selected ? "text-primary size-6" : "text-tertiary size-6"}
+                      className={selected ? "text-primary-text size-6" : "text-secondary size-6"}
                     />
                   </Pressable>
                 );
@@ -147,15 +149,12 @@ const DevicesScreen = () => {
       ) : (
         <ScrollView
           className="flex-1"
-          contentContainerClassName="gap-6 px-4 pb-32 pt-2"
+          contentInsetAdjustmentBehavior="automatic"
+          contentContainerClassName="gap-6 px-4 pb-10 pt-2"
           showsVerticalScrollIndicator={false}
         >
-          <Text className="text-secondary text-base">
-            Phones and tablets signed in to your account. Tap one to manage location sharing, rename
-            it, change its icon or remove it.
-          </Text>
-          <View className="overflow-hidden rounded-2xl border border-border bg-card">
-            {devices.data.map((device, index) => {
+          <ListSection footer="Phones and tablets signed in to your account. Tap one to manage location sharing, rename it, change its icon or remove it.">
+            {devices.data.map((device) => {
               const lastActive = shortTimeSince(device.lastSeenAt);
               const position = positions.find(
                 (item) => item.deviceId === device.id && item.userId === session?.user.id,
@@ -163,87 +162,62 @@ const DevicesScreen = () => {
               const lastLocationAt = position?.timestamp ?? device.lastLocationAt;
               const lastLocation = lastLocationAt ? shortTimeSince(lastLocationAt) : null;
               return (
-                <Pressable
+                <ListRow
                   key={device.id}
-                  accessibilityRole="button"
+                  title={device.name}
+                  icon={deviceIconFor(device.icon, device.platform).icon}
+                  iconColor="gray"
                   accessibilityHint="Manage location sharing, edit name and icon, or remove it"
-                  className={cn(
-                    "flex-row items-center gap-4 px-4 py-3.5 active:bg-secondary/60",
-                    index < devices.data.length - 1 && "border-b border-border/60",
-                  )}
                   onPress={() => {
                     form.reset({ name: device.name, icon: device.icon });
                     setEditing(device);
                   }}
-                >
-                  <View className="size-11 items-center justify-center rounded-xl bg-secondary">
-                    <Icon
-                      as={deviceIconFor(device.icon, device.platform).icon}
-                      className="text-foreground size-5"
-                    />
-                  </View>
-                  <View className="flex-1 gap-1">
-                    <View className="flex-row flex-wrap items-center gap-2">
-                      <Text className="text-foreground text-base font-semibold">{device.name}</Text>
-                      {device.isCurrent && (
-                        <View className="rounded-full bg-primary-soft px-2 py-0.5">
-                          <Text className="text-primary-text text-xs font-medium">
-                            This {thisDeviceNoun()}
-                          </Text>
-                        </View>
-                      )}
-                      {!device.activatedAt && (
-                        <View className="rounded-full bg-secondary px-2 py-0.5">
-                          <Text className="text-secondary text-xs font-medium">
-                            Waiting for setup
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                    <Text className="text-tertiary text-sm">
-                      {[
-                        device.model,
-                        `Added ${device.createdAt.toLocaleDateString(undefined, { dateStyle: "medium" })}`,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </Text>
-                    <Text className="text-tertiary text-sm">
-                      {device.isCurrent || lastActive === "now"
-                        ? "Active now"
-                        : `Last active ${lastActive} ago`}
-                    </Text>
-                    <Text className="text-tertiary text-sm">
-                      {!device.activatedAt
-                        ? "Can’t see anyone’s location until it’s set up"
-                        : isSharingPaused(device, serverNow()) ||
-                            (sharing.data && isSharingPaused(sharing.data.account, serverNow()))
-                          ? "Location sharing paused"
-                          : groups.data?.length === 0
-                            ? "Not sharing with any group"
-                            : [
-                                lastLocation === null
-                                  ? "No location shared yet"
-                                  : lastLocation === "now"
-                                    ? "Location updated now"
-                                    : `Location updated ${lastLocation} ago`,
-                                position && position.battery.level !== null
-                                  ? `Battery ${position.battery.level}%`
-                                  : null,
-                              ]
-                                .filter(Boolean)
-                                .join(" · ")}
-                    </Text>
-                  </View>
-                </Pressable>
+                  subtitle={[
+                    device.isCurrent ? `This ${thisDeviceNoun()}` : null,
+                    !device.activatedAt ? "Waiting for setup" : null,
+                    [
+                      device.model,
+                      `Added ${device.createdAt.toLocaleDateString(undefined, { dateStyle: "medium" })}`,
+                    ]
+                      .filter(Boolean)
+                      .join(" · "),
+                    device.isCurrent || lastActive === "now"
+                      ? "Active now"
+                      : `Last active ${lastActive} ago`,
+                    !device.activatedAt
+                      ? "Can’t see anyone’s location until it’s set up"
+                      : isSharingPaused(device, serverNow()) ||
+                          (sharing.data && isSharingPaused(sharing.data.account, serverNow()))
+                        ? "Location sharing paused"
+                        : groups.data?.length === 0
+                          ? "Not sharing with any group"
+                          : [
+                              lastLocation === null
+                                ? "No location shared yet"
+                                : lastLocation === "now"
+                                  ? "Location updated now"
+                                  : `Location updated ${lastLocation} ago`,
+                              position && position.battery.level !== null
+                                ? `Battery ${position.battery.level}%`
+                                : null,
+                            ]
+                              .filter(Boolean)
+                              .join(" · "),
+                  ]
+                    .filter(Boolean)
+                    .join("\n")}
+                />
               );
             })}
-          </View>
-          <Link href="/account/add-device" asChild>
-            <Button variant="secondary">
-              <Text>Add a device</Text>
-            </Button>
-          </Link>
+          </ListSection>
+          <ListSection>
+            <ListRow
+              title="Add a device"
+              icon={PlusIcon}
+              iconColor="blue"
+              href="/account/add-device"
+            />
+          </ListSection>
         </ScrollView>
       )}
     </View>

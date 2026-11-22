@@ -15,6 +15,7 @@ import { useServerChange } from "../hooks/useServerChange.ts";
 import { changeServer } from "../lib/changeServer.ts";
 import { getServerUrl, hasCustomServerUrl, normaliseServerUrl } from "../lib/currentServer.ts";
 import { thisDeviceNoun } from "../lib/thisDeviceNoun.ts";
+import { screenTitleClass } from "../components/onboarding/screenTitleClass.ts";
 
 const serverUrlSchema = z.object({
   url: z.string().superRefine((url, context) => {
@@ -70,7 +71,7 @@ export default function ServerUrl() {
           <ReturnToHomeHeader />
 
           <View className="gap-5">
-            <Text accessibilityRole="header" className="text-3xl font-bold">
+            <Text accessibilityRole="header" className={screenTitleClass}>
               Custom server
             </Text>
             <Text className="text-secondary text-base">
@@ -97,7 +98,7 @@ export default function ServerUrl() {
               }}
             />
 
-            <View className="rounded-xl bg-secondary p-4">
+            <View className="rounded-3xl bg-card p-4">
               <Text className="text-sm text-secondary">
                 Changing server signs you out on this {thisDeviceNoun()}.
                 {signedIn

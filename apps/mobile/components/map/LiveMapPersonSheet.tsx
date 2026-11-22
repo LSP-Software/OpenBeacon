@@ -113,7 +113,7 @@ export const LiveMapPersonSheet = ({
             </View>
           ) : null}
           {!isMultiDevice && isOutOfDate && !unreadableGroup ? (
-            <View className="mt-3 rounded-xl bg-secondary p-3">
+            <View className="mt-3 rounded-2xl bg-container p-3">
               <Text className="text-sm">
                 {mayBeOutOfBattery({ battery, timestamp })
                   ? `Battery was at ${battery?.level}%. ${name}’s phone may have run out.`
@@ -127,7 +127,7 @@ export const LiveMapPersonSheet = ({
                 <View
                   accessible
                   accessibilityLabel={`Battery ${batteryVisual.label}`}
-                  className="flex-row items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5"
+                  className="flex-row items-center gap-1.5 rounded-full bg-container px-3 py-1.5"
                 >
                   <Icon as={batteryVisual.icon} size={16} className={batteryVisual.colorClass} />
                   <Text className={`${batteryVisual.colorClass} text-sm font-medium`}>
@@ -139,7 +139,7 @@ export const LiveMapPersonSheet = ({
                 <View
                   accessible
                   accessibilityLabel={`Moving at ${speedLabel}`}
-                  className="flex-row items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5"
+                  className="flex-row items-center gap-1.5 rounded-full bg-container px-3 py-1.5"
                 >
                   <Icon as={GaugeIcon} size={16} className="text-foreground" />
                   <Text className="text-foreground text-sm font-medium">{speedLabel}</Text>
@@ -176,7 +176,7 @@ export const LiveMapPersonSheet = ({
       }
     >
       {unreadableGroup ? (
-        <View className="mt-3 gap-2 rounded-xl bg-destructive-soft p-3">
+        <View className="mt-3 gap-2 rounded-2xl bg-destructive-soft p-3">
           <Text className="text-sm">
             {isMultiDevice
               ? `Some of ${name}’s newer locations were encrypted with a key this ${thisDeviceNoun()} doesn’t have.`
@@ -230,7 +230,7 @@ const PersonDeviceRow = ({
 
   const content = (
     <>
-      <View className="size-9 items-center justify-center rounded-xl border border-border bg-background">
+      <View className="size-9 items-center justify-center rounded-full bg-container">
         <Icon
           as={deviceIconFor(device.icon, device.platform).icon}
           size={18}

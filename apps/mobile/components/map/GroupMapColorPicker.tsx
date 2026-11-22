@@ -28,7 +28,7 @@ export const GroupMapColorPicker = ({ groupId }: { groupId: string }) => {
   const selectedColor = save.isPending ? save.variables.color : getGroupColor(groupId);
 
   return (
-    <View className="gap-3 rounded-2xl border border-border bg-card p-4">
+    <View className="gap-3 rounded-3xl bg-card p-4">
       <View className="gap-1">
         <Text className="text-foreground font-medium">Map marker colour</Text>
         <Text className="text-tertiary text-sm">

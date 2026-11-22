@@ -29,6 +29,7 @@ import {
 } from "../lib/emailCodes.ts";
 import { finishAuthentication } from "../lib/finishAuthentication.ts";
 import { performGoogleAuth } from "../lib/googleAuth.ts";
+import { screenTitleClass } from "../components/onboarding/screenTitleClass.ts";
 
 type PendingSignIn = z.infer<typeof signInSchema> & { notice: string | undefined };
 
@@ -152,7 +153,7 @@ const SignIn = () => {
             <AnnouncementBanner />
             <HeldKeysNotice />
             <View className="gap-2">
-              <Text accessibilityRole="header" className="text-3xl font-bold">
+              <Text accessibilityRole="header" className={screenTitleClass}>
                 {unverified
                   ? "Verify your email"
                   : signInCode

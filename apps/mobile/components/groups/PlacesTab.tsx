@@ -12,8 +12,9 @@ import {
   PlusIcon,
 } from "lucide-react-native";
 import { useEffect } from "react";
-import { Pressable, View } from "react-native";
+import { Platform, Pressable, View } from "react-native";
 import { LoadingIndicator } from "../LoadingIndicator.tsx";
+import { groupedListClassName, groupedRowClassName, groupedRowStyle } from "./groupedRows.ts";
 import { Button } from "../ui/Button.tsx";
 import { Icon } from "../ui/Icon.tsx";
 import { Switch } from "../ui/Switch.tsx";
@@ -100,7 +101,7 @@ const PlacesTab = ({
 
   if (places.isError && !places.data) {
     return (
-      <View className="gap-3 rounded-2xl border border-border bg-card p-5">
+      <View className="gap-3 rounded-3xl bg-card p-5">
         <Text className="text-foreground text-lg font-semibold">Couldn’t load places</Text>
         <Text className="text-tertiary">Check your connection and try again.</Text>
         <Button
@@ -151,7 +152,7 @@ const PlacesTab = ({
     ) : null;
 
   const arrivalsSwitchCard = (
-    <View className="flex-row items-center gap-4 rounded-2xl border border-border bg-card p-4">
+    <View className="flex-row items-center gap-4 rounded-3xl bg-card p-4">
       <View className="flex-1 gap-1">
         <Text className="text-foreground font-semibold">Share arrivals and departures</Text>
         <Text className="text-sm text-tertiary">
@@ -205,7 +206,7 @@ const PlacesTab = ({
     return (
       <View className="gap-4">
         {arrivalsOffNotice}
-        <View className="gap-4 rounded-2xl border border-border bg-card p-5">
+        <View className="gap-4 rounded-3xl bg-card p-5">
           <View className="size-12 items-center justify-center rounded-full bg-primary-soft">
             <Icon as={MapPinIcon} size={20} className="text-primary-text" />
           </View>
@@ -244,18 +245,16 @@ const PlacesTab = ({
           {canManage ? addPlaceButton("Add place", "rounded-full") : null}
         </View>
       </View>
-      <View className="overflow-hidden rounded-2xl border border-border bg-card">
+      <View className={groupedListClassName}>
         {places.data.map((place, index) => {
           if (!place.geometry) {
             return (
               <View
                 key={place.id}
-                className={cn(
-                  "flex-row items-center gap-4 p-4",
-                  index > 0 && "border-t border-border/60",
-                )}
+                className={cn("flex-row items-center gap-4 p-4", groupedRowClassName(index))}
+                style={groupedRowStyle(index, places.data.length)}
               >
-                <View className="size-12 items-center justify-center rounded-xl bg-secondary">
+                <View className={placeIconClassName}>
                   <Text className="text-2xl">{place.emoji}</Text>
                 </View>
                 <View className="flex-1 gap-1">
@@ -285,11 +284,12 @@ const PlacesTab = ({
                 accessibilityRole="button"
                 accessibilityLabel={`${place.name}, ${formatPlaceSize(place.geometry.radiusMeters)}, ${describePeopleHere(here)}. Show on map`}
                 className={cn(
-                  "flex-row items-center gap-4 p-4 active:bg-secondary/60",
-                  index > 0 && "border-t border-border/60",
+                  "flex-row items-center gap-4 p-4 active:bg-container",
+                  groupedRowClassName(index),
                 )}
+                style={groupedRowStyle(index, places.data.length)}
               >
-                <View className="size-12 items-center justify-center rounded-xl bg-secondary">
+                <View className={placeIconClassName}>
                   <Text className="text-2xl">{place.emoji}</Text>
                 </View>
                 <View className="flex-1 gap-0.5">
@@ -307,7 +307,9 @@ const PlacesTab = ({
                     {describePeopleHere(here)}
                   </Text>
                 </View>
-                <Icon as={ChevronRightIcon} size={20} className="text-tertiary" />
+                {Platform.OS === "ios" ? (
+                  <Icon as={ChevronRightIcon} size={20} className="text-border-strong" />
+                ) : null}
               </Pressable>
             </Link>
           );
@@ -319,3 +321,8 @@ const PlacesTab = ({
 };
 
 export default PlacesTab;
+
+const placeIconClassName =
+  Platform.OS === "ios"
+    ? "size-12 items-center justify-center rounded-[12px] bg-secondary"
+    : "size-12 items-center justify-center rounded-full bg-container";

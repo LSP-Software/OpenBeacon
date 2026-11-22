@@ -2,10 +2,10 @@ import { useIsFocused } from "@react-navigation/native";
 import { tryCatch } from "@openbeacon/shared";
 import { skipToken, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocalSearchParams, useRouter } from "expo-router";
+import { ClockIcon, MapPinIcon, SlidersHorizontalIcon, UsersIcon } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { View } from "react-native";
-import { BackButton } from "../../../../components/headers/BackButton.tsx";
-import { GroupImage } from "../../../../components/image/GroupImage.tsx";
+import { ScreenHeader } from "../../../../components/headers/ScreenHeader.tsx";
 import { LoadingIndicator } from "../../../../components/LoadingIndicator.tsx";
 import { RefreshablePage } from "../../../../components/RefreshablePage.tsx";
 import { Button } from "../../../../components/ui/Button.tsx";
@@ -16,7 +16,7 @@ import { useCachedGroup } from "../../../../hooks/useCachedGroup.ts";
 import { useHeldHistoryKeyVersions } from "../../../../hooks/useHeldHistoryKeyVersions.ts";
 import { useLiveTrackingPositions } from "../../../../hooks/useLiveTrackingPositions.ts";
 import { useUnseenGroupHistory } from "../../../../hooks/useUnseenGroupHistory.ts";
-import { type RouterOutputs, trpc } from "../../../../lib/api.ts";
+import { trpc } from "../../../../lib/api.ts";
 import { authClient } from "../../../../lib/auth-client.ts";
 import { rotateGroupEpochIfRequired } from "../../../../lib/groupEncryption.ts";
 import { catchUpGroupImageKeys } from "../../../../lib/imageKeyCatchUp.ts";
@@ -30,10 +30,10 @@ import { thisDeviceNoun } from "../../../../lib/thisDeviceNoun.ts";
 type GroupTabValue = "members" | "places" | "history" | "settings";
 
 const GROUP_TABS: readonly SwipeTabsItem<GroupTabValue>[] = [
-  { value: "members", label: "Members" },
-  { value: "places", label: "Places" },
-  { value: "history", label: "History" },
-  { value: "settings", label: "Settings" },
+  { value: "members", label: "Members", icon: UsersIcon },
+  { value: "places", label: "Places", icon: MapPinIcon },
+  { value: "history", label: "History", icon: ClockIcon },
+  { value: "settings", label: "Settings", icon: SlidersHorizontalIcon },
 ] as const;
 
 const GroupScreen = () => {
@@ -131,7 +131,7 @@ const GroupBody = ({ groupId, initialTab }: { groupId: string; initialTab: Group
         return;
       }
       if (!result.data.some((item) => item.id === groupId)) {
-        router.replace("/(tabs)/groups/list");
+        router.dismissTo("/(tabs)/groups/list");
       }
     })();
     return () => {
@@ -148,12 +148,18 @@ const GroupBody = ({ groupId, initialTab }: { groupId: string; initialTab: Group
   }, [groupId, history.userId, historyLatestAt, isFocused, queryClient, value]);
 
   if (isPending || (isMissing && verifyFailedFor !== groupId)) {
-    return <LoadingIndicator />;
+    return (
+      <>
+        <ScreenHeader title="" fallback="/(tabs)/groups/list" />
+        <LoadingIndicator />
+      </>
+    );
   }
 
   if (!group) {
     return (
       <View className="flex-1 items-center justify-center gap-4 bg-background px-6">
+        <ScreenHeader title="Group" fallback="/(tabs)/groups/list" />
         <Text className="text-tertiary text-center">
           We couldn’t load this group. Check your connection and try again.
         </Text>
@@ -170,15 +176,16 @@ const GroupBody = ({ groupId, initialTab }: { groupId: string; initialTab: Group
   }
 
   return (
-    <RefreshablePage>
-      <View className="flex-1 bg-background pb-32">
-        <View className="px-2 py-1">
-          <BackButton fallback="/(tabs)/groups/list" />
-        </View>
+    <RefreshablePage edges={[]}>
+      <ScreenHeader
+        title={group.name}
+        subtitle={`${group.members.length} ${group.members.length === 1 ? "member" : "members"}`}
+        fallback="/(tabs)/groups/list"
+      />
+      <View className="flex-1 bg-background pb-32 pt-2">
         <View className="gap-4 px-4">
-          <GroupHeader group={group} userId={session?.user.id} />
           {keyAccess?.data?.current === "missing" && (
-            <View className="gap-2 rounded-2xl border border-destructive-text bg-card p-4">
+            <View className="gap-2 rounded-3xl bg-destructive-soft p-4">
               <Text className="font-semibold text-destructive-text">
                 {`This ${thisDeviceNoun()} can’t access this group’s current encryption key`}
               </Text>
@@ -186,7 +193,7 @@ const GroupBody = ({ groupId, initialTab }: { groupId: string; initialTab: Group
             </View>
           )}
           {historyPartialFrom !== null && showHistoryWarning && (
-            <View className="gap-2 rounded-2xl border border-warning-accent bg-card p-4">
+            <View className="gap-2 rounded-3xl bg-warning p-4">
               <Text className="font-semibold text-warning-text">
                 {`Some location history isn’t available on this ${thisDeviceNoun()}`}
               </Text>
@@ -258,41 +265,6 @@ const GroupBody = ({ groupId, initialTab }: { groupId: string; initialTab: Group
         </View>
       </View>
     </RefreshablePage>
-  );
-};
-
-const GroupHeader = ({
-  group,
-  userId,
-}: {
-  group: RouterOutputs["groupMembership"]["list"][number];
-  userId: string | undefined;
-}) => {
-  const canEditGroupImage = group.members.some(
-    (member) => member.userId === userId && (member.role === "OWNER" || member.role === "ADMIN"),
-  );
-
-  return (
-    <View className="flex-row items-center gap-4 px-1">
-      <GroupImage
-        groupId={group.id}
-        imageUrl={group.image ?? null}
-        size="sm"
-        editable={canEditGroupImage}
-      />
-      <View className="flex-1">
-        <Text
-          accessibilityRole="header"
-          className="text-foreground text-3xl font-bold"
-          numberOfLines={2}
-        >
-          {group.name}
-        </Text>
-        <Text className="text-tertiary text-sm">
-          {group.members.length} {group.members.length === 1 ? "member" : "members"}
-        </Text>
-      </View>
-    </View>
   );
 };
 

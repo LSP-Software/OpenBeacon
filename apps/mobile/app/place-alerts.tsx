@@ -88,7 +88,7 @@ const PlaceAlertsScreen = () => {
                   <AccordionItem
                     key={place.id}
                     value={place.id}
-                    className="rounded-2xl border border-border bg-card px-5"
+                    className="rounded-3xl bg-card px-5"
                   >
                     <AccordionTrigger className="items-center">
                       <View className="flex-1 flex-row items-center gap-4">

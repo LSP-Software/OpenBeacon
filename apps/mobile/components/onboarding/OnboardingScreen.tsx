@@ -14,6 +14,7 @@ import type { OnboardingStep } from "../../lib/onboardingTypes.ts";
 import { Button } from "../ui/Button.tsx";
 import { Icon } from "../ui/Icon.tsx";
 import { Text } from "../ui/Text.tsx";
+import { screenTitleClass } from "./screenTitleClass.ts";
 
 export const useAdvanceOnboardingOnce = () => {
   const advanced = useRef(false);
@@ -55,7 +56,7 @@ export const OnboardingProgress = ({ step }: { step: OnboardingStep }) => {
           accessibilityRole="button"
           accessibilityLabel="Go back"
           onPress={goBack}
-          className="size-11 items-center justify-center rounded-full active:bg-secondary"
+          className="size-11 items-center justify-center rounded-full active:bg-container"
         >
           <Icon as={ArrowLeftIcon} className="text-foreground size-6" />
         </Pressable>
@@ -73,7 +74,7 @@ export const OnboardingProgress = ({ step }: { step: OnboardingStep }) => {
             key={index}
             className={cn(
               "h-1 flex-1 rounded-full",
-              index < position.number ? "bg-primary" : "bg-secondary",
+              index < position.number ? "bg-primary" : "bg-container",
             )}
           />
         ))}
@@ -122,7 +123,7 @@ export const OnboardingScreen = ({
     >
       {illustration}
       <View className="gap-3">
-        <Text accessibilityRole="header" className="text-foreground text-3xl font-bold">
+        <Text accessibilityRole="header" className={screenTitleClass}>
           {title}
         </Text>
         <Text className="text-secondary text-base">{description}</Text>
@@ -153,7 +154,7 @@ export const OnboardingScreen = ({
 );
 
 export const OnboardingNote = ({ text }: { text: string }) => (
-  <View className="rounded-2xl bg-secondary/60 px-4 py-3">
+  <View className="rounded-3xl bg-container px-4 py-3">
     <Text className="text-foreground text-sm leading-5">{text}</Text>
   </View>
 );
@@ -167,9 +168,9 @@ export const OnboardingPoint = ({
   title: string;
   description: string;
 }) => (
-  <View className="flex-row gap-4 rounded-2xl border border-border bg-card p-4">
+  <View className="flex-row gap-4 rounded-3xl bg-card p-4">
     <View className="size-10 items-center justify-center rounded-full bg-primary-soft">
-      <Icon as={icon} className="text-primary-text size-5" />
+      <Icon as={icon} className="text-primary-soft-foreground size-5" />
     </View>
     <View className="flex-1 gap-1">
       <Text className="text-foreground text-base font-semibold">{title}</Text>

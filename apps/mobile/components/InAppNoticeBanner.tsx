@@ -24,7 +24,7 @@ export const InAppNoticeBanner = () => {
       className="absolute left-4 right-4"
       style={{ top: insets.top + 8 }}
     >
-      <View className="flex-row items-center gap-2 rounded-2xl border border-border bg-card p-4 shadow-lg">
+      <View className="flex-row items-center gap-2 rounded-3xl bg-card p-4 shadow-lg">
         <Link href={notice.href} asChild>
           <Pressable
             accessibilityRole="link"

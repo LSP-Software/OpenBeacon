@@ -90,7 +90,7 @@ const OnboardingDoneScreen = () => {
       }
       primary={{ label: "Go to the map", onPress: finishOnboarding }}
     >
-      <View className="rounded-2xl border border-border bg-card px-4">
+      <View className="rounded-3xl bg-card px-4">
         {rows.map((row, index) => (
           <View
             key={row.label}

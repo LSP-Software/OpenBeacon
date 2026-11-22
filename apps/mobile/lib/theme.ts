@@ -1,5 +1,6 @@
-import { useTheme } from "../providers/ThemeProvider.tsx";
-import type { ResolvedTheme } from "./themePreferences.ts";
+import { Platform } from "react-native";
+import { useAppTheme } from "../providers/ThemeProvider.tsx";
+import { getPalette, type Palette } from "./palette.ts";
 
 export type Colors = {
   isDark: boolean;
@@ -9,38 +10,23 @@ export type Colors = {
   textSecondary: string;
   textMuted: string;
   primary: string;
-};
-
-const BRAND = "#FF1464";
-
-const getColors = (theme: ResolvedTheme): Colors => {
-  const dark = theme === "dark";
-
-  if (dark) {
-    return {
-      isDark: true,
-      background: "#0B0912",
-      surface: "#130F1E",
-      text: "#EDE8F5",
-      textSecondary: "#B9B0CC",
-      textMuted: "#9A90B0",
-      primary: BRAND,
-    };
-  }
-
-  return {
-    isDark: false,
-    background: "#F4F0FA",
-    surface: "#FFFFFF",
-    text: "#1A1025",
-    textSecondary: "#564B6B",
-    textMuted: "#6C5F81",
-    primary: BRAND,
-  };
+  tint: string;
+  palette: Palette;
 };
 
 export const useColors = (): Colors => {
-  const { appTheme } = useTheme();
+  const appTheme = useAppTheme();
+  const palette = getPalette(Platform.OS === "ios" ? "ios" : "android", appTheme);
 
-  return getColors(appTheme);
+  return {
+    isDark: appTheme === "dark",
+    background: palette.background,
+    surface: palette.card,
+    text: palette.foreground,
+    textSecondary: palette["text-secondary"],
+    textMuted: palette["text-tertiary"],
+    primary: palette.action,
+    tint: palette["primary-text"],
+    palette,
+  };
 };
