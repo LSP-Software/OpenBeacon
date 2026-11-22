@@ -1,15 +1,16 @@
 import { Camera, GeoJSONSource, Layer, Map as MapLibreMap } from "@maplibre/maplibre-react-native";
 import { Link } from "expo-router";
-import { ChevronDownIcon, EyeOffIcon, LocateFixedIcon, ScanIcon } from "lucide-react-native";
-import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  AccessibilityInfo,
-  ActivityIndicator,
-  BackHandler,
-  Platform,
-  Pressable,
-  View,
-} from "react-native";
+  ChevronDownIcon,
+  EyeOffIcon,
+  HistoryIcon,
+  LayersIcon,
+  LocateFixedIcon,
+  ScanIcon,
+  UsersIcon,
+} from "lucide-react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AccessibilityInfo, ActivityIndicator, BackHandler, Platform, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useReducedMotion } from "../../hooks/useReducedMotion.ts";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
@@ -33,6 +34,8 @@ import { Icon } from "../ui/Icon.tsx";
 import { Button } from "../ui/Button.tsx";
 import { Text } from "../ui/Text.tsx";
 import { LiveMapEdgeChip } from "./LiveMapEdgeChip.tsx";
+import { MapButtonGroup, MapChip, MapIconButton } from "./MapControls.tsx";
+import { MapBottomInset, MapSurface } from "./MapSurface.tsx";
 import { LiveMapGroupMenu, LiveMapHiddenGroupsNotice } from "./LiveMapGroupVisibility.tsx";
 import { LiveMapMissingPersonSheet } from "./LiveMapMissingPersonSheet.tsx";
 import { LiveMapPeopleTray } from "./LiveMapPeopleTray.tsx";
@@ -49,6 +52,7 @@ import { useNativeMapStyle } from "./useNativeMapStyle.ts";
 
 export const NativeMap = ({
   awaitingLiveSelfFix = false,
+  bottomInset = 0,
   devices = [],
   focusPlaceId = null,
   groupOptions = null,
@@ -68,6 +72,7 @@ export const NativeMap = ({
   timelineGroupId = null,
 }: {
   awaitingLiveSelfFix?: boolean;
+  bottomInset?: number;
   devices?: readonly (MapMemberDevice & { paused: boolean; unreadable: boolean })[];
   focusPlaceId?: string | null;
   groupOptions?: readonly MapGroupOption[] | null;
@@ -214,7 +219,7 @@ export const NativeMap = ({
   const hasMarkers = markers.length > 0;
   const camera = useLiveMapCamera({
     awaitingLiveSelfFix,
-    bottomOverlayHeight: trayPeople ? trayHeight : 0,
+    bottomOverlayHeight: trayPeople ? trayHeight : bottomInset,
     edge,
     locationsLoading,
     mapStyle,
@@ -429,489 +434,478 @@ export const NativeMap = ({
   }
 
   return (
-    <View
-      className="flex-1"
-      onLayout={(event) => {
-        edge.onMapLayout(event.nativeEvent.layout);
-        setMapHeight(event.nativeEvent.layout.height);
-      }}
-    >
-      <MapLibreMap
-        key={map.mapRevision}
-        ref={mapRef}
-        style={{ flex: 1 }}
-        mapStyle={JSON.stringify(mapStyle)}
-        attribution={false}
-        logo={true}
-        touchPitch={false}
-        touchRotate={false}
-        androidView="surface"
-        onPress={() => {
-          // MapLibre on Android reports every pin tap to the map straight after the pin's own press
-          if (Platform.OS === "android" && Date.now() - pinPressAtRef.current < 500) return;
-          setToastGroups([]);
-          closeSheets();
-        }}
-        onRegionIsChanging={(feature) => {
-          const { bounds, animated, userInteraction, zoom } = feature.nativeEvent;
-          pins.onZoomChange(zoom);
-          edge.onRegionChange([
-            [bounds[2], bounds[3]],
-            [bounds[0], bounds[1]],
-          ]);
-          maybeSuspendFollowFromRegionChange({
-            properties: { animated, isUserInteraction: userInteraction },
-          });
-          edge.update();
-        }}
-        onRegionDidChange={(feature) => {
-          const { bounds, center, zoom, animated, userInteraction } = feature.nativeEvent;
-          pins.onZoomChange(zoom);
-          edge.onRegionChange([
-            [bounds[2], bounds[3]],
-            [bounds[0], bounds[1]],
-          ]);
-          camera.onRegionDidChange({
-            geometry: { coordinates: center },
-            properties: { animated, isUserInteraction: userInteraction, zoomLevel: zoom },
-          });
-          edge.update();
-        }}
-        onDidFinishLoadingMap={edge.onMapReady}
-        onDidFailLoadingMap={map.onMapLoadFailure}
-        onDidFinishLoadingStyle={() => {
-          edge.update();
-          map.onStyleLoaded();
-
-          camera.onStyleLoaded();
+    <MapBottomInset.Provider value={bottomInset}>
+      <View
+        className="flex-1"
+        onLayout={(event) => {
+          edge.onMapLayout(event.nativeEvent.layout);
+          setMapHeight(event.nativeEvent.layout.height);
         }}
       >
-        <Camera
-          ref={cameraRef}
-          initialViewState={{
-            center: cameraDefaultSettings.centerCoordinate,
-            zoom: cameraDefaultSettings.zoomLevel,
-            ...(selectedMarker
-              ? {
-                  padding: {
-                    top: camera.cameraPadding.paddingTop,
-                    right: camera.cameraPadding.paddingRight,
-                    bottom: camera.cameraPadding.paddingBottom,
-                    left: camera.cameraPadding.paddingLeft,
-                  },
-                }
-              : {}),
+        <MapLibreMap
+          key={map.mapRevision}
+          ref={mapRef}
+          style={{ flex: 1 }}
+          mapStyle={JSON.stringify(mapStyle)}
+          attribution={false}
+          logo={true}
+          touchPitch={false}
+          touchRotate={false}
+          androidView="surface"
+          onPress={() => {
+            // MapLibre on Android reports every pin tap to the map straight after the pin's own press
+            if (Platform.OS === "android" && Date.now() - pinPressAtRef.current < 500) return;
+            setToastGroups([]);
+            closeSheets();
           }}
-        />
-        {map.symbolLayerIds.map((id) => (
-          <Layer
-            key={id}
-            id={id}
-            type="symbol"
-            layout={{ visibility: getSymbolVisibility(showSymbols) }}
-          />
-        ))}
-        {selectedPlace ? (
-          <GeoJSONSource id="selected-place" data={placeCirclePolygon({ v: 1, ...selectedPlace })}>
-            <Layer
-              id="selected-place-fill"
-              type="fill"
-              paint={{ "fill-color": colors.primary, "fill-opacity": 0.18 }}
-            />
-            <Layer
-              id="selected-place-line"
-              type="line"
-              paint={{ "line-color": colors.primary, "line-width": 2 }}
-            />
-          </GeoJSONSource>
-        ) : null}
-        {places.map((place) => (
-          <PlaceAnnotation
-            key={`place:${placeKey(place)}`}
-            place={place}
-            selected={placeKey(place) === selectedPlaceKey}
-            onSelected={() => {
-              pinPressAtRef.current = Date.now();
-              closeSheets();
-              setSelectedPlaceKey(placeKey(place));
+          onRegionIsChanging={(feature) => {
+            const { bounds, animated, userInteraction, zoom } = feature.nativeEvent;
+            pins.onZoomChange(zoom);
+            edge.onRegionChange([
+              [bounds[2], bounds[3]],
+              [bounds[0], bounds[1]],
+            ]);
+            maybeSuspendFollowFromRegionChange({
+              properties: { animated, isUserInteraction: userInteraction },
+            });
+            edge.update();
+          }}
+          onRegionDidChange={(feature) => {
+            const { bounds, center, zoom, animated, userInteraction } = feature.nativeEvent;
+            pins.onZoomChange(zoom);
+            edge.onRegionChange([
+              [bounds[2], bounds[3]],
+              [bounds[0], bounds[1]],
+            ]);
+            camera.onRegionDidChange({
+              geometry: { coordinates: center },
+              properties: { animated, isUserInteraction: userInteraction, zoomLevel: zoom },
+            });
+            edge.update();
+          }}
+          onDidFinishLoadingMap={edge.onMapReady}
+          onDidFailLoadingMap={map.onMapLoadFailure}
+          onDidFinishLoadingStyle={() => {
+            edge.update();
+            map.onStyleLoaded();
+
+            camera.onStyleLoaded();
+          }}
+        >
+          <Camera
+            ref={cameraRef}
+            initialViewState={{
+              center: cameraDefaultSettings.centerCoordinate,
+              zoom: cameraDefaultSettings.zoomLevel,
+              ...(selectedMarker
+                ? {
+                    padding: {
+                      top: camera.cameraPadding.paddingTop,
+                      right: camera.cameraPadding.paddingRight,
+                      bottom: camera.cameraPadding.paddingBottom,
+                      left: camera.cameraPadding.paddingLeft,
+                    },
+                  }
+                : {}),
             }}
           />
-        ))}
-        {[
-          ...pins.gathering.map(({ gatherTo, marker }) => renderPerson(marker, { gatherTo })),
-          ...pins.groups.map((group) => {
-            if (edgeGroupIds.has(group.id)) return null;
-            const [onlyMember] = group.members;
-            if (group.members.length === 1 && onlyMember) {
-              return renderPerson(onlyMember, { arrival: pins.arrivals.get(group.id) });
-            }
-            return (
-              <LiveMapStackAnnotation
-                key={group.id}
-                arrival={pins.arrivals.get(group.id)}
-                group={group}
-                members={displayOrder(group.members)}
-                onPress={() => {
-                  pressStack(group);
-                }}
-              />
-            );
-          }),
-        ]}
-      </MapLibreMap>
-      {edgeMarkers.map((chip) => (
-        <LiveMapEdgeChip
-          key={chip.userId}
-          angle={chip.angle}
-          members={displayOrder(
-            pins.groups
-              .filter((group) => chip.memberIds.includes(group.id))
-              .flatMap((group) => group.members),
-          )}
-          onPress={() => {
-            pressEdgeChip(chip);
-          }}
-          x={chip.x}
-          y={chip.y}
-        />
-      ))}
-      {map.isRefreshing ? (
-        <View
-          className="absolute left-3 rounded-full bg-card p-3"
-          style={{ top: insets.top + 56 }}
-          accessibilityLabel="Loading map"
-        >
-          <ActivityIndicator color={colors.primary} />
-        </View>
-      ) : map.showRecoverableError ? (
-        <View
-          className="absolute left-3 right-16 gap-3 rounded-3xl bg-card p-4 shadow-md shadow-black/15"
-          style={{ top: insets.top + 56 }}
-          accessibilityLiveRegion="polite"
-        >
-          <Text className="text-tertiary">
-            We couldn’t load the map. Check your connection and try again.
-          </Text>
-          <Button variant="secondary" onPress={map.retryMapLoad}>
-            <Text>Try again</Text>
-          </Button>
-        </View>
-      ) : null}
-      <View
-        className="absolute right-3"
-        style={{ top: insets.top + 56 }}
-        onLayout={(event) => {
-          edge.onControlsLayout(event.nativeEvent.layout);
-        }}
-      >
-        {hasMarkers ? (
-          <View className="overflow-hidden rounded-full border border-border bg-card shadow-sm shadow-black/10">
-            <Pressable
-              accessibilityLabel="Show everyone"
-              accessibilityRole="button"
-              onPress={fitEveryoneInFrame}
-              className="size-12 items-center justify-center active:bg-secondary"
+          {map.symbolLayerIds.map((id) => (
+            <Layer
+              key={id}
+              id={id}
+              type="symbol"
+              layout={{ visibility: getSymbolVisibility(showSymbols) }}
+            />
+          ))}
+          {selectedPlace ? (
+            <GeoJSONSource
+              id="selected-place"
+              data={placeCirclePolygon({ v: 1, ...selectedPlace })}
             >
-              <Icon as={ScanIcon} size={20} className="text-foreground" />
-            </Pressable>
-            {selfMarker ? (
-              <Pressable
+              <Layer
+                id="selected-place-fill"
+                type="fill"
+                paint={{ "fill-color": colors.primary, "fill-opacity": 0.18 }}
+              />
+              <Layer
+                id="selected-place-line"
+                type="line"
+                paint={{ "line-color": colors.primary, "line-width": 2 }}
+              />
+            </GeoJSONSource>
+          ) : null}
+          {places.map((place) => (
+            <PlaceAnnotation
+              key={`place:${placeKey(place)}`}
+              place={place}
+              selected={placeKey(place) === selectedPlaceKey}
+              onSelected={() => {
+                pinPressAtRef.current = Date.now();
+                closeSheets();
+                setSelectedPlaceKey(placeKey(place));
+              }}
+            />
+          ))}
+          {[
+            ...pins.gathering.map(({ gatherTo, marker }) => renderPerson(marker, { gatherTo })),
+            ...pins.groups.map((group) => {
+              if (edgeGroupIds.has(group.id)) return null;
+              const [onlyMember] = group.members;
+              if (group.members.length === 1 && onlyMember) {
+                return renderPerson(onlyMember, { arrival: pins.arrivals.get(group.id) });
+              }
+              return (
+                <LiveMapStackAnnotation
+                  key={group.id}
+                  arrival={pins.arrivals.get(group.id)}
+                  group={group}
+                  members={displayOrder(group.members)}
+                  onPress={() => {
+                    pressStack(group);
+                  }}
+                />
+              );
+            }),
+          ]}
+        </MapLibreMap>
+        {edgeMarkers.map((chip) => (
+          <LiveMapEdgeChip
+            key={chip.userId}
+            angle={chip.angle}
+            members={displayOrder(
+              pins.groups
+                .filter((group) => chip.memberIds.includes(group.id))
+                .flatMap((group) => group.members),
+            )}
+            onPress={() => {
+              pressEdgeChip(chip);
+            }}
+            x={chip.x}
+            y={chip.y}
+          />
+        ))}
+        {map.isRefreshing ? (
+          <View
+            className="absolute left-3 rounded-full bg-card p-3"
+            style={{ top: insets.top + 56 }}
+            accessibilityLabel="Loading map"
+          >
+            <ActivityIndicator color={colors.primary} />
+          </View>
+        ) : map.showRecoverableError ? (
+          <View
+            className="absolute left-3 right-16 gap-3 rounded-3xl bg-card p-4 shadow-md shadow-black/15"
+            style={{ top: insets.top + 56 }}
+            accessibilityLiveRegion="polite"
+          >
+            <Text className="text-tertiary">
+              We couldn’t load the map. Check your connection and try again.
+            </Text>
+            <Button variant="secondary" onPress={map.retryMapLoad}>
+              <Text>Try again</Text>
+            </Button>
+          </View>
+        ) : null}
+        <View
+          className="absolute right-3 gap-4"
+          style={{ top: insets.top + 8 }}
+          onLayout={(event) => {
+            edge.onControlsLayout(event.nativeEvent.layout);
+          }}
+        >
+          <MapButtonGroup>
+            {[
+              <MapIconButton
+                key="labels"
+                icon={LayersIcon}
+                active={showSymbols}
+                accessibilityLabel="Show map names and symbols"
+                accessibilityRole="switch"
+                accessibilityState={{ checked: showSymbols }}
+                onPress={map.toggleSymbols}
+              />,
+              timelineGroupId ? (
+                <Link
+                  key="timeline"
+                  href={{ pathname: "/timeline", params: { groupId: timelineGroupId } }}
+                  asChild
+                >
+                  <MapIconButton
+                    icon={HistoryIcon}
+                    accessibilityLabel="Timeline"
+                    accessibilityRole="link"
+                  />
+                </Link>
+              ) : null,
+              hasMarkers ? (
+                <MapIconButton
+                  key="fit"
+                  icon={ScanIcon}
+                  accessibilityLabel="Show everyone"
+                  accessibilityRole="button"
+                  onPress={fitEveryoneInFrame}
+                />
+              ) : null,
+            ]}
+          </MapButtonGroup>
+          {hasMarkers && selfMarker ? (
+            <MapSurface radius={Platform.OS === "ios" ? 24 : 16}>
+              <MapIconButton
+                icon={LocateFixedIcon}
+                active
                 accessibilityLabel="Go to current location"
                 accessibilityRole="button"
                 onPress={goToCurrentLocation}
-                className="size-12 items-center justify-center border-t border-border active:bg-secondary"
-              >
-                <Icon as={LocateFixedIcon} size={20} className="text-foreground" />
-              </Pressable>
-            ) : null}
-          </View>
-        ) : null}
-      </View>
-      <View
-        pointerEvents="box-none"
-        className="absolute left-3 right-3 flex-row flex-wrap gap-2"
-        style={{ top: insets.top + 8 }}
-        onLayout={(event) => {
-          const { height, y } = event.nativeEvent.layout;
-          setChipsBottom(y + height);
-        }}
-      >
-        {canHideGroups ? (
-          <Pressable
-            accessibilityLabel={
-              hiddenGroupCount > 0
-                ? `Groups on the map, ${hiddenGroupCount} hidden`
-                : "Groups on the map"
-            }
-            accessibilityRole="button"
-            hitSlop={{ top: 4, bottom: 4 }}
-            accessibilityState={{ expanded: groupMenuOpen }}
-            onPress={() => {
-              if (groupMenuOpen) {
-                setGroupMenuOpen(false);
-                return;
-              }
-              openGroupMenu();
-            }}
-            className={cn(
-              "h-10 flex-row items-center gap-1 rounded-full border px-3 shadow-sm shadow-black/10",
-              groupMenuOpen ? "border-foreground bg-foreground" : "border-border bg-card",
-            )}
-          >
-            {hiddenGroupCount > 0 ? (
-              <Icon
-                as={EyeOffIcon}
-                size={14}
-                className={groupMenuOpen ? "text-background" : "text-secondary"}
               />
-            ) : null}
-            <Text
-              className={cn(
-                "text-sm font-semibold",
-                groupMenuOpen ? "text-background" : "text-foreground",
-              )}
-            >
-              Groups
-            </Text>
-            <Icon
-              as={ChevronDownIcon}
-              size={14}
-              className={groupMenuOpen ? "text-background" : "text-foreground"}
-            />
-          </Pressable>
-        ) : null}
-        <Pressable
-          accessibilityLabel="Show map names and symbols"
-          accessibilityRole="switch"
-          hitSlop={{ top: 4, bottom: 4 }}
-          accessibilityState={{ checked: showSymbols }}
-          onPress={map.toggleSymbols}
-          className={cn(
-            "h-10 justify-center rounded-full border px-3 shadow-sm shadow-black/10",
-            showSymbols ? "border-foreground bg-foreground" : "border-border bg-card",
-          )}
-        >
-          <Text
-            className={cn(
-              "text-sm font-semibold",
-              showSymbols ? "text-background" : "text-foreground",
-            )}
-          >
-            Labels
-          </Text>
-        </Pressable>
-        {timelineGroupId ? (
-          <Link href={{ pathname: "/timeline", params: { groupId: timelineGroupId } }} asChild>
-            <Pressable
-              accessibilityLabel="Timeline"
-              accessibilityRole="link"
-              hitSlop={{ top: 4, bottom: 4 }}
-              className="h-10 justify-center rounded-full border border-border bg-card px-3 shadow-sm shadow-black/10"
-            >
-              <Text className="text-foreground text-sm font-semibold">Timeline</Text>
-            </Pressable>
-          </Link>
-        ) : null}
-        <Pressable
-          accessibilityLabel={
-            showAttentionCount ? `People, ${needsAttentionCount} need attention` : "People"
-          }
-          accessibilityRole="button"
-          hitSlop={{ top: 4, bottom: 4 }}
-          accessibilityState={{ expanded: isTrayOpen }}
-          onPress={() => {
-            if (isTrayOpen) {
-              onPeopleTrayOpenChange?.(false);
-              return;
-            }
-            closeSheets();
-            onPeopleTrayOpenChange?.(true);
+            </MapSurface>
+          ) : null}
+        </View>
+        <View
+          pointerEvents="box-none"
+          className="absolute left-3 right-20 flex-row flex-wrap gap-2"
+          style={{ top: insets.top + 8 }}
+          onLayout={(event) => {
+            const { height, y } = event.nativeEvent.layout;
+            setChipsBottom(y + height);
           }}
-          className={cn(
-            "h-10 flex-row items-center gap-1.5 rounded-full border px-3 shadow-sm shadow-black/10",
-            isTrayOpen ? "border-foreground bg-foreground" : "border-border bg-card",
-          )}
         >
-          <Text
-            className={cn(
-              "text-sm font-semibold",
-              isTrayOpen ? "text-background" : "text-foreground",
-            )}
-          >
-            People
-          </Text>
-          {showAttentionCount ? (
-            <View
-              className={cn(
-                "h-5 min-w-5 items-center justify-center rounded-full px-1",
-                hasKeyProblem ? "bg-destructive" : "bg-border-strong",
-              )}
+          {canHideGroups ? (
+            <MapChip
+              active={groupMenuOpen}
+              accessibilityLabel={
+                hiddenGroupCount > 0
+                  ? `Groups on the map, ${hiddenGroupCount} hidden`
+                  : "Groups on the map"
+              }
+              accessibilityRole="button"
+              accessibilityState={{ expanded: groupMenuOpen }}
+              onPress={() => {
+                if (groupMenuOpen) {
+                  setGroupMenuOpen(false);
+                  return;
+                }
+                openGroupMenu();
+              }}
             >
+              <Icon
+                as={hiddenGroupCount > 0 ? EyeOffIcon : UsersIcon}
+                size={16}
+                className={groupMenuOpen ? "text-background" : "text-primary-text"}
+              />
               <Text
                 className={cn(
-                  "text-xs font-bold leading-4",
-                  hasKeyProblem ? "text-white" : "text-foreground",
+                  "text-[15px] font-semibold",
+                  groupMenuOpen ? "text-background" : "text-foreground",
                 )}
               >
-                {needsAttentionCount}
+                Groups
               </Text>
-            </View>
+              <Icon
+                as={ChevronDownIcon}
+                size={16}
+                className={groupMenuOpen ? "text-background" : "text-foreground"}
+              />
+            </MapChip>
           ) : null}
-        </Pressable>
+          <MapChip
+            active={isTrayOpen}
+            accessibilityLabel={
+              showAttentionCount ? `People, ${needsAttentionCount} need attention` : "People"
+            }
+            accessibilityRole="button"
+            accessibilityState={{ expanded: isTrayOpen }}
+            onPress={() => {
+              if (isTrayOpen) {
+                onPeopleTrayOpenChange?.(false);
+                return;
+              }
+              closeSheets();
+              onPeopleTrayOpenChange?.(true);
+            }}
+          >
+            <Text
+              className={cn(
+                "text-[15px] font-semibold",
+                isTrayOpen ? "text-background" : "text-foreground",
+              )}
+            >
+              People
+            </Text>
+            {showAttentionCount ? (
+              <View
+                className={cn(
+                  "h-5 min-w-5 items-center justify-center rounded-full px-1",
+                  hasKeyProblem ? "bg-destructive" : "bg-border-strong",
+                )}
+              >
+                <Text
+                  className={cn(
+                    "text-xs font-bold leading-4",
+                    hasKeyProblem ? "text-white" : "text-foreground",
+                  )}
+                >
+                  {needsAttentionCount}
+                </Text>
+              </View>
+            ) : null}
+          </MapChip>
+        </View>
+        {canHideGroups && groupMenuOpen ? (
+          <LiveMapGroupMenu
+            groups={groupOptions}
+            maxHeight={Math.max(mapHeight - insets.top - 68, 0)}
+            top={insets.top + 56}
+            onSetHidden={setGroupHidden}
+          />
+        ) : null}
+        {canHideGroups &&
+        (!groupMenuOpen || toastGroups.length > 0) &&
+        !selectedMarker &&
+        !isStackSheetOpen &&
+        !missingPerson ? (
+          <LiveMapHiddenGroupsNotice
+            bottom={trayPeople ? trayHeight + 12 : bottomInset + 40}
+            groups={groupOptions}
+            toastGroupNames={toastGroups.map((group) => group.name)}
+            onOpenMenu={openGroupMenu}
+            onUndo={() => {
+              for (const group of toastGroups) onSetGroupHidden?.(group.id, false);
+              setToastGroups([]);
+            }}
+          />
+        ) : null}
+        {selectedPlace ? (
+          <LiveMapPlaceSheet
+            key={placeKey(selectedPlace)}
+            here={placeHere}
+            place={selectedPlace}
+            onDelete={() => {
+              onDeletePlace?.(selectedPlace, () => setSelectedPlaceKey(null));
+            }}
+            onDismiss={() => setSelectedPlaceKey(null)}
+            onHeightChange={(height) => {
+              edge.onSheetHeightChange(height);
+            }}
+          />
+        ) : selectedMarker ? (
+          <LiveMapPersonSheet
+            key={selectedMarker.userId}
+            battery={selectedMarker.battery}
+            devices={
+              selectedPersonDevices.length >= 2
+                ? selectedPersonDevices.map((device) => ({
+                    battery: device.marker?.battery ?? null,
+                    deviceId: device.deviceId,
+                    icon: device.icon,
+                    isThisDevice: device.marker?.isSelf ?? false,
+                    name: device.name,
+                    platform: device.platform,
+                    paused: device.paused,
+                    speed: device.marker?.speed ?? null,
+                    timestamp: device.marker?.timestamp ?? null,
+                    unreadable: device.unreadable || device.marker?.unreadableGroup !== undefined,
+                  }))
+                : undefined
+            }
+            image={selectedMarker.image}
+            initials={selectedMarker.initials}
+            isSelf={selectedMarker.isSelf}
+            name={selectedMarker.name}
+            otherSharedGroupNames={selectedMarker.otherSharedGroupNames}
+            speed={selectedMarker.speed}
+            timeline={
+              personTimelineGroupId
+                ? { groupId: personTimelineGroupId, userId: selectedMarker.userId }
+                : undefined
+            }
+            timestamp={selectedMarker.timestamp}
+            unreadableGroup={selectedMarker.unreadableGroup}
+            onHeightChange={(height) => {
+              edge.onSheetHeightChange(height);
+            }}
+            onDismiss={clearSelection}
+            onRequestUpdate={
+              onRequestUpdate &&
+              (selectedPersonDevices.length === 0 ||
+                selectedPersonDevices.some(
+                  (device) => !device.paused && device.platform !== "ios",
+                )) &&
+              !(selectedPersonDevices.length === 1 && selectedMarker.unreadableGroup)
+                ? () => onRequestUpdate(selectedMarker.userId)
+                : undefined
+            }
+            onSelectDevice={(deviceId) => {
+              if (markers.some((marker) => marker.deviceId === deviceId)) {
+                goToDevice(deviceId);
+              }
+            }}
+          />
+        ) : isStackSheetOpen ? (
+          <LiveMapStackSheet
+            members={displayOrder(stackSheetMembers)}
+            onDismiss={() => {
+              setStackSheetDeviceIds(null);
+            }}
+            onHeightChange={(height) => {
+              edge.onSheetHeightChange(height);
+            }}
+            onSelectDevice={(deviceId) => {
+              setStackSheetDeviceIds(null);
+              selectDevice(deviceId);
+            }}
+          />
+        ) : missingPerson ? (
+          <LiveMapMissingPersonSheet
+            key={missingPerson.userId}
+            devices={missingPersonDevices}
+            person={missingPerson}
+            onDismiss={() => {
+              setMissingUserId(null);
+            }}
+            onRequestUpdate={
+              onRequestUpdate &&
+              !missingPerson.isSelf &&
+              !("sharingPaused" in missingPerson) &&
+              !("hiddenGroups" in missingPerson) &&
+              (missingPersonDevices.length === 0 ||
+                missingPersonDevices.some(
+                  (device) => !device.paused && device.platform !== "ios",
+                )) &&
+              !(
+                "reason" in missingPerson &&
+                (missingPerson.reason === "groupKey" || missingPersonDevices.length === 1)
+              )
+                ? () => onRequestUpdate(missingPerson.userId)
+                : undefined
+            }
+            onShowGroup={(groupId) => {
+              setGroupHidden(groupId, false);
+            }}
+            onHeightChange={(height) => {
+              edge.onSheetHeightChange(height);
+            }}
+          />
+        ) : trayPeople ? (
+          <LiveMapPeopleTray
+            now={now}
+            people={trayPeople}
+            onHeightChange={(height) => {
+              setTrayHeight(height);
+              edge.onSheetHeightChange(height);
+            }}
+            onSelectPerson={(userId) => {
+              setGroupMenuOpen(false);
+              const pinDeviceId = personPinDeviceId({ markers, people, pinMarkers, userId });
+              if (pinDeviceId) {
+                goToDevice(pinDeviceId);
+                return;
+              }
+              setMissingUserId(userId);
+            }}
+          />
+        ) : null}
       </View>
-      {canHideGroups && groupMenuOpen ? (
-        <LiveMapGroupMenu
-          groups={groupOptions}
-          maxHeight={Math.max(mapHeight - insets.top - 68, 0)}
-          top={insets.top + 56}
-          onSetHidden={setGroupHidden}
-        />
-      ) : null}
-      {canHideGroups &&
-      (!groupMenuOpen || toastGroups.length > 0) &&
-      !selectedMarker &&
-      !isStackSheetOpen &&
-      !missingPerson ? (
-        <LiveMapHiddenGroupsNotice
-          bottom={trayPeople ? trayHeight + 12 : 40}
-          groups={groupOptions}
-          toastGroupNames={toastGroups.map((group) => group.name)}
-          onOpenMenu={openGroupMenu}
-          onUndo={() => {
-            for (const group of toastGroups) onSetGroupHidden?.(group.id, false);
-            setToastGroups([]);
-          }}
-        />
-      ) : null}
-      {selectedPlace ? (
-        <LiveMapPlaceSheet
-          key={placeKey(selectedPlace)}
-          here={placeHere}
-          place={selectedPlace}
-          onDelete={() => {
-            onDeletePlace?.(selectedPlace, () => setSelectedPlaceKey(null));
-          }}
-          onDismiss={() => setSelectedPlaceKey(null)}
-          onHeightChange={(height) => {
-            edge.onSheetHeightChange(height);
-          }}
-        />
-      ) : selectedMarker ? (
-        <LiveMapPersonSheet
-          key={selectedMarker.userId}
-          battery={selectedMarker.battery}
-          devices={
-            selectedPersonDevices.length >= 2
-              ? selectedPersonDevices.map((device) => ({
-                  battery: device.marker?.battery ?? null,
-                  deviceId: device.deviceId,
-                  icon: device.icon,
-                  isThisDevice: device.marker?.isSelf ?? false,
-                  name: device.name,
-                  platform: device.platform,
-                  paused: device.paused,
-                  speed: device.marker?.speed ?? null,
-                  timestamp: device.marker?.timestamp ?? null,
-                  unreadable: device.unreadable || device.marker?.unreadableGroup !== undefined,
-                }))
-              : undefined
-          }
-          image={selectedMarker.image}
-          initials={selectedMarker.initials}
-          isSelf={selectedMarker.isSelf}
-          name={selectedMarker.name}
-          otherSharedGroupNames={selectedMarker.otherSharedGroupNames}
-          speed={selectedMarker.speed}
-          timeline={
-            personTimelineGroupId
-              ? { groupId: personTimelineGroupId, userId: selectedMarker.userId }
-              : undefined
-          }
-          timestamp={selectedMarker.timestamp}
-          unreadableGroup={selectedMarker.unreadableGroup}
-          onHeightChange={(height) => {
-            edge.onSheetHeightChange(height);
-          }}
-          onDismiss={clearSelection}
-          onRequestUpdate={
-            onRequestUpdate &&
-            (selectedPersonDevices.length === 0 ||
-              selectedPersonDevices.some(
-                (device) => !device.paused && device.platform !== "ios",
-              )) &&
-            !(selectedPersonDevices.length === 1 && selectedMarker.unreadableGroup)
-              ? () => onRequestUpdate(selectedMarker.userId)
-              : undefined
-          }
-          onSelectDevice={(deviceId) => {
-            if (markers.some((marker) => marker.deviceId === deviceId)) {
-              goToDevice(deviceId);
-            }
-          }}
-        />
-      ) : isStackSheetOpen ? (
-        <LiveMapStackSheet
-          members={displayOrder(stackSheetMembers)}
-          onDismiss={() => {
-            setStackSheetDeviceIds(null);
-          }}
-          onHeightChange={(height) => {
-            edge.onSheetHeightChange(height);
-          }}
-          onSelectDevice={(deviceId) => {
-            setStackSheetDeviceIds(null);
-            selectDevice(deviceId);
-          }}
-        />
-      ) : missingPerson ? (
-        <LiveMapMissingPersonSheet
-          key={missingPerson.userId}
-          devices={missingPersonDevices}
-          person={missingPerson}
-          onDismiss={() => {
-            setMissingUserId(null);
-          }}
-          onRequestUpdate={
-            onRequestUpdate &&
-            !missingPerson.isSelf &&
-            !("sharingPaused" in missingPerson) &&
-            !("hiddenGroups" in missingPerson) &&
-            (missingPersonDevices.length === 0 ||
-              missingPersonDevices.some((device) => !device.paused && device.platform !== "ios")) &&
-            !(
-              "reason" in missingPerson &&
-              (missingPerson.reason === "groupKey" || missingPersonDevices.length === 1)
-            )
-              ? () => onRequestUpdate(missingPerson.userId)
-              : undefined
-          }
-          onShowGroup={(groupId) => {
-            setGroupHidden(groupId, false);
-          }}
-          onHeightChange={(height) => {
-            edge.onSheetHeightChange(height);
-          }}
-        />
-      ) : trayPeople ? (
-        <LiveMapPeopleTray
-          now={now}
-          people={trayPeople}
-          onHeightChange={(height) => {
-            setTrayHeight(height);
-            edge.onSheetHeightChange(height);
-          }}
-          onSelectPerson={(userId) => {
-            setGroupMenuOpen(false);
-            const pinDeviceId = personPinDeviceId({ markers, people, pinMarkers, userId });
-            if (pinDeviceId) {
-              goToDevice(pinDeviceId);
-              return;
-            }
-            setMissingUserId(userId);
-          }}
-        />
-      ) : null}
-    </View>
+    </MapBottomInset.Provider>
   );
 };
 

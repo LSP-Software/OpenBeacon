@@ -630,7 +630,7 @@ const TimelineView = ({
             accessibilityRole="button"
             accessibilityLabel="Back"
             onPress={onClose}
-            className="size-10 items-center justify-center rounded-xl bg-background"
+            className="size-10 items-center justify-center rounded-full bg-container"
           >
             <Icon as={ChevronLeftIcon} size={22} className="text-foreground" />
           </Pressable>
@@ -641,7 +641,7 @@ const TimelineView = ({
             accessibilityState={{ expanded: groupMenuOpen }}
             disabled={(groups?.length ?? 0) < 2}
             onPress={() => setGroupMenuOpen((open) => !open)}
-            className="max-w-[55%] flex-row items-center gap-2 rounded-full bg-background px-3 py-2"
+            className="max-w-[55%] flex-row items-center gap-2 rounded-full bg-container px-3 py-2"
           >
             <View
               className="size-2.5 rounded-full"
@@ -666,7 +666,7 @@ const TimelineView = ({
                   setGroupMenuOpen(false);
                   if (item.id !== group.id) onSwitchGroup(item.id);
                 }}
-                className="min-h-11 flex-row items-center gap-2 rounded-xl px-3"
+                className="min-h-11 flex-row items-center gap-2 rounded-2xl px-3"
               >
                 <View
                   className="size-2.5 rounded-full"
@@ -921,7 +921,7 @@ const TimelineView = ({
               padding: cameraPadding,
             });
           }}
-          className="absolute right-3 size-11 items-center justify-center rounded-full border border-border bg-card shadow-sm shadow-black/10"
+          className="absolute right-3 size-11 items-center justify-center rounded-full bg-card shadow-sm shadow-black/10"
           style={{ top: topHeight + 8 }}
         >
           <Icon as={LocateFixedIcon} size={20} className="text-foreground" />
@@ -1038,7 +1038,7 @@ const TimelineView = ({
                   accessibilityRole="button"
                   accessibilityLabel={`Playback speed, ${speed} times. Double tap for ${nextSpeed} times`}
                   onPress={() => setSpeed(nextSpeed)}
-                  className="min-h-11 min-w-14 items-center justify-center rounded-full bg-background px-3"
+                  className="min-h-11 min-w-14 items-center justify-center rounded-full bg-container px-3"
                 >
                   <Text className="font-semibold text-foreground">{speed}×</Text>
                 </Pressable>
@@ -1163,7 +1163,7 @@ const TimelineView = ({
             {personId === null && hiddenCount > 0 ? (
               <Animated.View
                 {...card.fullOnly}
-                className="gap-2 rounded-xl border border-warning-accent bg-card p-3"
+                className="gap-2 rounded-2xl border border-warning-accent bg-card p-3"
               >
                 <Text className="text-sm text-foreground">
                   There are too many locations on this day to show everyone, so Timeline is showing{" "}
@@ -1264,7 +1264,7 @@ const StatCard = ({ label, value }: { label: string; value: string }) => {
   const { fontScale } = useWindowDimensions();
   return (
     <View
-      className="flex-1 rounded-xl bg-background px-3 py-2"
+      className="flex-1 rounded-2xl bg-container px-3 py-2"
       style={{ minWidth: 72 * Math.max(fontScale, 1) }}
     >
       <Text
@@ -1320,7 +1320,7 @@ const ControlButton = ({
     accessibilityRole="button"
     accessibilityLabel={label}
     onPress={onPress}
-    className="size-11 items-center justify-center rounded-full bg-background"
+    className="size-11 items-center justify-center rounded-full bg-container"
   >
     <Icon as={icon} size={20} className="text-foreground" />
   </Pressable>

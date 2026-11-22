@@ -36,7 +36,7 @@ export const TimelinePlayerCard = ({
     style={{ bottom }}
     {...card.panHandlers}
   >
-    <Animated.View className="overflow-hidden rounded-2xl" style={card.heightStyle}>
+    <Animated.View className="overflow-hidden rounded-3xl" style={card.heightStyle}>
       <View
         className={card.collapsible ? "px-4 pb-3" : "px-4 pb-3 pt-3"}
         onLayout={card.onFullLayout}

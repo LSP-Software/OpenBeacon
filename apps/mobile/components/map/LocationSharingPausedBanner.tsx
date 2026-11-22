@@ -113,7 +113,7 @@ export const LocationSharingPausedBanner = ({
     return (
       <View
         accessibilityLiveRegion="polite"
-        className="mb-2 flex-row items-center gap-3 rounded-2xl border border-warning-accent bg-card px-3 py-2"
+        className="mb-2 flex-row items-center gap-3 rounded-3xl border border-warning-accent bg-card px-4 py-3"
       >
         <Icon as={MapPinOffIcon} size={16} className="text-warning-text" />
         <View className="flex-1">
@@ -131,7 +131,7 @@ export const LocationSharingPausedBanner = ({
   if (!paused) return null;
 
   return (
-    <View accessibilityLiveRegion="polite" className="mb-2 gap-1 rounded-3xl bg-card px-3 py-2">
+    <View accessibilityLiveRegion="polite" className="mb-2 gap-1 rounded-3xl bg-card px-4 py-3">
       <View className="flex-row items-center gap-3">
         <Icon as={PauseIcon} size={16} className="text-foreground" />
         <Text className="flex-1 text-sm font-medium">Your location sharing is paused</Text>

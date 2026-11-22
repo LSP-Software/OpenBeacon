@@ -76,7 +76,7 @@ export const LiveMapMissingPersonSheet = ({
       }
     >
       {paused ? (
-        <View className="mt-3 rounded-xl bg-secondary p-3">
+        <View className="mt-3 rounded-2xl bg-container p-3">
           <Text className="text-sm">
             {person.isSelf
               ? "You’ve paused location sharing on all your devices."
@@ -104,7 +104,7 @@ export const LiveMapMissingPersonSheet = ({
         </View>
       ) : waitingForLocation ? (
         <View className="mt-3 gap-3">
-          <View className="rounded-xl bg-secondary p-3">
+          <View className="rounded-2xl bg-container p-3">
             <Text className="text-sm">
               {person.isSelf
                 ? "You’ve turned location sharing back on. Your location will show when one of your devices sends an update."
@@ -115,7 +115,7 @@ export const LiveMapMissingPersonSheet = ({
             <View className="gap-1">
               {devices.map((device) => (
                 <View key={device.deviceId} className="min-h-11 flex-row items-center gap-3 py-1.5">
-                  <View className="size-9 items-center justify-center rounded-xl border border-border bg-background">
+                  <View className="size-9 items-center justify-center rounded-full bg-container">
                     <Icon
                       as={deviceIconFor(device.icon, device.platform).icon}
                       size={18}
@@ -137,7 +137,7 @@ export const LiveMapMissingPersonSheet = ({
         </View>
       ) : hidden ? (
         <View className="mt-3 gap-3">
-          <View className="rounded-xl bg-secondary p-3">
+          <View className="rounded-2xl bg-container p-3">
             <Text className="text-sm">
               {person.name} is only in{" "}
               {hiddenGroupNames.length > 1
@@ -162,7 +162,7 @@ export const LiveMapMissingPersonSheet = ({
           </View>
         </View>
       ) : unreadable ? (
-        <View className="mt-3 rounded-xl border border-destructive px-3 pt-3 pb-1">
+        <View className="mt-3 rounded-2xl border border-destructive px-3 pt-3 pb-1">
           <Text className="text-sm">
             {unreadable.reason === "groupKey"
               ? `This ${thisDeviceNoun()} doesn’t have the encryption key for ${unreadable.groupName}, so it can’t read locations shared there.`
@@ -183,7 +183,7 @@ export const LiveMapMissingPersonSheet = ({
           </Link>
         </View>
       ) : (
-        <View className="mt-3 rounded-xl bg-secondary p-3">
+        <View className="mt-3 rounded-2xl bg-container p-3">
           <Text className="text-sm">
             {person.isSelf
               ? `Your location hasn’t been shared from this ${thisDeviceNoun()} yet. Check OpenBeacon has location permission and background location turned on.`

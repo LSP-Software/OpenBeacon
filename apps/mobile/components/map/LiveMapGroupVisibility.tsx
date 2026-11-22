@@ -86,7 +86,7 @@ export const LiveMapHiddenGroupsNotice = ({
     return (
       <View
         accessibilityLiveRegion="polite"
-        className="absolute left-3 right-3 flex-row items-center gap-3 rounded-xl bg-foreground py-2.5 pl-4 pr-2 shadow-md shadow-black/25"
+        className="absolute left-3 right-3 flex-row items-center gap-3 rounded-2xl bg-foreground py-2.5 pl-4 pr-2 shadow-md shadow-black/25"
         style={{ bottom }}
       >
         <View className="min-w-0 flex-1">
@@ -122,7 +122,7 @@ export const LiveMapHiddenGroupsNotice = ({
       <Pressable
         accessibilityRole="button"
         accessibilityHint="Opens the list of groups shown on the map"
-        className="max-w-full flex-row items-center gap-1.5 rounded-full border border-border bg-card py-2 pl-2.5 pr-3 shadow-sm shadow-black/15 active:opacity-70"
+        className="max-w-full flex-row items-center gap-1.5 rounded-full bg-card py-2 pl-2.5 pr-3 shadow-sm shadow-black/15 active:opacity-70"
         onPress={onOpenMenu}
       >
         <Icon as={EyeOffIcon} size={15} className="text-secondary" />

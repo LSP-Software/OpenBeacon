@@ -46,7 +46,7 @@ export const TimelinePeopleChooser = ({
         />
         <View
           accessibilityViewIsModal
-          className="max-h-[85%] gap-4 rounded-t-3xl bg-card px-6 pt-5"
+          className="max-h-[85%] gap-4 rounded-t-[28px] bg-card px-6 pt-5"
           style={{ paddingBottom: Math.max(insets.bottom, 20) }}
         >
           <View className="flex-row items-center justify-between gap-3">
@@ -80,7 +80,7 @@ export const TimelinePeopleChooser = ({
                     )
                   }
                   className={cn(
-                    "min-h-14 flex-row items-center gap-3 rounded-xl px-2",
+                    "min-h-14 flex-row items-center gap-3 rounded-2xl px-2",
                     tooMany && "opacity-50",
                   )}
                 >

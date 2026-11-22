@@ -1,11 +1,14 @@
 import { memo, useRef } from "react";
-import { ActivityIndicator, Pressable, ScrollView, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, ScrollView, View } from "react-native";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
 import { cn } from "../../lib/cn.ts";
 import type { MapPeople, MapPerson, MapPersonStatus } from "../../lib/mapPeopleTypes.ts";
 import { shortTimeSince, timeSince } from "../../lib/timeSince.ts";
 import { Text } from "../ui/Text.tsx";
 import { LiveMapMarkerPin } from "./LiveMapMarkerPin.tsx";
+import { MapSurface, useMapBottomInset } from "./MapSurface.tsx";
+
+const ios = Platform.OS === "ios";
 
 const countPeople = (count: number) => `${count} ${count === 1 ? "person" : "people"}`;
 
@@ -20,6 +23,7 @@ export const LiveMapPeopleTray = ({
   onSelectPerson: (userId: string) => void;
   people: MapPeople;
 }) => {
+  const bottomInset = useMapBottomInset();
   const scrollRef = useRef<ScrollView>(null);
   const sectionXRef = useRef<Record<string, number>>({});
   const sections = [
@@ -58,24 +62,32 @@ export const LiveMapPeopleTray = ({
   const allUpToDate =
     pendingSections.length === 0 && sections.length === 1 && sections[0]?.key === "upToDate";
 
-  return (
-    <View
-      className="absolute bottom-0 left-0 right-0 rounded-t-3xl border-t border-border bg-card pb-3 pt-4 shadow-md shadow-black/15"
-      onLayout={(event) => onHeightChange(event.nativeEvent.layout.height)}
-    >
-      <View className="flex-row items-center justify-between px-4 pb-3">
-        <Text accessibilityRole="header" className="text-foreground text-base font-semibold">
+  const content = (
+    <>
+      {ios ? null : (
+        <View className="items-center pb-3">
+          <View className="h-1 w-8 rounded-full bg-border-strong" />
+        </View>
+      )}
+      <View className="flex-row items-center justify-between px-5 pb-3">
+        <Text
+          accessibilityRole="header"
+          className={ios ? "text-foreground text-xl font-bold" : "text-foreground text-[22px]"}
+        >
           People
         </Text>
         {allUpToDate ? (
-          <View className="flex-row items-center gap-1.5">
-            <View className="size-2 rounded-full bg-success" />
-            <Text className="text-success text-sm font-medium">All up to date</Text>
-          </View>
+          ios ? (
+            <Text className="text-secondary text-[15px]">All up to date</Text>
+          ) : (
+            <View className="rounded-lg bg-secondary px-2.5 py-1">
+              <Text className="text-secondary-foreground text-sm font-medium">All up to date</Text>
+            </View>
+          )
         ) : null}
       </View>
       {allUpToDate ? null : (
-        <View className="flex-row flex-wrap gap-1.5 px-4 pb-3">
+        <View className="flex-row flex-wrap gap-1.5 px-5 pb-3">
           {sections.map((section) => {
             const isProblem = section.status === "cantRead";
             const chipLabel =
@@ -127,7 +139,7 @@ export const LiveMapPeopleTray = ({
         ref={scrollRef}
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerClassName="px-4"
+        contentContainerClassName="px-5"
       >
         {sections.map((section, index) => (
           <View
@@ -189,6 +201,26 @@ export const LiveMapPeopleTray = ({
           </View>
         ))}
       </ScrollView>
+    </>
+  );
+
+  return ios ? (
+    <View
+      className="absolute left-3 right-3"
+      style={{ bottom: bottomInset + 12 }}
+      onLayout={(event) => onHeightChange(event.nativeEvent.layout.height + bottomInset + 12)}
+    >
+      <MapSurface radius={30}>
+        <View className="pb-4 pt-4">{content}</View>
+      </MapSurface>
+    </View>
+  ) : (
+    <View
+      className="absolute bottom-0 left-0 right-0 bg-container pb-4 pt-3"
+      style={{ borderTopLeftRadius: 28, borderTopRightRadius: 28 }}
+      onLayout={(event) => onHeightChange(event.nativeEvent.layout.height + bottomInset)}
+    >
+      {content}
     </View>
   );
 };

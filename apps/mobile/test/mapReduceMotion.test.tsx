@@ -26,6 +26,7 @@ const element =
     React.createElement(type, props, children);
 
 mock.module("react-native", () => ({
+  Platform: { OS: "ios" },
   AccessibilityInfo: {
     addEventListener: () => ({ remove: () => {} }),
     isReduceMotionEnabled: async () => true,
@@ -64,6 +65,12 @@ mock.module("../components/ui/Button.tsx", () => ({ Button: element("button") })
 mock.module("../components/map/LiveMapMarkerPin.tsx", () => ({ LiveMapMarkerPin: () => null }));
 mock.module("../components/map/LiveMapStackPin.tsx", () => ({ LiveMapStackPin: () => null }));
 
+mock.module("../components/map/MapSurface.tsx", () => ({
+  MapBottomInset: React.createContext(0),
+  MapSurface: ({ children }: { children?: React.ReactNode }) =>
+    React.createElement("map-surface", null, children),
+  useMapBottomInset: () => 0,
+}));
 const { LiveMapPinMotion } = await import("../components/map/LiveMapPinMotion.tsx");
 const { LiveMapBottomSheet } = await import("../components/map/LiveMapBottomSheet.tsx");
 const { LiveMapEdgeChip } = await import("../components/map/LiveMapEdgeChip.tsx");

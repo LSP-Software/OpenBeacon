@@ -29,7 +29,7 @@ export const LiveMapPlaceSheet = ({
     accessibilityLabel={`${place.name}, ${place.groupName}`}
     header={
       <View className="flex-row items-center gap-4 pb-2">
-        <View className="size-14 items-center justify-center rounded-2xl bg-secondary">
+        <View className="size-14 items-center justify-center rounded-2xl bg-container">
           <Text className="text-3xl">{place.emoji}</Text>
         </View>
         <View className="min-w-0 flex-1">

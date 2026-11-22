@@ -44,6 +44,7 @@ mock.module("lucide-react-native", () => ({
   XIcon: () => null,
 }));
 mock.module("react-native", () => ({
+  Platform: { OS: "ios" },
   AccessibilityInfo: { announceForAccessibility: () => {} },
   ActivityIndicator: element("activity-indicator"),
   BackHandler: { addEventListener: () => ({ remove: () => {} }) },

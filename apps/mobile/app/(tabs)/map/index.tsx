@@ -9,7 +9,7 @@ import {
 } from "@tanstack/react-query";
 import { Link, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AppState, ScrollView, View } from "react-native";
+import { AppState, Platform, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LocationSharingPausedBanner } from "../../../components/map/LocationSharingPausedBanner.tsx";
 import { NativeMap } from "../../../components/map/NativeMap.tsx";
@@ -52,7 +52,6 @@ import type { MapMemberDevice } from "../../../lib/mapPeopleTypes.ts";
 import { registeredDeviceQueryOptions } from "../../../lib/registeredDevice.ts";
 import { resolveSelfDeviceLocationFallback } from "../../../lib/resolveSelfDeviceLocationFallback.ts";
 import { storage } from "../../../lib/storage.ts";
-import { TAB_BAR_CONTENT_HEIGHT } from "../../../lib/tabBarLayout.ts";
 import { dismissTrackingQueueEviction, getTrackingQueueEviction } from "../../../lib/tracking.ts";
 import { thisDeviceNoun } from "../../../lib/thisDeviceNoun.ts";
 
@@ -383,11 +382,9 @@ const MapScreen = () => {
   }, [markers, selectedDeviceId]);
 
   return (
-    <View
-      className="flex-1 bg-background"
-      style={{ paddingBottom: insets.bottom + TAB_BAR_CONTENT_HEIGHT }}
-    >
+    <View className="flex-1 bg-background">
       <NativeMap
+        bottomInset={Platform.OS === "ios" ? insets.bottom + 56 : 0}
         awaitingLiveSelfFix={selfDeviceLocation?.cached !== false}
         devices={memberDevices.map((device) => ({
           ...device,
@@ -449,7 +446,7 @@ const MapScreen = () => {
       />
       <ScrollView
         pointerEvents="box-none"
-        className="absolute left-3 right-16"
+        className="absolute left-3 right-20"
         style={{ top: insets.top + 56, maxHeight: "65%" }}
       >
         <AnnouncementBanner className="mb-2" />
@@ -463,7 +460,7 @@ const MapScreen = () => {
           (trackingStatus.connection === "failing" || trackingStatus.membership === "failed") && (
             <View
               accessibilityRole="alert"
-              className="mb-2 rounded-2xl border border-warning-accent bg-card p-4"
+              className="mb-2 rounded-3xl border border-warning-accent bg-card p-4"
             >
               <Text className="text-warning-text">
                 Can’t reach the server. Locations shown may be out of date.
@@ -471,7 +468,7 @@ const MapScreen = () => {
             </View>
           )}
         {queueEviction && (
-          <View className="mb-2 gap-2 rounded-2xl border border-warning-accent bg-card p-4">
+          <View className="mb-2 gap-2 rounded-3xl border border-warning-accent bg-card p-4">
             <Text className="font-semibold text-warning-text">
               Some location history was removed
             </Text>
@@ -504,7 +501,7 @@ const MapScreen = () => {
           groupsMissingKeys.map((group) => (
             <View
               key={group.id}
-              className="mb-2 gap-2 rounded-2xl border border-destructive-text bg-card p-4"
+              className="mb-2 gap-2 rounded-3xl border border-destructive-text bg-card p-4"
             >
               <Text className="font-semibold text-destructive-text">
                 Can’t show locations for {group.name}
@@ -529,7 +526,7 @@ const MapScreen = () => {
             </View>
           ))}
         {groupsMissingKeys.length > 2 && (
-          <View className="mb-2 gap-2 rounded-2xl border border-destructive-text bg-card p-4">
+          <View className="mb-2 gap-2 rounded-3xl border border-destructive-text bg-card p-4">
             <Text className="font-semibold text-destructive-text">
               Multiple groups require attention
             </Text>
