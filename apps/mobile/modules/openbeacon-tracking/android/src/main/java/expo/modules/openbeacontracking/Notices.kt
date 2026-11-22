@@ -209,12 +209,12 @@ object Notices {
         .setSubText(groupName)
         .setSmallIcon(R.drawable.openbeacon_notification_icon)
         .setColor(ContextCompat.getColor(context, R.color.openbeacon_notification_color))
-        .setCategory(if (kind == EventNoticeKind.PLACES_CHANGED) NotificationCompat.CATEGORY_STATUS else NotificationCompat.CATEGORY_EVENT)
+        .setCategory(NotificationCompat.CATEGORY_STATUS)
         .setOnlyAlertOnce(true)
         .setAutoCancel(true)
         .setContentIntent(intent)
     if (body != null) builder.setContentText(body).setStyle(NotificationCompat.BigTextStyle().bigText(body))
-    if (kind == EventNoticeKind.PLACES_CHANGED) builder.addAction(0, context.getString(R.string.openbeacon_places_changed_manage), intent)
+    if (kind == EventNoticeKind.PLACES_CHANGED) builder.addAction(R.drawable.openbeacon_notification_icon, context.getString(R.string.openbeacon_places_changed_manage), intent)
     manager.notify(kind.tag, id, builder.build())
     manager.notify(
       SUMMARY_TAG,
