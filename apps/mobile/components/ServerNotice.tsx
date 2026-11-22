@@ -10,7 +10,7 @@ export const ServerNotice = () => {
   const base = getBaseUrl();
   const host = URL.canParse(base) ? new URL(base).host : base;
   return (
-    <View className="flex-row items-center gap-3 rounded-xl border border-border bg-card px-4 py-3">
+    <View className="flex-row items-center gap-3 rounded-3xl bg-card px-4 py-3">
       <Text accessible accessibilityLabel={`Server: ${host}`} className="flex-1 text-secondary">
         Server: <Text className="font-semibold text-foreground">{host}</Text>
       </Text>

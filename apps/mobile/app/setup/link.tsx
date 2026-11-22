@@ -235,10 +235,11 @@ const LinkWithOtherPhoneScreen = () => {
       <ScreenHeader title="Set up" hideBack={!!handover && !problem} fallback="/setup" />
       <ScrollView
         className="flex-1"
+        contentInsetAdjustmentBehavior="automatic"
         contentContainerClassName="gap-6 px-4 pb-16 pt-2"
         showsVerticalScrollIndicator={false}
       >
-        <Text className="text-foreground text-2xl font-bold">Link with your other device</Text>
+        <Text className="text-foreground text-2xl font-semibold">Link with your other device</Text>
         <Text className="text-secondary text-base">
           Open OpenBeacon on your other phone or tablet and scan this code. You’ll find the scanner
           in Account → Devices → Add a device.

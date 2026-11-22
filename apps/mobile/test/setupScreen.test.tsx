@@ -53,9 +53,11 @@ mock.module("@tanstack/react-query", () => ({
 mock.module("react-native", () => ({
   Pressable: ({ children, onPress }: { children?: React.ReactNode; onPress?: () => void }) =>
     React.createElement("mock-pressable", { onPress }, children),
+  Platform: { OS: "android" },
   ScrollView: View,
   View,
 }));
+mock.module("../providers/ThemeProvider.tsx", () => ({ useAppTheme: () => "light" }));
 mock.module("react-native-safe-area-context", () => ({ SafeAreaView: View }));
 mock.module("../components/LoadingIndicator.tsx", () => ({ LoadingIndicator: () => null }));
 mock.module("../components/ui/Button.tsx", () => ({
@@ -71,7 +73,11 @@ mock.module("../components/ui/Button.tsx", () => ({
 }));
 mock.module("../components/ui/Text.tsx", () => ({ Text: View }));
 mock.module("../components/ui/Icon.tsx", () => ({ Icon: () => null }));
-mock.module("lucide-react-native", () => ({ CheckIcon: () => null }));
+mock.module("lucide-react-native", () => ({
+  CheckIcon: () => null,
+  ChevronRightIcon: () => null,
+  ExternalLinkIcon: () => null,
+}));
 mock.module("../lib/api.ts", () => ({
   trpc: {
     accountRecovery: { status: { queryOptions: () => ({ queryKey: "recovery" }) } },

@@ -18,6 +18,7 @@ import { clearPendingJoinCodes } from "../../lib/pendingJoinCode.ts";
 import { checkSessionAfterUnauthorized, isUnauthorizedError } from "../../lib/sessionCheck.ts";
 import { signOutOfThisPhone } from "../../lib/signOut.ts";
 import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
+import { screenTitleClass } from "../../components/onboarding/screenTitleClass.ts";
 
 const SetUpPhoneScreen = () => {
   const { data: session } = authClient.useSession();
@@ -149,7 +150,7 @@ const SetUpPhoneScreen = () => {
         showsVerticalScrollIndicator={false}
       >
         <View className="gap-4">
-          <Text accessibilityRole="header" className="text-foreground text-3xl font-bold">
+          <Text accessibilityRole="header" className={screenTitleClass}>
             Bring your history to this {noun}
           </Text>
           <Text className="text-secondary text-base">

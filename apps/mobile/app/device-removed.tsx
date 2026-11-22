@@ -4,11 +4,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "../components/ui/Button.tsx";
 import { Text } from "../components/ui/Text.tsx";
 import { thisDeviceNoun } from "../lib/thisDeviceNoun.ts";
+import { screenTitleClass } from "../components/onboarding/screenTitleClass.ts";
 
 const DeviceRemovedScreen = () => (
   <SafeAreaView className="flex-1 justify-between bg-background px-8 py-6">
     <View className="flex-1 justify-center gap-4">
-      <Text accessibilityRole="header" className="text-foreground text-3xl font-bold">
+      <Text accessibilityRole="header" className={screenTitleClass}>
         This {thisDeviceNoun()} was removed from your account
       </Text>
       <Text className="text-secondary text-base">

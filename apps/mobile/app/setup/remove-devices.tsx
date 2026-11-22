@@ -13,6 +13,7 @@ import { Alert } from "../../lib/alert.ts";
 import { trpc } from "../../lib/api.ts";
 import { cn } from "../../lib/cn.ts";
 import { deviceIconFor } from "../../lib/deviceIcons.ts";
+import { screenTitleClass } from "../../components/onboarding/screenTitleClass.ts";
 
 const RemoveOldDevicesScreen = () => {
   const queryClient = useQueryClient();
@@ -72,7 +73,7 @@ const RemoveOldDevicesScreen = () => {
         showsVerticalScrollIndicator={false}
       >
         <View className="gap-4">
-          <Text accessibilityRole="header" className="text-foreground text-3xl font-bold">
+          <Text accessibilityRole="header" className={screenTitleClass}>
             Remove devices you no longer have
           </Text>
           <Text className="text-secondary text-base">

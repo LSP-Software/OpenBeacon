@@ -67,7 +67,7 @@ export const AppLockScreen = () => {
               <View className="items-center gap-6">
                 <BeaconIcon size={96} />
                 <View className="gap-3">
-                  <Text className="text-center text-3xl font-bold" accessibilityRole="header">
+                  <Text className="text-center text-[28px] font-bold" accessibilityRole="header">
                     OpenBeacon is locked
                   </Text>
                   <Text className="text-tertiary text-center text-base leading-6">

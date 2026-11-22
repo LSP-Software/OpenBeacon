@@ -68,6 +68,7 @@ mock.module("expo-router", () => ({
     },
   },
   useFocusEffect: (effect: () => () => void) => React.useEffect(effect, [effect]),
+  useNavigation: () => ({ canGoBack: () => canGoBack }),
   usePathname: () => "/setup/link",
 }));
 mock.module("@tanstack/react-query", () => ({

@@ -118,7 +118,7 @@ export const ApiCompatibilityGate = () => {
       <SafeAreaView className="flex-1">
         <ScrollView contentContainerClassName="flex-grow justify-center px-8 py-10 gap-10">
           <View className="gap-5">
-            <Text className="font-bold text-4xl" accessibilityRole="header">
+            <Text className="text-[34px] font-bold leading-[41px]" accessibilityRole="header">
               {title}
             </Text>
             {compatibility.problem === "appTooOld" && (
@@ -143,7 +143,7 @@ export const ApiCompatibilityGate = () => {
             {compatibility.message !== null && (
               <Text className="text-lg">{compatibility.message}</Text>
             )}
-            <View className="rounded-xl bg-secondary p-4 gap-1">
+            <View className="rounded-3xl bg-card p-4 gap-1">
               <Text className="text-sm text-secondary">App version {appVersion}</Text>
               {selfHosted && <Text className="text-sm text-secondary">Server {getBaseUrl()}</Text>}
               {compatibility.problem !== "appTooOld" && (
