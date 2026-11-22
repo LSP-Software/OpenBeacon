@@ -4,7 +4,6 @@ import {
   Layer,
   Map as MapLibreMap,
   type MapRef,
-  Marker,
 } from "@maplibre/maplibre-react-native";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -35,6 +34,7 @@ import { TimelineDecryptCard } from "../components/timeline/TimelineDecryptCard.
 import { TimelineMapLayers } from "../components/timeline/TimelineMapLayers.tsx";
 import { TimelinePeopleChooser } from "../components/timeline/TimelinePeopleChooser.tsx";
 import { TimelinePin } from "../components/timeline/TimelinePin.tsx";
+import { TimelinePlaceLabel } from "../components/timeline/TimelinePlaceLabel.tsx";
 import {
   TimelineCardShared,
   TimelinePlayerCard,
@@ -852,33 +852,19 @@ const TimelineView = ({
             />
           ))}
           <TimelineMapLayers drawn={drawn} routes={routes} viewport={viewport} />
-          {visitedPlaces.map((place) => {
-            if (!place.geometry) return null;
-            const stopLabel = placeStopLabel(place.id);
-            return (
-              <Marker
+          {visitedPlaces.map((place) =>
+            place.geometry ? (
+              <TimelinePlaceLabel
                 key={place.id}
-                anchor="bottom"
-                lngLat={[place.geometry.longitude, place.geometry.latitude]}
-              >
-                <View style={{ paddingBottom: 30 }}>
-                  <View
-                    accessible
-                    accessibilityLabel={`Stopped at ${place.name}${stopLabel ? `, ${stopLabel}` : ""}`}
-                    className="flex-row items-center gap-1 rounded-full border border-border bg-card px-2.5 py-1 shadow-sm shadow-black/10"
-                  >
-                    <Text className="text-xs">{place.emoji}</Text>
-                    <Text className="text-xs font-semibold text-foreground" numberOfLines={1}>
-                      {place.name}
-                      {stopLabel ? (
-                        <Text className="text-xs font-normal text-secondary"> · {stopLabel}</Text>
-                      ) : null}
-                    </Text>
-                  </View>
-                </View>
-              </Marker>
-            );
-          })}
+                emoji={place.emoji}
+                id={place.id}
+                latitude={place.geometry.latitude}
+                longitude={place.geometry.longitude}
+                name={place.name}
+                stopLabel={placeStopLabel(place.id)}
+              />
+            ) : null,
+          )}
           {pins.map((pin) => (
             <TimelinePin
               key={pin.route.deviceId}
