@@ -16,12 +16,14 @@ import { useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, TextInput, View } from "react-native";
 import { InviteMemberToGroupDialog } from "../dialogs/InviteMemberToGroupDialog.tsx";
 import { LoadingIndicator } from "../LoadingIndicator.tsx";
+import { groupedListClassName, groupedRowClassName, groupedRowStyle } from "./groupedRows.ts";
 import { DecryptedAvatarImage } from "../image/DecryptedAvatarImage.tsx";
 import { Avatar, AvatarFallback } from "../ui/Avatar.tsx";
 import { BottomSheet } from "../ui/BottomSheet.tsx";
 import { Button } from "../ui/Button.tsx";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/Dialog.tsx";
 import { Icon } from "../ui/Icon.tsx";
+import { ListRow, ListSection } from "../ui/List.tsx";
 import { SegmentedControl } from "../ui/SegmentedControl.tsx";
 import { Text } from "../ui/Text.tsx";
 import { useCachedGroup } from "../../hooks/useCachedGroup.ts";
@@ -148,7 +150,7 @@ const MembersTab = ({
             value={nickname}
             onChangeText={setNickname}
             placeholder="Nickname"
-            className="h-[52px] rounded-lg border border-border-strong bg-input px-4 text-base text-foreground"
+            className="h-[52px] rounded-xl bg-card px-4 text-base text-foreground placeholder:text-tertiary"
           />
           <Button
             disabled={nicknameQuery.isPending || nicknameQuery.isError}
@@ -214,7 +216,7 @@ const MembersTab = ({
           </Button>
         )}
       </View>
-      <View className="overflow-hidden rounded-3xl bg-card">
+      <View className={groupedListClassName}>
         {memberStatuses.map((member, index) => (
           <Pressable
             key={member.id}
@@ -223,9 +225,10 @@ const MembersTab = ({
             accessibilityHint="Opens actions for this member"
             onPress={() => setSelectedMemberId(member.id)}
             className={cn(
-              "flex-row items-start gap-3 py-3.5 pl-4 pr-2 active:bg-secondary/60",
-              index > 0 && "border-t border-border/60",
+              "flex-row items-start gap-3 py-3.5 pl-4 pr-2 active:bg-container",
+              groupedRowClassName(index),
             )}
+            style={groupedRowStyle(index, memberStatuses.length)}
           >
             <Avatar alt={member.nickname ?? member.user.name} className="size-11">
               <DecryptedAvatarImage url={member.user.image} />
@@ -342,15 +345,13 @@ const MembersTab = ({
                 />
               </View>
             ) : null}
-            <View className="overflow-hidden rounded-2xl border border-border">
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Edit nickname"
+            <ListSection>
+              <ListRow
+                title="Edit nickname"
+                subtitle="Only you see nicknames"
+                icon={PencilIcon}
+                iconColor="blue"
                 accessibilityHint="Only you see nicknames"
-                accessibilityState={{
-                  disabled:
-                    nicknameQuery.isPending || nicknameQuery.isError || nicknameQuery.isFetching,
-                }}
                 disabled={
                   nicknameQuery.isPending || nicknameQuery.isError || nicknameQuery.isFetching
                 }
@@ -365,22 +366,13 @@ const MembersTab = ({
                   });
                   setNickname(selectedMember.nickname ?? "");
                 }}
-                className="min-h-[52px] flex-row items-center gap-3 px-4 py-3 active:bg-secondary/60"
-              >
-                <Icon as={PencilIcon} className="text-secondary size-5" />
-                <View className="flex-1">
-                  <Text className="text-foreground font-medium">Edit nickname</Text>
-                  <Text className="text-tertiary text-sm">Only you see nicknames</Text>
-                </View>
-              </Pressable>
-              {(selectedMember.id === self?.id ||
-                (canManage && (self?.role === "OWNER" || selectedMember.role === "MEMBER"))) && (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    selectedMember.id === self?.id ? "Leave group" : "Remove from group"
-                  }
-                  accessibilityState={{ disabled: removal.isPending }}
+              />
+              {selectedMember.id === self?.id ||
+              (canManage && (self?.role === "OWNER" || selectedMember.role === "MEMBER")) ? (
+                <ListRow
+                  title={selectedMember.id === self?.id ? "Leave group" : "Remove from group"}
+                  icon={selectedMember.id === self?.id ? LogOutIcon : UserMinusIcon}
+                  tone="danger"
                   disabled={removal.isPending}
                   onPress={() => {
                     setSelectedMemberId(null);
@@ -390,18 +382,9 @@ const MembersTab = ({
                       name: selectedMember.user.name,
                     });
                   }}
-                  className="min-h-[52px] flex-row items-center gap-3 border-t border-border/60 px-4 py-3 active:bg-secondary/60"
-                >
-                  <Icon
-                    as={selectedMember.id === self?.id ? LogOutIcon : UserMinusIcon}
-                    className="text-destructive-text size-5"
-                  />
-                  <Text className="text-destructive-text font-medium">
-                    {selectedMember.id === self?.id ? "Leave group" : "Remove from group"}
-                  </Text>
-                </Pressable>
-              )}
-            </View>
+                />
+              ) : null}
+            </ListSection>
           </>
         ) : null}
       </BottomSheet>

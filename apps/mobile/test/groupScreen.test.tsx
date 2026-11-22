@@ -56,6 +56,7 @@ mock.module("react-native-safe-area-context", () => ({
   SafeAreaView: ({ children }: { children: React.ReactNode }) => children,
 }));
 mock.module("lucide-react-native", () => ({
+  ClockIcon: () => null,
   ImageIcon: () => null,
   LogInIcon: () => null,
   LogOutIcon: () => null,
@@ -96,7 +97,7 @@ mock.module("../lib/auth-client.ts", () => ({
   authClient: { useSession: () => ({ data: { user: { id: sessionUserId } } }) },
 }));
 mock.module("../hooks/useGroupKeyAccess.ts", () => ({ useGroupKeyHistoryAccess: () => keyAccess }));
-mock.module("../components/headers/BackButton.tsx", () => ({ BackButton: () => null }));
+mock.module("../components/headers/ScreenHeader.tsx", () => ({ ScreenHeader: () => null }));
 mock.module("../components/image/GroupImage.tsx", () => ({ GroupImage: () => null }));
 mock.module("../lib/imageKeyCatchUp.ts", () => ({ catchUpGroupImageKeys: async () => 0 }));
 mock.module("../lib/groupEncryption.ts", () => ({ rotateGroupEpochIfRequired: async () => false }));

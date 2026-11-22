@@ -146,7 +146,7 @@ export const SharedInvite = ({
           />
         </View>
       ) : (
-        <View className="gap-3 rounded-2xl border border-border bg-background p-4">
+        <View className="gap-3 rounded-3xl bg-card p-4">
           <View className="flex-row items-center justify-between">
             <Text variant="label">Join code</Text>
             <Button

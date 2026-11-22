@@ -204,7 +204,7 @@ const Join = () => {
             </Text>
           ) : null}
           {isHostedServer(inviteServer) ? null : (
-            <View className="rounded-2xl border border-warning-border bg-warning p-4">
+            <View className="rounded-3xl bg-warning p-4">
               <Text className="text-warning-text">
                 Only change server if someone you know runs it and sent you this invite themselves.
                 Never use the password from another account there.

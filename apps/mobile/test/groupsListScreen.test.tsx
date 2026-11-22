@@ -71,6 +71,11 @@ mock.module("../components/dialogs/CreateGroupDialog.tsx", () => ({
   CreateGroupDialog: () => null,
 }));
 mock.module("../components/LoadingIndicator.tsx", () => ({ LoadingIndicator: () => "Loading" }));
+mock.module("../components/headers/TabHeader.tsx", () => ({
+  TabHeader: ({ title, actions }: { title: string; actions?: React.ReactNode }) =>
+    React.createElement("tab-header", { title }, actions),
+  tabScreenEdges: [],
+}));
 mock.module("../components/RefreshablePage.tsx", () => ({
   RefreshablePage: ({ children }: { children: React.ReactNode }) => children,
 }));

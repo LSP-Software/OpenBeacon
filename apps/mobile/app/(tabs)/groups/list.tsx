@@ -10,9 +10,15 @@ import {
   UsersIcon,
 } from "lucide-react-native";
 import { useState } from "react";
-import { Pressable, View } from "react-native";
+import { Platform, Pressable, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AnnouncementBanner } from "../../../components/AnnouncementBanner.tsx";
+import {
+  groupedListClassName,
+  groupedRowClassName,
+  groupedRowStyle,
+} from "../../../components/groups/groupedRows.ts";
+import { TabHeader, tabScreenEdges } from "../../../components/headers/TabHeader.tsx";
 import { CreateGroupDialog } from "../../../components/dialogs/CreateGroupDialog.tsx";
 import { LoadingIndicator } from "../../../components/LoadingIndicator.tsx";
 import { RefreshablePage } from "../../../components/RefreshablePage.tsx";
@@ -30,7 +36,9 @@ import { getGroupColor } from "../../../lib/groupColor.ts";
 import { initials } from "../../../lib/initials.ts";
 import { thisDeviceNoun } from "../../../lib/thisDeviceNoun.ts";
 
-export default function GroupsScreen() {
+const ios = Platform.OS === "ios";
+
+const GroupsScreen = () => {
   const [createGroupDialogOpen, setCreateGroupDialogOpen] = useState(false);
 
   const isFocused = useIsFocused();
@@ -69,41 +77,39 @@ export default function GroupsScreen() {
     );
   }
 
+  const actions =
+    groups.data.length > 0 ? (
+      <>
+        <Link href="/join" asChild>
+          <Button
+            size="sm"
+            variant="secondary"
+            className={ios ? "size-9 px-0" : ""}
+            hitSlop={4}
+            accessibilityLabel="Join a group with a QR code or join code"
+          >
+            <Icon as={QrCodeIcon} className="size-5 text-secondary-foreground" />
+            {ios ? null : <Text>Join</Text>}
+          </Button>
+        </Link>
+        <Button
+          size="sm"
+          className={ios ? "size-9 px-0" : ""}
+          hitSlop={4}
+          accessibilityLabel="Create new group"
+          onPress={() => setCreateGroupDialogOpen(true)}
+        >
+          <Icon as={PlusIcon} className="size-5 text-white" />
+          {ios ? null : <Text>New</Text>}
+        </Button>
+      </>
+    ) : undefined;
+
   return (
-    <RefreshablePage>
+    <RefreshablePage edges={tabScreenEdges}>
       <View className="flex-1 bg-background px-4 pb-32">
         <CreateGroupDialog open={createGroupDialogOpen} setOpen={setCreateGroupDialogOpen} />
-        <View className="flex-row items-center justify-between px-1 pb-4 pt-3">
-          <Text accessibilityRole="header" className="text-foreground text-3xl font-bold">
-            Groups
-          </Text>
-          {groups.data.length > 0 && (
-            <View className="flex-row gap-2">
-              <Link href="/join" asChild>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="rounded-full"
-                  hitSlop={4}
-                  accessibilityLabel="Join a group with a QR code or join code"
-                >
-                  <Icon as={QrCodeIcon} className="text-foreground size-4" />
-                  <Text>Join</Text>
-                </Button>
-              </Link>
-              <Button
-                size="sm"
-                className="rounded-full"
-                hitSlop={4}
-                accessibilityLabel="Create new group"
-                onPress={() => setCreateGroupDialogOpen(true)}
-              >
-                <Icon as={PlusIcon} className="size-4 text-white" />
-                <Text>New</Text>
-              </Button>
-            </View>
-          )}
-        </View>
+        <TabHeader title="Groups" actions={actions} />
         <AnnouncementBanner className="mb-4" />
         {groups.isError || invites.isError ? (
           <Text accessibilityLiveRegion="polite" className="text-secondary mb-4 px-1 text-sm">
@@ -115,7 +121,7 @@ export default function GroupsScreen() {
       </View>
     </RefreshablePage>
   );
-}
+};
 
 const GroupInvitesList = ({
   groupInvites,
@@ -128,7 +134,7 @@ const GroupInvitesList = ({
       {groupInvites.map((invite) => (
         <View
           key={invite.id}
-          className="flex-row items-center gap-3 rounded-2xl border border-primary/20 bg-primary-soft py-3 pl-4 pr-3"
+          className="flex-row items-center gap-3 rounded-3xl bg-primary-soft py-3 pl-4 pr-3"
         >
           <Icon as={MailIcon} className="text-primary-text size-5" />
           <Text className="text-foreground flex-1">
@@ -190,7 +196,7 @@ export const GroupList = ({
   }
 
   return (
-    <View className="overflow-hidden rounded-3xl bg-card">
+    <View className={groupedListClassName}>
       {groupList.map((group, index) => (
         <Link
           href={`/groups/${group.id}`}
@@ -200,9 +206,10 @@ export const GroupList = ({
         >
           <Pressable
             className={cn(
-              "flex-row items-center gap-3 py-3.5 pl-4 pr-3 active:bg-secondary/60",
-              index > 0 && "border-t border-border/60",
+              "flex-row items-center gap-3 py-3 pl-4 pr-3 active:bg-container",
+              groupedRowClassName(index),
             )}
+            style={groupedRowStyle(index, groupList.length)}
           >
             <View
               className="rounded-full p-0.5"
@@ -217,7 +224,13 @@ export const GroupList = ({
             </View>
             <View className="flex-1 gap-1.5">
               <View className="flex-row items-center gap-2">
-                <Text numberOfLines={1} className="text-foreground shrink text-lg font-semibold">
+                <Text
+                  numberOfLines={1}
+                  className={cn(
+                    "text-foreground shrink",
+                    ios ? "text-[17px] font-semibold" : "text-base font-medium",
+                  )}
+                >
                   {group.name}
                 </Text>
                 {unseenGroupIds.has(group.id) ? (
@@ -246,10 +259,12 @@ export const GroupList = ({
                 </Text>
               </View>
             </View>
-            <Icon as={ChevronRightIcon} className="text-tertiary size-5" />
+            {ios ? <Icon as={ChevronRightIcon} className="size-5 text-border-strong" /> : null}
           </Pressable>
         </Link>
       ))}
     </View>
   );
 };
+
+export default GroupsScreen;
