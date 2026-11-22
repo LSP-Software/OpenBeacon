@@ -101,10 +101,12 @@ test("an edit whose new value shows on screen confirms without an alert", () => 
 });
 
 test("Account menu labels match the titles of the screens they open", () => {
+  const overview = read("../app/(tabs)/account/overview.tsx");
   const menuItems = [
-    ...read("../app/(tabs)/account/overview.tsx").matchAll(
-      /label: "([^"]+)",\s*icon: \w+,\s*href: "\/account\/([a-z-]+)"/g,
+    ...overview.matchAll(
+      /label: "([^"]+)",\s*icon: \w+,\s*(?:color: "\w+",\s*)?href: "\/account\/([a-z-]+)"/g,
     ),
+    ...overview.matchAll(/title="([^"]+)"[^>]*?href="\/account\/([a-z-]+)"/g),
   ];
 
   expect(menuItems.length).toBeGreaterThan(10);
@@ -120,7 +122,7 @@ test("the button that opens Sign out other sessions is named like the screen", (
   )?.[1];
 
   expect(title).toBeDefined();
-  expect(read("../app/account/password.tsx")).toContain(`<Text>${title}</Text>`);
+  expect(read("../app/account/password.tsx")).toContain(`title="${title}"`);
 });
 
 test("Android notification text that names this device says tablet on a tablet", () => {

@@ -1,9 +1,10 @@
+import { ShieldCheckIcon } from "lucide-react-native";
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { View } from "react-native";
 import { trpc, trpcClient } from "../lib/api.ts";
 import { ensureDeviceKeyRegistration } from "../lib/deviceKeys.ts";
 import { checkHistoryRecovery } from "../lib/groupKeyAccess.ts";
 import { Text } from "./ui/Text.tsx";
+import { ListRow, ListSection } from "./ui/List.tsx";
 
 export const RecoveryCoverage = ({ userId }: { userId: string | undefined }) => {
   const groups = useQuery(trpc.groupMembership.list.queryOptions());
@@ -35,34 +36,32 @@ export const RecoveryCoverage = ({ userId }: { userId: string | undefined }) => 
   if (groups.data && groupList.length === 0) return null;
 
   return (
-    <View className="gap-3">
+    <ListSection title="Groups">
       {groupList.map((group, index) => {
         const groupRecovery = recovery[index];
         const result = groupRecovery?.data;
         return (
-          <View key={group.id} className="gap-1 rounded-3xl bg-card p-4">
-            <Text className="font-semibold">{group.name}</Text>
-            {groupRecovery?.isError || status.isError ? (
-              <Text className="text-tertiary">Unable to check this group.</Text>
-            ) : status.data && historyKeyVersion === undefined ? (
-              <Text className="text-tertiary">History isn’t protected yet.</Text>
-            ) : !result ? (
-              <Text className="text-tertiary">Checking…</Text>
-            ) : result.status === "complete" ? (
-              <Text className="text-tertiary">All history is protected.</Text>
-            ) : result.status === "none" ? (
-              <Text className="text-tertiary">History isn’t protected yet.</Text>
-            ) : (
-              <Text className="text-tertiary">
-                History from{" "}
-                {result.protectedFrom.toLocaleDateString(undefined, { dateStyle: "medium" })} is
-                protected. Older history is protected once a phone that can still read it has your
-                recovery phrase.
-              </Text>
-            )}
-          </View>
+          <ListRow
+            key={group.id}
+            title={group.name}
+            icon={ShieldCheckIcon}
+            iconColor="green"
+            subtitle={
+              groupRecovery?.isError || status.isError
+                ? "Unable to check this group."
+                : status.data && historyKeyVersion === undefined
+                  ? "History isn’t protected yet."
+                  : !result
+                    ? "Checking…"
+                    : result.status === "complete"
+                      ? "All history is protected."
+                      : result.status === "none"
+                        ? "History isn’t protected yet."
+                        : `History from ${result.protectedFrom.toLocaleDateString(undefined, { dateStyle: "medium" })} is protected. Older history is protected once a phone that can still read it has your recovery phrase.`
+            }
+          />
         );
       })}
-    </View>
+    </ListSection>
   );
 };

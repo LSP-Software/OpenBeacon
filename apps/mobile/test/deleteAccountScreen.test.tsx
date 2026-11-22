@@ -37,6 +37,8 @@ mock.module("@tanstack/react-query", () => ({
 mock.module("react-native", () => ({ ScrollView: View, View }));
 mock.module("react-native-safe-area-context", () => ({ SafeAreaView: View }));
 mock.module("../components/headers/ScreenHeader.tsx", () => ({ ScreenHeader: () => null }));
+mock.module("lucide-react-native", () => ({ DownloadIcon: View }));
+mock.module("../components/ui/List.tsx", () => ({ ListRow: () => null, ListSection: View }));
 mock.module("../components/ui/Button.tsx", () => ({
   Button: ({ children, onPress }: { children?: React.ReactNode; onPress?: () => void }) =>
     React.createElement("mock-button", { onPress }, children),

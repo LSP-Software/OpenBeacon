@@ -201,16 +201,17 @@ const RecoveryPhraseResetScreen = () => {
       >
         <ScrollView
           className="flex-1"
-          contentContainerClassName="gap-6 px-4 pb-32 pt-2"
+          contentInsetAdjustmentBehavior="automatic"
+          contentContainerClassName="gap-6 px-4 pb-10 pt-2"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
           {step === "warn" && setup && (
             <View className="gap-4">
-              <Text className="text-foreground text-2xl font-bold">
+              <Text className="text-foreground px-1 text-2xl font-bold">
                 Start fresh on this {thisDeviceNoun()}?
               </Text>
-              <View className="gap-2 rounded-lg border border-destructive bg-destructive/10 p-4">
+              <View className="gap-2 rounded-3xl bg-destructive-soft p-4">
                 <Text className="font-semibold">
                   Your location history from before today will be deleted for good.
                 </Text>
@@ -225,13 +226,13 @@ const RecoveryPhraseResetScreen = () => {
 
           {step === "warn" && !setup && (
             <View className="gap-4">
-              <Text className="text-foreground text-2xl font-bold">
+              <Text className="text-foreground px-1 text-2xl font-bold">
                 Reset your recovery phrase?
               </Text>
-              <Text className="text-secondary text-base">
+              <Text className="text-secondary px-1 text-[15px] leading-5">
                 Only do this if you’ve lost your phrase and no other phone can read your history.
               </Text>
-              <View className="gap-2 rounded-lg border border-destructive bg-destructive/10 p-4">
+              <View className="gap-2 rounded-3xl bg-destructive-soft p-4">
                 <Text className="font-semibold">
                   Encrypted history from before today can’t be recovered.
                 </Text>
@@ -241,7 +242,7 @@ const RecoveryPhraseResetScreen = () => {
                   own keys. Other phones will need the new phrase.
                 </Text>
               </View>
-              <Text className="text-secondary text-base">
+              <Text className="text-secondary px-1 text-[15px] leading-5">
                 Your groups and live location sharing aren’t affected.
               </Text>
             </View>
@@ -250,7 +251,7 @@ const RecoveryPhraseResetScreen = () => {
           {step === "warn" && (
             <View className="gap-4">
               {providers?.email && (
-                <Text className="text-secondary text-base">
+                <Text className="text-secondary px-1 text-[15px] leading-5">
                   To make sure it’s you, we’ll email you a code before you get your new phrase.
                 </Text>
               )}
@@ -298,7 +299,7 @@ const RecoveryPhraseResetScreen = () => {
           {step === "code" && !codeEmail && <LoadingIndicator />}
           {step === "code" && codeEmail && (
             <View className="gap-4">
-              <Text className="text-foreground text-2xl font-bold">Check your email</Text>
+              <Text className="text-foreground px-1 text-2xl font-bold">Check your email</Text>
               <EmailCodeEntry
                 email={codeEmail}
                 submitLabel="Continue"
@@ -318,7 +319,9 @@ const RecoveryPhraseResetScreen = () => {
 
           {step === "protecting" && (
             <View className="gap-4">
-              <Text className="text-foreground text-2xl font-bold">Protecting your history</Text>
+              <Text className="text-foreground px-1 text-2xl font-bold">
+                Protecting your history
+              </Text>
               <Text accessibilityLiveRegion="polite" className="text-tertiary text-base">
                 {progress.total === 0
                   ? "Checking your groups…"
@@ -329,8 +332,8 @@ const RecoveryPhraseResetScreen = () => {
 
           {step === "unconfirmed" && (
             <View className="gap-4">
-              <Text className="text-foreground text-2xl font-bold">Finish setting up</Text>
-              <Text className="text-secondary text-base">
+              <Text className="text-foreground px-1 text-2xl font-bold">Finish setting up</Text>
+              <Text className="text-secondary px-1 text-[15px] leading-5">
                 {`Your new phrase is set up, but we couldn’t finish setting up this ${thisDeviceNoun()}. Check your connection and try again.`}
               </Text>
               <Button
@@ -345,8 +348,10 @@ const RecoveryPhraseResetScreen = () => {
 
           {step === "unsaved" && (
             <View className="gap-4">
-              <Text className="text-foreground text-2xl font-bold">Restore your new phrase</Text>
-              <Text className="text-secondary text-base">
+              <Text className="text-foreground px-1 text-2xl font-bold">
+                Restore your new phrase
+              </Text>
+              <Text className="text-secondary px-1 text-[15px] leading-5">
                 Your new phrase is set up, but this {thisDeviceNoun()} couldn’t save its key.
                 Restore with the phrase you just wrote down.
               </Text>
@@ -360,13 +365,13 @@ const RecoveryPhraseResetScreen = () => {
 
           {step === "done" && (
             <View className="gap-4">
-              <Text className="text-foreground text-2xl font-bold">Your phrase is reset</Text>
-              <Text className="text-secondary text-base">
+              <Text className="text-foreground px-1 text-2xl font-bold">Your phrase is reset</Text>
+              <Text className="text-secondary px-1 text-[15px] leading-5">
                 Use it to get your location history back if you lose or replace your{" "}
                 {thisDeviceNoun()}.
               </Text>
               {progress.failed > 0 && (
-                <Text className="text-secondary text-base">
+                <Text className="text-secondary px-1 text-[15px] leading-5">
                   Some history couldn’t be protected yet. OpenBeacon will keep trying in the
                   background.
                 </Text>

@@ -34,7 +34,7 @@ mock.module("../components/ConfirmIdentity.tsx", () => ({
   ConfirmIdentity: () => React.createElement("confirm-identity"),
 }));
 mock.module("../components/LoadingIndicator.tsx", () => ({ LoadingIndicator: () => null }));
-mock.module("../components/headers/BackButton.tsx", () => ({ BackButton: () => null }));
+mock.module("../components/headers/ScreenHeader.tsx", () => ({ ScreenHeader: () => null }));
 mock.module("../components/ui/Button.tsx", () => ({
   Button: ({ children, onPress }: { children?: React.ReactNode; onPress?: () => void }) =>
     React.createElement("mock-button", { onPress }, children),

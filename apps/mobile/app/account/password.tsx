@@ -2,7 +2,8 @@ import { Alert } from "../../lib/alert.ts";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { tryCatch } from "@openbeacon/shared";
 import { useQuery } from "@tanstack/react-query";
-import { Link, router } from "expo-router";
+import { router } from "expo-router";
+import { LogOutIcon, MailCheckIcon } from "lucide-react-native";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
@@ -10,6 +11,7 @@ import type { z } from "zod";
 import { ScreenHeader } from "../../components/headers/ScreenHeader.tsx";
 import { Button } from "../../components/ui/Button.tsx";
 import { Input } from "../../components/ui/Input.tsx";
+import { ListRow, ListSection } from "../../components/ui/List.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { trpc } from "../../lib/api.ts";
 import { passwordErrorMessage } from "../../lib/passwordErrorMessage.ts";
@@ -84,12 +86,13 @@ const PasswordScreen = () => {
       >
         <ScrollView
           className="flex-1"
-          contentContainerClassName="gap-6 px-4 pb-32 pt-2"
+          contentInsetAdjustmentBehavior="automatic"
+          contentContainerClassName="gap-6 px-4 pb-10 pt-2"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
           {hasPassword && (
-            <Text className="text-secondary text-base">
+            <Text className="text-secondary px-4 text-[15px] leading-5">
               Enter your current password, then choose a new one.
             </Text>
           )}
@@ -138,42 +141,48 @@ const PasswordScreen = () => {
               </Button>
             </View>
           )}
-          <View className="gap-4">
-            {hasPassword && (
-              <Text className="text-secondary text-base">
-                Lost a phone or tablet? Sign out everywhere else without changing your password.
-              </Text>
-            )}
-            <Link href="/account/sign-out-others" replace asChild>
-              <Button variant="secondary">
-                <Text>Sign out other sessions</Text>
-              </Button>
-            </Link>
-          </View>
+          <ListSection
+            footer={
+              hasPassword
+                ? "Lost a phone or tablet? Sign out everywhere else without changing your password."
+                : undefined
+            }
+          >
+            <ListRow
+              title="Sign out other sessions"
+              icon={LogOutIcon}
+              iconColor="orange"
+              accessibilityRole="link"
+              onPress={() => router.replace("/account/sign-out-others")}
+            />
+          </ListSection>
           {hasPassword && signInCodes.isError && (
-            <View className="gap-2">
-              <Text variant="label">Sign-in codes</Text>
-              <Text className="text-secondary text-base">
-                We couldn’t load this setting. Check your connection and try again.
-              </Text>
-            </View>
+            <ListSection
+              title="Sign-in codes"
+              footer="We couldn’t load this setting. Check your connection and try again."
+            >
+              <ListRow title="Sign-in codes" icon={MailCheckIcon} iconColor="blue" disabled />
+            </ListSection>
           )}
           {hasPassword &&
             signInCodes.data &&
             (signInCodes.data.on || signInCodes.data.canTurnOn) && (
-              <View className="gap-3">
-                <Text variant="label">Sign-in codes</Text>
-                <Text className="text-secondary text-base">
-                  {signInCodes.data.on
-                    ? "On. Signing in on a new phone also needs a code we email you."
-                    : "Off. Turn on to also need a code from your email when you sign in on a new phone, so your password alone isn’t enough."}
-                </Text>
-                <Link href="/account/sign-in-codes" asChild>
-                  <Button variant="secondary">
-                    <Text>Manage sign-in codes</Text>
-                  </Button>
-                </Link>
-              </View>
+              <ListSection
+                title="Sign-in codes"
+                footer={
+                  signInCodes.data.on
+                    ? "Signing in on a new phone also needs a code we email you."
+                    : "Turn on to also need a code from your email when you sign in on a new phone, so your password alone isn’t enough."
+                }
+              >
+                <ListRow
+                  title="Manage sign-in codes"
+                  icon={MailCheckIcon}
+                  iconColor="blue"
+                  value={signInCodes.data.on ? "On" : "Off"}
+                  href="/account/sign-in-codes"
+                />
+              </ListSection>
             )}
         </ScrollView>
       </KeyboardAvoidingView>

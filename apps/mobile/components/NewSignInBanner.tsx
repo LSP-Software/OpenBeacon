@@ -19,7 +19,7 @@ export const NewSignInBanner = ({ subscribed }: { subscribed: boolean }) => {
   if (!pending) return null;
 
   return (
-    <View className="mb-2 gap-2 rounded-xl border border-primary bg-card p-4">
+    <View className="mb-2 gap-2 rounded-3xl bg-primary-soft p-4">
       <Text className="font-semibold text-foreground">
         New sign-in on {pending.name}. Is this you?
       </Text>

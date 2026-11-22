@@ -1,10 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
+import { ScanFaceIcon } from "lucide-react-native";
 import { useState } from "react";
 import { Platform, ScrollView, View } from "react-native";
 import { ScreenHeader } from "../../components/headers/ScreenHeader.tsx";
 import { ChoiceList } from "../../components/ui/ChoiceList.tsx";
 import { Switch } from "../../components/ui/Switch.tsx";
-import { Text } from "../../components/ui/Text.tsx";
+import { ListRow, ListSection } from "../../components/ui/List.tsx";
 import { Alert } from "../../lib/alert.ts";
 import {
   changeRelockAfter,
@@ -63,50 +64,52 @@ const AppLockSettingsScreen = () => {
 
       <ScrollView
         className="flex-1"
-        contentContainerClassName="gap-6 px-4 pb-32 pt-2"
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerClassName="gap-6 px-4 pb-10 pt-2"
         showsVerticalScrollIndicator={false}
       >
-        <View>
-          <Text className="text-secondary text-base">
-            {Platform.OS === "ios"
+        <ListSection
+          footer={
+            Platform.OS === "ios"
               ? `Ask for Face ID, Touch ID or your passcode before anyone can open OpenBeacon on this ${thisDeviceNoun()}. Location sharing keeps running while the app is locked, and the location indicator stays on. OpenBeacon’s preview in the app switcher is hidden while app lock is on.`
-              : `Ask for your face, fingerprint or screen lock before anyone can open OpenBeacon on this ${thisDeviceNoun()}. Location sharing keeps running while the app is locked, and the sharing notification stays on. On Android 13 and later, OpenBeacon’s preview in recent apps is hidden while app lock is on.`}
-          </Text>
-        </View>
-
-        <View className="flex-row items-center gap-4 rounded-3xl bg-card px-4 py-3.5">
-          <View className="flex-1 gap-1">
-            <Text className="text-foreground font-medium">App lock</Text>
-            <Text className="text-tertiary text-sm">
-              {unavailable
+              : `Ask for your face, fingerprint or screen lock before anyone can open OpenBeacon on this ${thisDeviceNoun()}. Location sharing keeps running while the app is locked, and the sharing notification stays on. On Android 13 and later, OpenBeacon’s preview in recent apps is hidden while app lock is on.`
+          }
+        >
+          <ListRow
+            title="App lock"
+            icon={ScanFaceIcon}
+            iconColor="teal"
+            subtitle={
+              unavailable
                 ? `This ${thisDeviceNoun()} has no screen lock. Set one in your ${thisDeviceNoun()}’s settings to use app lock.`
                 : enabled
                   ? `On for this ${thisDeviceNoun()}.`
-                  : `Off for this ${thisDeviceNoun()}.`}
-            </Text>
-          </View>
-          <Switch
-            accessibilityLabel="App lock"
-            value={requested ?? enabled}
+                  : `Off for this ${thisDeviceNoun()}.`
+            }
+            accessibilityRole="switch"
+            accessibilityState={{ checked: requested ?? enabled }}
             disabled={requested !== null || unavailable}
-            onValueChange={(next) => void toggle(next)}
+            onPress={() => void toggle(!(requested ?? enabled))}
+            trailing={
+              <Switch
+                accessibilityLabel="App lock"
+                value={requested ?? enabled}
+                disabled={requested !== null || unavailable}
+                onValueChange={(next) => void toggle(next)}
+              />
+            }
           />
-        </View>
+        </ListSection>
 
         {enabled && (
-          <View className="gap-2">
-            <Text variant="label">Lock again</Text>
-            <ChoiceList
-              accessibilityLabel="Lock again"
-              options={relockOptions}
-              selected={relockAfter}
-              onChange={(next) => void changeRelock(next)}
-            />
-            <Text className="text-tertiary text-sm">
-              Choose how long you can be away before OpenBeacon asks again. It always asks when it’s
-              opened after being closed. Choosing a longer time asks for your screen lock.
-            </Text>
-          </View>
+          <ChoiceList
+            title="Lock again"
+            footer="Choose how long you can be away before OpenBeacon asks again. It always asks when it’s opened after being closed. Choosing a longer time asks for your screen lock."
+            accessibilityLabel="Lock again"
+            options={relockOptions}
+            selected={relockAfter}
+            onChange={(next) => void changeRelock(next)}
+          />
         )}
       </ScrollView>
     </View>

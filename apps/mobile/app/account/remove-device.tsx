@@ -77,17 +77,18 @@ const RemoveDeviceScreen = () => {
       >
         <ScrollView
           className="flex-1"
-          contentContainerClassName="gap-6 px-4 pb-32 pt-2"
+          contentInsetAdjustmentBehavior="automatic"
+          contentContainerClassName="gap-6 px-4 pb-10 pt-2"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
           <View className="gap-2">
-            <Text className="text-secondary text-base">
+            <Text className="text-secondary px-1 text-[15px] leading-5">
               Remove {name} if it’s lost or stolen, or you don’t use it any more. It will be signed
               out, it won’t receive new locations, and it will delete its keys and data the next
               time it connects.
             </Text>
-            <Text className="text-secondary text-base">
+            <Text className="text-secondary px-1 text-[15px] leading-5">
               Anything it has already seen can’t be taken back. If someone else might know your
               password, change it too.
             </Text>

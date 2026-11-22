@@ -10,10 +10,7 @@ export const HeldKeysNotice = () => {
   const notice = signInKeyNotice({ held: readLostSessions(), noun: thisDeviceNoun() });
   if (!notice) return null;
   return (
-    <View
-      accessibilityLiveRegion="polite"
-      className="flex-row gap-3 rounded-2xl border border-warning-accent bg-card p-4"
-    >
+    <View accessibilityLiveRegion="polite" className="flex-row gap-3 rounded-3xl bg-warning p-4">
       <Icon as={KeyRoundIcon} className="text-warning-text size-5" />
       <View className="flex-1 gap-1">
         <Text className="font-semibold text-warning-text">{notice.title}</Text>

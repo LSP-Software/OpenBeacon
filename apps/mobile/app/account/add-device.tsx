@@ -97,12 +97,13 @@ const AddDeviceScreen = () => {
       <ScreenHeader title="Add a device" hideBack={step === "approving"} />
       <ScrollView
         className="flex-1"
-        contentContainerClassName="gap-6 px-4 pb-16 pt-2"
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerClassName="gap-6 px-4 pb-10 pt-2"
         showsVerticalScrollIndicator={false}
       >
         {(step === "scan" || step === "checking") && (
           <View className="gap-4">
-            <Text className="text-secondary text-base">
+            <Text className="text-secondary px-1 text-[15px] leading-5">
               On the new phone or tablet, sign in and choose “Link with your other device”. Then
               scan the code it shows.
             </Text>
@@ -111,7 +112,7 @@ const AddDeviceScreen = () => {
               <View
                 accessible
                 accessibilityLabel="Camera. Point it at the code on the new device."
-                className="overflow-hidden rounded-2xl"
+                className="overflow-hidden rounded-3xl"
               >
                 <CameraView
                   style={{ height: 320 }}
@@ -121,7 +122,7 @@ const AddDeviceScreen = () => {
               </View>
             ) : permission && !permission.canAskAgain ? (
               <View className="gap-4">
-                <Text className="text-secondary text-base">
+                <Text className="text-secondary px-1 text-[15px] leading-5">
                   OpenBeacon isn’t allowed to use the camera. Turn on camera access in Settings to
                   scan the code.
                 </Text>
@@ -153,10 +154,10 @@ const AddDeviceScreen = () => {
 
         {(step === "confirm" || step === "approving") && link && (
           <View className="gap-4">
-            <Text className="text-foreground text-2xl font-bold">
+            <Text className="text-foreground px-1 text-2xl font-bold">
               Add {link.device.name} to your account?
             </Text>
-            <Text className="text-secondary text-base">
+            <Text className="text-secondary px-1 text-[15px] leading-5">
               It will see your groups’ locations and your history.
               {link.device.model && link.device.model !== link.device.name
                 ? ` It’s a ${link.device.model}.`
@@ -173,8 +174,10 @@ const AddDeviceScreen = () => {
 
         {step === "done" && link && (
           <View className="gap-4">
-            <Text className="text-foreground text-2xl font-bold">{link.device.name} is set up</Text>
-            <Text className="text-secondary text-base">
+            <Text className="text-foreground px-1 text-2xl font-bold">
+              {link.device.name} is set up
+            </Text>
+            <Text className="text-secondary px-1 text-[15px] leading-5">
               It now has your location history and will see your groups’ locations shortly.
             </Text>
             <Button onPress={() => router.back()}>

@@ -76,17 +76,18 @@ const SignOutOtherSessionsScreen = () => {
       >
         <ScrollView
           className="flex-1"
-          contentContainerClassName="gap-6 px-4 pb-32 pt-2"
+          contentInsetAdjustmentBehavior="automatic"
+          contentContainerClassName="gap-6 px-4 pb-10 pt-2"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
           <View className="gap-2">
-            <Text className="text-secondary text-base">
+            <Text className="text-secondary px-1 text-[15px] leading-5">
               Each phone or tablet where you’re signed in is a session. This signs out every session
               except this {thisDeviceNoun()}. Use it if you’ve lost a phone or tablet, or think
               someone else is signed in.
             </Text>
-            <Text className="text-secondary text-base">
+            <Text className="text-secondary px-1 text-[15px] leading-5">
               Signed-out phones and tablets still show under Devices on the Account tab, but they
               must sign in again to see anything new.
             </Text>
@@ -94,7 +95,7 @@ const SignOutOtherSessionsScreen = () => {
 
           {methods.data?.password && (
             <View className="gap-4">
-              <Text className="text-secondary text-base">
+              <Text className="text-secondary px-1 text-[15px] leading-5">
                 If someone else might know your password, change it instead. That signs out your
                 other sessions too.
               </Text>
@@ -106,7 +107,7 @@ const SignOutOtherSessionsScreen = () => {
             </View>
           )}
           {methods.data?.password === false && (
-            <Text className="text-secondary text-base">
+            <Text className="text-secondary px-1 text-[15px] leading-5">
               If someone else might be using your Google account, change your Google password first,
               or they could sign in again.
             </Text>

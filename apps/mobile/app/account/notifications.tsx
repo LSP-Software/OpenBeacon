@@ -6,11 +6,11 @@ import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
 import { PromptCard } from "../../components/PromptCard.tsx";
 import { ScreenHeader } from "../../components/headers/ScreenHeader.tsx";
 import { Button } from "../../components/ui/Button.tsx";
+import { ListRow, ListSection } from "../../components/ui/List.tsx";
 import { Switch } from "../../components/ui/Switch.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { Alert } from "../../lib/alert.ts";
 import { trpc } from "../../lib/api.ts";
-import { cn } from "../../lib/cn.ts";
 import { useNotificationSettings } from "../../lib/notifications.ts";
 import { userMessage } from "../../lib/userMessage.ts";
 import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
@@ -92,10 +92,11 @@ const NotificationsScreen = () => {
 
       <ScrollView
         className="flex-1"
-        contentContainerClassName="gap-6 px-4 pb-32 pt-2"
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerClassName="gap-6 px-4 pb-10 pt-2"
         showsVerticalScrollIndicator={false}
       >
-        <Text className="text-secondary text-base">
+        <Text className="text-secondary px-4 text-[15px] leading-5">
           Choose what you hear about. These settings are the same on all your phones. Security
           notifications go to your other phones, not the one that made the change.
         </Text>
@@ -133,68 +134,57 @@ const NotificationsScreen = () => {
             );
             const emailColumn = showEmail && rows.some(({ email }) => email !== null);
             return (
-              <View key={section.key} className="gap-2">
-                <Text variant="label">{section.title}</Text>
-                {section.key === "security" && showEmail && (
-                  <Text className="text-tertiary text-sm">
-                    Turning any of these off sends an email to your account’s address.
-                  </Text>
-                )}
-                <View className="overflow-hidden rounded-3xl bg-card">
-                  {showEmail && (
-                    <View className="flex-row justify-end gap-4 px-4 pt-3">
-                      {emailColumn && (
-                        <Text className="text-tertiary w-12 text-center text-xs font-semibold">
-                          Email
-                        </Text>
-                      )}
-                      <Text className="text-tertiary w-12 text-center text-xs font-semibold">
-                        Phone
-                      </Text>
-                    </View>
-                  )}
-                  {rows.map((row, index) => {
-                    const { label } = notificationTypes[row.type];
-                    const description = descriptions[row.type];
-                    const change = (channel: "email" | "phone", enabled: boolean) =>
-                      setSetting.mutate({ type: row.type, channel, enabled });
-                    return (
-                      <View
-                        key={row.type}
-                        className={cn(
-                          "flex-row items-center gap-4 px-4 py-3.5",
-                          index > 0 && "border-t border-border/60",
-                        )}
-                      >
-                        <View className="flex-1 gap-1">
-                          <Text className="text-foreground font-medium">{label}</Text>
-                          {description && (
-                            <Text className="text-tertiary text-sm">{description}</Text>
+              <ListSection
+                key={section.key}
+                title={section.title}
+                footer={
+                  section.key === "security" && showEmail
+                    ? "Turning any of these off sends an email to your account’s address."
+                    : undefined
+                }
+              >
+                {rows.map((row) => {
+                  const { label } = notificationTypes[row.type];
+                  const description = descriptions[row.type];
+                  const change = (channel: "email" | "phone", enabled: boolean) =>
+                    setSetting.mutate({ type: row.type, channel, enabled });
+                  return (
+                    <ListRow
+                      key={row.type}
+                      title={label}
+                      subtitle={description}
+                      trailing={
+                        <View className="flex-row gap-3">
+                          {emailColumn && row.email !== null && (
+                            <View className="items-center gap-1">
+                              {showEmail && (
+                                <Text className="text-tertiary text-xs font-semibold">Email</Text>
+                              )}
+                              <Switch
+                                accessibilityLabel={`${label}, email`}
+                                value={row.email}
+                                disabled={isSaving(row.type, "email")}
+                                onValueChange={(enabled) => change("email", enabled)}
+                              />
+                            </View>
                           )}
-                        </View>
-                        {emailColumn && row.email !== null && (
-                          <View className="w-12 items-center">
+                          <View className="items-center gap-1">
+                            {showEmail && (
+                              <Text className="text-tertiary text-xs font-semibold">Phone</Text>
+                            )}
                             <Switch
-                              accessibilityLabel={`${label}, email`}
-                              value={row.email}
-                              disabled={isSaving(row.type, "email")}
-                              onValueChange={(enabled) => change("email", enabled)}
+                              accessibilityLabel={showEmail ? `${label}, phone` : label}
+                              value={row.phone}
+                              disabled={isSaving(row.type, "phone")}
+                              onValueChange={(enabled) => change("phone", enabled)}
                             />
                           </View>
-                        )}
-                        <View className="w-12 items-center">
-                          <Switch
-                            accessibilityLabel={showEmail ? `${label}, phone` : label}
-                            value={row.phone}
-                            disabled={isSaving(row.type, "phone")}
-                            onValueChange={(enabled) => change("phone", enabled)}
-                          />
                         </View>
-                      </View>
-                    );
-                  })}
-                </View>
-              </View>
+                      }
+                    />
+                  );
+                })}
+              </ListSection>
             );
           })}
       </ScrollView>

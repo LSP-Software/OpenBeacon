@@ -63,7 +63,30 @@ mock.module("../components/LoadingIndicator.tsx", () => ({ LoadingIndicator: () 
 mock.module("../components/PromptCard.tsx", () => ({
   PromptCard: ({ title }: { title: string }) => React.createElement("prompt-card", { title }),
 }));
-mock.module("../components/headers/BackButton.tsx", () => ({ BackButton: () => null }));
+mock.module("../components/headers/ScreenHeader.tsx", () => ({ ScreenHeader: () => null }));
+mock.module("../components/ui/List.tsx", () => ({
+  ListSection: ({ footer, children }: { footer?: React.ReactNode; children?: React.ReactNode }) => (
+    <>
+      {children}
+      {footer}
+    </>
+  ),
+  ListRow: ({
+    title,
+    subtitle,
+    trailing,
+  }: {
+    title: string;
+    subtitle?: string;
+    trailing?: React.ReactNode;
+  }) => (
+    <>
+      {title}
+      {subtitle}
+      {trailing}
+    </>
+  ),
+}));
 mock.module("../components/ui/Button.tsx", () => ({ Button: View }));
 mock.module("../components/ui/Switch.tsx", () => ({
   Switch: (props: { accessibilityLabel: string; value: boolean }) =>
