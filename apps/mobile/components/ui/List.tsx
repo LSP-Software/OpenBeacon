@@ -143,6 +143,7 @@ export const ListRow = ({
         ...(selected === undefined ? {} : { checked: selected }),
         ...accessibilityState,
       }}
+      accessible={pressable}
       disabled={disabled || !pressable}
       onPress={onPress}
       className={cn(
@@ -201,7 +202,13 @@ export const ListRow = ({
           {trailingValue}
         </Text>
       ) : null}
-      {trailing}
+      {pressable && accessibilityRole === "switch" ? (
+        <View importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
+          {trailing}
+        </View>
+      ) : (
+        trailing
+      )}
       {selected && ios ? (
         <Icon as={CheckIcon} size={20} strokeWidth={2.5} className="text-primary-text" />
       ) : null}

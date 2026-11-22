@@ -5,6 +5,7 @@ import React, { act } from "react";
 import { createRoot, type Root } from "test-renderer";
 import type { z } from "zod";
 import type { changeLocationSharing } from "../lib/locationSharing.ts";
+import { mockLocationSharingCardUi } from "./locationSharingCardMocks.testUtil.ts";
 
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -49,12 +50,12 @@ const pendingPause = (
 const Host = ({ children, ...props }: { children?: React.ReactNode; [key: string]: unknown }) =>
   React.createElement("host", props, children);
 mock.module("react-native", () => ({
+  Platform: { OS: "ios" },
   View: Host,
   ScrollView: Host,
   Pressable: Host,
-  Modal: ({ visible, children }: { visible: boolean; children?: React.ReactNode }) =>
-    visible ? children : null,
 }));
+mockLocationSharingCardUi();
 const appLock = { locked: false, away: false };
 mock.module("expo-location", () => ({
   enableNetworkProviderAsync: async () => undefined,
@@ -71,6 +72,7 @@ mock.module("lucide-react-native", () => ({
   CheckIcon: () => null,
   MapPinIcon: () => null,
   PauseIcon: () => null,
+  TimerIcon: () => null,
 }));
 mock.module("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ bottom: 0 }) }));
 mock.module("@react-navigation/native", () => ({ useIsFocused: () => true }));
@@ -127,12 +129,6 @@ mock.module("../lib/locationSharing.ts", () => ({
 mock.module("./ui/Button.tsx", () => ({
   Button: ({ children, ...props }: { children?: React.ReactNode; [key: string]: unknown }) =>
     React.createElement("mock-button", props, children),
-}));
-mock.module("./ui/Card.tsx", () => ({
-  Card: Host,
-  CardHeader: Host,
-  CardContent: Host,
-  CardTitle: Host,
 }));
 mock.module("./ui/Text.tsx", () => ({ Text: Host }));
 mock.module("./ui/Icon.tsx", () => ({ Icon: () => null }));
@@ -266,7 +262,7 @@ test("resuming a pending account pause targets the account instead of the device
   pendingAccount = pendingPause(60);
   locallyPaused = true;
   await render();
-  await press("Resume all devices");
+  await press("Share my location");
   expect(changes).toEqual([
     {
       scope: "account",
@@ -284,7 +280,7 @@ test("a change is based on the revision shown when it was tapped", async () => {
     sharingRevision: 4,
   });
   await render();
-  await press("Resume sharing");
+  await press("Share my location");
   expect(changes).toEqual([
     {
       scope: "device",
@@ -303,7 +299,7 @@ test("explains when another device changed sharing before a resume", async () =>
     sharingRevision: 1,
   });
   await render();
-  await press("Resume sharing");
+  await press("Share my location");
   expect(JSON.stringify(root?.container.toJSON())).toContain(
     "Location sharing was just changed on another device",
   );
@@ -312,7 +308,7 @@ test("explains when another device changed sharing before a resume", async () =>
 test("does not claim capture stopped when the local pause failed", async () => {
   mutationError = new Error("Native pause failed");
   await render();
-  await press("Pause sharing");
+  await press("Share my location");
   await press("Pause sharing");
   const output = JSON.stringify(root?.container.toJSON());
   expect(output).toContain("Couldn’t pause location sharing");
@@ -323,20 +319,26 @@ test("an offline pause closes the sheet and explains that only this phone has st
   mutationError = new Error("Network request failed");
   pauseLocallyBeforeFailing = true;
   await render();
-  await press("Pause sharing");
+  await press("Share my location");
   await press("Pause sharing");
   const output = JSON.stringify(root?.container.toJSON());
   expect(output).not.toContain("Pause on");
   expect(output).toContain(
     "Sharing stopped on this phone. Your groups and other devices will update when we can reach the server.",
   );
-  expect(output).toContain("Resume");
+  expect(output).toContain(
+    JSON.stringify({
+      type: "mock-button",
+      props: { accessibilityState: { checked: false } },
+      children: ["Share my location"],
+    }),
+  );
 });
 
 test("a change the server won't accept says it couldn't be applied instead of waiting to go online", async () => {
   mutationStatus = "rejected";
   await render();
-  await press("Pause sharing");
+  await press("Share my location");
   await press("Pause sharing");
   const output = JSON.stringify(root?.container.toJSON());
   expect(output).toContain("Your last change to location sharing couldn’t be applied");

@@ -17,6 +17,7 @@ mock.module("./storage.ts", () => ({
 
 mock.module("../providers/ThemeProvider.tsx", () => ({
   useTheme: () => mockedThemeState,
+  useAppTheme: () => mockedThemeState.appTheme,
 }));
 
 const importThemePreferencesModule = async () =>

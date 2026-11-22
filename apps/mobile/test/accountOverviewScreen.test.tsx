@@ -49,6 +49,7 @@ mock.module("lucide-react-native", () =>
       "BellIcon",
       "BellOffIcon",
       "BookOpenIcon",
+      "ChevronRightIcon",
       "EyeIcon",
       "GaugeIcon",
       "HistoryIcon",
@@ -59,6 +60,7 @@ mock.module("lucide-react-native", () =>
       "MailIcon",
       "MapIcon",
       "MapPinIcon",
+      "PencilIcon",
       "ScanFaceIcon",
       "SmartphoneIcon",
       "SunIcon",
@@ -73,6 +75,11 @@ mock.module("react-native", () => ({
   View,
 }));
 mock.module("react-native-safe-area-context", () => ({ SafeAreaView: View }));
+mock.module("../components/headers/TabHeader.tsx", () => ({
+  TabHeader: () => null,
+  tabScreenEdges: [],
+}));
+mock.module("../components/ui/List.tsx", () => ({ ListRow: () => null }));
 mock.module("../components/containers/settingsContainer.tsx", () => ({
   SettingsContainer: ({
     categories,

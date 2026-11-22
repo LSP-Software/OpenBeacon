@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, mock, test } from "bun:test";
 import { resolveLocationSharing, type SharingPreference } from "@openbeacon/shared";
 import { onlineManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React, { act } from "react";
+import { mockLocationSharingCardUi } from "./locationSharingCardMocks.testUtil.ts";
 import { createRoot, type Root } from "test-renderer";
 
 (
@@ -38,9 +39,8 @@ mock.module("react-native", () => ({
   View: Host,
   ScrollView: Host,
   Pressable: Host,
-  Modal: ({ visible, children }: { visible: boolean; children?: React.ReactNode }) =>
-    visible ? children : null,
 }));
+mockLocationSharingCardUi();
 mock.module("expo-location", () => ({
   enableNetworkProviderAsync: async () => undefined,
   getBackgroundPermissionsAsync: async () => ({}),
@@ -56,6 +56,7 @@ mock.module("lucide-react-native", () => ({
   CheckIcon: () => null,
   MapPinIcon: () => null,
   PauseIcon: () => null,
+  TimerIcon: () => null,
 }));
 mock.module("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ bottom: 0 }) }));
 mock.module("@react-navigation/native", () => ({ useIsFocused: () => true }));
@@ -127,12 +128,6 @@ mock.module("./ui/Button.tsx", () => ({
   Button: ({ children, ...props }: { children?: React.ReactNode; [key: string]: unknown }) =>
     React.createElement("mock-button", props, children),
 }));
-mock.module("./ui/Card.tsx", () => ({
-  Card: Host,
-  CardHeader: Host,
-  CardContent: Host,
-  CardTitle: Host,
-}));
 mock.module("./ui/Text.tsx", () => ({ Text: Host }));
 mock.module("./ui/Icon.tsx", () => ({ Icon: () => null }));
 const { LocationSharingCard } = await import("./LocationSharingCard.tsx");
@@ -185,7 +180,7 @@ test("an offline pause stops this phone before the connection returns and closes
   knownOffline = true;
   onlineManager.setOnline(false);
   await render();
-  await press("Pause sharing");
+  await press("Share my location");
   expect(output()).toContain("Pause on");
   await press("Pause sharing");
 
@@ -198,7 +193,7 @@ test("an offline pause stops this phone before the connection returns and closes
 
 test("a pause waiting on a slow server can still be dismissed and keeps the phone paused", async () => {
   await render();
-  await press("Pause sharing");
+  await press("Share my location");
   await press("Pause sharing");
   expect(sentChanges).toHaveLength(1);
   expect(nativePauses).toEqual([true]);

@@ -70,7 +70,8 @@
                   "CardTitle",
                   "DialogDescription",
                   "DialogTitle",
-                  "Link"
+                  "Link",
+                  "NativeTabs.Trigger.Label"
                 ]
               }
             },
@@ -94,7 +95,8 @@
         "**/*.test.ts",
         "**/*.test.tsx",
         "apps/mobile/test/**",
-        "apps/mobile/components/map/nativeMap.testUtil.tsx"
+        "apps/mobile/components/map/nativeMap.testUtil.tsx",
+        "apps/mobile/components/locationSharingCardMocks.testUtil.ts"
       ],
       "linter": {
         "rules": {

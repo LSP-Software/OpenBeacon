@@ -21,7 +21,7 @@ export const BottomSheet = ({
   children: React.ReactNode;
 }) => {
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const { palette } = useColors();
   const sheet = useRef<ModalBottomSheetRef>(null);
   const [mounted, setMounted] = useState(visible);
@@ -71,16 +71,18 @@ export const BottomSheet = ({
   if (!mounted) return null;
 
   return (
-    <AndroidHost style={{ position: "absolute", width: 0, height: 0 }}>
-      <ModalBottomSheet
-        ref={sheet}
-        onDismissRequest={onClose}
-        containerColor={palette.background}
-        showDragHandle
-        skipPartiallyExpanded
-      >
-        <ComposeRNHostView matchContents>{content}</ComposeRNHostView>
-      </ModalBottomSheet>
-    </AndroidHost>
+    <View pointerEvents="none" style={{ position: "absolute", left: 0, top: 0, width, height }}>
+      <AndroidHost style={{ width, height }}>
+        <ModalBottomSheet
+          ref={sheet}
+          onDismissRequest={onClose}
+          containerColor={palette.background}
+          showDragHandle
+          skipPartiallyExpanded
+        >
+          <ComposeRNHostView matchContents>{content}</ComposeRNHostView>
+        </ModalBottomSheet>
+      </AndroidHost>
+    </View>
   );
 };

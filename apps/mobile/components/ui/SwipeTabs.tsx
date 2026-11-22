@@ -3,6 +3,7 @@ import {
   type LayoutChangeEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
+  Platform,
   Pressable,
   type ScrollView,
   useWindowDimensions,
@@ -15,15 +16,20 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
 } from "react-native-reanimated";
+import type { LucideIcon } from "lucide-react-native";
 import { cn } from "../../lib/cn.ts";
+import { Icon } from "./Icon.tsx";
 import { getSceneIndexFromOffset, getSwipeTabsIndex } from "./swipeTabs.ts";
 import { Text } from "./Text.tsx";
 
 export type SwipeTabsItem<T extends string> = {
   value: T;
   label: string;
+  icon?: LucideIcon;
   badge?: boolean;
 };
+
+const ios = Platform.OS === "ios";
 
 export const SwipeTabs = <T extends string>({
   ariaLabel = "Swipe tabs",
@@ -145,13 +151,16 @@ export const SwipeTabs = <T extends string>({
       return { opacity: 0 };
     }
 
-    const tabWidth = barWidth / tabs.length;
+    const inset = ios ? 4 : 0;
+    const tabWidth = (barWidth - inset * 2) / tabs.length;
+    const margin = ios ? 0 : 16;
 
     return {
       opacity: 1,
-      width: tabWidth - 24,
+      width: tabWidth - margin * 2,
       left:
-        12 +
+        inset +
+        margin +
         interpolate(
           scrollX.value,
           [0, Math.max(tabs.length - 1, 1) * pageWidth],
@@ -164,7 +173,9 @@ export const SwipeTabs = <T extends string>({
   return (
     <View className="gap-4">
       <View
-        className="flex-row border-b border-border"
+        className={
+          ios ? "flex-row rounded-full bg-secondary p-1" : "flex-row border-b border-border"
+        }
         accessibilityLabel={ariaLabel}
         accessibilityRole="tablist"
         onLayout={(event) => {
@@ -172,6 +183,13 @@ export const SwipeTabs = <T extends string>({
           if (nextWidth !== barWidth) setBarWidth(nextWidth);
         }}
       >
+        {ios ? (
+          <Animated.View
+            pointerEvents="none"
+            className="absolute bottom-1 top-1 rounded-full bg-card"
+            style={indicatorStyle}
+          />
+        ) : null}
         {tabs.map((tab) => (
           <Pressable
             key={tab.value}
@@ -179,27 +197,44 @@ export const SwipeTabs = <T extends string>({
             accessibilityRole="tab"
             accessibilityLabel={tab.badge ? `${tab.label}, new activity` : tab.label}
             accessibilityState={{ selected: tab.value === value }}
-            className="h-12 flex-1 flex-row items-center justify-center gap-1.5"
+            className={
+              ios
+                ? "min-h-9 flex-1 flex-row items-center justify-center gap-1.5 px-1"
+                : "min-h-16 flex-1 items-center justify-center gap-1 py-2"
+            }
           >
-            <Text
-              className={cn(
-                "text-base",
-                tab.value === value
-                  ? "text-foreground font-semibold"
-                  : "text-secondary font-medium",
-              )}
-              numberOfLines={1}
-            >
-              {tab.label}
-            </Text>
-            {tab.badge ? <View className="size-2 rounded-full bg-primary" /> : null}
+            {!ios && tab.icon ? (
+              <Icon
+                as={tab.icon}
+                size={22}
+                className={tab.value === value ? "text-primary-text" : "text-secondary"}
+              />
+            ) : null}
+            <View className="flex-row items-center gap-1.5">
+              <Text
+                className={cn(
+                  ios ? "text-[15px]" : "text-sm",
+                  tab.value === value
+                    ? ios
+                      ? "font-semibold text-foreground"
+                      : "font-medium text-primary-text"
+                    : "font-medium text-secondary",
+                )}
+                numberOfLines={1}
+              >
+                {tab.label}
+              </Text>
+              {tab.badge ? <View className="size-2 rounded-full bg-primary" /> : null}
+            </View>
           </Pressable>
         ))}
-        <Animated.View
-          pointerEvents="none"
-          className="absolute -bottom-px h-[3px] rounded-t-full bg-primary"
-          style={indicatorStyle}
-        />
+        {ios ? null : (
+          <Animated.View
+            pointerEvents="none"
+            className="absolute -bottom-px h-[3px] rounded-t-full bg-primary-text"
+            style={indicatorStyle}
+          />
+        )}
       </View>
 
       <View onLayout={handleContainerLayout}>
