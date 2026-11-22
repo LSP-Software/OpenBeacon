@@ -1,6 +1,6 @@
 # Group history
 
-Open a Group's History tab to see its last 14 days of activity, starting at your most recent join. Owners, admins and members have the same history access. Leaving or being removed ends access; rejoining does not restore entries from before that join.
+Open a Group's History tab to see its last 30 days of activity, starting at your most recent join. Owners, admins and members have the same history access. Leaving or being removed ends access; rejoining does not restore entries from before that join.
 
 History includes Group creation, member joins, departures, removals and account deletions, role changes, Group renames and picture changes, Place additions, edits and deletions, and devices arriving at or leaving Places. Filters separate arrivals and departures, members, roles, Group changes and Place changes. Entries are newest first, grouped by day; Show older loads another page.
 
@@ -16,7 +16,7 @@ A dot on the Groups tab, Group row and History tab means another member has chan
 
 ## API and deployment
 
-`groupHistory.list` merges `GroupEvent` and `PlaceTransition` records, with a maximum of 100 entries per page and a timestamp-and-ID cursor. Both sources are limited to the last 14 days and the caller's latest membership. `groupHistory.latest` returns the latest qualifying Group event time for each of the caller's Groups. Group events and new membership timestamps use the database clock.
+`groupHistory.list` merges `GroupEvent` and `PlaceTransition` records, with a maximum of 100 entries per page and a timestamp-and-ID cursor. Both sources are limited to the last 30 days and the caller's latest membership. `groupHistory.latest` returns the latest qualifying Group event time for each of the caller's Groups. Group events and new membership timestamps use the database clock.
 
 The `add_group_events` migration creates `GroupEvent` and drops `GroupJoinAlert`, including any existing join alerts. It does not backfill Group events, so Group changes appear only after deployment. Existing Place Transitions can still appear within the visibility window. Both the client and server minimum compatibility levels are 7. Older apps rely on join alerts, so the hosted server must wait until the level-7 app is available to users before deploying this change. Self-hosters must coordinate their server and app updates. The legacy `groupInvites.joinAlerts` and `groupInvites.dismissJoinAlert` procedures remain as empty/no-op responses, but apps below level 7 are rejected by the compatibility check. See [API compatibility](../development/api-compatibility.md).
 

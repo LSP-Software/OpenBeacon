@@ -140,9 +140,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await prisma.$disconnect();
     });
 
-    test("merges group events and place arrivals newest first, within the last 14 days", async () => {
-      await seedEvent("expired", ago(15 * day));
-      await seedTransition("expiredArrival", ago(14 * day + minute));
+    test("merges group events and place arrivals newest first, within the last 30 days", async () => {
+      await seedEvent("expired", ago(31 * day));
+      await seedTransition("expiredArrival", ago(30 * day + minute));
       await seedEvent("renamed", ago(3 * minute));
       await seedTransition("arrived", ago(2 * minute));
       await seedEvent("renamedAgain", ago(minute));
@@ -325,13 +325,13 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
 
     test("latest counts other people's group events since you joined, not arrivals or expired ones", async () => {
       await seedEvent("beforeJoin", ago(20 * minute));
-      await seedEvent("expired", ago(14 * day + minute));
+      await seedEvent("expired", ago(30 * day + minute));
       await seedEvent("byMember", ago(5 * minute), member);
       await seedTransition("ownerArrivedEarly", ago(4 * minute), owner);
       await setJoinedAt(member, ago(10 * minute));
       expect(await caller(member).groupHistory.latest()).toEqual([{ groupId, latestAt: null }]);
 
-      await setJoinedAt(member, ago(15 * day));
+      await setJoinedAt(member, ago(31 * day));
       expect(await caller(member).groupHistory.latest()).toEqual([
         {
           groupId,

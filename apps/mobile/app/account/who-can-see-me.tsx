@@ -116,7 +116,7 @@ const WhoCanSeeMeScreen = () => {
           <Text className="text-secondary text-base">
             Everyone in a group with you can see where you are while you’re sharing. They can also
             replay where you’ve been, as far back as you chose for that group (shown below, at most
-            14 days), but only from when they joined that group, and see roughly when you paused and
+            30 days), but only from when they joined that group, and see roughly when you paused and
             resumed sharing. While you’ve paused, they can see that you’ve paused, but not where you
             are.
           </Text>

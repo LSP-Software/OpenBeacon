@@ -2,7 +2,7 @@ import { Prisma } from "@openbeacon/database";
 import { HISTORY_SHARES, historyShareFirstHour, type HistoryShare } from "@openbeacon/shared";
 import { deleteTrackingPointsInBatches } from "./trackingCleanup.ts";
 
-export const HISTORY_RETENTION_MS = 14 * 24 * 60 * 60_000;
+export const HISTORY_RETENTION_MS = 30 * 24 * 60 * 60_000;
 
 export const effectiveHistoryShareSql = Prisma.sql`COALESCE("member"."historyShare", "account"."historyShare")`;
 

@@ -37,7 +37,7 @@ const schoolId = `${prefix}-school`;
 const otherPlaceId = `${prefix}-other-place`;
 const minute = 60_000;
 const day = 24 * 60 * minute;
-const longAgo = new Date(Date.now() - 30 * day);
+const longAgo = new Date(Date.now() - 60 * day);
 
 const caller = (userId: string, deviceId: string, callerCache = cache) =>
   router.createCaller(
@@ -252,7 +252,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const unknownPlace = transition({ placeId: `${prefix}-missing` });
       const future = transition({ occurredAt: new Date(now + 10 * minute) });
       const slightlyAhead = transition({ occurredAt: new Date(now + minute) });
-      const tooOld = transition({ occurredAt: new Date(now - 15 * day) });
+      const tooOld = transition({ occurredAt: new Date(now - 31 * day) });
       const kept = transition({ direction: "LEAVE", placeId: schoolId });
       const result = await upload([
         otherGroupPlace,
@@ -619,10 +619,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       ]);
     });
 
-    test("recent returns the last 14 days newest first, in pages, for members only", async () => {
+    test("recent returns the last 30 days newest first, in pages, for members only", async () => {
       const now = Date.now();
       await seedTransitions([
-        { id: `${prefix}-expired`, createdAt: new Date(now - 15 * day) },
+        { id: `${prefix}-expired`, createdAt: new Date(now - 31 * day) },
         ...Array.from({ length: 101 }, (_, index) => ({
           id: `${prefix}-recent-${String(index).padStart(3, "0")}`,
           createdAt: new Date(now - day + index * minute),

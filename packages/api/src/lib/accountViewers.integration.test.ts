@@ -52,7 +52,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             createdAt: ago(5),
           },
           { groupId: family, type: "MEMBER_LEFT" as const, subjectUserId: sam, createdAt: ago(2) },
-          { groupId: family, type: "MEMBER_LEFT" as const, subjectUserId: old, createdAt: ago(20) },
+          { groupId: family, type: "MEMBER_LEFT" as const, subjectUserId: old, createdAt: ago(40) },
           { groupId: former, type: "MEMBER_LEFT" as const, subjectUserId: me, createdAt: ago(1) },
           {
             groupId: former,

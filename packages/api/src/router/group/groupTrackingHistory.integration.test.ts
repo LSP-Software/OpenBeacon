@@ -35,7 +35,7 @@ const caller = (userId: string, deviceId: string) =>
   ).groupTracking;
 
 const HOUR_MS = 3_600_000;
-const RETENTION_HOURS = 336;
+const RETENTION_HOURS = 720;
 const nowHour = () => Math.floor(Date.now() / HOUR_MS);
 const groupIds: string[] = [];
 
@@ -311,7 +311,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       ).toEqual([lateDeviceId]);
     });
 
-    test("the 14-day window goes by arrival and ranges are at most 26 hours", async () => {
+    test("the 30-day window goes by arrival and ranges are at most 26 hours", async () => {
       const { groupId, store } = await createGroup("window");
       const windowHour = nowHour() - RETENTION_HOURS;
       await store({ capturedHour: windowHour - 1 });

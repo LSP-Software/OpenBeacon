@@ -96,7 +96,7 @@ describe("wording", () => {
 
   test("the invite line describes the amount shared", () => {
     expect(historyShareAmount("WEEK_1")).toBe("1 week of history");
-    expect(historyShareAmount("MAXIMUM")).toBe("up to 14 days of history");
+    expect(historyShareAmount("MAXIMUM")).toBe("up to 30 days of history");
   });
 
   test("a setting this build doesn't know still has wording", () => {

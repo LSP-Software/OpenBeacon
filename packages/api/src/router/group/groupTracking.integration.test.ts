@@ -280,10 +280,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
     const sent = [
       point("hour-missing"),
       point("hour-late", { capturedHour: nowHour - 30 }),
-      point("hour-too-old", { capturedHour: nowHour - 400 }),
+      point("hour-too-old", { capturedHour: nowHour - 800 }),
       point("hour-ahead", { capturedHour: nowHour + 1 }),
       point("hour-too-far-ahead", { capturedHour: nowHour + 5 }),
-      point("hour-stay-too-old", { capturedHour: nowHour - 500, role: "STAY" }),
+      point("hour-stay-too-old", { capturedHour: nowHour - 900, role: "STAY" }),
     ];
     expect((await upload(sent)).accepted).toHaveLength(sent.length);
     const stored = new Map(
@@ -294,7 +294,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
     );
     const offsetOf = (sentPoint: (typeof sent)[number]) =>
       stored.get(pointIdOf(sentPoint.clientPointId))?.offset;
-    expect(sent.map(offsetOf)).toEqual([0, -30, -336, 1, 1, -336]);
+    expect(sent.map(offsetOf)).toEqual([0, -30, -720, 1, 1, -720]);
     for (const { receivedHour } of stored.values()) {
       expect(Math.abs(receivedHour - nowHour)).toBeLessThanOrEqual(1);
     }

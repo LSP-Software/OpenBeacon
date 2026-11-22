@@ -43,16 +43,16 @@ const eventIcons = {
 } as const;
 
 const filters = [
-  { label: "All", category: null, empty: "Nothing has happened in the last 14 days." },
+  { label: "All", category: null, empty: "Nothing has happened in the last 30 days." },
   {
     label: "Arrivals",
     category: "arrivals",
-    empty: "No arrivals or departures in the last 14 days.",
+    empty: "No arrivals or departures in the last 30 days.",
   },
-  { label: "Members", category: "members", empty: "No member changes in the last 14 days." },
-  { label: "Roles", category: "roles", empty: "No role changes in the last 14 days." },
-  { label: "Group", category: "group", empty: "No group changes in the last 14 days." },
-  { label: "Places", category: "places", empty: "No place changes in the last 14 days." },
+  { label: "Members", category: "members", empty: "No member changes in the last 30 days." },
+  { label: "Roles", category: "roles", empty: "No role changes in the last 30 days." },
+  { label: "Group", category: "group", empty: "No group changes in the last 30 days." },
+  { label: "Places", category: "places", empty: "No place changes in the last 30 days." },
 ] as const;
 
 const HistoryTab = ({
@@ -275,7 +275,7 @@ const HistoryTab = ({
           <Text>Show older</Text>
         </Button>
       ) : null}
-      <Text className="mt-3 text-center text-sm text-tertiary">History is kept for 14 days.</Text>
+      <Text className="mt-3 text-center text-sm text-tertiary">History is kept for 30 days.</Text>
     </View>
   );
 };

@@ -19,7 +19,7 @@ const choices: Partial<
   HOURS_6: { label: "6 hours", amount: "6 hours of history", period: "the last 6 hours" },
   DAY_1: { label: "1 day", amount: "1 day of history", period: "the last day" },
   WEEK_1: { label: "1 week", amount: "1 week of history", period: "the last week" },
-  MAXIMUM: { label: "Maximum (14 days)", amount: "up to 14 days of history", period: null },
+  MAXIMUM: { label: "Maximum (30 days)", amount: "up to 30 days of history", period: null },
 };
 
 const choice = (share: HistoryShare) =>

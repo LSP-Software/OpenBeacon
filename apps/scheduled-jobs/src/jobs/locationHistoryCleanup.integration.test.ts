@@ -147,7 +147,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history
       },
     });
     await prisma.$executeRaw`
-      DELETE FROM "TrackingPoint" WHERE "receivedHour" < ${hourOf(ago(14))}
+      DELETE FROM "TrackingPoint" WHERE "receivedHour" < ${hourOf(ago(30))}
     `;
     await prisma.group.deleteMany({ where: { id: { startsWith: leftover } } });
     await prisma.user.deleteMany({ where: { id: { startsWith: leftover } } });
@@ -180,13 +180,13 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history
     await prisma.$disconnect();
   });
 
-  test("deletes location history older than 14 days and keeps the rest", async () => {
+  test("deletes location history older than 30 days and keeps the rest", async () => {
     const groupId = await createGroup("boundary", [200]);
     const otherGroupId = await createGroup("other", [200]);
     await addPayloads(groupId, [
       { epoch: 1, receivedAt: ago(90), name: "old" },
-      { epoch: 1, receivedAt: ago(14 + 1 / 24), name: "justOver" },
-      { epoch: 1, receivedAt: ago(14 - 1 / 24), name: "justUnder" },
+      { epoch: 1, receivedAt: ago(30 + 1 / 24), name: "justOver" },
+      { epoch: 1, receivedAt: ago(30 - 1 / 24), name: "justUnder" },
       { epoch: 1, receivedAt: ago(1), name: "recent" },
     ]);
     await addPayloads(otherGroupId, [{ epoch: 1, receivedAt: ago(10), name: "recent" }]);
@@ -195,15 +195,15 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history
     expect(await payloadNames(otherGroupId)).toEqual(["recent"]);
   });
 
-  test("deletes late points by when they arrived and never keeps one past 14 days and 1 hour", async () => {
+  test("deletes late points by when they arrived and never keeps one past 30 days and 1 hour", async () => {
     const groupId = await createGroup("late", [200]);
-    const cutoffHour = hourOf(ago(14));
+    const cutoffHour = hourOf(ago(30));
     const atHour = (hour: number) => new Date(hour * 3_600_000 + 1_000);
     await addPayloads(groupId, [
-      { epoch: 1, receivedAt: atHour(cutoffHour - 2), capturedOffset: -336, name: "lateAndOld" },
+      { epoch: 1, receivedAt: atHour(cutoffHour - 2), capturedOffset: -720, name: "lateAndOld" },
       { epoch: 1, receivedAt: atHour(cutoffHour - 1), capturedOffset: 1, name: "aheadAndOld" },
       { epoch: 1, receivedAt: atHour(cutoffHour), capturedOffset: 1, name: "lastKeptHour" },
-      { epoch: 1, receivedAt: ago(1), capturedOffset: -336, name: "lateButRecent" },
+      { epoch: 1, receivedAt: ago(1), capturedOffset: -720, name: "lateButRecent" },
     ]);
     await createLocationHistoryCleanup()();
     expect(await payloadNames(groupId)).toEqual(["lastKeptHour", "lateButRecent"]);
@@ -214,17 +214,17 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history
       WHERE "stream"."groupId" = ${groupId}
     `;
     expect(databaseNow.getTime() - oldest!.receivedHour * 3_600_000).toBeLessThan(
-      14 * day + 3_600_000,
+      30 * day + 3_600_000,
     );
   });
 
-  test("deletes latest points more than 14 days old and streams left with no point and no latest point", async () => {
+  test("deletes latest points more than 30 days old and streams left with no point and no latest point", async () => {
     const staleGroupId = await createGroup("stale-latest", [200, 100, 50]);
-    await addLatest(staleGroupId, 1, ago(15));
-    await addPayloads(staleGroupId, [{ epoch: 2, receivedAt: ago(20) }]);
+    await addLatest(staleGroupId, 1, ago(31));
+    await addPayloads(staleGroupId, [{ epoch: 2, receivedAt: ago(40) }]);
     await addPayloads(staleGroupId, [{ epoch: 3, receivedAt: ago(2), name: "kept" }]);
     const freshGroupId = await createGroup("fresh-latest", [200]);
-    await addLatest(freshGroupId, 1, ago(13));
+    await addLatest(freshGroupId, 1, ago(29));
     await createLocationHistoryCleanup()();
     expect(await prisma.trackingLatestPoint.count({ where: { groupId: staleGroupId } })).toBe(0);
     expect(await streamEpochs(staleGroupId)).toEqual([3]);
@@ -249,9 +249,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history
   });
 
   test("deletes empty epochs superseded before the cutoff, with their wraps", async () => {
-    const groupId = await createGroup("epochs", [50, 30, 20, 15, 12, 3]);
+    const groupId = await createGroup("epochs", [100, 60, 40, 32, 25, 3]);
     await addPayloads(groupId, [
-      { epoch: 1, receivedAt: ago(40) },
+      { epoch: 1, receivedAt: ago(80) },
       { epoch: 3, receivedAt: ago(1), name: "lateUpload" },
       { epoch: 5, receivedAt: ago(8) },
     ]);
@@ -358,7 +358,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history
     expect(await epochNumbers(profilePicture)).toEqual([2]);
   });
 
-  test("deletes place transitions and group events more than 14 days old, in batches up to the run limit", async () => {
+  test("deletes place transitions and group events more than 30 days old, in batches up to the run limit", async () => {
     const groupId = await createGroup("transitions", [200]);
     const place = await prisma.place.create({
       data: {
@@ -376,8 +376,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history
     const transitions = [
       { name: "old", occurredAt: ago(30) },
       { name: "older", occurredAt: ago(60) },
-      { name: "justOver", occurredAt: ago(14 + 1 / 24) },
-      { name: "justUnder", occurredAt: ago(14 - 1 / 24) },
+      { name: "justOver", occurredAt: ago(30 + 1 / 24) },
+      { name: "justUnder", occurredAt: ago(30 - 1 / 24) },
       { name: "recent", occurredAt: ago(1) },
     ];
     await prisma.placeTransition.createMany({

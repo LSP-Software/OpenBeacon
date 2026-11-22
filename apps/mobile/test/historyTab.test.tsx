@@ -96,7 +96,7 @@ test("an event type a newer server added is left out and the rest of the history
 test("a day holding only events this build doesn't know shows the empty message", async () => {
   items = [event("SEATS_CHANGED", "unknown")];
 
-  expect(await render()).toContain("Nothing has happened in the last 14 days.");
+  expect(await render()).toContain("Nothing has happened in the last 30 days.");
 });
 
 test("opening History clears the dot even when the newest group event is beyond the first page", async () => {
