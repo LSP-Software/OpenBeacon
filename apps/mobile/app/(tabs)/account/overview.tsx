@@ -267,7 +267,7 @@ const AccountScreen = () => {
           Account
         </Text>
         <AnnouncementBanner />
-        <View className="flex-row items-center gap-4 rounded-2xl border border-border bg-card p-4">
+        <View className="flex-row items-center gap-4 rounded-3xl bg-card p-4">
           <ProfileImage imageUrl={session?.user?.image ?? null} />
           <View className="flex-1">
             <Text className="text-foreground text-xl font-bold" numberOfLines={1}>

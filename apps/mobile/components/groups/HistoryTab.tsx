@@ -157,7 +157,7 @@ const HistoryTab = ({
     return (
       <View className="gap-2 pt-1">
         {filterBar}
-        <View className="gap-3 rounded-2xl border border-border bg-card p-5">
+        <View className="gap-3 rounded-3xl bg-card p-5">
           <Text className="text-foreground text-lg font-semibold">Couldn’t load history</Text>
           <Text className="text-secondary">Check your connection and try again.</Text>
           <Button
@@ -185,7 +185,7 @@ const HistoryTab = ({
     <View className="gap-2 pt-1">
       {filterBar}
       {history.isError ? (
-        <View className="flex-row items-center justify-between gap-3 rounded-2xl border border-border bg-card px-4 py-2">
+        <View className="flex-row items-center justify-between gap-3 rounded-3xl bg-card px-4 py-2">
           <Text className="flex-1 text-sm text-foreground">
             Couldn’t reach the server, so this may be out of date.
           </Text>

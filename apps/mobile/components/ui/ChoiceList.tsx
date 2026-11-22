@@ -1,8 +1,7 @@
-import { CheckIcon, type LucideIcon } from "lucide-react-native";
-import { Pressable, View } from "react-native";
-import { cn } from "../../lib/cn.ts";
-import { Icon } from "./Icon.tsx";
-import { Text } from "./Text.tsx";
+import type { LucideIcon } from "lucide-react-native";
+import { Platform, View } from "react-native";
+import { useColors } from "../../lib/theme.ts";
+import { ListRow, ListSection } from "./List.tsx";
 
 export const ChoiceList = <T,>({
   accessibilityLabel,
@@ -10,6 +9,8 @@ export const ChoiceList = <T,>({
   selected,
   onChange,
   disabled = false,
+  title,
+  footer,
 }: {
   accessibilityLabel: string;
   options: readonly {
@@ -21,45 +22,44 @@ export const ChoiceList = <T,>({
   selected: T | null;
   onChange: (value: T) => void;
   disabled?: boolean;
+  title?: string | undefined;
+  footer?: React.ReactNode;
 }) => (
-  <View
-    accessibilityRole="radiogroup"
-    accessibilityLabel={accessibilityLabel}
-    className="overflow-hidden rounded-2xl border border-border bg-card"
-  >
-    {options.map((option, index) => (
-      <Pressable
-        key={option.title}
-        accessibilityRole="radio"
-        accessibilityLabel={option.title}
-        accessibilityHint={option.description}
-        accessibilityState={{ checked: selected === option.value, disabled }}
-        disabled={disabled}
-        onPress={() => onChange(option.value)}
-        className={cn(
-          "min-h-[52px] flex-row items-center gap-3 px-4 py-3 active:bg-secondary/60",
-          index > 0 && "border-t border-border/60",
-          disabled && "opacity-50",
-        )}
-      >
-        {option.icon ? <Icon as={option.icon} className="text-secondary size-5" /> : null}
-        <View className="flex-1 gap-0.5">
-          <Text className="text-foreground font-medium">{option.title}</Text>
-          {option.description ? (
-            <Text className="text-tertiary text-sm">{option.description}</Text>
-          ) : null}
-        </View>
-        <View
-          className={cn(
-            "size-[22px] items-center justify-center rounded-full border-2",
-            selected === option.value ? "border-primary bg-primary" : "border-border-strong",
-          )}
-        >
-          {selected === option.value ? (
-            <Icon as={CheckIcon} className="size-3.5 text-white" strokeWidth={3} />
-          ) : null}
-        </View>
-      </Pressable>
-    ))}
+  <View accessibilityRole="radiogroup" accessibilityLabel={accessibilityLabel}>
+    <ListSection title={title} footer={footer}>
+      {options.map((option) => (
+        <ListRow
+          key={option.title}
+          title={option.title}
+          subtitle={option.description}
+          icon={option.icon}
+          accessibilityRole="radio"
+          accessibilityLabel={option.title}
+          accessibilityHint={option.description}
+          selected={selected === option.value}
+          disabled={disabled}
+          onPress={() => onChange(option.value)}
+          leading={
+            Platform.OS === "ios" ? null : <RadioMark selected={selected === option.value} />
+          }
+        />
+      ))}
+    </ListSection>
   </View>
 );
+
+const RadioMark = ({ selected }: { selected: boolean }) => {
+  const { palette } = useColors();
+  const color = selected ? palette["primary-text"] : palette["text-secondary"];
+  return (
+    <View
+      className="size-5 items-center justify-center rounded-full border-2"
+      style={{ borderColor: color }}
+    >
+      <View
+        className="size-2.5 rounded-full"
+        style={{ backgroundColor: selected ? color : "transparent" }}
+      />
+    </View>
+  );
+};

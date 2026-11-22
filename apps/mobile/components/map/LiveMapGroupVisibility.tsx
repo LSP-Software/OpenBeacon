@@ -19,7 +19,7 @@ export const LiveMapGroupMenu = ({
 }) => (
   <View
     accessibilityLabel="Show on map"
-    className="absolute left-3 w-72 rounded-2xl border border-border bg-card py-1.5 shadow-md shadow-black/20"
+    className="absolute left-3 w-72 rounded-3xl bg-card py-1.5 shadow-md shadow-black/20"
     style={{ maxHeight, top }}
   >
     <Text className="text-secondary mx-4 mb-1 mt-2 text-sm font-semibold">Show on map</Text>

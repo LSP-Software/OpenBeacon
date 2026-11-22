@@ -1,6 +1,15 @@
-import { Pressable, View } from "react-native";
+import {
+  Text as ComposeText,
+  SegmentedButton,
+  SingleChoiceSegmentedButtonRow,
+} from "@expo/ui/jetpack-compose";
+import { fillMaxWidth, weight } from "@expo/ui/jetpack-compose/modifiers";
+import { Picker, Text as SwiftText } from "@expo/ui/swift-ui";
+import { disabled as disabledModifier, pickerStyle, tag } from "@expo/ui/swift-ui/modifiers";
+import { Platform, View } from "react-native";
 import { cn } from "../../lib/cn.ts";
-import { Text } from "./Text.tsx";
+import { useColors } from "../../lib/theme.ts";
+import { AndroidHost, IosHost } from "./NativeHost.tsx";
 
 export const SegmentedControl = <T,>({
   accessibilityLabel,
@@ -14,37 +23,64 @@ export const SegmentedControl = <T,>({
   selected: T;
   onChange: (value: T) => void;
   disabled?: boolean;
-}) => (
-  <View
-    accessibilityRole="radiogroup"
-    accessibilityLabel={accessibilityLabel}
-    className={cn("flex-row rounded-xl bg-secondary p-1", disabled && "opacity-50")}
-  >
-    {options.map((option) => (
-      <Pressable
-        key={option.label}
-        accessibilityRole="radio"
-        accessibilityLabel={option.label}
-        accessibilityState={{ checked: selected === option.value, disabled }}
-        disabled={disabled}
-        onPress={() => onChange(option.value)}
-        className={cn(
-          "h-10 flex-1 items-center justify-center rounded-lg px-2",
-          selected === option.value && "bg-card dark:bg-border-strong",
-        )}
-      >
-        <Text
-          numberOfLines={1}
-          className={cn(
-            "text-sm",
-            selected === option.value
-              ? "text-foreground font-semibold"
-              : "text-secondary font-medium",
-          )}
-        >
-          {option.label}
-        </Text>
-      </Pressable>
-    ))}
-  </View>
-);
+}) => {
+  const { palette } = useColors();
+  const selectedIndex = options.findIndex((option) => option.value === selected);
+  const choose = (index: number) => {
+    const option = options[index];
+    if (option && !disabled) onChange(option.value);
+  };
+
+  return (
+    <View
+      accessibilityRole="radiogroup"
+      accessibilityLabel={accessibilityLabel}
+      className={cn("w-full", disabled && "opacity-50")}
+    >
+      {Platform.OS === "ios" ? (
+        <IosHost matchContents={{ vertical: true }} style={{ width: "100%" }}>
+          <Picker
+            label={accessibilityLabel}
+            selection={selectedIndex}
+            onSelectionChange={choose}
+            modifiers={[pickerStyle("segmented"), disabledModifier(disabled)]}
+          >
+            {options.map((option, index) => (
+              <SwiftText key={option.label} modifiers={[tag(index)]}>
+                {option.label}
+              </SwiftText>
+            ))}
+          </Picker>
+        </IosHost>
+      ) : (
+        <AndroidHost matchContents={{ vertical: true }} style={{ width: "100%" }}>
+          <SingleChoiceSegmentedButtonRow modifiers={[fillMaxWidth()]}>
+            {options.map((option, index) => (
+              <SegmentedButton
+                key={option.label}
+                selected={index === selectedIndex}
+                enabled={!disabled}
+                onClick={() => choose(index)}
+                modifiers={[weight(1)]}
+                colors={{
+                  activeContainerColor: palette.secondary,
+                  activeContentColor: palette["secondary-foreground"],
+                  activeBorderColor: palette["border-strong"],
+                  inactiveContainerColor: "#00000000",
+                  inactiveContentColor: palette.foreground,
+                  inactiveBorderColor: palette["border-strong"],
+                }}
+              >
+                <SegmentedButton.Label>
+                  <ComposeText maxLines={1} style={{ typography: "labelLarge" }}>
+                    {option.label}
+                  </ComposeText>
+                </SegmentedButton.Label>
+              </SegmentedButton>
+            ))}
+          </SingleChoiceSegmentedButtonRow>
+        </AndroidHost>
+      )}
+    </View>
+  );
+};

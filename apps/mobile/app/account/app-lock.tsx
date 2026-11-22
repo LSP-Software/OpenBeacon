@@ -74,7 +74,7 @@ const AppLockSettingsScreen = () => {
           </Text>
         </View>
 
-        <View className="flex-row items-center gap-4 rounded-2xl border border-border bg-card px-4 py-3.5">
+        <View className="flex-row items-center gap-4 rounded-3xl bg-card px-4 py-3.5">
           <View className="flex-1 gap-1">
             <Text className="text-foreground font-medium">App lock</Text>
             <Text className="text-tertiary text-sm">

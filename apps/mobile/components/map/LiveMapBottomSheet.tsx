@@ -106,7 +106,7 @@ export const LiveMapBottomSheet = ({
       }}
     >
       <View
-        className="rounded-2xl border border-border bg-card px-5 pb-5 pt-3 shadow-md shadow-black/15"
+        className="rounded-3xl bg-card px-5 pb-5 pt-3 shadow-md shadow-black/15"
         onLayout={(event) => onHeightChange?.(event.nativeEvent.layout.height)}
       >
         {onDismiss ? (

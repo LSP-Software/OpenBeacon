@@ -16,7 +16,7 @@ import { getPushStatus } from "../../lib/tracking.ts";
 import { appVersion, maplibreVersion } from "../../lib/versions.ts";
 
 const InfoRows = ({ rows }: { rows: { label: string; value: string }[] }) => (
-  <View className="overflow-hidden rounded-2xl border border-border bg-card">
+  <View className="overflow-hidden rounded-3xl bg-card">
     {rows.map((row, index) => (
       <View
         key={row.label}

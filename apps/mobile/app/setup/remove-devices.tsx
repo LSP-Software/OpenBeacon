@@ -93,7 +93,7 @@ const RemoveOldDevicesScreen = () => {
           </View>
         )}
         {otherDevices.length > 0 && (
-          <View className="overflow-hidden rounded-2xl border border-border bg-card">
+          <View className="overflow-hidden rounded-3xl bg-card">
             {otherDevices.map((device, index) => {
               const checked = ticked.has(device.id);
               return (

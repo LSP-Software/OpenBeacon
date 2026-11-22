@@ -1,10 +1,11 @@
 import { EyeIcon, EyeOffIcon } from "lucide-react-native";
 import { type RefObject, useState } from "react";
 import { type Control, Controller, type FieldPath, type FieldValues } from "react-hook-form";
-import { Pressable, TextInput, type TextInputProps, View } from "react-native";
+import { Platform, Pressable, TextInput, type TextInputProps, View } from "react-native";
 import { cn } from "../../lib/cn.ts";
 import { Field, FieldDescription, FieldError, FieldLabel } from "./Field.tsx";
 import { Icon } from "./Icon.tsx";
+import { Text } from "./Text.tsx";
 
 type FormInputProps<TFieldValues extends FieldValues, TName extends FieldPath<TFieldValues>> = Omit<
   TextInputProps,
@@ -34,6 +35,7 @@ function Input<TFieldValues extends FieldValues, TName extends FieldPath<TFieldV
   const [inputFocused, setInputFocused] = useState(false);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const isPasswordInput = secureTextEntry === true;
+  const outlined = Platform.OS !== "ios";
 
   return (
     <Controller
@@ -42,9 +44,13 @@ function Input<TFieldValues extends FieldValues, TName extends FieldPath<TFieldV
       render={({ field, fieldState }) => {
         return (
           <Field data-invalid={fieldState.invalid}>
-            {(label || description) && (
+            {((label && !outlined) || description) && (
               <View className={"flex flex-col"}>
-                {label && <FieldLabel className="text-sm font-semibold">{label}</FieldLabel>}
+                {label && !outlined && (
+                  <FieldLabel className="px-1 text-[13px] uppercase text-secondary">
+                    {label}
+                  </FieldLabel>
+                )}
                 {description && <FieldDescription>{description}</FieldDescription>}
               </View>
             )}
@@ -72,7 +78,9 @@ function Input<TFieldValues extends FieldValues, TName extends FieldPath<TFieldV
                   field.onBlur();
                 }}
                 className={cn(
-                  `h-[52px] rounded-lg border border-border-strong bg-input px-4 text-base text-foreground ${inputFocused && "border-primary"}`,
+                  outlined
+                    ? `h-14 rounded-[4px] border bg-input px-4 text-base text-foreground ${inputFocused ? "border-2 border-primary-text" : "border-border-strong"}`
+                    : "h-[50px] rounded-[12px] bg-card px-4 text-[17px] text-foreground",
                   isPasswordInput && "pr-12",
                   props.editable === false && "opacity-50",
                   "placeholder:text-tertiary",
@@ -81,6 +89,19 @@ function Input<TFieldValues extends FieldValues, TName extends FieldPath<TFieldV
                 {...props}
                 secureTextEntry={isPasswordInput ? !passwordVisible : secureTextEntry}
               />
+              {outlined && label ? (
+                <View pointerEvents="none" className="absolute -top-2 left-3 bg-background px-1">
+                  <Text
+                    className={cn(
+                      "text-xs",
+                      inputFocused ? "text-primary-text" : "text-secondary",
+                      fieldState.invalid && "text-destructive-text",
+                    )}
+                  >
+                    {label}
+                  </Text>
+                </View>
+              ) : null}
               {isPasswordInput && (
                 <Pressable
                   className="absolute right-4 top-0 bottom-0 justify-center"

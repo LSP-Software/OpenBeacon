@@ -5,13 +5,7 @@ import { Text, TextClassContext } from "./Text.tsx";
 function Card({ className, ...props }: ViewProps & React.RefAttributes<View>) {
   return (
     <TextClassContext.Provider value="text-card-foreground">
-      <View
-        className={cn(
-          "flex flex-col gap-4 rounded-2xl border border-border bg-card py-5",
-          className,
-        )}
-        {...props}
-      />
+      <View className={cn("flex flex-col gap-4 rounded-3xl bg-card py-5", className)} {...props} />
     </TextClassContext.Provider>
   );
 }

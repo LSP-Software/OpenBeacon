@@ -214,7 +214,7 @@ const MembersTab = ({
           </Button>
         )}
       </View>
-      <View className="overflow-hidden rounded-2xl border border-border bg-card">
+      <View className="overflow-hidden rounded-3xl bg-card">
         {memberStatuses.map((member, index) => (
           <Pressable
             key={member.id}
@@ -269,11 +269,7 @@ const MembersTab = ({
           </Pressable>
         ))}
       </View>
-      <BottomSheet
-        visible={selectedMember !== undefined}
-        onClose={() => setSelectedMemberId(null)}
-        closeLabel="Close member actions"
-      >
+      <BottomSheet visible={selectedMember !== undefined} onClose={() => setSelectedMemberId(null)}>
         {selectedMember ? (
           <>
             <View className="flex-row items-center gap-3">

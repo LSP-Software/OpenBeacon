@@ -585,7 +585,7 @@ export const NativeMap = ({
         </View>
       ) : map.showRecoverableError ? (
         <View
-          className="absolute left-3 right-16 gap-3 rounded-2xl border border-border bg-card p-4 shadow-md shadow-black/15"
+          className="absolute left-3 right-16 gap-3 rounded-3xl bg-card p-4 shadow-md shadow-black/15"
           style={{ top: insets.top + 56 }}
           accessibilityLiveRegion="polite"
         >

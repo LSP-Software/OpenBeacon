@@ -32,7 +32,7 @@ export const TimelinePlayerCard = ({
   miniScrubber: ReactNode;
 }) => (
   <View
-    className="absolute left-3 right-3 rounded-2xl border border-border bg-card shadow-md shadow-black/15"
+    className="absolute left-3 right-3 rounded-3xl bg-card shadow-md shadow-black/15"
     style={{ bottom }}
     {...card.panHandlers}
   >

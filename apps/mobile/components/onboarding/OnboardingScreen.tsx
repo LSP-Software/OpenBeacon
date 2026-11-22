@@ -167,7 +167,7 @@ export const OnboardingPoint = ({
   title: string;
   description: string;
 }) => (
-  <View className="flex-row gap-4 rounded-2xl border border-border bg-card p-4">
+  <View className="flex-row gap-4 rounded-3xl bg-card p-4">
     <View className="size-10 items-center justify-center rounded-full bg-primary-soft">
       <Icon as={icon} className="text-primary-text size-5" />
     </View>

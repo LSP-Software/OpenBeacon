@@ -327,11 +327,7 @@ export const LocationSharingCard = ({
           </Text>
         ) : null}
       </CardContent>
-      <BottomSheet
-        visible={open && !locked && !away}
-        onClose={() => setOpen(false)}
-        closeLabel="Cancel pause"
-      >
+      <BottomSheet visible={open && !locked && !away} onClose={() => setOpen(false)}>
         <View className="flex-row items-center justify-between gap-3">
           <Text accessibilityRole="header" className="flex-1 text-xl font-bold">
             Pause location sharing

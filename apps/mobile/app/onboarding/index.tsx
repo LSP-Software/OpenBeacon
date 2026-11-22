@@ -96,7 +96,7 @@ const WelcomeScreen = () => {
       description={`Let’s get this ${noun} ready to share with the people you choose. It takes about two minutes.`}
       primary={{ label: "Get started", onPress: start, loading: starting }}
     >
-      <View className="rounded-2xl border border-border bg-card px-4">
+      <View className="rounded-3xl bg-card px-4">
         {[`Name this ${noun}`, "Allow location and notifications", "Create recovery phrase"].map(
           (item, index, items) => (
             <View

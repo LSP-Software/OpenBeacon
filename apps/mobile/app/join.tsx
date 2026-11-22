@@ -271,7 +271,7 @@ const Join = () => {
               </>
             ) : (
               <>
-                <View className="gap-3 rounded-2xl border border-border bg-card p-4">
+                <View className="gap-3 rounded-3xl bg-card p-4">
                   <View className="flex-row items-center gap-3">
                     <View className="size-12 items-center justify-center rounded-lg bg-primary-soft">
                       <Icon as={QrCodeIcon} className="text-primary-text size-6" />

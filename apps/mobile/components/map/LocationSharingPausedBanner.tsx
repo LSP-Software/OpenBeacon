@@ -131,10 +131,7 @@ export const LocationSharingPausedBanner = ({
   if (!paused) return null;
 
   return (
-    <View
-      accessibilityLiveRegion="polite"
-      className="mb-2 gap-1 rounded-2xl border border-border bg-card px-3 py-2"
-    >
+    <View accessibilityLiveRegion="polite" className="mb-2 gap-1 rounded-3xl bg-card px-3 py-2">
       <View className="flex-row items-center gap-3">
         <Icon as={PauseIcon} size={16} className="text-foreground" />
         <Text className="flex-1 text-sm font-medium">Your location sharing is paused</Text>

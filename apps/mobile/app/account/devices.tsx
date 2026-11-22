@@ -154,7 +154,7 @@ const DevicesScreen = () => {
             Phones and tablets signed in to your account. Tap one to manage location sharing, rename
             it, change its icon or remove it.
           </Text>
-          <View className="overflow-hidden rounded-2xl border border-border bg-card">
+          <View className="overflow-hidden rounded-3xl bg-card">
             {devices.data.map((device, index) => {
               const lastActive = shortTimeSince(device.lastSeenAt);
               const position = positions.find(

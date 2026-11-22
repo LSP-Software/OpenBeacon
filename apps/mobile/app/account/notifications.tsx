@@ -140,7 +140,7 @@ const NotificationsScreen = () => {
                     Turning any of these off sends an email to your account’s address.
                   </Text>
                 )}
-                <View className="overflow-hidden rounded-2xl border border-border bg-card">
+                <View className="overflow-hidden rounded-3xl bg-card">
                   {showEmail && (
                     <View className="flex-row justify-end gap-4 px-4 pt-3">
                       {emailColumn && (

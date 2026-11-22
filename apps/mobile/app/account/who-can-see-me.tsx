@@ -130,7 +130,7 @@ const WhoCanSeeMeScreen = () => {
               No one. You’re not in a group with anyone else.
             </Text>
           ) : (
-            <View className="overflow-hidden rounded-2xl border border-border bg-card">
+            <View className="overflow-hidden rounded-3xl bg-card">
               {viewers.data.current.map((viewer, index) => (
                 <Person
                   key={viewer.userId}
@@ -170,7 +170,7 @@ const WhoCanSeeMeScreen = () => {
           {viewers.data.past.length === 0 ? (
             <Text className="text-tertiary text-base">No one.</Text>
           ) : (
-            <View className="overflow-hidden rounded-2xl border border-border bg-card">
+            <View className="overflow-hidden rounded-3xl bg-card">
               {viewers.data.past.map((viewer, index) => {
                 const stillSharing = viewers.data.current.find(
                   (person) => person.userId === viewer.userId,

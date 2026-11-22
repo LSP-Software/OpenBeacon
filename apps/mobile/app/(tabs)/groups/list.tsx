@@ -178,7 +178,7 @@ export const GroupList = ({
             </Button>
           </Link>
         </View>
-        <View className="flex-row items-center gap-3 rounded-2xl border border-border bg-card p-4">
+        <View className="flex-row items-center gap-3 rounded-3xl bg-card p-4">
           <Icon as={LockIcon} className="text-secondary size-5" />
           <Text className="text-secondary flex-1 text-sm">
             Your location is encrypted on this {thisDeviceNoun()} before it’s sent, and only your
@@ -190,7 +190,7 @@ export const GroupList = ({
   }
 
   return (
-    <View className="overflow-hidden rounded-2xl border border-border bg-card">
+    <View className="overflow-hidden rounded-3xl bg-card">
       {groupList.map((group, index) => (
         <Link
           href={`/groups/${group.id}`}

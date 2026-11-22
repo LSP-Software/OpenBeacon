@@ -1,5 +1,7 @@
-import { useRef, useState } from "react";
-import { PanResponder, View } from "react-native";
+import { Slider as ComposeSlider } from "@expo/ui/jetpack-compose";
+import { Slider as SwiftSlider } from "@expo/ui/swift-ui";
+import { accessibilityLabel, accessibilityValue, tint } from "@expo/ui/swift-ui/modifiers";
+import { Platform, View } from "react-native";
 import {
   formatPlaceDistance,
   formatPlaceSize,
@@ -8,8 +10,9 @@ import {
   PLACE_SIZE_STOPS,
   placeRadiusFromSlider,
   sliderFromPlaceRadius,
-  snapPlaceRadius,
 } from "../lib/places.ts";
+import { useColors } from "../lib/theme.ts";
+import { AndroidHost, IosHost } from "./ui/NativeHost.tsx";
 import { SegmentedControl } from "./ui/SegmentedControl.tsx";
 import { Text } from "./ui/Text.tsx";
 
@@ -20,31 +23,9 @@ export const PlaceSizeSlider = ({
   onChange: (radiusMeters: number) => void;
   radiusMeters: number;
 }) => {
-  const [trackWidth, setTrackWidth] = useState(0);
-  const trackWidthRef = useRef(0);
-  const startXRef = useRef(0);
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
-  const thumbSize = 28;
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderTerminationRequest: () => false,
-      onPanResponderGrant: (event) => {
-        startXRef.current = event.nativeEvent.locationX;
-        const width = trackWidthRef.current;
-        if (width > 0) onChangeRef.current(placeRadiusFromSlider(startXRef.current / width));
-      },
-      onPanResponderMove: (_event, gesture) => {
-        const width = trackWidthRef.current;
-        if (width > 0) {
-          onChangeRef.current(placeRadiusFromSlider((startXRef.current + gesture.dx) / width));
-        }
-      },
-    }),
-  ).current;
+  const { palette } = useColors();
+  const position = sliderFromPlaceRadius(radiusMeters);
+  const change = (value: number) => onChange(placeRadiusFromSlider(value));
 
   return (
     <View className="gap-3">
@@ -52,44 +33,35 @@ export const PlaceSizeSlider = ({
         <Text className="text-foreground font-semibold">Size</Text>
         <Text className="font-semibold text-primary-text">{formatPlaceSize(radiusMeters)}</Text>
       </View>
-      <View
-        {...panResponder.panHandlers}
-        accessible
-        accessibilityRole="adjustable"
-        accessibilityLabel="Size"
-        accessibilityValue={{
-          min: PLACE_RADIUS_MIN,
-          max: PLACE_RADIUS_MAX,
-          now: radiusMeters,
-          text: formatPlaceSize(radiusMeters),
-        }}
-        accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}
-        onAccessibilityAction={(event) => {
-          const step = event.nativeEvent.actionName === "increment" ? 25 : -25;
-          onChange(snapPlaceRadius(radiusMeters + step));
-        }}
-        onLayout={(event) => {
-          trackWidthRef.current = event.nativeEvent.layout.width;
-          setTrackWidth(event.nativeEvent.layout.width);
-        }}
-        className="h-10 justify-center"
-      >
-        <View className="h-1.5 rounded-full bg-secondary" pointerEvents="none">
-          <View
-            className="h-1.5 rounded-full bg-primary"
-            style={{ width: sliderFromPlaceRadius(radiusMeters) * trackWidth }}
+      {Platform.OS === "ios" ? (
+        <IosHost matchContents={{ vertical: true }} style={{ width: "100%" }}>
+          <SwiftSlider
+            value={position}
+            min={0}
+            max={1}
+            onValueChange={change}
+            modifiers={[
+              tint(palette.action),
+              accessibilityLabel("Size"),
+              accessibilityValue(formatPlaceSize(radiusMeters)),
+            ]}
           />
-        </View>
-        <View
-          pointerEvents="none"
-          className="absolute rounded-full border-4 border-card bg-primary shadow-sm shadow-black/20"
-          style={{
-            width: thumbSize,
-            height: thumbSize,
-            left: sliderFromPlaceRadius(radiusMeters) * trackWidth - thumbSize / 2,
-          }}
-        />
-      </View>
+        </IosHost>
+      ) : (
+        <AndroidHost matchContents={{ vertical: true }} style={{ width: "100%" }}>
+          <ComposeSlider
+            value={position}
+            min={0}
+            max={1}
+            onValueChange={change}
+            colors={{
+              thumbColor: palette["primary-text"],
+              activeTrackColor: palette["primary-text"],
+              inactiveTrackColor: palette.secondary,
+            }}
+          />
+        </AndroidHost>
+      )}
       <View className="flex-row justify-between">
         <Text className="text-xs text-tertiary">{formatPlaceDistance(PLACE_RADIUS_MIN)}</Text>
         <Text className="text-xs text-tertiary">{formatPlaceDistance(PLACE_RADIUS_MAX)}</Text>

@@ -100,7 +100,7 @@ const PlacesTab = ({
 
   if (places.isError && !places.data) {
     return (
-      <View className="gap-3 rounded-2xl border border-border bg-card p-5">
+      <View className="gap-3 rounded-3xl bg-card p-5">
         <Text className="text-foreground text-lg font-semibold">Couldn’t load places</Text>
         <Text className="text-tertiary">Check your connection and try again.</Text>
         <Button
@@ -151,7 +151,7 @@ const PlacesTab = ({
     ) : null;
 
   const arrivalsSwitchCard = (
-    <View className="flex-row items-center gap-4 rounded-2xl border border-border bg-card p-4">
+    <View className="flex-row items-center gap-4 rounded-3xl bg-card p-4">
       <View className="flex-1 gap-1">
         <Text className="text-foreground font-semibold">Share arrivals and departures</Text>
         <Text className="text-sm text-tertiary">
@@ -205,7 +205,7 @@ const PlacesTab = ({
     return (
       <View className="gap-4">
         {arrivalsOffNotice}
-        <View className="gap-4 rounded-2xl border border-border bg-card p-5">
+        <View className="gap-4 rounded-3xl bg-card p-5">
           <View className="size-12 items-center justify-center rounded-full bg-primary-soft">
             <Icon as={MapPinIcon} size={20} className="text-primary-text" />
           </View>
@@ -244,7 +244,7 @@ const PlacesTab = ({
           {canManage ? addPlaceButton("Add place", "rounded-full") : null}
         </View>
       </View>
-      <View className="overflow-hidden rounded-2xl border border-border bg-card">
+      <View className="overflow-hidden rounded-3xl bg-card">
         {places.data.map((place, index) => {
           if (!place.geometry) {
             return (

@@ -625,7 +625,7 @@ const TimelineView = ({
         style={{ top: insets.top + 8 }}
         onLayout={(event) => setTopHeight(event.nativeEvent.layout.height + insets.top + 8)}
       >
-        <View className="flex-row items-center gap-2 rounded-2xl border border-border bg-card px-2 py-2 shadow-md shadow-black/15">
+        <View className="flex-row items-center gap-2 rounded-3xl bg-card px-2 py-2 shadow-md shadow-black/15">
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Back"
@@ -656,7 +656,7 @@ const TimelineView = ({
           </Pressable>
         </View>
         {groupMenuOpen ? (
-          <View className="self-end rounded-2xl border border-border bg-card p-1 shadow-md shadow-black/15">
+          <View className="self-end rounded-3xl bg-card p-1 shadow-md shadow-black/15">
             {groups?.map((item) => (
               <Pressable
                 key={item.id}
