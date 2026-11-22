@@ -15,7 +15,7 @@ export const ScreenHeader = ({
   fallback?: Href;
 }) => {
   const navigation = useNavigation();
-  const backMissing = !hideBack && !navigation.canGoBack();
+  const backMissing = !hideBack && (navigation.getState()?.index ?? 0) === 0;
 
   return (
     <Stack.Screen
@@ -26,9 +26,7 @@ export const ScreenHeader = ({
         gestureEnabled: !hideBack,
         ...(backMissing
           ? { headerLeft: () => (fallback ? <BackButton fallback={fallback} /> : <BackButton />) }
-          : hideBack
-            ? { headerLeft: () => null }
-            : {}),
+          : {}),
         ...(subtitle
           ? {
               headerTitle: () => (

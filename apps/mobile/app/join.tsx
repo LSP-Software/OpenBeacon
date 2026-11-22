@@ -2,7 +2,7 @@ import { tryCatch } from "@openbeacon/shared";
 import { Alert } from "../lib/alert.ts";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Clipboard from "expo-clipboard";
-import { Link, router, useLocalSearchParams } from "expo-router";
+import { Link, router, useLocalSearchParams, Stack } from "expo-router";
 import { CheckIcon, ClipboardPasteIcon, QrCodeIcon, XIcon } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
 import { ScrollView, TextInput, View } from "react-native";
@@ -232,6 +232,7 @@ const Join = () => {
   if (session && invite) {
     return (
       <SafeAreaView className="flex-1 bg-background p-6">
+        <Stack.Screen options={{ headerShown: false }} />
         <InviteConfirmation
           key={JSON.stringify(invite)}
           invite={invite}

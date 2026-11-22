@@ -131,7 +131,7 @@ const GroupBody = ({ groupId, initialTab }: { groupId: string; initialTab: Group
         return;
       }
       if (!result.data.some((item) => item.id === groupId)) {
-        router.replace("/(tabs)/groups/list");
+        router.dismissTo("/(tabs)/groups/list");
       }
     })();
     return () => {

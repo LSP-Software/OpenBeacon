@@ -89,7 +89,7 @@ export const useMemberRemoval = (groupId: string) => {
                 }
                 if (isSelf) {
                   forgetHiddenMapGroup({ groupId, userId: member.userId });
-                  router.replace("/(tabs)/groups/list");
+                  router.dismissTo("/(tabs)/groups/list");
                 }
                 await queryClient.invalidateQueries({
                   queryKey: trpc.groupMembership.list.queryKey(),

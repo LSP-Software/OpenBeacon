@@ -72,11 +72,16 @@ const LocationHistoryScreen = () => {
         <ListSection
           title="Export your history"
           footer={
-            exporting
-              ? exporting.total > 0
-                ? `Decrypting your history… ${Math.round((exporting.done / exporting.total) * 100)}%. Stay on this screen until it’s done.`
-                : "Getting your history…"
-              : `Save a copy of your own location history from your groups. Your ${thisDeviceNoun()} decrypts it and makes the file, so the server never sees what’s inside. The file itself isn’t encrypted, so keep it somewhere safe. GPX opens in most map and fitness apps. JSON is for spreadsheets and your own tools, and also has accuracy, speed and battery.`
+            <Text
+              accessibilityLiveRegion="polite"
+              className="text-[13px] leading-[18px] text-secondary"
+            >
+              {exporting
+                ? exporting.total > 0
+                  ? `Decrypting your history… ${Math.round((exporting.done / exporting.total) * 100)}%. Stay on this screen until it’s done.`
+                  : "Getting your history…"
+                : `Save a copy of your own location history from your groups. Your ${thisDeviceNoun()} decrypts it and makes the file, so the server never sees what’s inside. The file itself isn’t encrypted, so keep it somewhere safe. GPX opens in most map and fitness apps. JSON is for spreadsheets and your own tools, and also has accuracy, speed and battery.`}
+            </Text>
           }
         >
           {(["gpx", "json"] as const).map((format) => (

@@ -15,7 +15,7 @@ const host =
   ({ children, ...props }: { children?: React.ReactNode }) =>
     React.createElement(type, props, children);
 
-mock.module("expo-router", () => ({ useRouter: () => ({ replace: () => {} }) }));
+mock.module("expo-router", () => ({ useRouter: () => ({ dismissTo: () => {} }) }));
 mock.module("@react-navigation/native", () => ({ useIsFocused: () => true }));
 mock.module("@tanstack/react-query", () => ({
   skipToken: Symbol("skipToken"),

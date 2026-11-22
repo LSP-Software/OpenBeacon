@@ -180,7 +180,7 @@ const SettingsTab = ({ groupId }: { groupId: string }) => {
                       return;
                     }
                     if (session) forgetHiddenMapGroup({ groupId, userId: session.user.id });
-                    router.replace("/(tabs)/groups/list");
+                    router.dismissTo("/(tabs)/groups/list");
                     await queryClient.invalidateQueries({
                       queryKey: trpc.groupMembership.list.queryKey(),
                     });

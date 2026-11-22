@@ -10,6 +10,7 @@ import {
   PLACE_SIZE_STOPS,
   placeRadiusFromSlider,
   sliderFromPlaceRadius,
+  snapPlaceRadius,
 } from "../lib/places.ts";
 import { useColors } from "../lib/theme.ts";
 import { AndroidHost, IosHost } from "./ui/NativeHost.tsx";
@@ -48,19 +49,36 @@ export const PlaceSizeSlider = ({
           />
         </IosHost>
       ) : (
-        <AndroidHost matchContents={{ vertical: true }} style={{ width: "100%" }}>
-          <ComposeSlider
-            value={position}
-            min={0}
-            max={1}
-            onValueChange={change}
-            colors={{
-              thumbColor: palette["primary-text"],
-              activeTrackColor: palette["primary-text"],
-              inactiveTrackColor: palette.secondary,
-            }}
-          />
-        </AndroidHost>
+        <View
+          accessible
+          accessibilityRole="adjustable"
+          accessibilityLabel="Size"
+          accessibilityValue={{
+            min: PLACE_RADIUS_MIN,
+            max: PLACE_RADIUS_MAX,
+            now: radiusMeters,
+            text: formatPlaceSize(radiusMeters),
+          }}
+          accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}
+          onAccessibilityAction={(event) => {
+            const step = event.nativeEvent.actionName === "increment" ? 25 : -25;
+            onChange(snapPlaceRadius(radiusMeters + step));
+          }}
+        >
+          <AndroidHost matchContents={{ vertical: true }} style={{ width: "100%" }}>
+            <ComposeSlider
+              value={position}
+              min={0}
+              max={1}
+              onValueChange={change}
+              colors={{
+                thumbColor: palette["primary-text"],
+                activeTrackColor: palette["primary-text"],
+                inactiveTrackColor: palette.secondary,
+              }}
+            />
+          </AndroidHost>
+        </View>
       )}
       <View className="flex-row justify-between">
         <Text className="text-xs text-tertiary">{formatPlaceDistance(PLACE_RADIUS_MIN)}</Text>

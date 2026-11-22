@@ -25,6 +25,8 @@ export const BottomSheet = ({
   const { palette } = useColors();
   const sheet = useRef<ModalBottomSheetRef>(null);
   const [mounted, setMounted] = useState(visible);
+  const latestVisible = useRef(visible);
+  latestVisible.current = visible;
 
   useEffect(() => {
     if (visible) {
@@ -35,7 +37,9 @@ export const BottomSheet = ({
       setMounted(false);
       return;
     }
-    void tryCatch(sheet.current.hide()).then(() => setMounted(false));
+    void tryCatch(sheet.current.hide()).then(() => {
+      if (!latestVisible.current) setMounted(false);
+    });
   }, [visible]);
 
   const content = (

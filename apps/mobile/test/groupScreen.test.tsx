@@ -22,7 +22,7 @@ let keyAccess: {
   };
   isError: boolean;
 }[] = [];
-const replace = mock(() => {});
+const dismissTo = mock(() => {});
 let fetchGroups: () => Promise<{ id: string }[]> = async () => groups;
 const fetchQuery = mock(() => fetchGroups());
 const invalidateQueries = mock(async () => {});
@@ -35,7 +35,7 @@ let historyResult: {
   isSuccess: boolean;
   isFetching: boolean;
 };
-const router = { replace };
+const router = { dismissTo };
 mock.module("@tanstack/react-query", () => ({
   skipToken: Symbol("skipToken"),
   useQuery: ({ select }: { select?: (data: unknown) => unknown }) => ({
@@ -175,7 +175,7 @@ beforeEach(() => {
   groups = [];
   fetchGroups = async () => groups;
   keyAccess = [];
-  replace.mockClear();
+  dismissTo.mockClear();
   fetchQuery.mockClear();
   queryResult = { data: [family([])], isPending: false };
 });
@@ -278,12 +278,12 @@ test("does not redirect from an unfocused group screen when the group leaves the
   await act(async () => {
     root.render(<GroupScreen />);
   });
-  expect(replace).not.toHaveBeenCalled();
+  expect(dismissTo).not.toHaveBeenCalled();
   isFocused = true;
   await act(async () => {
     root.render(<GroupScreen />);
   });
-  expect(replace).toHaveBeenCalledWith("/(tabs)/groups/list");
+  expect(dismissTo).toHaveBeenCalledWith("/(tabs)/groups/list");
   await act(async () => {
     root.unmount();
   });
@@ -299,7 +299,7 @@ test("returns to groups once a fresh list confirms the group is gone", async () 
     root.render(<GroupScreen />);
   });
   expect(fetchQuery).toHaveBeenCalled();
-  expect(replace).toHaveBeenCalledWith("/(tabs)/groups/list");
+  expect(dismissTo).toHaveBeenCalledWith("/(tabs)/groups/list");
   await act(async () => {
     root.unmount();
   });
@@ -313,7 +313,7 @@ test("stays when a fresh list still contains a group the cached list was missing
     root.render(<GroupScreen />);
   });
   expect(fetchQuery).toHaveBeenCalled();
-  expect(replace).not.toHaveBeenCalled();
+  expect(dismissTo).not.toHaveBeenCalled();
   await act(async () => {
     root.unmount();
   });
@@ -344,7 +344,7 @@ test("says the group couldn't be loaded when it can't be checked, for example of
     root.render(<GroupScreen />);
   });
   expect(JSON.stringify(root.container.toJSON())).toContain("We couldn’t load this group.");
-  expect(replace).not.toHaveBeenCalled();
+  expect(dismissTo).not.toHaveBeenCalled();
   await act(async () => {
     root.unmount();
   });
@@ -364,7 +364,7 @@ test("tries the check again from not found once the connection is back", async (
   if (!tryAgain) throw new Error("Try again button not found");
   await act(async () => (tryAgain.props as { onPress: () => void }).onPress());
   expect(fetchQuery).toHaveBeenCalledTimes(2);
-  expect(replace).toHaveBeenCalledWith("/(tabs)/groups/list");
+  expect(dismissTo).toHaveBeenCalledWith("/(tabs)/groups/list");
   await act(async () => {
     root.unmount();
   });

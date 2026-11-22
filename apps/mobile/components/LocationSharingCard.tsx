@@ -198,7 +198,8 @@ export const LocationSharingCard = ({
     );
   };
 
-  const sharingOn = !(device ? devicePaused : paused);
+  const sharingOn = !(device ? devicePaused || accountPaused : paused);
+  const blockedByAccountPause = !!device && accountPaused && !devicePaused;
   const status = accountPaused
     ? "Paused on all your devices"
     : paused
@@ -290,7 +291,7 @@ export const LocationSharingCard = ({
                 device && !device.isCurrent ? `Share from ${device.name}` : "Share my location"
               }
               value={sharingOn}
-              disabled={update.isPending}
+              disabled={update.isPending || blockedByAccountPause}
               onValueChange={(on) => {
                 if (on) {
                   void save(false, resumeAccount ? "account" : "device");

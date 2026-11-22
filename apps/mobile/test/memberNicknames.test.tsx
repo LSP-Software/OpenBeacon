@@ -32,7 +32,7 @@ mock.module("@tanstack/react-query", () => ({
         ? { data: memberDevices, isPending: false }
         : { data: options.select?.([group]), isPending: false },
 }));
-mock.module("expo-router", () => ({ useRouter: () => ({ replace: () => {} }) }));
+mock.module("expo-router", () => ({ useRouter: () => ({ dismissTo: () => {} }) }));
 mock.module("@react-navigation/native", () => ({ useIsFocused: () => true }));
 mock.module("lucide-react-native", () => ({
   CirclePauseIcon: () => null,
