@@ -20,7 +20,7 @@ const UnitsScreen = () => {
       >
         <ChoiceList
           title="Speed"
-          footer={`Used for how fast people are going on the map and in Timeline. This setting stays on this ${thisDeviceNoun()}.`}
+          footer={`Used for speeds on the map and in Timeline, and for distance travelled in Timeline. This setting stays on this ${thisDeviceNoun()}.`}
           accessibilityLabel="Speed units"
           options={[
             {

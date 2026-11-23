@@ -65,7 +65,7 @@ import { GROUP_COLOR_PALETTE, getGroupColor } from "../lib/groupColor.ts";
 import { loadPersonalNicknames } from "../lib/personalNicknames.ts";
 import { groupPlacesQueryOptions } from "../lib/placeSync.ts";
 import { getSymbolVisibility } from "../lib/protomaps-style.ts";
-import { timelineSpeedLabel } from "../lib/speed.ts";
+import { formatDistance, timelineSpeedLabel } from "../lib/speed.ts";
 import {
   pickPersonDevices,
   timelineDayStats,
@@ -1078,7 +1078,7 @@ const TimelineView = ({
                 <>
                   <View className="flex-row flex-wrap gap-2">
                     <StatCard
-                      value={formatDistance(selectedRoute.stats.distanceMeters)}
+                      value={formatDistance(selectedRoute.stats.distanceMeters, speedUnit)}
                       label="travelled"
                     />
                     <StatCard
@@ -1349,9 +1349,6 @@ const formatDate = (time: number) =>
     day: "numeric",
     month: "short",
   });
-
-const formatDistance = (meters: number) =>
-  meters < 1000 ? `${Math.round(meters)} m` : `${(meters / 1000).toFixed(1)} km`;
 
 const formatDuration = (ms: number) => {
   const minutes = Math.round(ms / 60_000);

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   defaultSpeedUnit,
+  formatDistance,
   formatSpeed,
   liveSpeedHidesAt,
   liveSpeedLabel,
@@ -8,6 +9,36 @@ import {
   parseSpeedPreference,
   timelineSpeedLabel,
 } from "./speed.ts";
+
+describe("formatDistance", () => {
+  test("uses metres and kilometres with km/h", () => {
+    expect(formatDistance(420.4, "kmh")).toBe("420 m");
+    expect(formatDistance(12_345, "kmh")).toBe("12.3 km");
+  });
+
+  test("switches to kilometres once the metres would round to 1000", () => {
+    expect(formatDistance(999.4, "kmh")).toBe("999 m");
+    expect(formatDistance(999.6, "kmh")).toBe("1.0 km");
+  });
+
+  test("switches to miles once the feet would round to a tenth of a mile", () => {
+    expect(formatDistance(160.78, "mph")).toBe("527 ft");
+    expect(formatDistance(160.9, "mph")).toBe("0.1 mi");
+  });
+
+  test("drops the decimal from 100 upwards", () => {
+    expect(formatDistance(99_940, "kmh")).toBe("99.9 km");
+    expect(formatDistance(99_960, "kmh")).toBe("100 km");
+    expect(formatDistance(1_234_567, "kmh")).toBe("1235 km");
+    expect(formatDistance(1_234_567, "mph")).toBe("767 mi");
+  });
+
+  test("uses feet and miles with mph", () => {
+    expect(formatDistance(100, "mph")).toBe("328 ft");
+    expect(formatDistance(1609.344, "mph")).toBe("1.0 mi");
+    expect(formatDistance(12_345, "mph")).toBe("7.7 mi");
+  });
+});
 
 describe("formatSpeed", () => {
   test("converts metres per second to whole mph and km/h", () => {

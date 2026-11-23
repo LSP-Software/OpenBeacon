@@ -57,6 +57,15 @@ export const formatSpeed = (metersPerSecond: number, unit: SpeedUnit) =>
     ? `${Math.round(metersPerSecond * 2.2369362920544)} mph`
     : `${Math.round(metersPerSecond * 3.6)} km/h`;
 
+export const formatDistance = (meters: number, unit: SpeedUnit) => {
+  const metres = Math.round(meters);
+  const feet = Math.round(meters * 3.28084);
+  if (unit === "kmh" && metres < 1000) return `${metres} m`;
+  if (unit === "mph" && feet < 528) return `${feet} ft`;
+  const value = unit === "kmh" ? meters / 1000 : meters / 1609.344;
+  return `${value < 99.95 ? value.toFixed(1) : Math.round(value)} ${unit === "kmh" ? "km" : "mi"}`;
+};
+
 export const movingSpeedLabel = (speed: number | null, unit: SpeedUnit) =>
   speed !== null && speed >= MOVING_SPEED_MPS && speed <= MAX_SHOWN_SPEED_MPS
     ? formatSpeed(speed, unit)
