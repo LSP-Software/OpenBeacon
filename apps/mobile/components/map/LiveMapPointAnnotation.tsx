@@ -5,41 +5,26 @@ import { useLocationStale } from "../../hooks/useLocationStale.ts";
 import { useSelfDeviceHeading } from "../../hooks/useSelfDeviceHeading.ts";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
 import type { LiveMapPinOffset } from "../../lib/liveMapPinGroups.ts";
+import type { LiveMapPinGlide } from "../../lib/liveMapPinGlide.ts";
 import { useTheme } from "../../providers/ThemeProvider.tsx";
 import { LiveMapMarkerPin } from "./LiveMapMarkerPin.tsx";
 import { LiveMapPinMotion } from "./LiveMapPinMotion.tsx";
 import { refreshViewAnnotation } from "./refreshViewAnnotation.ts";
+import { useLiveMapPinPosition } from "./useLiveMapPinPosition.ts";
 
-export const SelfLiveMapPointAnnotation = ({
-  arrival,
-  gatherTo,
-  marker,
-  onSelected,
-  speedLabel,
-}: {
-  arrival?: LiveMapPinOffset | undefined;
-  gatherTo?: LiveMapPinOffset | undefined;
-  marker: LiveMapMarker;
-  onSelected: () => void;
-  speedLabel: string | null;
-}) => {
+export const SelfLiveMapPointAnnotation = (
+  props: Omit<Parameters<typeof LiveMapPointAnnotation>[0], "headingDegrees">,
+) => {
   const headingDegrees = useSelfDeviceHeading(true);
 
-  return (
-    <LiveMapPointAnnotation
-      arrival={arrival}
-      gatherTo={gatherTo}
-      headingDegrees={headingDegrees}
-      marker={marker}
-      onSelected={onSelected}
-      speedLabel={speedLabel}
-    />
-  );
+  return <LiveMapPointAnnotation {...props} headingDegrees={headingDegrees} />;
 };
 
 export const LiveMapPointAnnotation = ({
   arrival,
   gatherTo,
+  getZoom,
+  glides,
   headingDegrees,
   marker,
   onSelected,
@@ -47,12 +32,20 @@ export const LiveMapPointAnnotation = ({
 }: {
   arrival?: LiveMapPinOffset | undefined;
   gatherTo?: LiveMapPinOffset | undefined;
+  getZoom: () => number;
+  glides: ReadonlyMap<string, LiveMapPinGlide>;
   headingDegrees: number | null;
   marker: LiveMapMarker;
   onSelected: () => void;
   speedLabel: string | null;
 }) => {
   const annotationRef = useRef<ViewAnnotationRef>(null);
+  const shown = useLiveMapPinPosition({
+    base: marker,
+    deviceIds: [marker.deviceId],
+    getZoom,
+    glides,
+  });
   const isStale = useLocationStale(marker.timestamp);
   const { appTheme } = useTheme();
   const shownHeadingDegrees =
@@ -94,7 +87,7 @@ export const LiveMapPointAnnotation = ({
     <ViewAnnotation
       ref={annotationRef}
       id={marker.deviceId}
-      lngLat={[marker.longitude, marker.latitude]}
+      lngLat={[shown.longitude, shown.latitude]}
       anchor="center"
       onPress={onSelected}
       {...(Platform.OS === "ios" ? { title: accessibilityLabel } : {})}

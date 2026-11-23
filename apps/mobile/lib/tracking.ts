@@ -92,6 +92,7 @@ let captureRefreshPending = false;
 let trackingPaused = false;
 let uploadRejectedKeys = false;
 let keyAccessChangePending = false;
+let lastAccountSyncAt = 0;
 const observedGroupEpochs = new Map<string, string>();
 const lastCleanBackfills = new Map<string, { at: number; missingVersion: number | null }>();
 
@@ -697,6 +698,7 @@ const takeAccountSync = (
   if (!round.accountDevice || !round.account || trackingPaused) return;
   round.accountSync = startAccountSync(trackingModule, round.accountDevice, round.account, signal);
   round.accountDevice = null;
+  lastAccountSyncAt = Date.now();
 };
 
 const placeUploadFields = (
@@ -723,9 +725,11 @@ const settlePlaceResponse = async (
   trackingModule: NonNullable<Awaited<ReturnType<typeof loadTrackingModule>>>,
   round: PlaceRound,
   response: {
+    keyState?: string;
     placeTransitions?: { accepted: string[]; duplicates: string[]; discarded: string[] };
   } & PlaceUpdates,
 ) => {
+  if (response.keyState && noteTrackingKeyState(response.keyState)) uploadRejectedKeys = true;
   if (response.placeTransitions) {
     const { accepted, duplicates, discarded } = response.placeTransitions;
     await trackingModule.deletePlaceTransitions([...accepted, ...duplicates, ...discarded]);
@@ -891,16 +895,13 @@ const uploadClaimedItems = async (
     duplicates,
     discarded = [],
     expired = [],
-    keyState,
   }: {
     accepted: string[];
     discarded?: string[];
     duplicates: string[];
     expired?: string[];
-    keyState?: string;
   } = uploadResult.data;
 
-  if (keyState && noteTrackingKeyState(keyState)) uploadRejectedKeys = true;
   await settlePlaceResponse(trackingModule, round, uploadResult.data);
 
   if (accepted.length > 0 && items[0]) {
@@ -1017,16 +1018,18 @@ const startPlaceRound = async (
     const group = transitions.get(transition.groupId) ?? [];
     if (group.length < 50) transitions.set(transition.groupId, [...group, transition]);
   }
+  const sinceAccountSync = Date.now() - lastAccountSyncAt;
+  const accountSyncDue = !trackingPaused && (sinceAccountSync < 0 || sinceAccountSync >= 50_000);
   return {
     account: startAccountRound(device.userId),
-    accountDevice: trackingPaused ? null : device,
+    accountDevice: accountSyncDue ? device : null,
     accountSync: null,
-    cursor: trackingPaused
-      ? null
-      : {
+    cursor: accountSyncDue
+      ? {
           placeAlerts: getPlaceAlertsCursor(device.userId),
           notices: getNoticesCursor(device.userId),
-        },
+        }
+      : null,
     deviceId: device.deviceId,
     retryAlone: new Map(),
     transitions,
@@ -1179,6 +1182,7 @@ const pollPlaceUpdates = ({ onlyWithoutKeys = false }: { onlyWithoutKeys?: boole
         ? null
         : (keyGroupId ?? readCursorGroup(getOwner(device.userId)));
     const accountSync = startAccountSync(trackingModule, device, account);
+    lastAccountSyncAt = Date.now();
     const upload = groupId
       ? tryCatch(
           trpcClient.groupTracking.uploadBatch.mutate(
@@ -1407,6 +1411,7 @@ export const deleteQueuedTrackingPoints = async ({
 export const resumeTracking = () => {
   trackingPaused = false;
   lastCleanBackfills.clear();
+  lastAccountSyncAt = 0;
 };
 
 export const getUnassignedTrackingPoints = async () => {

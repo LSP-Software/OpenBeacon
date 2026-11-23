@@ -114,6 +114,14 @@ enum TrackingRuntime {
     return try body()
   }
 
+  static func isLowPowerMode() -> Bool {
+    defaults.bool(forKey: "openbeacon_tracking_low_power_mode")
+  }
+
+  static func setLowPowerMode(_ enabled: Bool) {
+    defaults.set(enabled, forKey: "openbeacon_tracking_low_power_mode")
+  }
+
   static func nowMillis() -> Int64 {
     Int64(Date().timeIntervalSince1970 * 1000)
   }

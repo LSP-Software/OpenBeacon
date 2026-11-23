@@ -188,6 +188,7 @@ class TrackingCaptureService : Service() {
         .evaluate(
           battery = BatteryReader.read(this),
           speedMetersPerSecond = null,
+          accuracyMeters = null,
           distanceFromLastQueuedMeters = null,
           timeSinceLastQueuedMs = null,
         ).intervalMs
@@ -461,6 +462,7 @@ class TrackingCaptureService : Service() {
       } else {
         null
       }
+    val accuracy = location.accuracy.toDouble().takeIf { location.hasAccuracy() }
     val nowMs = System.currentTimeMillis()
     val (queued, intervalMs, captureRunning) =
       synchronized(captureStateLock) {
@@ -478,12 +480,14 @@ class TrackingCaptureService : Service() {
       CaptureSamplingPolicy.evaluate(
         battery = battery,
         speedMetersPerSecond = speed,
+        accuracyMeters = accuracy,
         distanceFromLastQueuedMeters =
           queued?.let {
             distanceMeters(it.latitude, it.longitude, location.latitude, location.longitude)
           },
         timeSinceLastQueuedMs = queued?.let { nowMs - it.atMs },
         forcedRefresh = refreshGeneration != null,
+        lowPowerMode = TrackingRuntime.isLowPowerMode(this),
       )
 
     val nextIntervalMs = decision.intervalMs.coerceAtLeast(MIN_INTERVAL_MS)
@@ -512,7 +516,7 @@ class TrackingCaptureService : Service() {
         batteryCharging = battery.charging,
         captureGeneration = generation,
         fixId = location.elapsedRealtimeNanos.takeIf { it > 0 },
-        accuracyMeters = location.accuracy.toDouble().takeIf { location.hasAccuracy() },
+        accuracyMeters = accuracy,
         live = decision.shouldQueue,
         onCurrentFixQueued = { currentFixQueued = true },
       )

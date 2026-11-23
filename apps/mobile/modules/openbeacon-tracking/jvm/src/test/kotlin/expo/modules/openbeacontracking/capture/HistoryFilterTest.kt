@@ -4,6 +4,7 @@ import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.sin
+import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -43,7 +44,7 @@ class HistoryFilterTest {
       val kept = run(HistoryFilter(), fixes).map { it.fix }
       assertTrue(kept.size < fixes.size, "$name kept every fix")
       for (fix in fixes.filter { it.timestampMillis <= kept.last().timestampMillis }) {
-        val tolerance = max(15.0, 1.5 * (fix.speedMetersPerSecond ?: 0.0))
+        val tolerance = max(8.0, 1.5 * (fix.speedMetersPerSecond ?: 0.0))
         val error = errorAgainst(kept, fix)
         assertTrue(error <= tolerance + 0.5, "$name: ${"%.1f".format(error)} m off at ${fix.timestampMillis - start} ms")
       }
@@ -251,6 +252,27 @@ class HistoryFilterTest {
     val records = run(after, walkOut)
     assertTrue(records.none { it.stayUntil != null })
     assertEquals(walkOut[0], records.first().fix)
+  }
+
+  @Test
+  fun aWalkingDetourOfElevenMetresShowsInTheKeptRoute() {
+    val fixes = track(0 until 30) { step -> Triple(step * 14.0, if (step == 5) 11.0 else if (step == 4 || step == 6) 5.5 else 0.0, 1.4) }
+    val kept = run(HistoryFilter(), fixes).map { it.fix }
+    val keptAtFifteen = run(HistoryFilter(HistoryFilterSettings(minToleranceMeters = 15.0)), fixes).map { it.fix }
+
+    assertTrue(fixes[6] in kept, "kept ${kept.map { it.timestampMillis - start }}")
+    assertTrue(errorAgainst(kept, fixes[5]) <= 8.0)
+    assertTrue(keptAtFifteen.none { it in fixes.slice(4..6) })
+    assertTrue(errorAgainst(keptAtFifteen, fixes[5]) > 10.0)
+  }
+
+  @Test
+  fun gpsNoiseOnAStraightWalkKeepsFewPoints() {
+    val random = Random(7)
+    val fixes = track(0 until 180) { step -> Triple(step * 14.0 + random.nextDouble(-4.0, 4.0), random.nextDouble(-4.0, 4.0), 1.4) }
+    val kept = run(HistoryFilter(), fixes)
+    assertTrue(kept.none { it.stayUntil != null })
+    assertTrue(kept.size <= 24, "kept ${kept.size} points in 30 minutes")
   }
 
   private fun run(

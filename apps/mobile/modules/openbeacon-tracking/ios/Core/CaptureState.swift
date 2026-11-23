@@ -110,7 +110,11 @@ enum CaptureSamplingPolicy {
   static let batterySaverMovingIntervalMs: Int64 = 20_000
   static let uploadIntervalMs: Int64 = 60_000
   static let batterySaverUploadIntervalMs: Int64 = 120_000
-  static let movingSpeedMps = 1.0
+  static let fastestUploadIntervalMs: Int64 = 10_000
+  static let maxDistanceBetweenUploadsMeters = 100.0
+  static let nearestFixSlackMs: Int64 = movingIntervalMs / 2
+  static let movingSpeedMps = 0.5
+  static let maxSpeedAccuracyMeters = 20.0
   static let stationaryDistanceMeters = 25.0
   static let maxStationarySkipMs: Int64 = 300_000
   static let lowBatteryLevel = 15
@@ -118,12 +122,20 @@ enum CaptureSamplingPolicy {
   static func evaluate(
     battery: BatterySnapshot,
     speedMetersPerSecond: Double?,
+    accuracyMeters: Double?,
     distanceFromLastQueuedMeters: Double?,
     timeSinceLastQueuedMs: Int64?,
-    forcedRefresh: Bool = false
+    forcedRefresh: Bool = false,
+    lowPowerMode: Bool = false
   ) -> (shouldQueue: Bool, intervalMs: Int64, forceUpload: Bool, uploadIntervalMs: Int64) {
     let batterySaver = battery.powerSaveMode || (battery.levelKnown && battery.level <= lowBatteryLevel && !battery.charging)
-    let moving = speedMetersPerSecond.map { $0 >= movingSpeedMps } ?? false
+    let trustedSpeed: Double? = (accuracyMeters.map { $0 <= maxSpeedAccuracyMeters } ?? false) ? speedMetersPerSecond : nil
+    let coveredMeters: Double? = distanceFromLastQueuedMeters.map { $0 - (accuracyMeters ?? 0) }
+    let moving: Bool = {
+      if let speed = trustedSpeed { return speed >= movingSpeedMps }
+      guard let covered = coveredMeters, let elapsed = timeSinceLastQueuedMs else { return false }
+      return covered >= stationaryDistanceMeters && covered >= movingSpeedMps * Double(elapsed) / 1_000
+    }()
     let intervalMs: Int64 =
       batterySaver
         ? (moving ? batterySaverMovingIntervalMs : batterySaverDefaultIntervalMs)
@@ -135,11 +147,19 @@ enum CaptureSamplingPolicy {
       return elapsed >= maxStationarySkipMs || moving || distance >= stationaryDistanceMeters
     }()
 
+    let nextUploadIntervalMs: Int64 = {
+      if batterySaver { return batterySaverUploadIntervalMs }
+      guard moving else { return uploadIntervalMs }
+      guard !lowPowerMode, let speed = trustedSpeed else { return uploadIntervalMs - nearestFixSlackMs }
+      let untilMaxDistanceMs = Int64(maxDistanceBetweenUploadsMeters / speed * 1_000)
+      return min(max(untilMaxDistanceMs, fastestUploadIntervalMs), uploadIntervalMs) - nearestFixSlackMs
+    }()
+
     return (
       shouldQueue: shouldQueue,
       intervalMs: intervalMs,
       forceUpload: forcedRefresh,
-      uploadIntervalMs: batterySaver ? batterySaverUploadIntervalMs : uploadIntervalMs
+      uploadIntervalMs: nextUploadIntervalMs
     )
   }
 }

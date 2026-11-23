@@ -1,7 +1,7 @@
 import Foundation
 
 struct HistoryFilterSettings {
-  var minToleranceMeters = 15.0
+  var minToleranceMeters = 8.0
   var toleranceSecondsOfSpeed = 1.5
   var maxGapMeters = 600.0
   var shortestMaxGapMs: Int64 = 30_000

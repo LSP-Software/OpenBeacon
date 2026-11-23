@@ -71,6 +71,7 @@ final class LocationCapture: NSObject, CLLocationManagerDelegate {
     let policyIntervalMs = CaptureSamplingPolicy.evaluate(
       battery: readBattery(),
       speedMetersPerSecond: nil,
+      accuracyMeters: nil,
       distanceFromLastQueuedMeters: nil,
       timeSinceLastQueuedMs: nil
     ).intervalMs
@@ -222,6 +223,7 @@ final class LocationCapture: NSObject, CLLocationManagerDelegate {
 
   private func enqueueEncryptedFix(_ location: CLLocation, fixMs: Int64, battery: BatterySnapshot, generation: Int64) {
     let speed: Double? = location.speed >= 0 ? location.speed : nil
+    let accuracy: Double? = location.horizontalAccuracy >= 0 ? location.horizontalAccuracy : nil
     let now = TrackingRuntime.nowMillis()
     let (queued, current) = TrackingRuntime.locked { (lastQueued, isCurrent(generation)) }
     guard current else { return }
@@ -232,11 +234,13 @@ final class LocationCapture: NSObject, CLLocationManagerDelegate {
     let decision = CaptureSamplingPolicy.evaluate(
       battery: battery,
       speedMetersPerSecond: speed,
+      accuracyMeters: accuracy,
       distanceFromLastQueuedMeters: queued.map {
         PlaceDwellDetector.distanceMeters($0.latitude, $0.longitude, location.coordinate.latitude, location.coordinate.longitude)
       },
       timeSinceLastQueuedMs: queued.map { now - $0.atMs },
-      forcedRefresh: refreshGeneration != nil
+      forcedRefresh: refreshGeneration != nil,
+      lowPowerMode: TrackingRuntime.isLowPowerMode()
     )
     TrackingRuntime.locked {
       currentIntervalMs = max(decision.intervalMs, Self.minIntervalMs)
@@ -246,7 +250,7 @@ final class LocationCapture: NSObject, CLLocationManagerDelegate {
       latitude: location.coordinate.latitude,
       longitude: location.coordinate.longitude,
       timestampMillis: fixMs,
-      accuracyMeters: location.horizontalAccuracy >= 0 ? location.horizontalAccuracy : nil,
+      accuracyMeters: accuracy,
       speedMetersPerSecond: speed,
       batteryLevel: battery.levelKnown ? battery.level : nil,
       batteryCharging: battery.charging

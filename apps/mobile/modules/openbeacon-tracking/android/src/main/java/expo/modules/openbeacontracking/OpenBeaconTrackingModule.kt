@@ -226,6 +226,14 @@ class OpenBeaconTrackingModule : Module() {
         TrackingRuntime.isCaptureRunning || TrackingRuntime.isCaptureParked(requireContext())
       }
 
+      Function("isLowPowerMode") {
+        TrackingRuntime.isLowPowerMode(requireContext())
+      }
+
+      Function("setLowPowerMode") { enabled: Boolean ->
+        TrackingRuntime.setLowPowerMode(requireContext(), enabled)
+      }
+
       Function("areNotificationsEnabled") {
         Notices.canShowSharing(requireContext())
       }

@@ -130,6 +130,8 @@ declare class OpenBeaconTrackingModule extends NativeModule<{
   refreshCapture(): Promise<void>;
   stopCapture(): Promise<void>;
   isCaptureRunning(): boolean;
+  isLowPowerMode(): boolean;
+  setLowPowerMode(enabled: boolean): void;
   countUnassignedCiphertexts(senderDeviceId: string): Promise<number>;
   assignUnassignedCiphertexts(senderDeviceId: string, owner: string): Promise<void>;
   listPendingCiphertexts(

@@ -51,6 +51,7 @@ import { LiveMapStackSheet } from "./LiveMapStackSheet.tsx";
 import { useLiveMapEdgeMarkers } from "./useLiveMapEdgeMarkers.ts";
 import { useLiveMapCamera } from "./useLiveMapCamera.ts";
 import { useLiveMapPinGroups } from "./useLiveMapPinGroups.ts";
+import { useLiveMapPinGlides } from "./useLiveMapPinGlides.ts";
 import { useNativeMapStyle } from "./useNativeMapStyle.ts";
 
 export const NativeMap = ({
@@ -110,6 +111,7 @@ export const NativeMap = ({
   });
   const pinMarkers = useMemo(() => mergeSamePersonDevices(markers), [markers]);
   const pins = useLiveMapPinGroups(pinMarkers);
+  const pinGlides = useLiveMapPinGlides(markers, reduceMotion || !isFocused);
   const edgeSubjects = useMemo(
     () =>
       pins.groups.map((group) => ({
@@ -235,6 +237,7 @@ export const NativeMap = ({
     markers,
     onClearSelection: closeSheets,
     onSelectDevice: selectDevice,
+    pinGlides,
     pmtilesUrl,
     reduceMotion,
     selectedMarker,
@@ -402,7 +405,8 @@ export const NativeMap = ({
   ) => {
     const annotationProps = {
       ...motion,
-      speedLabel: isSpeedChipPin(marker) ? selectedSpeedLabel : null,
+      getZoom: pins.getZoom,
+      glides: pinGlides,
       marker,
       onSelected: () => {
         pinPressAtRef.current = Date.now();
@@ -411,6 +415,7 @@ export const NativeMap = ({
         setGroupMenuOpen(false);
         selectDevice(marker.deviceId);
       },
+      speedLabel: isSpeedChipPin(marker) ? selectedSpeedLabel : null,
     };
     return marker.isSelf ? (
       <SelfLiveMapPointAnnotation key={marker.deviceId} {...annotationProps} />
@@ -598,6 +603,8 @@ export const NativeMap = ({
                 <LiveMapStackAnnotation
                   key={group.id}
                   arrival={pins.arrivals.get(group.id)}
+                  getZoom={pins.getZoom}
+                  glides={pinGlides}
                   group={group}
                   members={displayOrder(group.members)}
                   onPress={() => {
@@ -608,7 +615,12 @@ export const NativeMap = ({
             }),
           ]}
           {speedChipMarker && selectedSpeedLabel ? (
-            <LiveMapSpeedChipAnnotation label={selectedSpeedLabel} marker={speedChipMarker} />
+            <LiveMapSpeedChipAnnotation
+              getZoom={pins.getZoom}
+              glides={pinGlides}
+              label={selectedSpeedLabel}
+              marker={speedChipMarker}
+            />
           ) : null}
         </MapLibreMap>
         {edgeMarkers.map((chip) => (

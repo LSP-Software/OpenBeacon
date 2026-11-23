@@ -9,6 +9,11 @@ import {
   reduceLiveMapInitialFit,
 } from "../../lib/liveMapInitialFit.ts";
 import {
+  type LiveMapPinGlide,
+  liveMapPinPixelsBetween,
+  liveMapPinGlidePosition,
+} from "../../lib/liveMapPinGlide.ts";
+import {
   buildLiveMapTrackingCameraStop,
   shouldSuspendLiveMapFollowOnRegionChange,
 } from "../../lib/liveMapTrackingCamera.ts";
@@ -17,6 +22,7 @@ import {
   mapCameraAfterFittingMarkers,
   mapCameraFromRegionChange,
 } from "../../lib/mapPmtilesCameraState.ts";
+import { subscribeToLiveMapFrames } from "./liveMapFrameTicker.ts";
 import { useLiveMapCameraCommands } from "./useLiveMapCameraCommands.ts";
 import type { useLiveMapEdgeMarkers } from "./useLiveMapEdgeMarkers.ts";
 import type { useNativeMapStyle } from "./useNativeMapStyle.ts";
@@ -31,6 +37,7 @@ export const useLiveMapCamera = ({
   markers,
   onClearSelection,
   onSelectDevice,
+  pinGlides,
   pmtilesUrl,
   reduceMotion,
   selectedMarker,
@@ -41,13 +48,17 @@ export const useLiveMapCamera = ({
 }: {
   awaitingLiveSelfFix: boolean;
   bottomOverlayHeight: number;
-  edge: Pick<ReturnType<typeof useLiveMapEdgeMarkers>, "suppress" | "release" | "releaseAfter">;
+  edge: Pick<
+    ReturnType<typeof useLiveMapEdgeMarkers>,
+    "follow" | "release" | "releaseAfter" | "suppress"
+  >;
   locationsLoading: boolean;
   mapStyle: ReturnType<typeof useNativeMapStyle>["mapStyle"];
   mapRevision: number;
   markers: readonly LiveMapMarker[];
   onClearSelection: () => void;
   onSelectDevice: (deviceId: string) => void;
+  pinGlides: ReadonlyMap<string, LiveMapPinGlide>;
   pmtilesUrl: string | null;
   reduceMotion: boolean;
   selectedMarker: LiveMapMarker | null;
@@ -57,12 +68,19 @@ export const useLiveMapCamera = ({
   topOverlayBottom: number;
 }) => {
   const cameraRef = useRef<CameraRef>(null);
-  const { scheduleRelease, setCamera } = useLiveMapCameraCommands(cameraRef, reduceMotion);
+  const cameraAnimationEndsAtMsRef = useRef(0);
+  const { scheduleRelease, setCamera } = useLiveMapCameraCommands(
+    cameraRef,
+    cameraAnimationEndsAtMsRef,
+    reduceMotion,
+  );
   const scheduleCameraRelease = useEffectEvent(scheduleRelease);
   const moveCamera = useEffectEvent(setCamera);
+  const followOnEdge = useEffectEvent(edge.follow);
   const initialFitStateRef = useRef(createLiveMapInitialFitState());
   const initialFitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [initialFitRevision, setInitialFitRevision] = useState(0);
+  const [followRevision, setFollowRevision] = useState(0);
   const [styleLoadedRevision, setStyleLoadedRevision] = useState<number | null>(null);
   const isStyleLoaded = styleLoadedRevision === mapRevision;
   const preservedCameraRef = useRef(INITIAL_MAP_CAMERA);
@@ -74,6 +92,16 @@ export const useLiveMapCamera = ({
   const suppressUserCameraControlUntilMsRef = useRef(0);
   const markersRef = useRef(markers);
   markersRef.current = markers;
+  const pinGlidesRef = useRef(pinGlides);
+  pinGlidesRef.current = pinGlides;
+  const shownPosition = (
+    pin: { deviceId: string; latitude: number; longitude: number },
+    atMs: number,
+  ) => {
+    const glide = pinGlidesRef.current.get(pin.deviceId);
+    return glide ? liveMapPinGlidePosition(glide, atMs) : { ...pin, settled: true };
+  };
+  const readShownPosition = useEffectEvent(shownPosition);
   const selectedDeviceIdRef = useRef(selectedDeviceId);
   selectedDeviceIdRef.current = selectedDeviceId;
   const sheetOpenRef = useRef(sheetOpen);
@@ -174,6 +202,8 @@ export const useLiveMapCamera = ({
 
     if (selectedDeviceIdRef.current !== currentSelfMarker.deviceId) {
       onSelectDevice(currentSelfMarker.deviceId);
+    } else {
+      setFollowRevision((revision) => revision + 1);
     }
 
     const stop = buildLiveMapTrackingCameraStop({
@@ -195,6 +225,7 @@ export const useLiveMapCamera = ({
       return;
     }
 
+    edge.follow(currentSelfMarker.deviceId);
     trackedDeviceIdRef.current = currentSelfMarker.deviceId;
     trackedCoordinateRef.current = {
       latitude: currentSelfMarker.latitude,
@@ -254,10 +285,11 @@ export const useLiveMapCamera = ({
   };
 
   const goToDevice = (deviceId: string) => {
-    const marker = markersRef.current.find((item) => item.deviceId === deviceId);
-    if (!marker) return;
-    edge.suppress([deviceId]);
+    const pin = markersRef.current.find((item) => item.deviceId === deviceId);
+    if (!pin) return;
+    edge.follow(deviceId);
     if (selectedDeviceIdRef.current !== deviceId) onSelectDevice(deviceId);
+    else setFollowRevision((revision) => revision + 1);
     clearLiveMapInitialFitTimer(initialFitTimerRef);
     initialFitStateRef.current = reduceLiveMapInitialFit(initialFitStateRef.current, {
       type: "user_camera_control",
@@ -265,27 +297,30 @@ export const useLiveMapCamera = ({
     followSuspendedRef.current = false;
     const stop = buildLiveMapTrackingCameraStop({
       followSuspended: false,
-      latitude: marker.latitude,
-      longitude: marker.longitude,
+      latitude: pin.latitude,
+      longitude: pin.longitude,
       padding: { ...cameraPaddingRef.current, paddingBottom: 220 },
       previousLatitude: null,
       previousLongitude: null,
       previouslyTrackedDeviceId: null,
       selectedDeviceId: deviceId,
     });
-    if (!stop) {
-      edge.release();
-      return;
-    }
-    edge.releaseAfter(stop.animationDuration);
+    if (!stop) return;
+    const aim = shownPosition(pin, Date.now() + stop.animationDuration);
     trackedDeviceIdRef.current = deviceId;
-    trackedCoordinateRef.current = { latitude: marker.latitude, longitude: marker.longitude };
+    trackedCoordinateRef.current = { latitude: aim.latitude, longitude: aim.longitude };
     suppressUserCameraControlFor(suppressUserCameraControlUntilMsRef, stop.animationDuration);
-    setCamera(stop);
+    setCamera({ ...stop, centerCoordinate: [aim.longitude, aim.latitude] });
+    preservedCameraRef.current = mapCameraFromRegionChange({
+      latitude: aim.latitude,
+      longitude: aim.longitude,
+      zoomLevel: stop.zoomLevel ?? preservedCameraRef.current.zoomLevel,
+    });
   };
 
   const noteUserCameraControl = () => {
     edge.release();
+    edge.follow(null);
     clearLiveMapInitialFitTimer(initialFitTimerRef);
     initialFitStateRef.current = reduceLiveMapInitialFit(initialFitStateRef.current, {
       type: "user_camera_control",
@@ -378,6 +413,7 @@ export const useLiveMapCamera = ({
   ]);
 
   useEffect(() => {
+    void followRevision;
     if (!mapStyle || !cameraRef.current) return;
     if (
       selectedDeviceId === null ||
@@ -387,46 +423,90 @@ export const useLiveMapCamera = ({
       trackedDeviceIdRef.current = null;
       trackedCoordinateRef.current = null;
       followSuspendedRef.current = false;
+      followOnEdge(null);
       return;
     }
 
-    const stop = buildLiveMapTrackingCameraStop({
-      followSuspended: followSuspendedRef.current,
-      latitude: selectedLatitude,
-      longitude: selectedLongitude,
-      padding: cameraPadding,
-      previousLatitude: trackedCoordinateRef.current?.latitude ?? null,
-      previousLongitude: trackedCoordinateRef.current?.longitude ?? null,
-      previouslyTrackedDeviceId: trackedDeviceIdRef.current,
-      selectedDeviceId,
-    });
-
-    if (!stop) {
-      trackedDeviceIdRef.current = selectedDeviceId;
-      return;
-    }
-
-    if (trackedDeviceIdRef.current !== selectedDeviceId) {
-      clearLiveMapInitialFitTimer(initialFitTimerRef);
-      initialFitStateRef.current = reduceLiveMapInitialFit(initialFitStateRef.current, {
-        type: "user_camera_control",
-      }).state;
-    }
-
-    followSuspendedRef.current = false;
-    trackedDeviceIdRef.current = selectedDeviceId;
-    trackedCoordinateRef.current = {
+    const selected = {
+      deviceId: selectedDeviceId,
       latitude: selectedLatitude,
       longitude: selectedLongitude,
     };
-    suppressUserCameraControlFor(suppressUserCameraControlUntilMsRef, stop.animationDuration);
-    moveCamera(stop);
-    preservedCameraRef.current = mapCameraFromRegionChange({
-      latitude: selectedLatitude,
-      longitude: selectedLongitude,
-      zoomLevel: stop.zoomLevel ?? preservedCameraRef.current.zoomLevel,
+    const shown = readShownPosition(selected, Date.now());
+    const isNewFocus = trackedDeviceIdRef.current !== selectedDeviceId;
+    const animating = Date.now() < cameraAnimationEndsAtMsRef.current;
+    const stop =
+      isNewFocus || (shown.settled && !animating)
+        ? buildLiveMapTrackingCameraStop({
+            followSuspended: followSuspendedRef.current,
+            latitude: shown.latitude,
+            longitude: shown.longitude,
+            padding: cameraPadding,
+            previousLatitude: trackedCoordinateRef.current?.latitude ?? null,
+            previousLongitude: trackedCoordinateRef.current?.longitude ?? null,
+            previouslyTrackedDeviceId: trackedDeviceIdRef.current,
+            selectedDeviceId,
+          })
+        : null;
+
+    if (stop) {
+      if (isNewFocus) {
+        clearLiveMapInitialFitTimer(initialFitTimerRef);
+        initialFitStateRef.current = reduceLiveMapInitialFit(initialFitStateRef.current, {
+          type: "user_camera_control",
+        }).state;
+      }
+
+      const aim = readShownPosition(selected, Date.now() + stop.animationDuration);
+      followSuspendedRef.current = false;
+      trackedCoordinateRef.current = { latitude: aim.latitude, longitude: aim.longitude };
+      suppressUserCameraControlFor(suppressUserCameraControlUntilMsRef, stop.animationDuration);
+      moveCamera({ ...stop, centerCoordinate: [aim.longitude, aim.latitude] });
+      preservedCameraRef.current = mapCameraFromRegionChange({
+        latitude: aim.latitude,
+        longitude: aim.longitude,
+        zoomLevel: stop.zoomLevel ?? preservedCameraRef.current.zoomLevel,
+      });
+    }
+    trackedDeviceIdRef.current = selectedDeviceId;
+    followOnEdge(followSuspendedRef.current ? null : selectedDeviceId);
+    if (shown.settled && !animating) return;
+
+    const unsubscribe = subscribeToLiveMapFrames((nowMs) => {
+      if (followSuspendedRef.current || trackedDeviceIdRef.current !== selectedDeviceId) {
+        unsubscribe();
+        return;
+      }
+      if (nowMs < cameraAnimationEndsAtMsRef.current) return;
+      const next = readShownPosition(selected, nowMs);
+      const tracked = trackedCoordinateRef.current;
+      if (
+        !tracked ||
+        liveMapPinPixelsBetween(tracked, next, preservedCameraRef.current.zoomLevel) >= 1
+      ) {
+        trackedCoordinateRef.current = { latitude: next.latitude, longitude: next.longitude };
+        moveCamera({
+          animationDuration: 0,
+          centerCoordinate: [next.longitude, next.latitude],
+          padding: cameraPadding,
+        });
+        preservedCameraRef.current = mapCameraFromRegionChange({
+          latitude: next.latitude,
+          longitude: next.longitude,
+          zoomLevel: preservedCameraRef.current.zoomLevel,
+        });
+      }
+      if (next.settled) unsubscribe();
     });
-  }, [cameraPadding, mapStyle, selectedLatitude, selectedLongitude, selectedDeviceId]);
+    return unsubscribe;
+  }, [
+    cameraPadding,
+    followRevision,
+    mapStyle,
+    selectedLatitude,
+    selectedLongitude,
+    selectedDeviceId,
+  ]);
   const onRegionDidChange = (feature: {
     geometry: { coordinates: number[] };
     properties: { animated: boolean; isUserInteraction: boolean; zoomLevel: number };
@@ -472,6 +552,7 @@ export const useLiveMapCamera = ({
         ...stop,
         animationDuration: 0,
       });
+      edge.follow(selectedDeviceId);
       trackedDeviceIdRef.current = selectedDeviceId;
       trackedCoordinateRef.current = {
         latitude: selectedLatitude,

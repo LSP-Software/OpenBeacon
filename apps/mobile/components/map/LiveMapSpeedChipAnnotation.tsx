@@ -2,18 +2,30 @@ import { ViewAnnotation, type ViewAnnotationRef } from "@maplibre/maplibre-react
 import { useEffect, useRef } from "react";
 import { View } from "react-native";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
+import type { LiveMapPinGlide } from "../../lib/liveMapPinGlide.ts";
 import { useTheme } from "../../providers/ThemeProvider.tsx";
 import { Text } from "../ui/Text.tsx";
 import { refreshViewAnnotation } from "./refreshViewAnnotation.ts";
+import { useLiveMapPinPosition } from "./useLiveMapPinPosition.ts";
 
 export const LiveMapSpeedChipAnnotation = ({
+  getZoom,
+  glides,
   label,
   marker,
 }: {
+  getZoom: () => number;
+  glides: ReadonlyMap<string, LiveMapPinGlide>;
   label: string;
   marker: LiveMapMarker;
 }) => {
   const annotationRef = useRef<ViewAnnotationRef>(null);
+  const shown = useLiveMapPinPosition({
+    base: marker,
+    deviceIds: [marker.deviceId],
+    getZoom,
+    glides,
+  });
   const { appTheme } = useTheme();
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: Android draws ViewAnnotation children into a bitmap that needs an explicit refresh when the label changes
@@ -26,7 +38,7 @@ export const LiveMapSpeedChipAnnotation = ({
       key={appTheme}
       ref={annotationRef}
       id={`speed:${marker.deviceId}`}
-      lngLat={[marker.longitude, marker.latitude]}
+      lngLat={[shown.longitude, shown.latitude]}
       anchor="top"
       offset={[0, 24]}
     >

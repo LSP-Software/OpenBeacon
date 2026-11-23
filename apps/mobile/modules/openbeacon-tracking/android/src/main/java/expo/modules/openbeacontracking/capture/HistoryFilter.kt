@@ -4,7 +4,7 @@ import kotlin.math.max
 import kotlin.math.min
 
 data class HistoryFilterSettings(
-  val minToleranceMeters: Double = 15.0,
+  val minToleranceMeters: Double = 8.0,
   val toleranceSecondsOfSpeed: Double = 1.5,
   val maxGapMeters: Double = 600.0,
   val shortestMaxGapMs: Long = 30_000L,
