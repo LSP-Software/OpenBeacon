@@ -2076,7 +2076,7 @@ describe("NativeMap over a fake MapLibre", () => {
     await flushEffects();
 
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 700));
+      await new Promise((resolve) => setTimeout(resolve, 1300));
     });
 
     expect(getNativeMapCameraCommands().at(-1)).toEqual({
@@ -2276,7 +2276,7 @@ describe("NativeMap over a fake MapLibre", () => {
         {
           type: "setCamera",
           stop: {
-            animationDuration: 500,
+            animationDuration: 1200,
             animationMode: "flyTo",
             centerCoordinate: [-0.1278, 51.5074],
             padding: {

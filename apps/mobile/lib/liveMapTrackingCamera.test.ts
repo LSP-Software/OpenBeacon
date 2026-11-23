@@ -25,7 +25,7 @@ describe("buildLiveMapTrackingCameraStop", () => {
         selectedDeviceId: "alice",
       }),
     ).toEqual({
-      animationDuration: 500,
+      animationDuration: 1200,
       animationMode: "flyTo",
       centerCoordinate: [-0.12, 51.5],
       padding,
@@ -66,7 +66,7 @@ describe("buildLiveMapTrackingCameraStop", () => {
         selectedDeviceId: "bob",
       }),
     ).toEqual({
-      animationDuration: 500,
+      animationDuration: 1200,
       animationMode: "flyTo",
       centerCoordinate: [-0.12, 51.5],
       padding,
@@ -115,7 +115,7 @@ describe("buildLiveMapTrackingCameraStop", () => {
         selectedDeviceId: "bob",
       }),
     ).toEqual({
-      animationDuration: 500,
+      animationDuration: 1200,
       animationMode: "flyTo",
       centerCoordinate: [-0.12, 51.5],
       padding,
