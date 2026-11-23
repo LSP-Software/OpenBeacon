@@ -12,6 +12,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AccessibilityInfo, ActivityIndicator, BackHandler, Platform, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useLiveSpeedLabel } from "../../hooks/useLiveSpeedLabel.ts";
 import { useReducedMotion } from "../../hooks/useReducedMotion.ts";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
 import {
@@ -40,6 +41,7 @@ import { LiveMapGroupMenu, LiveMapHiddenGroupsNotice } from "./LiveMapGroupVisib
 import { LiveMapMissingPersonSheet } from "./LiveMapMissingPersonSheet.tsx";
 import { LiveMapPeopleTray } from "./LiveMapPeopleTray.tsx";
 import { LiveMapPointAnnotation, SelfLiveMapPointAnnotation } from "./LiveMapPointAnnotation.tsx";
+import { LiveMapSpeedChipAnnotation } from "./LiveMapSpeedChipAnnotation.tsx";
 import { LiveMapPersonSheet } from "./LiveMapPersonSheet.tsx";
 import { LiveMapPlaceSheet } from "./LiveMapPlaceSheet.tsx";
 import { PlaceAnnotation } from "./PlaceAnnotation.tsx";
@@ -100,6 +102,10 @@ export const NativeMap = ({
   const map = useNativeMapStyle();
   const { mapStyle, pmtilesUrl, showSymbols } = map;
   const selectedMarker = markers.find((marker) => marker.deviceId === selectedDeviceId) ?? null;
+  const selectedSpeedLabel = useLiveSpeedLabel({
+    speed: selectedMarker?.speed ?? null,
+    timestamp: selectedMarker?.timestamp ?? null,
+  });
   const pinMarkers = useMemo(() => mergeSamePersonDevices(markers), [markers]);
   const pins = useLiveMapPinGroups(pinMarkers);
   const edgeSubjects = useMemo(
@@ -357,12 +363,27 @@ export const NativeMap = ({
     fitEdgeGroup(deviceIds);
   };
 
+  const isSpeedChipPin = (marker: LiveMapMarker) =>
+    marker.deviceId === selectedDeviceId &&
+    !(marker.mergedDeviceIds && marker.mergedDeviceIds.length > 1);
+  const speedChipMarker =
+    selectedSpeedLabel === null
+      ? null
+      : (pins.groups.find(
+          (group) =>
+            !edgeGroupIds.has(group.id) &&
+            group.members.length === 1 &&
+            group.members[0] !== undefined &&
+            isSpeedChipPin(group.members[0]),
+        )?.members[0] ?? null);
+
   const renderPerson = (
     marker: LiveMapMarker,
     motion: { arrival?: LiveMapPinOffset | undefined; gatherTo?: LiveMapPinOffset | undefined },
   ) => {
     const annotationProps = {
       ...motion,
+      speedLabel: isSpeedChipPin(marker) ? selectedSpeedLabel : null,
       marker,
       onSelected: () => {
         pinPressAtRef.current = Date.now();
@@ -567,6 +588,9 @@ export const NativeMap = ({
               );
             }),
           ]}
+          {speedChipMarker && selectedSpeedLabel ? (
+            <LiveMapSpeedChipAnnotation label={selectedSpeedLabel} marker={speedChipMarker} />
+          ) : null}
         </MapLibreMap>
         {edgeMarkers.map((chip) => (
           <LiveMapEdgeChip

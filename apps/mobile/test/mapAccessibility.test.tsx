@@ -139,25 +139,29 @@ const marker = (overrides: Partial<LiveMapMarker>): LiveMapMarker => ({
 });
 
 test.each([
-  [{}, "Alice"],
-  [{ deviceName: "Work phone" }, "Alice, Work phone"],
+  [{}, null, "Alice"],
+  [{ deviceName: "Work phone" }, null, "Alice, Work phone"],
   [
     { deviceName: "Work phone", mergedDeviceIds: ["device-1", "device-2"] },
+    null,
     "Alice, 2 devices here",
   ],
-  [{ timestamp: "2026-11-11T12:00:00.000Z" }, "Alice, Location is over 10 minutes old"],
+  [{ timestamp: "2026-11-11T12:00:00.000Z" }, null, "Alice, Location is over 10 minutes old"],
   [
     { deviceName: "Work phone", unreadableGroup: { id: "group-1", name: "Family" } },
+    null,
     "Alice, Work phone, Newer location can’t be read",
   ],
-] satisfies [Partial<LiveMapMarker>, string][])(
-  "map pin %p is announced on iOS as %p",
-  async (overrides, label) => {
+  [{}, "30 mph", "Alice, Moving at 30 mph"],
+] satisfies [Partial<LiveMapMarker>, string | null, string][])(
+  "map pin %p with speed %p is announced on iOS as %p",
+  async (overrides, speedLabel, label) => {
     const [pin] = await elements(
       <LiveMapPointAnnotation
         headingDegrees={null}
         marker={marker(overrides)}
         onSelected={() => {}}
+        speedLabel={speedLabel}
       />,
       "accessible-view",
     );
@@ -170,7 +174,12 @@ test("an Android map pin, drawn into the map as a picture, hides its views from 
   root = createRoot();
   await act(async () =>
     root?.render(
-      <LiveMapPointAnnotation headingDegrees={null} marker={marker({})} onSelected={() => {}} />,
+      <LiveMapPointAnnotation
+        headingDegrees={null}
+        marker={marker({})}
+        onSelected={() => {}}
+        speedLabel={null}
+      />,
     ),
   );
   expect(root.container.queryAll((item) => item.type === "accessible-view")).toEqual([]);

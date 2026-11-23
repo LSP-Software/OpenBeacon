@@ -266,6 +266,10 @@ mock.module("../../hooks/useSelfDeviceHeading.ts", () => ({
   useSelfDeviceHeading: () => getNativeMapSelfHeadingDegrees(),
 }));
 
+mock.module("../../hooks/useSpeedUnit.ts", () => ({
+  useSpeedUnit: () => ({ unit: "mph" }),
+}));
+
 mock.module("../../lib/api.ts", () => ({
   queryClient: {
     setQueryData,
@@ -406,6 +410,11 @@ mock.module("./LiveMapMarkerPin.tsx", () => ({
 
     return React.createElement("live-map-marker-pin");
   },
+}));
+
+mock.module("./LiveMapSpeedChipAnnotation.tsx", () => ({
+  LiveMapSpeedChipAnnotation: ({ label, marker }: { label: string; marker: { name: string } }) =>
+    React.createElement("speed-chip", { label, name: marker.name }),
 }));
 
 const { NativeMap }: typeof import("./NativeMap.tsx") = await import("./NativeMap.tsx");
@@ -642,6 +651,68 @@ describe("NativeMap over a fake MapLibre", () => {
       });
       root = null;
     }
+  });
+
+  describe("speed chip under the selected pin", () => {
+    const renderAtStreetZoom = async (props: React.ComponentProps<typeof NativeMap>) => {
+      await renderNativeMap(props);
+      await act(async () => {
+        emitNativeMapRegionDidChange({ latitude: 51.5, longitude: -0.12, zoomLevel: 14 });
+        await new Promise((resolve) => setTimeout(resolve, 60));
+      });
+    };
+    const speedChips = () =>
+      (root?.container.queryAll((instance) => instance.type === "speed-chip") ?? []).map((chip) => [
+        chip.props["name"],
+        chip.props["label"],
+      ]);
+    const alice = createLiveMapMarkerFixture({ name: "Alice", speed: 13.4, userId: "alice" });
+    const bob = createLiveMapMarkerFixture({
+      latitude: 50.8,
+      longitude: -1.1,
+      name: "Bob",
+      speed: 13.4,
+      userId: "bob",
+    });
+
+    beforeEach(() => {
+      setSystemTime(new Date("2026-07-19T10:01:00.000Z"));
+    });
+
+    test("shows only on the selected moving person's pin", async () => {
+      await renderAtStreetZoom({ markers: [alice, bob], selectedDeviceId: "alice" });
+      expect(speedChips()).toEqual([["Alice", "30 mph"]]);
+    });
+
+    test("shows nowhere when no one is selected", async () => {
+      await renderAtStreetZoom({ markers: [alice, bob] });
+      expect(speedChips()).toEqual([]);
+    });
+
+    test("hides once the fix is over 3 minutes old", async () => {
+      setSystemTime(new Date("2026-07-19T10:03:01.000Z"));
+      await renderAtStreetZoom({ markers: [alice, bob], selectedDeviceId: "alice" });
+      expect(speedChips()).toEqual([]);
+    });
+
+    test("hides on a pin merging two of the person's devices", async () => {
+      const phone = createLiveMapMarkerFixture({
+        deviceId: "alice-phone",
+        name: "Alice",
+        speed: 13.4,
+        timestamp: "2026-07-19T10:00:30.000Z",
+        userId: "alice",
+      });
+      const watch = createLiveMapMarkerFixture({
+        deviceId: "alice-watch",
+        latitude: 51.5001,
+        name: "Alice",
+        speed: 13.4,
+        userId: "alice",
+      });
+      await renderAtStreetZoom({ markers: [phone, watch], selectedDeviceId: "alice-phone" });
+      expect(speedChips()).toEqual([]);
+    });
   });
 
   test.each(["ios", "android"] as const)(
