@@ -15,11 +15,13 @@ export const SelfLiveMapPointAnnotation = ({
   gatherTo,
   marker,
   onSelected,
+  speedLabel,
 }: {
   arrival?: LiveMapPinOffset | undefined;
   gatherTo?: LiveMapPinOffset | undefined;
   marker: LiveMapMarker;
   onSelected: () => void;
+  speedLabel: string | null;
 }) => {
   const headingDegrees = useSelfDeviceHeading(true);
 
@@ -30,6 +32,7 @@ export const SelfLiveMapPointAnnotation = ({
       headingDegrees={headingDegrees}
       marker={marker}
       onSelected={onSelected}
+      speedLabel={speedLabel}
     />
   );
 };
@@ -40,12 +43,14 @@ export const LiveMapPointAnnotation = ({
   headingDegrees,
   marker,
   onSelected,
+  speedLabel,
 }: {
   arrival?: LiveMapPinOffset | undefined;
   gatherTo?: LiveMapPinOffset | undefined;
   headingDegrees: number | null;
   marker: LiveMapMarker;
   onSelected: () => void;
+  speedLabel: string | null;
 }) => {
   const annotationRef = useRef<ViewAnnotationRef>(null);
   const isStale = useLocationStale(marker.timestamp);
@@ -66,6 +71,7 @@ export const LiveMapPointAnnotation = ({
       : isStale
         ? ["Location is over 10 minutes old"]
         : []),
+    ...(speedLabel ? [`Moving at ${speedLabel}`] : []),
   ].join(", ");
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: Android draws ViewAnnotation children into a bitmap that needs an explicit refresh when the pin's look changes
