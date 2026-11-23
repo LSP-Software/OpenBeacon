@@ -3718,4 +3718,168 @@ describe("NativeMap over a fake MapLibre", () => {
       });
     });
   });
+
+  describe("Android back button", () => {
+    const people: MapPeople = {
+      cantLocate: [],
+      cantRead: [],
+      finding: [],
+      hidden: [],
+      outOfDate: [],
+      paused: [
+        {
+          groupNames: ["Family"],
+          image: null,
+          initials: "TO",
+          isSelf: false,
+          name: "Tom",
+          sharingPaused: true,
+          timelineGroupId: "family",
+          userId: "tom",
+        },
+      ],
+      upToDate: [],
+      waiting: [],
+      waitingForLocation: [],
+    };
+    const findAll = (type: string) =>
+      root?.container.queryAll((instance) => instance.type === type) ?? [];
+    const pressBack = async () => {
+      const listeners = [...backPressListeners].reverse();
+      let handled = false;
+      await act(async () => {
+        handled = listeners.some((listener) => listener());
+      });
+      return handled;
+    };
+
+    test("leaves back to the system when nothing is open", async () => {
+      await renderNativeMap({ markers: [createLiveMapMarkerFixture({ userId: "alice" })] });
+      expect(await pressBack()).toBe(false);
+    });
+
+    test("closes a person's card like a swipe, clearing the selection and speed chip", async () => {
+      setSystemTime(new Date("2026-07-19T10:01:00.000Z"));
+      const selections: Array<string | null> = [];
+      await renderSelectableNativeMap(
+        [createLiveMapMarkerFixture({ name: "Alice", speed: 13.4, userId: "alice" })],
+        selections,
+      );
+      await act(async () => {
+        emitNativeMapRegionDidChange({ latitude: 51.5, longitude: -0.12, zoomLevel: 14 });
+        await new Promise((resolve) => setTimeout(resolve, 60));
+      });
+      await act(async () => emitNativeMapIosAnnotationTap("alice"));
+      expect(findAll("live-map-person-sheet")).toHaveLength(1);
+      expect(findAll("speed-chip")).toHaveLength(1);
+
+      expect(await pressBack()).toBe(true);
+      expect(selections).toEqual(["alice", null]);
+      expect(findAll("live-map-person-sheet")).toHaveLength(0);
+      expect(findAll("speed-chip")).toHaveLength(0);
+      expect(await pressBack()).toBe(false);
+      setSystemTime();
+    });
+
+    test("closes a place's card", async () => {
+      const home = {
+        canManage: false,
+        emoji: "🏠",
+        groupId: "family",
+        groupName: "Family",
+        id: "home",
+        latitude: 51.5,
+        longitude: -0.12,
+        memberUserIds: [],
+        name: "Home",
+        radiusMeters: 250,
+      };
+      await renderNativeMap({ places: [home] });
+      await renderNativeMap({ focusPlaceId: "home", places: [home] });
+      await flushEffects();
+      expect(findAll("live-map-place-sheet")).toHaveLength(1);
+
+      expect(await pressBack()).toBe(true);
+      expect(findAll("live-map-place-sheet")).toHaveLength(0);
+      expect(await pressBack()).toBe(false);
+    });
+
+    test("closes a stack's list", async () => {
+      testPlatform.OS = "android";
+      await renderSelectableNativeMap(
+        [
+          createLiveMapMarkerFixture({ userId: "alice", name: "Alice" }),
+          createLiveMapMarkerFixture({ userId: "bob", name: "Bob" }),
+        ],
+        [],
+      );
+      const [stackId] = getNativeMapMountedAnnotationIds();
+      await act(async () => emitNativeMapAndroidMarkerTap(stackId ?? ""));
+      expect(findAll("live-map-stack-sheet")).toHaveLength(1);
+
+      expect(await pressBack()).toBe(true);
+      expect(findAll("live-map-stack-sheet")).toHaveLength(0);
+      expect(await pressBack()).toBe(false);
+    });
+
+    test("closes one layer per press: missing person's card, then the People card", async () => {
+      const trayChanges: boolean[] = [];
+      await renderNativeMap({
+        onPeopleTrayOpenChange: (open) => {
+          trayChanges.push(open);
+        },
+        people,
+        peopleTrayOpen: true,
+      });
+      await act(async () =>
+        (
+          findAll("live-map-people-tray")[0]?.props["onSelectPerson"] as
+            ((userId: string) => void) | undefined
+        )?.("tom"),
+      );
+      expect(findAll("live-map-missing-person-sheet")).toHaveLength(1);
+
+      expect(await pressBack()).toBe(true);
+      expect(findAll("live-map-missing-person-sheet")).toHaveLength(0);
+      expect(findAll("live-map-people-tray")).toHaveLength(1);
+      expect(trayChanges).toEqual([]);
+
+      expect(await pressBack()).toBe(true);
+      expect(trayChanges).toEqual([false]);
+    });
+
+    test("closes the groups menu before the People card under it", async () => {
+      const trayChanges: boolean[] = [];
+      await renderNativeMap({
+        groupOptions: [
+          { color: "#FF1464", hidden: false, id: "family", memberCount: 3, name: "Family" },
+          { color: "#2A9D8F", hidden: false, id: "club", memberCount: 4, name: "Club" },
+        ],
+        onPeopleTrayOpenChange: (open) => {
+          trayChanges.push(open);
+        },
+        people,
+        peopleTrayOpen: true,
+      });
+      const groupsButton = findAll("pressable").find((instance) =>
+        String(instance.props["accessibilityLabel"]).startsWith("Groups on the map"),
+      );
+      await act(async () => (groupsButton?.props["onPress"] as (() => void) | undefined)?.());
+      expect(findAll("live-map-group-menu")).toHaveLength(1);
+
+      expect(await pressBack()).toBe(true);
+      expect(findAll("live-map-group-menu")).toHaveLength(0);
+      expect(trayChanges).toEqual([]);
+
+      expect(await pressBack()).toBe(true);
+      expect(trayChanges).toEqual([false]);
+    });
+
+    test("ignores back while another screen covers the map", async () => {
+      screenFocused = false;
+      await renderNativeMap({ people, peopleTrayOpen: true });
+      expect(findAll("live-map-people-tray")).toHaveLength(1);
+      expect(await pressBack()).toBe(false);
+    });
+  });
 });
