@@ -32,6 +32,7 @@ mock.module("react-native", () => ({
     isReduceMotionEnabled: async () => true,
   },
   ActivityIndicator: element("activity-indicator"),
+  Dimensions: { get: () => ({ height: 800, width: 400 }) },
   Animated: {
     Value: FakeAnimatedValue,
     View: element("animated-view"),

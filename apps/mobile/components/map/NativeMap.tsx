@@ -889,6 +889,9 @@ export const NativeMap = ({
           <LiveMapPeopleTray
             now={now}
             people={trayPeople}
+            onDismiss={() => {
+              onPeopleTrayOpenChange?.(false);
+            }}
             onHeightChange={(height) => {
               setTrayHeight(height);
               edge.onSheetHeightChange(height);

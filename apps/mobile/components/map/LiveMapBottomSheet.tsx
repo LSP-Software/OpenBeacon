@@ -1,19 +1,9 @@
-import { type ReactNode, useEffect, useRef } from "react";
-import {
-  Animated,
-  PanResponder,
-  type PanResponderGestureState,
-  Platform,
-  View,
-} from "react-native";
-import { useReducedMotion } from "../../hooks/useReducedMotion.ts";
+import type { ReactNode } from "react";
+import { Animated, Platform, View } from "react-native";
 import { useMapBottomInset } from "./MapSurface.tsx";
+import { useSwipeDownToDismiss } from "./useSwipeDownToDismiss.ts";
 
 const ios = Platform.OS === "ios";
-
-const DISMISS_DISTANCE = 80;
-const DISMISS_VELOCITY = 0.9;
-const HIDDEN_OFFSET = 520;
 
 export const LiveMapBottomSheet = ({
   accessibilityLabel,
@@ -28,77 +18,8 @@ export const LiveMapBottomSheet = ({
   onDismiss?: (() => void) | undefined;
   onHeightChange?: ((height: number) => void) | undefined;
 }) => {
-  const reduceMotion = useReducedMotion();
   const bottomInset = useMapBottomInset();
-  const reduceMotionRef = useRef(reduceMotion);
-  reduceMotionRef.current = reduceMotion;
-  const translateY = useRef(new Animated.Value(reduceMotion ? 0 : HIDDEN_OFFSET)).current;
-  const dragOriginY = useRef(0);
-
-  useEffect(() => {
-    if (reduceMotionRef.current) {
-      translateY.setValue(0);
-      return;
-    }
-    Animated.spring(translateY, {
-      damping: 22,
-      stiffness: 220,
-      toValue: 0,
-      useNativeDriver: true,
-    }).start();
-  }, [translateY]);
-
-  useEffect(() => {
-    if (reduceMotion) translateY.setValue(0);
-  }, [reduceMotion, translateY]);
-
-  const dismiss = () => {
-    if (reduceMotionRef.current) {
-      onDismiss?.();
-      return;
-    }
-    Animated.timing(translateY, {
-      duration: 180,
-      toValue: HIDDEN_OFFSET,
-      useNativeDriver: true,
-    }).start(({ finished }) => {
-      if (finished) {
-        onDismiss?.();
-      }
-    });
-  };
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_event, gestureState) =>
-        Math.abs(gestureState.dy) > 4 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx),
-      onPanResponderGrant: () => {
-        translateY.stopAnimation((value) => {
-          dragOriginY.current = value;
-        });
-      },
-      onPanResponderMove: (_event, gestureState: PanResponderGestureState) => {
-        translateY.setValue(Math.max(0, dragOriginY.current + gestureState.dy));
-      },
-      onPanResponderRelease: (_event, gestureState: PanResponderGestureState) => {
-        if (gestureState.dy > DISMISS_DISTANCE || gestureState.vy > DISMISS_VELOCITY) {
-          dismiss();
-          return;
-        }
-
-        if (reduceMotionRef.current) {
-          translateY.setValue(0);
-          return;
-        }
-        Animated.spring(translateY, {
-          damping: 22,
-          stiffness: 220,
-          toValue: 0,
-          useNativeDriver: true,
-        }).start();
-      },
-    }),
-  ).current;
+  const { dismiss, panHandlers, translateY } = useSwipeDownToDismiss(onDismiss);
 
   return (
     <Animated.View
@@ -128,7 +49,7 @@ export const LiveMapBottomSheet = ({
         }
       >
         {onDismiss ? (
-          <View {...panResponder.panHandlers}>
+          <View {...panHandlers}>
             <View className="mb-3 items-center">
               <View
                 className="rounded-full bg-border-strong"
