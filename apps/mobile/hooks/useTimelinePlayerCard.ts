@@ -1,5 +1,6 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { type LayoutChangeEvent, PanResponder } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { GestureResponderEvent, LayoutChangeEvent } from "react-native";
+import { Gesture } from "react-native-gesture-handler";
 import {
   cancelAnimation,
   Extrapolation,
@@ -8,6 +9,7 @@ import {
   useSharedValue,
   withSpring,
 } from "react-native-reanimated";
+import { scheduleOnRN } from "react-native-worklets";
 import {
   type TimelineCardBox,
   timelineCardBoxMoved,
@@ -50,8 +52,10 @@ export const useTimelinePlayerCard = ({
   const progress = useSharedValue(1);
   const restingOpen = useSharedValue(true);
   const target = useRef(true);
-  const dragStart = useRef(1);
+  const dragStart = useSharedValue(1);
   const range = heights.full - heights.mini;
+  const dragRange = useSharedValue(range);
+  const tapStart = useRef({ x: 0, y: 0 });
 
   const settle = (opened: boolean, velocity = 0) => {
     target.current = opened;
@@ -74,36 +78,52 @@ export const useTimelinePlayerCard = ({
     if (target.current !== open) settle(open);
   });
 
-  const latest = useRef({ collapsible, open, range, settle });
-  useLayoutEffect(() => {
-    latest.current = { collapsible, open, range, settle };
-  });
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => !latest.current.open,
-      onMoveShouldSetPanResponder: (_event, gesture) =>
-        latest.current.collapsible &&
-        Math.abs(gesture.dy) > TAP_SLOP &&
-        Math.abs(gesture.dy) > Math.abs(gesture.dx),
-      onPanResponderGrant: () => {
-        cancelAnimation(progress);
-        restingOpen.value = false;
-        dragStart.current = progress.value;
-      },
-      onPanResponderMove: (_event, gesture) => {
-        const range = Math.max(latest.current.range, 1);
-        progress.value = Math.min(Math.max(dragStart.current - gesture.dy / range, 0), 1);
-      },
-      onPanResponderRelease: (_event, gesture) => {
-        const tapped = Math.abs(gesture.dx) < TAP_SLOP && Math.abs(gesture.dy) < TAP_SLOP;
-        const opened =
-          tapped || timelineCardOpens({ progress: progress.value, velocity: gesture.vy });
-        latest.current.settle(opened, (-gesture.vy * 1000) / Math.max(latest.current.range, 1));
-        setExpanded(opened);
-      },
-      onPanResponderTerminate: () => latest.current.settle(latest.current.open),
-    }),
-  ).current;
+  useEffect(() => {
+    dragRange.value = range;
+  }, [dragRange, range]);
+
+  const finishDrag = (velocity: number, dragged: number) => {
+    const opened = timelineCardOpens({ progress: dragged, velocity });
+    settle(opened, (-velocity * 1000) / Math.max(range, 1));
+    setExpanded(opened);
+  };
+  const cancelDrag = () => settle(open);
+
+  const dragGesture = Gesture.Pan()
+    .enabled(collapsible)
+    .activeOffsetY([-TAP_SLOP, TAP_SLOP])
+    .failOffsetX([-TAP_SLOP, TAP_SLOP])
+    .onStart(() => {
+      cancelAnimation(progress);
+      restingOpen.value = false;
+      dragStart.value = progress.value;
+    })
+    .onUpdate((event) => {
+      progress.value = Math.min(
+        Math.max(dragStart.value - event.translationY / Math.max(dragRange.value, 1), 0),
+        1,
+      );
+    })
+    .onEnd((event, success) => {
+      if (success) scheduleOnRN(finishDrag, event.velocityY / 1000, progress.value);
+      else scheduleOnRN(cancelDrag);
+    });
+
+  const tapToOpen = {
+    onStartShouldSetResponder: () => !open,
+    onResponderGrant: (event: GestureResponderEvent) => {
+      tapStart.current = { x: event.nativeEvent.pageX, y: event.nativeEvent.pageY };
+    },
+    onResponderRelease: (event: GestureResponderEvent) => {
+      const moved = Math.max(
+        Math.abs(event.nativeEvent.pageX - tapStart.current.x),
+        Math.abs(event.nativeEvent.pageY - tapStart.current.y),
+      );
+      if (moved >= TAP_SLOP) return;
+      settle(true);
+      setExpanded(true);
+    },
+  };
 
   const measure = (name: BoxName) => (event: LayoutChangeEvent) => {
     const { height, width, x, y } = event.nativeEvent.layout;
@@ -185,7 +205,8 @@ export const useTimelinePlayerCard = ({
     onFullLayout: measureHeight("full"),
     onMiniLayout: measureHeight("mini"),
     open,
-    panHandlers: panResponder.panHandlers,
+    dragGesture,
+    tapToOpen,
     setExpanded,
     shared: {
       clock: { onLayout: measure("clock"), style: clockStyle },

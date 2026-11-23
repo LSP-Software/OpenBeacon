@@ -3,6 +3,7 @@ import "../global.css";
 import { PortalHost } from "@rn-primitives/portal";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { type ErrorBoundaryProps, Stack } from "expo-router";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import {
   ApiCompatibilityGate,
   useApiCompatibilityGateShown,
@@ -34,87 +35,89 @@ const RootLayout = () => {
   useDismissNoticesWhenOpened();
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <LocationPermissionProvider>
-          <TrackingProvider>
-            <SessionDataCleanup />
-            <DeletionCancellationNotice />
-            <View className="flex-1 bg-background">
-              <View
-                className="flex-1"
-                importantForAccessibility={
-                  compatibilityGateShown || covered ? "no-hide-descendants" : "auto"
-                }
-                accessibilityElementsHidden={compatibilityGateShown || covered}
-              >
-                <RootStack>
-                  <Stack.Screen name="index" />
-                  <Stack.Protected
-                    guard={
-                      thisDevice === "active" ||
-                      (!session && (!isPending || thisDevice === "unregistered"))
-                    }
-                  >
-                    <Stack.Screen name="(tabs)" />
-                    <Stack.Screen name="join" />
-                    <Stack.Screen name="place" />
-                    <Stack.Screen name="place-alerts" />
-                    <Stack.Screen name="timeline" />
-                    <Stack.Screen name="setup/name" />
-                    <Stack.Screen name="onboarding/notifications" />
-                    <Stack.Screen name="onboarding/location" />
-                    <Stack.Screen name="onboarding/background" />
-                    <Stack.Screen name="onboarding/recovery" />
-                    <Stack.Screen name="onboarding/app-lock" />
-                    <Stack.Screen name="onboarding/done" />
-                    <Stack.Screen name="setup/remove-devices" />
-                    <Stack.Screen name="account/about" />
-                    <Stack.Screen name="account/add-device" />
-                    <Stack.Screen name="account/app-lock" />
-                    <Stack.Screen name="account/contact-us" />
-                    <Stack.Screen name="account/delete" />
-                    <Stack.Screen name="account/devices" />
-                    <Stack.Screen name="account/notifications" />
-                    <Stack.Screen name="account/password" />
-                    <Stack.Screen name="account/recovery" />
-                    <Stack.Screen name="account/recovery-change" />
-                    <Stack.Screen name="account/recovery-setup" />
-                    <Stack.Screen name="account/remove-device" />
-                    <Stack.Screen name="account/sign-out-others" />
-                    <Stack.Screen name="account/sign-in-codes" />
-                    <Stack.Screen name="account/theme" />
-                    <Stack.Screen name="account/units" />
-                    <Stack.Screen name="account/location-history" />
-                    <Stack.Screen name="account/who-can-see-me" />
-                  </Stack.Protected>
-                </RootStack>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <LocationPermissionProvider>
+            <TrackingProvider>
+              <SessionDataCleanup />
+              <DeletionCancellationNotice />
+              <View className="flex-1 bg-background">
+                <View
+                  className="flex-1"
+                  importantForAccessibility={
+                    compatibilityGateShown || covered ? "no-hide-descendants" : "auto"
+                  }
+                  accessibilityElementsHidden={compatibilityGateShown || covered}
+                >
+                  <RootStack>
+                    <Stack.Screen name="index" />
+                    <Stack.Protected
+                      guard={
+                        thisDevice === "active" ||
+                        (!session && (!isPending || thisDevice === "unregistered"))
+                      }
+                    >
+                      <Stack.Screen name="(tabs)" />
+                      <Stack.Screen name="join" />
+                      <Stack.Screen name="place" />
+                      <Stack.Screen name="place-alerts" />
+                      <Stack.Screen name="timeline" />
+                      <Stack.Screen name="setup/name" />
+                      <Stack.Screen name="onboarding/notifications" />
+                      <Stack.Screen name="onboarding/location" />
+                      <Stack.Screen name="onboarding/background" />
+                      <Stack.Screen name="onboarding/recovery" />
+                      <Stack.Screen name="onboarding/app-lock" />
+                      <Stack.Screen name="onboarding/done" />
+                      <Stack.Screen name="setup/remove-devices" />
+                      <Stack.Screen name="account/about" />
+                      <Stack.Screen name="account/add-device" />
+                      <Stack.Screen name="account/app-lock" />
+                      <Stack.Screen name="account/contact-us" />
+                      <Stack.Screen name="account/delete" />
+                      <Stack.Screen name="account/devices" />
+                      <Stack.Screen name="account/notifications" />
+                      <Stack.Screen name="account/password" />
+                      <Stack.Screen name="account/recovery" />
+                      <Stack.Screen name="account/recovery-change" />
+                      <Stack.Screen name="account/recovery-setup" />
+                      <Stack.Screen name="account/remove-device" />
+                      <Stack.Screen name="account/sign-out-others" />
+                      <Stack.Screen name="account/sign-in-codes" />
+                      <Stack.Screen name="account/theme" />
+                      <Stack.Screen name="account/units" />
+                      <Stack.Screen name="account/location-history" />
+                      <Stack.Screen name="account/who-can-see-me" />
+                    </Stack.Protected>
+                  </RootStack>
+                </View>
+                <View
+                  className="absolute inset-0"
+                  pointerEvents="box-none"
+                  importantForAccessibility={covered ? "no-hide-descendants" : "auto"}
+                  accessibilityElementsHidden={covered}
+                >
+                  <ApiCompatibilityGate />
+                  <OfflineBanner />
+                  {session ? <InAppNoticeBanner /> : null}
+                </View>
               </View>
-              <View
-                className="absolute inset-0"
-                pointerEvents="box-none"
-                importantForAccessibility={covered ? "no-hide-descendants" : "auto"}
-                accessibilityElementsHidden={covered}
-              >
-                <ApiCompatibilityGate />
-                <OfflineBanner />
-                {session ? <InAppNoticeBanner /> : null}
-              </View>
-            </View>
-          </TrackingProvider>
-        </LocationPermissionProvider>
-        <View
-          className="absolute inset-0"
-          pointerEvents="box-none"
-          importantForAccessibility={covered ? "no-hide-descendants" : "auto"}
-          accessibilityElementsHidden={covered}
-        >
-          <AlertHost />
-          <PortalHost />
-        </View>
-        <AppLockScreen />
-      </ThemeProvider>
-    </QueryClientProvider>
+            </TrackingProvider>
+          </LocationPermissionProvider>
+          <View
+            className="absolute inset-0"
+            pointerEvents="box-none"
+            importantForAccessibility={covered ? "no-hide-descendants" : "auto"}
+            accessibilityElementsHidden={covered}
+          >
+            <AlertHost />
+            <PortalHost />
+          </View>
+          <AppLockScreen />
+        </ThemeProvider>
+      </QueryClientProvider>
+    </GestureHandlerRootView>
   );
 };
 

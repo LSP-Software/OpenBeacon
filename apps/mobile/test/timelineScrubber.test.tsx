@@ -1,6 +1,8 @@
 import { expect, mock, test } from "bun:test";
 import React, { act, type ReactNode } from "react";
 import { createRoot } from "test-renderer";
+import type { SharedValue } from "react-native-reanimated";
+import type { TestGestureHandlers } from "./gestureHandlerTestModule.ts";
 
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -13,9 +15,18 @@ const element =
 
 let fontScale = 1;
 mock.module("react-native", () => ({
-  PanResponder: { create: () => ({ panHandlers: {} }) },
   useWindowDimensions: () => ({ fontScale }),
   View: element("view"),
+}));
+mock.module("react-native-reanimated", () => ({
+  default: { View: element("animated-view") },
+  useAnimatedStyle: (style: () => object) => style(),
+  useDerivedValue: <T,>(value: () => T) => ({
+    get value() {
+      return value();
+    },
+  }),
+  useSharedValue: <T,>(value: T) => React.useRef({ value }).current,
 }));
 mock.module("react-native-svg", () => ({
   Defs: element("defs"),
@@ -32,6 +43,14 @@ mock.module("../components/ui/Text.tsx", () => ({ Text: element("text") }));
 const { TimelineKey, TimelineScrubber } =
   await import("../components/timeline/TimelineScrubber.tsx");
 
+const sharedValue = (value: number) => ({ value }) as unknown as SharedValue<number>;
+
+const testClock = (time: number) => ({
+  onBegin: () => {},
+  onEnd: () => {},
+  time: sharedValue(time),
+});
+
 const ticksFor = async (uses24HourClock: boolean, scale = 1, trackWidth = 320) => {
   fontScale = scale;
   const start = new Date(2026, 10, 19).getTime();
@@ -42,10 +61,10 @@ const ticksFor = async (uses24HourClock: boolean, scale = 1, trackWidth = 320) =
       day={{ end, start }}
       from={start}
       historyStart={start}
+      clock={testClock(start)}
       lanes={[]}
-      onScrub={() => {}}
+      onSeek={() => {}}
       step={15 * 60_000}
-      time={start}
       to={end}
       uses24HourClock={uses24HourClock}
       valueLabel="00:00"
@@ -100,9 +119,9 @@ test("time before history starts is drawn apart from the no-location hatch", asy
             runs: [{ end: start + 6 * hour, kind: "noLocation", start: start + 5 * hour }],
           },
         ]}
-        onScrub={() => {}}
+        clock={testClock(start + 2 * hour)}
+        onSeek={() => {}}
         step={15 * 60_000}
-        time={start + 2 * hour}
         to={end}
         uses24HourClock
         valueLabel="02:00"
@@ -124,6 +143,88 @@ test("time before history starts is drawn apart from the no-location hatch", asy
     { fill: "url(#timeline-hatch)", x: 50 },
     { fill: "#000000", x: 0 },
   ]);
+});
+
+const renderTrack = async ({ from, to }: { from: number; to: number }) => {
+  const start = new Date(2026, 10, 19).getTime();
+  const hour = 60 * 60_000;
+  const events: string[] = [];
+  const seeks: number[] = [];
+  const clock = {
+    onBegin: () => {
+      events.push("begin");
+    },
+    onEnd: (time: number) => {
+      events.push(`end ${(time - start) / hour}`);
+    },
+    time: sharedValue(start),
+  };
+  const root = createRoot();
+  await act(async () =>
+    root.render(
+      <TimelineScrubber
+        clock={clock}
+        day={{ end: start + 24 * hour, start }}
+        from={start + from * hour}
+        historyStart={start}
+        lanes={[]}
+        onSeek={(time) => seeks.push((time - start) / hour)}
+        step={15 * 60_000}
+        to={start + to * hour}
+        uses24HourClock
+        valueLabel="00:00"
+      />,
+    ),
+  );
+  const track = root.container.queryAll(
+    (node) => node.type === "view" && node.props["accessibilityLabel"] === "Time of day",
+  )[0];
+  const onLayout = track?.props["onLayout"] as
+    ((event: { nativeEvent: { layout: { width: number } } }) => void) | undefined;
+  await act(async () => onLayout?.({ nativeEvent: { layout: { width: 240 } } }));
+  const detector = root.container.queryAll((node) => node.type === "gesture-detector")[0];
+  const { handlers } = (detector?.props["gesture"] ?? { handlers: {} }) as {
+    handlers: TestGestureHandlers;
+  };
+  return {
+    act: (name: string, x?: number) => handlers[name]?.(x === undefined ? {} : { x }),
+    events,
+    hours: () => (clock.time.value - start) / hour,
+    seeks,
+    accessibilityAction: (actionName: string) =>
+      (track?.props["onAccessibilityAction"] as ((event: object) => void) | undefined)?.({
+        nativeEvent: { actionName },
+      }),
+    unmount: () => act(async () => root.unmount()),
+  };
+};
+
+test("touching the track jumps to that time and dragging follows the finger", async () => {
+  const track = await renderTrack({ from: 0, to: 24 });
+  track.act("onBegin", 40);
+  expect(track.hours()).toBe(4);
+  track.act("onUpdate", 100);
+  expect(track.hours()).toBe(10);
+  track.act("onFinalize");
+  expect(track.events).toEqual(["begin", "end 10"]);
+  await track.unmount();
+});
+
+test("dragging past the shown hours stops at the first and last available moment", async () => {
+  const track = await renderTrack({ from: 2, to: 18 });
+  track.act("onBegin", 0);
+  expect(track.hours()).toBe(2);
+  track.act("onUpdate", 400);
+  expect(track.hours()).toBe(18);
+  await track.unmount();
+});
+
+test("screen reader adjustments move by one step and stay inside the shown hours", async () => {
+  const track = await renderTrack({ from: 0, to: 24 });
+  track.accessibilityAction("increment");
+  track.accessibilityAction("decrement");
+  expect(track.seeks).toEqual([0.25, 0]);
+  await track.unmount();
 });
 
 const keyLabels = async (showNotAvailable: boolean) => {

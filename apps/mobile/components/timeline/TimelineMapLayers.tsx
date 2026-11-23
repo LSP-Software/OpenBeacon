@@ -1,16 +1,18 @@
 import { GeoJSONSource, Layer } from "@maplibre/maplibre-react-native";
-import { memo, useMemo } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { useColors } from "../../lib/theme.ts";
 import { timelineArrows, timelineRouteGradient } from "../../lib/timelineMap.ts";
 import type { Coordinate } from "../../lib/timelineTypes.ts";
 
 export const TimelineMapLayers = memo(
   ({
-    drawn,
+    dayKey,
+    reduceMotion,
     routes,
     viewport,
   }: {
-    drawn: Readonly<Record<string, number>>;
+    dayKey: string | undefined;
+    reduceMotion: boolean;
     routes: ReadonlyArray<{
       color: string;
       deviceId: string;
@@ -22,6 +24,11 @@ export const TimelineMapLayers = memo(
     }>;
     viewport: { bounds: [number, number, number, number]; zoom: number } | null;
   }) => {
+    const drawn = useDrawIn({
+      dayKey,
+      reduceMotion,
+      routeIds: routes.map((route) => route.deviceId),
+    });
     const colors = useColors();
     const casing = colors.isDark ? colors.background : colors.text;
     const zoom = viewport ? Math.round(viewport.zoom * 4) / 4 : null;
@@ -212,3 +219,56 @@ export const TimelineMapLayers = memo(
     );
   },
 );
+
+const DRAW_IN_MS = 1200;
+
+const useDrawIn = ({
+  dayKey,
+  reduceMotion,
+  routeIds,
+}: {
+  dayKey: string | undefined;
+  reduceMotion: boolean;
+  routeIds: readonly string[];
+}) => {
+  const [drawIn, setDrawIn] = useState<{ clock: number; starts: Record<string, number> }>({
+    clock: 0,
+    starts: {},
+  });
+  const routeKey = routeIds.join(",");
+
+  useEffect(() => {
+    if (dayKey === undefined || routeKey === "") return;
+    const start = performance.now();
+    setDrawIn((current) => {
+      const starts = Object.fromEntries(
+        Object.entries(current.starts).filter(([key]) => key.startsWith(`${dayKey}:`)),
+      );
+      for (const deviceId of routeKey.split(",")) {
+        starts[`${dayKey}:${deviceId}`] ??= reduceMotion ? -Infinity : start;
+      }
+      return { clock: start, starts };
+    });
+    if (reduceMotion) return;
+    let frame = 0;
+    const step = (now: number) => {
+      setDrawIn((current) => ({ ...current, clock: now }));
+      if (now - start < DRAW_IN_MS) frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+  }, [reduceMotion, routeKey, dayKey]);
+
+  return Object.fromEntries(
+    routeIds.map((deviceId) => [
+      deviceId,
+      Math.min(
+        Math.max(
+          (drawIn.clock - (drawIn.starts[`${dayKey}:${deviceId}`] ?? Infinity)) / DRAW_IN_MS,
+          0,
+        ),
+        1,
+      ),
+    ]),
+  );
+};

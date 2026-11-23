@@ -27,7 +27,8 @@ const card = {
   measure: () => () => {},
   miniSlots: { clock: {}, play: {}, speed: {} },
   open: false,
-  panHandlers: {},
+  dragGesture: {},
+  tapToOpen: {},
   setExpanded: () => {},
 } as unknown as ComponentProps<typeof TimelinePlayerCard>["card"];
 

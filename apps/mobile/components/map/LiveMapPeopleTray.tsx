@@ -1,5 +1,7 @@
 import { memo, useRef } from "react";
-import { ActivityIndicator, Animated, Platform, Pressable, ScrollView, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, ScrollView, View } from "react-native";
+import { GestureDetector } from "react-native-gesture-handler";
+import Animated from "react-native-reanimated";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
 import { cn } from "../../lib/cn.ts";
 import type { MapPeople, MapPerson, MapPersonStatus } from "../../lib/mapPeopleTypes.ts";
@@ -27,7 +29,7 @@ export const LiveMapPeopleTray = ({
   people: MapPeople;
 }) => {
   const bottomInset = useMapBottomInset();
-  const { dismiss, panHandlers, translateY } = useSwipeDownToDismiss(onDismiss);
+  const { animatedStyle, dismiss, gesture } = useSwipeDownToDismiss(onDismiss);
   const scrollRef = useRef<ScrollView>(null);
   const sectionXRef = useRef<Record<string, number>>({});
   const sections = [
@@ -214,27 +216,32 @@ export const LiveMapPeopleTray = ({
   );
 
   return (
-    <Animated.View
-      {...panHandlers}
-      className={
-        ios ? "absolute left-3 right-3" : "absolute bottom-0 left-0 right-0 bg-container pb-4 pt-3"
-      }
-      style={[
-        { transform: [{ translateY }] },
-        ios ? { bottom: bottomInset + 12 } : { borderTopLeftRadius: 28, borderTopRightRadius: 28 },
-      ]}
-      onLayout={(event) =>
-        onHeightChange(event.nativeEvent.layout.height + bottomInset + (ios ? 12 : 0))
-      }
-    >
-      {ios ? (
-        <MapSurface radius={30}>
-          <View className="pb-4 pt-4">{content}</View>
-        </MapSurface>
-      ) : (
-        content
-      )}
-    </Animated.View>
+    <GestureDetector gesture={gesture}>
+      <Animated.View
+        className={
+          ios
+            ? "absolute left-3 right-3"
+            : "absolute bottom-0 left-0 right-0 bg-container pb-4 pt-3"
+        }
+        style={[
+          ios
+            ? { bottom: bottomInset + 12 }
+            : { borderTopLeftRadius: 28, borderTopRightRadius: 28 },
+          animatedStyle,
+        ]}
+        onLayout={(event) =>
+          onHeightChange(event.nativeEvent.layout.height + bottomInset + (ios ? 12 : 0))
+        }
+      >
+        {ios ? (
+          <MapSurface radius={30}>
+            <View className="pb-4 pt-4">{content}</View>
+          </MapSurface>
+        ) : (
+          content
+        )}
+      </Animated.View>
+    </GestureDetector>
   );
 };
 
