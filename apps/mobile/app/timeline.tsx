@@ -18,7 +18,7 @@ import {
   SkipBackIcon,
   SkipForwardIcon,
 } from "lucide-react-native";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   BackHandler,
@@ -30,6 +30,7 @@ import {
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNativeMapStyle } from "../components/map/useNativeMapStyle.ts";
+import { TimelineClockText } from "../components/timeline/TimelineClockText.tsx";
 import { TimelineDecryptCard } from "../components/timeline/TimelineDecryptCard.tsx";
 import { TimelineMapLayers } from "../components/timeline/TimelineMapLayers.tsx";
 import { TimelinePeopleChooser } from "../components/timeline/TimelinePeopleChooser.tsx";
@@ -51,6 +52,7 @@ import { Icon } from "../components/ui/Icon.tsx";
 import { Text } from "../components/ui/Text.tsx";
 import { useCachedGroup } from "../hooks/useCachedGroup.ts";
 import { useReducedMotion } from "../hooks/useReducedMotion.ts";
+import { useTimelineClock } from "../hooks/useTimelineClock.ts";
 import { useUnits } from "../hooks/useUnits.ts";
 import { useTimelinePlayerCard } from "../hooks/useTimelinePlayerCard.ts";
 import { useUses24HourClock } from "../hooks/useUses24HourClock.ts";
@@ -84,12 +86,12 @@ import {
   timelineLaneRuns,
   timelineRoute,
 } from "../lib/timelineMap.ts";
+import { packTimelineTrack, timelineMinuteLabels } from "../lib/timelineTrack.ts";
 import type { TimelineSender } from "../lib/timelineTypes.ts";
 import { thisDeviceNoun } from "../lib/thisDeviceNoun.ts";
 
 const SPEEDS = [60, 300, 900] as const;
 const STEP_MS = 15 * 60_000;
-const DRAW_IN_MS = 1200;
 const NO_SENDERS: readonly TimelineSender[] = [];
 
 const TimelineScreen = () => {
@@ -189,20 +191,12 @@ const TimelineView = ({
   const [personId, setPersonId] = useState(initialPersonId);
   const [deviceChoice, setDeviceChoice] = useState<Record<string, string>>({});
   const [pickedDayKey, setPickedDayKey] = useState<string | null>(null);
-  const [playing, setPlaying] = useState(false);
-  const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(60);
   const [following, setFollowing] = useState(false);
   const fittedView = useRef({ moved: false, view: "" });
-  const [timeState, setTimeState] = useState<{ key: string; time: number } | null>(null);
-  const [drawIn, setDrawIn] = useState<{ clock: number; starts: Record<string, number> }>({
-    clock: 0,
-    starts: {},
-  });
   const [chosenPeople, setChosenPeople] = useState<string[] | null>(null);
   const [chooserOpen, setChooserOpen] = useState(false);
   const reduceMotion = useReducedMotion();
   const { unit: units } = useUnits();
-  const timeRef = useRef(0);
   const dayStripRef = useRef<ScrollView>(null);
 
   const { data: groups } = useQuery({
@@ -349,25 +343,11 @@ const TimelineView = ({
       };
     });
   }, [places.data, shownPeople]);
-  const routeIds = routes.map((route) => route.deviceId).join(",");
-  const drawn = useMemo(
-    () =>
-      Object.fromEntries(
-        routes.map((route) => [
-          route.deviceId,
-          Math.min(
-            Math.max(
-              (drawIn.clock -
-                (drawIn.starts[`${timeline?.day.key}:${route.deviceId}`] ?? Infinity)) /
-                DRAW_IN_MS,
-              0,
-            ),
-            1,
-          ),
-        ]),
-      ),
-    [drawIn, routes, timeline?.day.key],
+  const tracks = useMemo(
+    () => shownPeople.map((person) => packTimelineTrack(person.device.segments)),
+    [shownPeople],
   );
+  const selectedTrack = selectedPerson ? (tracks[0] ?? null) : null;
   const visitedPlaces = useMemo(
     () =>
       (places.data ?? []).filter(
@@ -389,22 +369,20 @@ const TimelineView = ({
         ? Math.max(...located.map((segment) => segment.end))
         : timeline.to
       : Math.min(timeline.to, ...located.map((segment) => segment.start));
-  const time = timeline
-    ? Math.min(
-        Math.max(timeState?.key === timeline.day.key ? timeState.time : startTime, timeline.from),
-        timeline.to,
-      )
-    : 0;
-  useLayoutEffect(() => {
-    timeRef.current = time;
+  const clock = useTimelineClock({
+    dayKey: timeline?.day.key,
+    from: timeline?.from ?? 0,
+    selectedTrack,
+    startTime,
+    to: timeline?.to ?? 0,
+    tracks,
   });
-  const setTime = (value: number) => {
-    if (timeline) setTimeState({ key: timeline.day.key, time: value });
-  };
+  const time = timeline ? clock.shownTime : 0;
 
-  const pins = routes.flatMap((route) => {
+  const pins = routes.flatMap((route, index) => {
     const at = timelinePositionAt(route.person.device.segments, time);
-    return at.position ? [{ ...at, route }] : [];
+    const track = tracks[index];
+    return at.position && track ? [{ ...at, route, track }] : [];
   });
   const selectedPin = selectedPerson ? (pins[0] ?? null) : null;
   const card = useTimelinePlayerCard({
@@ -421,53 +399,6 @@ const TimelineView = ({
     left: 40,
     right: 40,
   };
-
-  const timelineDayKey = timeline?.day.key;
-  const timelineTo = timeline?.to;
-  useEffect(() => {
-    if (!playing || timelineDayKey === undefined || timelineTo === undefined) return;
-    let current = timeRef.current;
-    let last = performance.now();
-    let rendered = last;
-    let frame = 0;
-    const tick = (now: number) => {
-      current = Math.min(current + (now - last) * speed, timelineTo);
-      last = now;
-      if (now - rendered >= 33 || current >= timelineTo) {
-        rendered = now;
-        setTimeState({ key: timelineDayKey, time: current });
-      }
-      if (current >= timelineTo) {
-        setPlaying(false);
-        return;
-      }
-      frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [playing, speed, timelineDayKey, timelineTo]);
-
-  useEffect(() => {
-    if (timelineDayKey === undefined || routeIds === "") return;
-    const start = performance.now();
-    setDrawIn((current) => {
-      const starts = Object.fromEntries(
-        Object.entries(current.starts).filter(([key]) => key.startsWith(`${timelineDayKey}:`)),
-      );
-      for (const deviceId of routeIds.split(",")) {
-        starts[`${timelineDayKey}:${deviceId}`] ??= reduceMotion ? -Infinity : start;
-      }
-      return { clock: start, starts };
-    });
-    if (reduceMotion) return;
-    let frame = 0;
-    const step = (now: number) => {
-      setDrawIn((current) => ({ ...current, clock: now }));
-      if (now - start < DRAW_IN_MS) frame = requestAnimationFrame(step);
-    };
-    frame = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(frame);
-  }, [reduceMotion, routeIds, timelineDayKey]);
 
   useEffect(() => {
     if (!groupMenuOpen) return;
@@ -489,15 +420,15 @@ const TimelineView = ({
 
   const followLongitude = selectedPin?.position.longitude;
   const followLatitude = selectedPin?.position.latitude;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: following tracks the pin's position, and padding changes are picked up on the next move
-  useEffect(() => {
-    if (!following || followLongitude === undefined || followLatitude === undefined) return;
-    if (fittedView.current.view !== fit.view) return;
+  const followView = useRef({ padding: cameraPadding, view: fit.view });
+  followView.current = { padding: cameraPadding, view: fit.view };
+  const followTo = useCallback((longitude: number, latitude: number) => {
+    if (fittedView.current.view !== followView.current.view) return;
     cameraRef.current?.jumpTo({
-      center: [followLongitude, followLatitude],
-      padding: cameraPadding,
+      center: [longitude, latitude],
+      padding: followView.current.padding,
     });
-  }, [followLatitude, followLongitude, following]);
+  }, []);
 
   const followedOpen = useRef(card.open);
   // biome-ignore lint/correctness/useExhaustiveDependencies: only the card opening or closing re-centres the followed pin, with the padding for its new size
@@ -620,6 +551,7 @@ const TimelineView = ({
   );
   const firstCoordinate = routes[0]?.line[0];
 
+  const { setPlaying } = clock;
   const topOverlay = useMemo(
     () => (
       <View
@@ -779,6 +711,7 @@ const TimelineView = ({
       onClose,
       onSwitchGroup,
       personId,
+      setPlaying,
     ],
   );
   const lanes = useMemo(
@@ -793,20 +726,27 @@ const TimelineView = ({
     [routes],
   );
 
+  const { playing, speed } = clock;
   const nextSpeed = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length] ?? 60;
-  const clockLabel =
-    timeline && time >= timeline.day.end
-      ? formatTimelineDayEnd(timeline.day.end, uses24HourClock)
-      : formatClock(time);
+  const timelineDay = timeline?.day;
+  const dayEndLabel = timeline ? formatTimelineDayEnd(timeline.day.end, uses24HourClock) : "";
+  const clockLabel = timeline && time >= timeline.day.end ? dayEndLabel : formatClock(time);
+  const minuteLabels = useMemo(
+    () =>
+      timelineDay
+        ? timelineMinuteLabels(timelineDay, (value) => formatTimelineClock(value, uses24HourClock))
+        : [],
+    [timelineDay, uses24HourClock],
+  );
   const dayLabel = day ? formatDate(day.start) : "";
 
-  const scrubTo = (value: number) => {
-    setPlaying(false);
-    setTime(value);
-  };
   const stops = routes.flatMap((route) => route.stats.stops);
   const previousStop = timelineStopJump({ direction: "previous", stops, time });
   const nextStop = timelineStopJump({ direction: "next", stops, time });
+  const jumpToStop = (direction: "next" | "previous") => {
+    const target = timelineStopJump({ direction, stops, time: clock.time.value });
+    if (target !== null) clock.seek(target);
+  };
 
   return (
     <View className="flex-1 bg-background">
@@ -856,7 +796,12 @@ const TimelineView = ({
               layout={{ visibility: getSymbolVisibility(map.showSymbols) }}
             />
           ))}
-          <TimelineMapLayers drawn={drawn} routes={routes} viewport={viewport} />
+          <TimelineMapLayers
+            dayKey={timeline?.day.key}
+            reduceMotion={reduceMotion}
+            routes={routes}
+            viewport={viewport}
+          />
           {visitedPlaces.map((place) =>
             place.geometry ? (
               <TimelinePlaceLabel
@@ -880,7 +825,10 @@ const TimelineView = ({
               latitude={pin.position.latitude}
               longitude={pin.position.longitude}
               name={pin.route.person.name}
+              onFollow={following && pin === selectedPin ? followTo : undefined}
               paused={pin.state === "pause"}
+              time={clock.time}
+              track={pin.track}
             />
           ))}
         </MapLibreMap>
@@ -955,13 +903,13 @@ const TimelineView = ({
         miniScrubber={
           timeline ? (
             <TimelineMiniScrubber
+              clock={clock.scrubber}
               day={timeline.day}
               from={timeline.from}
               step={STEP_MS}
-              time={time}
               to={timeline.to}
               valueLabel={status ? `${clockLabel}, ${status.title}` : clockLabel}
-              onScrub={scrubTo}
+              onSeek={clock.seek}
             />
           ) : (
             <View className="h-11 items-center justify-center">
@@ -1016,13 +964,14 @@ const TimelineView = ({
               onLayout={card.measure("topRow")}
             >
               <TimelineCardShared motion={card.shared.clock}>
-                <Text
-                  className="text-3xl font-semibold text-foreground"
-                  maxFontSizeMultiplier={1.5}
-                  style={{ fontVariant: ["tabular-nums"] }}
-                >
-                  {clockLabel}
-                </Text>
+                <TimelineClockText
+                  key={timeline.day.key}
+                  accessibilityLabel={clockLabel}
+                  day={timeline.day}
+                  endLabel={dayEndLabel}
+                  labels={minuteLabels}
+                  time={clock.time}
+                />
               </TimelineCardShared>
               <Animated.View {...card.fullOnly} className="min-w-16 flex-1">
                 <Text
@@ -1042,7 +991,7 @@ const TimelineView = ({
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={`Playback speed, ${speed} times. Double tap for ${nextSpeed} times`}
-                  onPress={() => setSpeed(nextSpeed)}
+                  onPress={() => clock.setSpeed(nextSpeed)}
                   className="min-h-11 min-w-14 items-center justify-center rounded-full bg-container px-3"
                 >
                   <Text className="font-semibold text-foreground">{speed}×</Text>
@@ -1052,16 +1001,16 @@ const TimelineView = ({
             <Animated.View {...card.fullOnly} className="gap-3">
               {routes.length > 0 ? (
                 <TimelineScrubber
+                  clock={clock.scrubber}
                   day={timeline.day}
                   from={timeline.from}
                   historyStart={timeline.historyStart}
                   lanes={lanes}
                   step={STEP_MS}
-                  time={time}
                   to={timeline.to}
                   uses24HourClock={uses24HourClock}
                   valueLabel={status ? `${clockLabel}, ${status.title}` : clockLabel}
-                  onScrub={scrubTo}
+                  onSeek={clock.seek}
                 />
               ) : (
                 <Text className="py-2 text-center text-tertiary">
@@ -1115,14 +1064,12 @@ const TimelineView = ({
                     disabled={previousStop === null}
                     icon={SkipBackIcon}
                     label="Previous stop"
-                    onPress={() => {
-                      if (previousStop !== null) scrubTo(previousStop);
-                    }}
+                    onPress={() => jumpToStop("previous")}
                   />
                   <ControlButton
                     icon={RewindIcon}
                     label="Back 15 minutes"
-                    onPress={() => scrubTo(Math.max(time - STEP_MS, timeline.from))}
+                    onPress={() => clock.seek(clock.time.value - STEP_MS)}
                   />
                 </Animated.View>
                 <TimelineCardShared motion={card.shared.play}>
@@ -1133,21 +1080,20 @@ const TimelineView = ({
                     disabled={!styleLoaded}
                     onPress={() => {
                       if (playing) {
-                        setPlaying(false);
+                        clock.setPlaying(false);
                         return;
                       }
-                      setTime(
+                      clock.play(
                         timelinePlayStart({
                           from: timeline.from,
                           located,
-                          scrubbed: timeState?.key === timeline.day.key,
-                          time,
+                          scrubbed: clock.scrubbed,
+                          time: clock.time.value,
                           to: timeline.to,
                           today: showingToday,
                         }),
                       );
                       setFollowing(true);
-                      setPlaying(true);
                     }}
                     className="size-14 items-center justify-center rounded-full bg-primary"
                   >
@@ -1158,15 +1104,13 @@ const TimelineView = ({
                   <ControlButton
                     icon={FastForwardIcon}
                     label="Forward 15 minutes"
-                    onPress={() => scrubTo(Math.min(time + STEP_MS, timeline.to))}
+                    onPress={() => clock.seek(clock.time.value + STEP_MS)}
                   />
                   <ControlButton
                     disabled={nextStop === null}
                     icon={SkipForwardIcon}
                     label="Next stop"
-                    onPress={() => {
-                      if (nextStop !== null) scrubTo(nextStop);
-                    }}
+                    onPress={() => jumpToStop("next")}
                   />
                 </Animated.View>
               </View>

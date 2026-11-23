@@ -12,10 +12,6 @@ const now = Date.parse("2026-07-19T12:00:00.000Z");
 
 mock.module("react-native", () => ({
   Platform: { OS: "ios" },
-  Animated: {
-    View: ({ children }: { children?: React.ReactNode }) =>
-      React.createElement("animated-view", null, children),
-  },
   ActivityIndicator: () => React.createElement("activity-indicator"),
   Pressable: ({
     accessibilityLabel,
@@ -29,8 +25,14 @@ mock.module("react-native", () => ({
   View: ({ children }: { children?: React.ReactNode }) =>
     React.createElement("view", null, children),
 }));
+mock.module("react-native-reanimated", () => ({
+  default: {
+    View: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement("animated-view", null, children),
+  },
+}));
 mock.module("./useSwipeDownToDismiss.ts", () => ({
-  useSwipeDownToDismiss: () => ({ dismiss: () => {}, panHandlers: {}, translateY: 0 }),
+  useSwipeDownToDismiss: () => ({ animatedStyle: {}, dismiss: () => {}, gesture: {} }),
 }));
 mock.module("../ui/Text.tsx", () => ({
   Text: ({ children }: { children?: React.ReactNode }) =>

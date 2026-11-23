@@ -40,9 +40,22 @@ mock.module("react-native", () => ({
     spring: () => ({ start: () => {} }),
     timing: () => ({ start: () => {} }),
   },
-  PanResponder: { create: () => ({ panHandlers: {} }) },
   Pressable: element("pressable"),
   View: element("view"),
+}));
+mock.module("react-native-reanimated", () => ({
+  cancelAnimation: () => {},
+  default: { View: element("reanimated-view") },
+  useAnimatedStyle: (style: () => object) => style(),
+  useSharedValue: <T,>(value: T) => React.useRef({ value }).current,
+  withSpring: (value: number) => value,
+  withTiming: (value: number, _config: object, done?: (finished: boolean) => void) => {
+    done?.(true);
+    return value;
+  },
+}));
+mock.module("react-native-worklets", () => ({
+  scheduleOnRN: (callback: (...args: unknown[]) => void, ...args: unknown[]) => callback(...args),
 }));
 mock.module("@tanstack/react-query", () => ({
   useMutation: () => ({ isPending: false, mutate: () => {} }),
@@ -117,9 +130,10 @@ test("map sheets open and close at once when Reduce motion is on", async () => {
       }}
     />,
   );
-  expect(transformOf(root)).toEqual({ translateY: 0 });
+  const sheet = root.container.queryAll((node) => node.type === "reanimated-view")[0];
+  const sheetStyles = sheet?.props["style"] as Array<{ transform?: object[] }> | undefined;
+  expect(sheetStyles?.flatMap((style) => style.transform ?? [])).toEqual([{ translateY: 0 }]);
 
-  const sheet = root.container.queryAll((node) => node.type === "animated-view")[0];
   const onAction = sheet?.props["onAccessibilityAction"] as
     ((event: { nativeEvent: { actionName: string } }) => void) | undefined;
   await act(async () => onAction?.({ nativeEvent: { actionName: "dismiss" } }));
