@@ -177,6 +177,14 @@ public class OpenBeaconTrackingModule: Module {
       TrackingRuntime.locked { TrackingRuntime.isCaptureRunning } || TrackingRuntime.isCaptureParked()
     }
 
+    Function("isLowPowerMode") {
+      TrackingRuntime.isLowPowerMode()
+    }
+
+    Function("setLowPowerMode") { (enabled: Bool) in
+      TrackingRuntime.setLowPowerMode(enabled)
+    }
+
     Function("areNotificationsEnabled") {
       Notices.areEnabled()
     }

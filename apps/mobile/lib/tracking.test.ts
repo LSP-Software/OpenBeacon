@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, jest, mock, test } from "bun:test";
+import { beforeEach, describe, expect, jest, mock, spyOn, test } from "bun:test";
 import { createHash } from "node:crypto";
 import {
   createDeviceKeyPair,
@@ -1118,6 +1118,71 @@ describe("tracking service", () => {
           },
         },
       ]);
+    });
+
+    const flushAt = async (times: number[], beforeFlush: (index: number) => void = () => {}) => {
+      const clock = spyOn(Date, "now");
+      try {
+        for (const [index, time] of times.entries()) {
+          clock.mockReturnValue(time);
+          pendingCiphertexts = [
+            createQueueItem({ clientPointId: `p${index}`, groupId: "group-1", id: index + 1 }),
+          ];
+          beforeFlush(index);
+          await flushPendingTrackingPoints();
+        }
+      } finally {
+        clock.mockRestore();
+      }
+    };
+    const askedForCatchUp = () => uploadCalls.map((call) => call.placeAlertsCursor !== undefined);
+
+    test("uploads less than a minute apart ask for alerts and account notices once", async () => {
+      storedPlaceCursor = "2026-11-15T09:00:00.000Z|";
+      const startedAt = Date.now();
+      await flushAt([0, 10_000, 20_000, 60_000].map((sinceStartMs) => startedAt + sinceStartMs));
+
+      expect(askedForCatchUp()).toEqual([true, false, false, true]);
+      expect(accountSyncCalls).toHaveLength(2);
+    });
+
+    test("a clock set backwards doesn't hold back alerts and account notices", async () => {
+      const startedAt = Date.now();
+      await flushAt([startedAt, startedAt - 3_600_000, startedAt - 3_590_000]);
+
+      expect(askedForCatchUp()).toEqual([true, true, false]);
+      expect(accountSyncCalls).toHaveLength(2);
+    });
+
+    test("resuming sharing asks for alerts and account notices on the next upload", async () => {
+      const startedAt = Date.now();
+      await flushAt([startedAt, startedAt + 10_000], (index) => {
+        if (index === 1) resumeTracking();
+      });
+
+      expect(askedForCatchUp()).toEqual([true, true]);
+      expect(accountSyncCalls).toHaveLength(2);
+    });
+
+    test("arrivals and departures are sent in rounds that don't ask for alerts", async () => {
+      const startedAt = Date.now();
+      await flushAt([startedAt, startedAt + 10_000], (index) => {
+        if (index === 1) queuedTransitions = [transition(t1), transition(old, "group-2")];
+      });
+
+      expect(uploadCalls.slice(1)).toEqual([
+        expect.objectContaining({
+          groupId: "group-1",
+          placeTransitions: [expect.objectContaining({ clientId: t1 })],
+        }),
+        expect.objectContaining({
+          groupId: "group-2",
+          points: [],
+          placeTransitions: [expect.objectContaining({ clientId: old })],
+        }),
+      ]);
+      expect(askedForCatchUp()).toEqual([true, false, false]);
+      expect(deletedTransitions.flat().sort()).toEqual([t1, old]);
     });
 
     test("a group with only transitions gets an upload of its own, and the first one asks for alerts from now", async () => {
@@ -2348,21 +2413,76 @@ describe("tracking service", () => {
     captureRunning = true;
     await reconcileTrackingKeys({ startCapture: true });
     let keyState = "state-1";
-    uploadGroup = async ({ points }) => ({
+    uploadGroup = async ({ points, placeAlertsCursor }) => ({
       accepted: points.map((point) => (point as { clientPointId: string }).clientPointId),
       duplicates: [],
-      keyState,
+      ...(placeAlertsCursor === undefined ? {} : { keyState }),
     });
-    pendingCiphertexts = [createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 })];
-    await syncBackgroundTracking();
-    pendingCiphertexts = [createQueueItem({ clientPointId: "point-2", groupId: "group-1", id: 2 })];
+    const startedAt = Date.now();
+    const clock = spyOn(Date, "now");
+    try {
+      clock.mockReturnValue(startedAt);
+      pendingCiphertexts = [
+        createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 }),
+      ];
+      await syncBackgroundTracking();
+      clock.mockReturnValue(startedAt + 60_000);
+      pendingCiphertexts = [
+        createQueueItem({ clientPointId: "point-2", groupId: "group-1", id: 2 }),
+      ];
+      requests.length = 0;
+      await syncBackgroundTracking();
+      expect(requests).not.toContain("groupMembership.list");
+      keyState = "state-2";
+      clock.mockReturnValue(startedAt + 120_000);
+      pendingCiphertexts = [
+        createQueueItem({ clientPointId: "point-3", groupId: "group-1", id: 3 }),
+      ];
+      requests.length = 0;
+      await syncBackgroundTracking();
+      expect(requests).toContain("groupMembership.list");
+      expect(uploadCalls.filter((call) => call.placeAlertsCursor !== undefined)).toHaveLength(3);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  test("key state carried by an upload with only place changes still triggers a key check", async () => {
+    captureRunning = true;
+    await reconcileTrackingKeys({ startCapture: true });
+    registeredDevice = {
+      deviceId: "device-1",
+      privateKey: deviceKeyPair.privateKey,
+      userId: "user-1",
+    };
+    queuedTransitions = [
+      {
+        clientId: "00000000-0000-4000-8000-000000000001",
+        senderDeviceId: "device-1",
+        groupId: "group-1",
+        placeId: "place-group-1",
+        direction: "ARRIVE",
+        occurredAt: 1_000,
+      },
+    ];
+    uploadGroup = async ({ points, placeTransitions }) => ({
+      accepted: points.map((point) => (point as { clientPointId: string }).clientPointId),
+      duplicates: [],
+      keyState: "state-changed",
+      ...(placeTransitions
+        ? {
+            placeTransitions: {
+              accepted: placeTransitions.map(({ clientId }) => clientId),
+              duplicates: [],
+              discarded: [],
+            },
+          }
+        : {}),
+    });
+    storageValues.set("tracking.keyState", `${Date.now()} state-before`);
     requests.length = 0;
     await syncBackgroundTracking();
-    expect(requests).not.toContain("groupMembership.list");
-    keyState = "state-2";
-    pendingCiphertexts = [createQueueItem({ clientPointId: "point-3", groupId: "group-1", id: 3 })];
-    requests.length = 0;
-    await syncBackgroundTracking();
+    expect(uploadCalls).toEqual([expect.objectContaining({ points: [] })]);
     expect(requests).toContain("groupMembership.list");
   });
 

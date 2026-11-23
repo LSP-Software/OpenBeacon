@@ -493,7 +493,7 @@ describe("groupTrackingRouter", () => {
 
   test("uploadBatch inserts for members and returns accepted ids", async () => {
     const insertPointsMock = storedPoints();
-    const { caller } = await createCaller({
+    const { caller, statements } = await createCaller({
       insertPointsMock,
       memberFindUniqueMock: createMemberFindUniqueMock(true),
     });
@@ -508,9 +508,63 @@ describe("groupTrackingRouter", () => {
       discarded: [],
       duplicates: [],
       expired: [],
-      keyState: expect.any(String),
     });
     expect(insertPointsMock).toHaveBeenCalled();
+    expect(statements.some((sql) => sql.includes("AccountHistoryKey"))).toBe(false);
+  });
+
+  test("only an upload that asks to catch up carries the key state", async () => {
+    const { caller } = await createCaller({
+      insertPointsMock: storedPoints(),
+      memberFindUniqueMock: createMemberFindUniqueMock(true),
+    });
+
+    for (const cursor of [{ placeAlertsCursor: null }, { noticesCursor: null }]) {
+      await expect(
+        caller.groupTracking.uploadBatch({
+          groupId: "group-1",
+          points: [trackingPoint(`point-${Object.keys(cursor)[0]}`)],
+          ...cursor,
+        }),
+      ).resolves.toMatchObject({ keyState: expect.any(String) });
+    }
+  });
+
+  test("allows 120 catch-ups a minute per user, then still stores points without them", async () => {
+    let now = 0;
+    const insertPointsMock = storedPoints();
+    const { caller } = await createCaller({
+      insertPointsMock,
+      memberFindUniqueMock: createMemberFindUniqueMock(true),
+      now: () => now,
+    });
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    const catchUp = (seed: string) =>
+      caller.groupTracking.uploadBatch({
+        groupId: "group-1",
+        points: [trackingPoint(seed)],
+        placeAlertsCursor: null,
+        noticesCursor: null,
+      });
+
+    for (let request = 0; request < 120; request += 1) {
+      expect(await catchUp(`allowed-${request}`)).toHaveProperty("keyState");
+    }
+    expect(await catchUp("over")).toEqual({
+      accepted: [testClientPointId("over")],
+      discarded: [],
+      duplicates: [],
+      expired: [],
+    });
+    expect(insertPointsMock).toHaveBeenCalledTimes(121);
+    expect(warn.mock.calls).toContainEqual([
+      "[rate-limit] upload limit reached",
+      { userId: "user-1", limit: "catch-ups per minute" },
+    ]);
+
+    now = 60_000;
+    expect(await catchUp("next-minute")).toHaveProperty("keyState");
+    warn.mockRestore();
   });
 
   test("uploadBatch still succeeds without a key state when the key-state query fails", async () => {
@@ -529,8 +583,9 @@ describe("groupTrackingRouter", () => {
     const result = await caller.groupTracking.uploadBatch({
       groupId: "group-1",
       points: [trackingPoint("point-1")],
+      placeAlertsCursor: null,
     });
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       accepted: [testClientPointId("point-1")],
       discarded: [],
       duplicates: [],
@@ -555,9 +610,11 @@ describe("groupTrackingRouter", () => {
     const result = await caller.groupTracking.uploadBatch({
       groupId: "group-1",
       points: [trackingPoint("point-1")],
+      placeAlertsCursor: null,
     });
     expect(Date.now() - started).toBeLessThan(4_000);
-    expect(result).toEqual({
+    expect(result).not.toHaveProperty("keyState");
+    expect(result).toMatchObject({
       accepted: [testClientPointId("point-1")],
       discarded: [],
       duplicates: [],

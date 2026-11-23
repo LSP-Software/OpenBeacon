@@ -48,6 +48,7 @@ export const useLiveMapEdgeMarkers = ({
   const edgeDirtyRef = useRef(false);
   const edgeControlsRef = useRef<LayoutRectangle | null>(null);
   const edgeSuppressedDeviceIdsRef = useRef<ReadonlySet<string>>(new Set());
+  const followedDeviceIdRef = useRef<string | null>(null);
   const edgeSuppressionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [edgeMarkers, setEdgeMarkers] = useState<Array<MapEdgeCandidate & { memberIds: string[] }>>(
     [],
@@ -58,7 +59,11 @@ export const useLiveMapEdgeMarkers = ({
   markersRef.current = markers;
 
   const isSuppressed = (memberDeviceIds: readonly string[]) =>
-    memberDeviceIds.some((deviceId) => edgeSuppressedDeviceIdsRef.current.has(deviceId));
+    memberDeviceIds.some(
+      (deviceId) =>
+        edgeSuppressedDeviceIdsRef.current.has(deviceId) ||
+        deviceId === followedDeviceIdRef.current,
+    );
 
   const edgeViewportHeight = () =>
     Math.max(
@@ -191,16 +196,30 @@ export const useLiveMapEdgeMarkers = ({
     }, 16);
   };
 
-  const suppress = (deviceIds: readonly string[]) => {
-    edgeSuppressedDeviceIdsRef.current = new Set(deviceIds);
+  const hideSuppressedEdgeMarkers = () => {
     edgeSelectionRevisionRef.current += 1;
-    if (edgeSuppressionTimerRef.current !== null) clearTimeout(edgeSuppressionTimerRef.current);
     const suppressedSubjectIds = markersRef.current
       .filter((marker) => isSuppressed(marker.memberDeviceIds))
       .map((marker) => marker.userId);
-    setEdgeMarkers((current) =>
-      current.filter((edge) => !edge.memberIds.some((id) => suppressedSubjectIds.includes(id))),
-    );
+    setEdgeMarkers((current) => {
+      const next = current.filter(
+        (edge) => !edge.memberIds.some((id) => suppressedSubjectIds.includes(id)),
+      );
+      return next.length === current.length ? current : next;
+    });
+  };
+
+  const suppress = (deviceIds: readonly string[]) => {
+    edgeSuppressedDeviceIdsRef.current = new Set(deviceIds);
+    if (edgeSuppressionTimerRef.current !== null) clearTimeout(edgeSuppressionTimerRef.current);
+    hideSuppressedEdgeMarkers();
+  };
+
+  const follow = (deviceId: string | null) => {
+    if (followedDeviceIdRef.current === deviceId) return;
+    followedDeviceIdRef.current = deviceId;
+    hideSuppressedEdgeMarkers();
+    updateEdgeMarkers();
   };
 
   const release = () => {
@@ -243,6 +262,7 @@ export const useLiveMapEdgeMarkers = ({
   return {
     mapRef,
     edgeMarkers,
+    follow,
     suppress,
     release,
     releaseAfter,

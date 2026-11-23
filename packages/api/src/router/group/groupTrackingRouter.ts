@@ -38,7 +38,7 @@ export const groupTrackingRouter = {
   uploadBatch: groupMemberProcedure
     .meta({
       rateLimit: {
-        limit: 240,
+        limit: 1_000,
         windowMs: 60_000,
       },
     })
@@ -187,21 +187,42 @@ export const groupTrackingRouter = {
           clientIds: result.placeTransitions.accepted,
         });
       }
+      const asksToCatchUp =
+        input.placeAlertsCursor !== undefined || input.noticesCursor !== undefined;
+      const catchUpBudget = asksToCatchUp
+        ? await ctx.cache.rateLimits.consume(
+            {
+              namespace: "groupTracking.uploadBatch.catchUp",
+              identifier: { type: "userId", value: userId },
+              limit: 120,
+              windowMs: 60_000,
+            },
+            { whenUnavailable: "allow" },
+          )
+        : { allowed: false };
+      if (asksToCatchUp && !catchUpBudget.allowed) {
+        console.warn("[rate-limit] upload limit reached", {
+          userId,
+          limit: "catch-ups per minute",
+        });
+      }
+      const placeAlertsCursor = catchUpBudget.allowed ? input.placeAlertsCursor : undefined;
+      const noticesCursor = catchUpBudget.allowed ? input.noticesCursor : undefined;
       const [placeUpdates, imageKeysNeedCatchUp, notices] = await Promise.all([
-        input.placeAlertsCursor === undefined
+        placeAlertsCursor === undefined
           ? null
           : tryCatch(
               Promise.all([
                 readPlacesSummary({ db: ctx.db, userId }),
-                readPlaceAlerts({ cursor: input.placeAlertsCursor, db: ctx.db, userId }),
+                readPlaceAlerts({ cursor: placeAlertsCursor, db: ctx.db, userId }),
               ]),
             ),
-        input.placeAlertsCursor === undefined
+        placeAlertsCursor === undefined
           ? null
           : tryCatch(readImageKeysNeedCatchUp({ db: ctx.db, userId })),
-        input.noticesCursor === undefined
+        noticesCursor === undefined
           ? null
-          : tryCatch(readGroupNotices({ cursor: input.noticesCursor, db: ctx.db, userId })),
+          : tryCatch(readGroupNotices({ cursor: noticesCursor, db: ctx.db, userId })),
       ]);
       const catchUpFields = {
         ...(notices && !notices.error ? { notices: notices.data } : {}),
@@ -212,6 +233,7 @@ export const groupTrackingRouter = {
           ? { imageKeysNeedCatchUp: imageKeysNeedCatchUp.data }
           : {}),
       };
+      if (!catchUpBudget.allowed) return { ...result, ...catchUpFields };
       let timer: ReturnType<typeof setTimeout> | undefined;
       const keyState = await tryCatch(
         Promise.race([

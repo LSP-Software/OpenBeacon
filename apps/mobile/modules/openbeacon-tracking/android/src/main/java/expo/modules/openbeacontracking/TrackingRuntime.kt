@@ -226,6 +226,16 @@ object TrackingRuntime {
   fun isCaptureEnabled(context: Context): Boolean =
     context.getSharedPreferences("openbeacon_tracking_capture", Context.MODE_PRIVATE).getBoolean("enabled", false)
 
+  fun isLowPowerMode(context: Context): Boolean =
+    context.getSharedPreferences("openbeacon_tracking_capture", Context.MODE_PRIVATE).getBoolean("lowPowerMode", false)
+
+  fun setLowPowerMode(
+    context: Context,
+    enabled: Boolean,
+  ) {
+    check(context.getSharedPreferences("openbeacon_tracking_capture", Context.MODE_PRIVATE).edit().putBoolean("lowPowerMode", enabled).commit())
+  }
+
   fun isCaptureParked(context: Context): Boolean =
     isCaptureEnabled(context) && sharingState(context).isConfirmedIndefinitePause()
 

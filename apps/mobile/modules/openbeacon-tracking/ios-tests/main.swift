@@ -254,10 +254,42 @@ check(boundary.enumerated().flatMap { fix(jitter, $0.element, Int64(30 * ($0.off
 
 let battery = BatterySnapshot(level: 80, charging: false, powerSaveMode: false, levelKnown: true)
 let lowBattery = BatterySnapshot(level: 10, charging: false, powerSaveMode: false, levelKnown: true)
-check(CaptureSamplingPolicy.evaluate(battery: battery, speedMetersPerSecond: 2, distanceFromLastQueuedMeters: 5, timeSinceLastQueuedMs: 1000).intervalMs == 10_000, "moving samples every 10 seconds")
-check(CaptureSamplingPolicy.evaluate(battery: lowBattery, speedMetersPerSecond: nil, distanceFromLastQueuedMeters: 5, timeSinceLastQueuedMs: 1000).intervalMs == 60_000, "low battery samples every minute")
-check(!CaptureSamplingPolicy.evaluate(battery: battery, speedMetersPerSecond: 0, distanceFromLastQueuedMeters: 5, timeSinceLastQueuedMs: 1000).shouldQueue, "a stationary phone skips nearby fixes")
-check(CaptureSamplingPolicy.evaluate(battery: battery, speedMetersPerSecond: 0, distanceFromLastQueuedMeters: 5, timeSinceLastQueuedMs: 300_000).shouldQueue, "a stationary phone still queues every five minutes")
+let decide = { (snapshot: BatterySnapshot, speed: Double?, accuracy: Double?, distance: Double, elapsedMs: Int64) in
+  CaptureSamplingPolicy.evaluate(battery: snapshot, speedMetersPerSecond: speed, accuracyMeters: accuracy, distanceFromLastQueuedMeters: distance, timeSinceLastQueuedMs: elapsedMs)
+}
+check(decide(battery, 2, 5, 5, 1000).intervalMs == 10_000, "moving samples every 10 seconds")
+check(decide(lowBattery, nil, nil, 5, 1000).intervalMs == 60_000, "low battery samples every minute")
+check(!decide(battery, 0, 5, 5, 1000).shouldQueue, "a stationary phone skips nearby fixes")
+check(decide(battery, 0, 5, 5, 300_000).shouldQueue, "a stationary phone still queues every five minutes")
+let uploadIntervalMs = { (speed: Double?, lowPowerMode: Bool) in
+  CaptureSamplingPolicy.evaluate(battery: battery, speedMetersPerSecond: speed, accuracyMeters: 5, distanceFromLastQueuedMeters: 5, timeSinceLastQueuedMs: 1000, lowPowerMode: lowPowerMode).uploadIntervalMs
+}
+check(uploadIntervalMs(nil, false) == 60_000 && uploadIntervalMs(0.4, false) == 60_000, "a phone that isn't moving uploads once a minute")
+check(decide(battery, 0.6, 5, 5, 10_000).intervalMs == 10_000, "a slow walk counts as moving")
+check(decide(battery, nil, nil, 40, 30_000).intervalMs == 10_000, "a fix without a speed counts as moving once the phone has covered the distance")
+check(decide(battery, nil, nil, 20, 30_000).intervalMs == 30_000, "a fix without a speed that stayed close is not moving")
+check(decide(battery, nil, nil, 40, 300_000).intervalMs == 30_000, "a fix without a speed that covered the distance too slowly is not moving")
+check(decide(battery, 1.2, 35, 5, 30_000).intervalMs == 30_000 && decide(battery, 1.2, nil, 5, 30_000).intervalMs == 30_000, "a speed from a poor fix is ignored")
+check(decide(battery, 1.2, 20, 5, 30_000).intervalMs == 10_000 && decide(battery, 1.2, 8, 5, 30_000).intervalMs == 10_000, "a speed from a good fix counts")
+check(decide(battery, 0.1, 30, 60, 30_000).intervalMs == 10_000 && decide(battery, 0.1, 30, 60, 30_000).uploadIntervalMs == 55_000, "a poor fix still counts as moving once the phone has covered the distance")
+check(decide(battery, nil, 30, 40, 30_000).intervalMs == 30_000 && decide(battery, nil, 5, 40, 30_000).intervalMs == 10_000, "a coarse fix that jumped within its accuracy is not moving")
+check(decide(battery, 0.5, 5, 5, 10_000).intervalMs == 10_000 && decide(battery, 0.49, 5, 5, 10_000).intervalMs == 30_000, "moving starts exactly at the speed threshold")
+check(decide(battery, nil, nil, 25, 50_000).intervalMs == 10_000 && decide(battery, nil, nil, 24.9, 50_000).intervalMs == 30_000, "moving starts exactly at the distance threshold")
+check(uploadIntervalMs(1.4, false) == 55_000 && uploadIntervalMs(5, false) == 15_000, "a moving phone uploads more often the faster it goes")
+check(uploadIntervalMs(10, false) == 5_000 && uploadIntervalMs(31, false) == 5_000, "a fast phone uploads with every fix")
+let fixTimes: [Int64] = (1...12).map { Int64($0) * 9_900 }
+let uploadTimes = { (speed: Double) -> [Int64] in
+  let interval = uploadIntervalMs(speed, false)
+  return Array(fixTimes.reduce([Int64(0)]) { uploads, fix in fix - uploads.last! >= interval ? uploads + [fix] : uploads }.dropFirst())
+}
+check(uploadTimes(13) == fixTimes, "a fast phone uploads with the fix nearest its due time")
+check(uploadTimes(5.5) == [19_800, 39_600, 59_400, 79_200, 99_000, 118_800], "a moving phone uploads with the fix nearest its due time")
+check(uploadTimes(1.4) == [59_400, 118_800], "a walking phone uploads with the fix nearest a minute")
+check(uploadIntervalMs(31, true) == 55_000 && uploadIntervalMs(1.4, true) == 55_000, "low power mode uploads with the fix nearest a minute at any speed")
+check(uploadIntervalMs(0, true) == 60_000, "low power mode uploads once a minute when still")
+check(decide(battery, nil, nil, 40, 30_000).uploadIntervalMs == 55_000, "a phone moving by distance uploads with the fix nearest a minute")
+check(decide(lowBattery, 31, 5, 5, 1000).uploadIntervalMs == 120_000, "battery saver keeps the slowest upload rate")
+check(decide(lowBattery, nil, nil, 40, 30_000).intervalMs == 20_000 && decide(lowBattery, nil, nil, 40, 30_000).uploadIntervalMs == 120_000, "battery saver keeps the slowest upload rate while moving by distance")
 
 let historyShare = CaptureHistoryShare(account: "LAST_LOCATION", groups: ["family": "MAXIMUM", "club": "LAST_LOCATION"])
 check(!historyShare.isLiveOnly("family"), "a group's own history choice beats the account setting")

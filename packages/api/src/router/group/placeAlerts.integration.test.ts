@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
 import { WRAPPED_EPOCH_KEY_ALGORITHM } from "@openbeacon/encryption";
@@ -382,6 +382,63 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await setMute(owner, { placeId: tempId, mutedUserId: null });
       await prisma.place.delete({ where: { id: tempId } });
       expect(await mutesOf(owner)).toEqual([]);
+    });
+
+    test("over the catch-up limit an upload still stores its departure but leaves out alerts", async () => {
+      await seedArrivals([{ id: "while-limited", userId: owner, placeId: homeId }]);
+      const consume = cache.rateLimits.consume.bind(cache.rateLimits);
+      const limited = spyOn(cache.rateLimits, "consume").mockImplementation(
+        async (options, behaviour) =>
+          options.namespace === "groupTracking.uploadBatch.catchUp"
+            ? {
+                allowed: false,
+                limit: 120,
+                remaining: 0,
+                retryAfterMs: 60_000,
+                resetAfterMs: 60_000,
+              }
+            : consume(options, behaviour),
+      );
+      const warn = spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        const response = await caller(member).groupTracking.uploadBatch({
+          groupId,
+          points: [],
+          placeTransitions: [
+            {
+              clientId: crypto.randomUUID(),
+              placeId: homeId,
+              direction: "LEAVE",
+              occurredAt: new Date(),
+              senderDeviceId: phoneOf(member),
+            },
+          ],
+          placeAlertsCursor: encodeAlertsCursor({
+            createdAt: new Date(Date.now() - 10 * minute),
+            id: "",
+          }),
+          noticesCursor: null,
+        });
+        expect(response.placeTransitions?.accepted).toHaveLength(1);
+        for (const field of [
+          "places",
+          "placeAlerts",
+          "notices",
+          "imageKeysNeedCatchUp",
+          "keyState",
+        ]) {
+          expect(response).not.toHaveProperty(field);
+        }
+      } finally {
+        limited.mockRestore();
+        warn.mockRestore();
+      }
+      expect(
+        await prisma.placeTransition.count({
+          where: { groupId, userId: member, direction: "LEAVE" },
+        }),
+      ).toBe(1);
+      expect(await alertIds(member)).toEqual(["while-limited"]);
     });
   },
 );

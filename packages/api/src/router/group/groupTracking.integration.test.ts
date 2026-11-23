@@ -484,8 +484,17 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
   });
 
   test("upload responses carry a key state that changes when tracking keys need checking", async () => {
-    const keyState = async (seed: string) => (await upload([point(seed)])).keyState;
+    const keyState = async (seed: string) =>
+      (
+        await caller(ownerId, ownerDeviceId).groupTracking.uploadBatch({
+          groupId,
+          points: [point(seed)],
+          noticesCursor: null,
+        })
+      ).keyState;
     const first = await keyState("state-1");
+    expect(first).toEqual(expect.any(String));
+    expect(await upload([point("state-without-cursor")])).not.toHaveProperty("keyState");
     expect(await keyState("state-2")).toBe(first);
     await prisma.userDevice.update({
       where: { id: ownerDeviceId },
@@ -546,7 +555,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
       discarded: [],
       duplicates: [],
       expired: [expired.clientPointId],
-      keyState: expect.any(String),
     });
     const otherGroupId = `${prefix}-other-group`;
     await prisma.group.create({

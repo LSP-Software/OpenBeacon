@@ -3,6 +3,7 @@ import { type RefObject, useEffect, useRef } from "react";
 
 export const useLiveMapCameraCommands = (
   cameraRef: RefObject<CameraRef | null>,
+  animationEndsAtMsRef: RefObject<number>,
   reduceMotion: boolean,
 ) => {
   const releaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -14,6 +15,7 @@ export const useLiveMapCameraCommands = (
   };
 
   const scheduleRelease = (animationDurationMs: number) => {
+    animationEndsAtMsRef.current = Date.now() + animationDurationMs;
     clearReleaseTimer();
     releaseTimerRef.current = setTimeout(() => {
       releaseTimerRef.current = null;

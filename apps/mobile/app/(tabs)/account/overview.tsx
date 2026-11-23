@@ -6,6 +6,7 @@ import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, router } from "expo-router";
 import {
+  BatteryMediumIcon,
   BellIcon,
   BellOffIcon,
   BookOpenIcon,
@@ -57,6 +58,7 @@ import { getStoredDeviceId } from "../../../lib/deviceKeys.ts";
 import { historyLossRisk } from "../../../lib/historyLossRisk.ts";
 import { historyShareLabel } from "../../../lib/historyShare.ts";
 import { removePhoneRecoveryPrompt } from "../../../lib/keyRemovalWarnings.ts";
+import { useLowPowerMode } from "../../../lib/lowPowerMode.ts";
 import {
   getLocationPermissionWarningDescription,
   getLocationPermissionWarningTitle,
@@ -86,6 +88,7 @@ const AccountScreen = () => {
   const { openLocationPermissionSettings, permissionState } = useLocationPermissions();
   const notifications = useNotificationSettings();
   const appLock = useAppLock();
+  const lowPowerMode = useLowPowerMode();
   const historyShare = useHistoryShare();
   const { appThemePreference } = useTheme();
   const units = useUnits();
@@ -335,6 +338,13 @@ const AccountScreen = () => {
             value={
               historyShare.setting ? historyShareLabel(historyShare.setting.account) : undefined
             }
+          />
+          <ListRow
+            title="Save battery while moving"
+            icon={BatteryMediumIcon}
+            iconColor="green"
+            href="/account/save-battery"
+            value={lowPowerMode ? "On" : "Off"}
           />
         </LocationSharingCard>
         {permissionState?.shouldShowAccountWarning && (
