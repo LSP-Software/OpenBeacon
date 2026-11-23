@@ -51,7 +51,7 @@ import { Icon } from "../components/ui/Icon.tsx";
 import { Text } from "../components/ui/Text.tsx";
 import { useCachedGroup } from "../hooks/useCachedGroup.ts";
 import { useReducedMotion } from "../hooks/useReducedMotion.ts";
-import { useSpeedUnit } from "../hooks/useSpeedUnit.ts";
+import { useUnits } from "../hooks/useUnits.ts";
 import { useTimelinePlayerCard } from "../hooks/useTimelinePlayerCard.ts";
 import { useUses24HourClock } from "../hooks/useUses24HourClock.ts";
 import { useTimelineDay, useTimelineDays } from "../hooks/useTimeline.ts";
@@ -65,7 +65,7 @@ import { GROUP_COLOR_PALETTE, getGroupColor } from "../lib/groupColor.ts";
 import { loadPersonalNicknames } from "../lib/personalNicknames.ts";
 import { groupPlacesQueryOptions } from "../lib/placeSync.ts";
 import { getSymbolVisibility } from "../lib/protomaps-style.ts";
-import { timelineSpeedLabel } from "../lib/speed.ts";
+import { formatDistance, timelineSpeedLabel } from "../lib/units.ts";
 import {
   pickPersonDevices,
   timelineDayStats,
@@ -199,7 +199,7 @@ const TimelineView = ({
   const [chosenPeople, setChosenPeople] = useState<string[] | null>(null);
   const [chooserOpen, setChooserOpen] = useState(false);
   const reduceMotion = useReducedMotion();
-  const { unit: speedUnit } = useSpeedUnit();
+  const { unit: units } = useUnits();
   const timeRef = useRef(0);
   const dayStripRef = useRef<ScrollView>(null);
 
@@ -578,7 +578,7 @@ const TimelineView = ({
     }
     switch (selectedSegment.kind) {
       case "moving": {
-        const speedLabel = timelineSpeedLabel(selectedPin, speedUnit);
+        const speedLabel = timelineSpeedLabel(selectedPin, units);
         return {
           title: "Moving",
           detail: speedLabel ? `${speedLabel} · ${date}` : date,
@@ -1078,7 +1078,7 @@ const TimelineView = ({
                 <>
                   <View className="flex-row flex-wrap gap-2">
                     <StatCard
-                      value={formatDistance(selectedRoute.stats.distanceMeters)}
+                      value={formatDistance(selectedRoute.stats.distanceMeters, units)}
                       label="travelled"
                     />
                     <StatCard
@@ -1349,9 +1349,6 @@ const formatDate = (time: number) =>
     day: "numeric",
     month: "short",
   });
-
-const formatDistance = (meters: number) =>
-  meters < 1000 ? `${Math.round(meters)} m` : `${(meters / 1000).toFixed(1)} km`;
 
 const formatDuration = (ms: number) => {
   const minutes = Math.round(ms / 60_000);

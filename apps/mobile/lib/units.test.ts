@@ -1,13 +1,44 @@
 import { describe, expect, test } from "bun:test";
 import {
-  defaultSpeedUnit,
+  defaultUnits,
+  formatDistance,
   formatSpeed,
   liveSpeedHidesAt,
   liveSpeedLabel,
   movingSpeedLabel,
-  parseSpeedPreference,
+  parseUnitsPreference,
   timelineSpeedLabel,
-} from "./speed.ts";
+} from "./units.ts";
+
+describe("formatDistance", () => {
+  test("uses metres and kilometres with km/h", () => {
+    expect(formatDistance(420.4, "kmh")).toBe("420 m");
+    expect(formatDistance(12_345, "kmh")).toBe("12.3 km");
+  });
+
+  test("switches to kilometres once the metres would round to 1000", () => {
+    expect(formatDistance(999.4, "kmh")).toBe("999 m");
+    expect(formatDistance(999.6, "kmh")).toBe("1.0 km");
+  });
+
+  test("switches to miles once the feet would round to a tenth of a mile", () => {
+    expect(formatDistance(160.78, "mph")).toBe("527 ft");
+    expect(formatDistance(160.9, "mph")).toBe("0.1 mi");
+  });
+
+  test("drops the decimal from 100 upwards", () => {
+    expect(formatDistance(99_940, "kmh")).toBe("99.9 km");
+    expect(formatDistance(99_960, "kmh")).toBe("100 km");
+    expect(formatDistance(1_234_567, "kmh")).toBe("1235 km");
+    expect(formatDistance(1_234_567, "mph")).toBe("767 mi");
+  });
+
+  test("uses feet and miles with mph", () => {
+    expect(formatDistance(100, "mph")).toBe("328 ft");
+    expect(formatDistance(1609.344, "mph")).toBe("1.0 mi");
+    expect(formatDistance(12_345, "mph")).toBe("7.7 mi");
+  });
+});
 
 describe("formatSpeed", () => {
   test("converts metres per second to whole mph and km/h", () => {
@@ -89,21 +120,21 @@ describe("liveSpeedLabel", () => {
   });
 });
 
-describe("defaultSpeedUnit", () => {
+describe("defaultUnits", () => {
   test("uses mph in mph regions and km/h elsewhere", () => {
-    expect(defaultSpeedUnit({ measurementSystem: "uk", regionCode: "GB" })).toBe("mph");
-    expect(defaultSpeedUnit({ measurementSystem: "us", regionCode: "US" })).toBe("mph");
-    expect(defaultSpeedUnit({ measurementSystem: "metric", regionCode: "gb" })).toBe("mph");
-    expect(defaultSpeedUnit({ measurementSystem: "metric", regionCode: "FR" })).toBe("kmh");
-    expect(defaultSpeedUnit({ measurementSystem: "metric", regionCode: "IE" })).toBe("kmh");
-    expect(defaultSpeedUnit({ measurementSystem: "us", regionCode: "CA" })).toBe("kmh");
+    expect(defaultUnits({ measurementSystem: "uk", regionCode: "GB" })).toBe("mph");
+    expect(defaultUnits({ measurementSystem: "us", regionCode: "US" })).toBe("mph");
+    expect(defaultUnits({ measurementSystem: "metric", regionCode: "gb" })).toBe("mph");
+    expect(defaultUnits({ measurementSystem: "metric", regionCode: "FR" })).toBe("kmh");
+    expect(defaultUnits({ measurementSystem: "metric", regionCode: "IE" })).toBe("kmh");
+    expect(defaultUnits({ measurementSystem: "us", regionCode: "CA" })).toBe("kmh");
   });
 
   test("falls back to the measurement system without a region", () => {
-    expect(defaultSpeedUnit({ measurementSystem: "us", regionCode: null })).toBe("mph");
-    expect(defaultSpeedUnit({ measurementSystem: "uk", regionCode: null })).toBe("mph");
-    expect(defaultSpeedUnit({ measurementSystem: "metric", regionCode: null })).toBe("kmh");
-    expect(defaultSpeedUnit({ measurementSystem: null, regionCode: null })).toBe("kmh");
+    expect(defaultUnits({ measurementSystem: "us", regionCode: null })).toBe("mph");
+    expect(defaultUnits({ measurementSystem: "uk", regionCode: null })).toBe("mph");
+    expect(defaultUnits({ measurementSystem: "metric", regionCode: null })).toBe("kmh");
+    expect(defaultUnits({ measurementSystem: null, regionCode: null })).toBe("kmh");
   });
 });
 
@@ -123,12 +154,12 @@ describe("timelineSpeedLabel", () => {
   });
 });
 
-describe("parseSpeedPreference", () => {
+describe("parseUnitsPreference", () => {
   test("reads a stored unit and falls back to the phone's region for anything else", () => {
-    expect(parseSpeedPreference("mph")).toBe("mph");
-    expect(parseSpeedPreference("kmh")).toBe("kmh");
-    expect(parseSpeedPreference(undefined)).toBe("auto");
-    expect(parseSpeedPreference("knots")).toBe("auto");
-    expect(parseSpeedPreference("km/h")).toBe("auto");
+    expect(parseUnitsPreference("mph")).toBe("mph");
+    expect(parseUnitsPreference("kmh")).toBe("kmh");
+    expect(parseUnitsPreference(undefined)).toBe("auto");
+    expect(parseUnitsPreference("knots")).toBe("auto");
+    expect(parseUnitsPreference("km/h")).toBe("auto");
   });
 });

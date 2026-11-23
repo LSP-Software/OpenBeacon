@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { liveSpeedHidesAt, liveSpeedLabel } from "../lib/speed.ts";
-import { useSpeedUnit } from "./useSpeedUnit.ts";
+import { liveSpeedHidesAt, liveSpeedLabel } from "../lib/units.ts";
+import { useUnits } from "./useUnits.ts";
 
 export const useLiveSpeedLabel = ({
   speed,
@@ -9,7 +9,7 @@ export const useLiveSpeedLabel = ({
   speed: number | null;
   timestamp: string | null;
 }) => {
-  const { unit } = useSpeedUnit();
+  const { unit } = useUnits();
   const [, setTick] = useState(0);
   const label = liveSpeedLabel({ now: Date.now(), speed, timestamp, unit });
   const hidesAt = label === null || timestamp === null ? null : liveSpeedHidesAt(timestamp);

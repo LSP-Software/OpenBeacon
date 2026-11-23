@@ -49,7 +49,7 @@ import { ListRow } from "../../../components/ui/List.tsx";
 import { Text } from "../../../components/ui/Text.tsx";
 import { useHeldHistoryKeyVersions } from "../../../hooks/useHeldHistoryKeyVersions.ts";
 import { useHistoryShare } from "../../../hooks/useHistoryShare.ts";
-import { useSpeedUnit } from "../../../hooks/useSpeedUnit.ts";
+import { useUnits } from "../../../hooks/useUnits.ts";
 import { trpc } from "../../../lib/api.ts";
 import { useAppLock } from "../../../lib/appLock.ts";
 import { authClient } from "../../../lib/auth-client.ts";
@@ -88,8 +88,8 @@ const AccountScreen = () => {
   const appLock = useAppLock();
   const historyShare = useHistoryShare();
   const { appThemePreference } = useTheme();
-  const speedUnit = useSpeedUnit();
-  const speedUnitLabel = speedUnit.unit === "mph" ? "mph" : "km/h";
+  const units = useUnits();
+  const unitsLabel = units.unit === "mph" ? "Miles" : "Kilometres";
   const [signOutPhase, setSignOutPhase] = useState<"uploading" | "signingOut" | null>(null);
   const signingOut = useRef(false);
   const recoveryStatus = useQuery({
@@ -483,9 +483,9 @@ const AccountScreen = () => {
                   color: "blue",
                   href: "/account/units",
                   value:
-                    speedUnit.preference === "auto"
-                      ? `${speedUnitLabel} (${thisDeviceNoun()} region)`
-                      : speedUnitLabel,
+                    units.preference === "auto"
+                      ? `${unitsLabel} (${thisDeviceNoun()} region)`
+                      : unitsLabel,
                 },
               ],
             },

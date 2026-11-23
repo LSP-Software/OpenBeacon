@@ -33,7 +33,7 @@ mock.module("../components/ui/Button.tsx", () => ({
     onPress?: () => void;
   }) => React.createElement("mock-button", { disabled, loading, onPress }, children),
 }));
-mock.module("../hooks/useSpeedUnit.ts", () => ({ useSpeedUnit: () => ({ unit: "mph" }) }));
+mock.module("../hooks/useUnits.ts", () => ({ useUnits: () => ({ unit: "mph" }) }));
 mock.module("../hooks/useTimeSince.ts", () => ({
   useTimeSince: (timestamp: string | null) => (timestamp ? "1 min ago" : null),
 }));

@@ -266,8 +266,8 @@ mock.module("../../hooks/useSelfDeviceHeading.ts", () => ({
   useSelfDeviceHeading: () => getNativeMapSelfHeadingDegrees(),
 }));
 
-mock.module("../../hooks/useSpeedUnit.ts", () => ({
-  useSpeedUnit: () => ({ unit: "mph" }),
+mock.module("../../hooks/useUnits.ts", () => ({
+  useUnits: () => ({ unit: "mph" }),
 }));
 
 mock.module("../../lib/api.ts", () => ({
