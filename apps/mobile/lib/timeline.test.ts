@@ -6,6 +6,8 @@ import {
   pickPersonDevices,
   timelineDayStats,
   timelinePositionAt,
+  timelineSegmentAt,
+  timelineStopJump,
 } from "./timeline.ts";
 import type { TimelineDeviceData, TimelinePoint } from "./timelineTypes.ts";
 
@@ -565,5 +567,33 @@ describe("timelinePauseDetail", () => {
       });
     expect(ongoing(60)).toBe("Alice paused some time after t60");
     expect(ongoing(0)).toBe("Alice paused");
+  });
+});
+
+describe("timelineStopJump", () => {
+  const stops = [{ start: 9_000 }, { start: 1_000 }, { start: 5_000 }];
+
+  test("next goes to the following arrival and previous to the one before", () => {
+    expect(timelineStopJump({ direction: "next", stops, time: 5_000 })).toBe(9_000);
+    expect(timelineStopJump({ direction: "previous", stops, time: 5_000 })).toBe(1_000);
+    expect(timelineStopJump({ direction: "previous", stops, time: 6_000 })).toBe(5_000);
+  });
+
+  test("there is nowhere to go past the first or last stop", () => {
+    expect(timelineStopJump({ direction: "next", stops, time: 9_000 })).toBeNull();
+    expect(timelineStopJump({ direction: "previous", stops, time: 1_000 })).toBeNull();
+    expect(timelineStopJump({ direction: "next", stops: [], time: 0 })).toBeNull();
+  });
+
+  test("landing on an arrival shows the person as stopped, not still moving", () => {
+    const segments = segmentsOf([
+      point({ latitude: 51, time: at(10) }),
+      point({ latitude: 52, stayUntil: at(11), time: at(10, 5) }),
+    ]);
+    const { stops: dayStops } = timelineDayStats({ places: [], segments });
+    const arrival = timelineStopJump({ direction: "next", stops: dayStops, time: at(10) });
+    expect(arrival).toBe(at(10, 5));
+    expect(timelineSegmentAt(segments, arrival ?? 0)?.kind).toBe("stay");
+    expect(timelinePositionAt(segments, arrival ?? 0).state).toBe("stay");
   });
 });

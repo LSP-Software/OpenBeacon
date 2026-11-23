@@ -72,6 +72,8 @@ import {
   timelinePauseDetail,
   timelinePlayStart,
   timelinePositionAt,
+  timelineSegmentAt,
+  timelineStopJump,
 } from "../lib/timeline.ts";
 import { formatTimelineClock, formatTimelineDayEnd } from "../lib/timelineClock.ts";
 import { pickTimelinePeople } from "../lib/timelineBudget.ts";
@@ -534,9 +536,9 @@ const TimelineView = ({
   }, [fit.key]);
 
   const selectedRoute = selectedPerson ? routes[0] : undefined;
-  const selectedSegment = selectedPerson?.device.segments.find(
-    (segment) => segment.start <= time && time <= segment.end,
-  );
+  const selectedSegment = selectedPerson
+    ? timelineSegmentAt(selectedPerson.device.segments, time)
+    : null;
   const selectedStop = selectedRoute?.stats.stops.find(
     (stop) => stop.start <= time && time <= stop.end,
   );
@@ -802,6 +804,9 @@ const TimelineView = ({
     setPlaying(false);
     setTime(value);
   };
+  const stops = routes.flatMap((route) => route.stats.stops);
+  const previousStop = timelineStopJump({ direction: "previous", stops, time });
+  const nextStop = timelineStopJump({ direction: "next", stops, time });
 
   return (
     <View className="flex-1 bg-background">
@@ -1107,9 +1112,12 @@ const TimelineView = ({
               <View className="flex-row items-center" onLayout={card.measure("controls")}>
                 <Animated.View {...card.fullOnly} className="flex-1 flex-row justify-around">
                   <ControlButton
+                    disabled={previousStop === null}
                     icon={SkipBackIcon}
-                    label="Start of day"
-                    onPress={() => scrubTo(timeline.from)}
+                    label="Previous stop"
+                    onPress={() => {
+                      if (previousStop !== null) scrubTo(previousStop);
+                    }}
                   />
                   <ControlButton
                     icon={RewindIcon}
@@ -1153,9 +1161,12 @@ const TimelineView = ({
                     onPress={() => scrubTo(Math.min(time + STEP_MS, timeline.to))}
                   />
                   <ControlButton
+                    disabled={nextStop === null}
                     icon={SkipForwardIcon}
-                    label="End of day"
-                    onPress={() => scrubTo(timeline.to)}
+                    label="Next stop"
+                    onPress={() => {
+                      if (nextStop !== null) scrubTo(nextStop);
+                    }}
                   />
                 </Animated.View>
               </View>
@@ -1308,10 +1319,12 @@ const DeviceSwitch = ({
 };
 
 const ControlButton = ({
+  disabled = false,
   icon,
   label,
   onPress,
 }: {
+  disabled?: boolean;
   icon: typeof PlayIcon;
   label: string;
   onPress: () => void;
@@ -1319,8 +1332,13 @@ const ControlButton = ({
   <Pressable
     accessibilityRole="button"
     accessibilityLabel={label}
+    accessibilityState={{ disabled }}
+    disabled={disabled}
     onPress={onPress}
-    className="size-11 items-center justify-center rounded-full bg-container"
+    className={cn(
+      "size-11 items-center justify-center rounded-full bg-container",
+      disabled && "opacity-40",
+    )}
   >
     <Icon as={icon} size={20} className="text-foreground" />
   </Pressable>

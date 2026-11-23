@@ -209,6 +209,23 @@ export const timelinePlayStart = ({
   return Math.max(from, Math.min(to, ...located.map((segment) => segment.start)));
 };
 
+export const timelineStopJump = ({
+  direction,
+  stops,
+  time,
+}: {
+  direction: "next" | "previous";
+  stops: readonly { start: number }[];
+  time: number;
+}) => {
+  const arrivals = stops.map((stop) => stop.start).sort((first, second) => first - second);
+  const target =
+    direction === "next"
+      ? arrivals.find((arrival) => arrival > time)
+      : arrivals.findLast((arrival) => arrival < time);
+  return target ?? null;
+};
+
 export const pickPersonDevices = <
   Device extends { deviceId: string; pointCount: number; userId: string },
 >(
@@ -221,12 +238,7 @@ export const pickPersonDevices = <
   return selected ? { others, selected } : null;
 };
 
-export const timelinePositionAt = (
-  segments: readonly TimelineSegment[],
-  time: number,
-):
-  | { position: TimelinePosition; state: "moving" | "pause" | "stay" }
-  | { position: null; state: "noLocation" } => {
+export const timelineSegmentAt = (segments: readonly TimelineSegment[], time: number) => {
   let low = 0;
   let high = segments.length - 1;
   let index = -1;
@@ -240,16 +252,24 @@ export const timelinePositionAt = (
     }
   }
   const found = segments[index];
-  if (!found || time > found.end) return { position: null, state: "noLocation" };
+  if (!found || time > found.end) return null;
   const previous = segments[index - 1];
-  const segment =
-    (found.kind === "noLocation" || found.kind === "pause") &&
+  return (found.kind === "noLocation" || found.kind === "pause") &&
     time === found.start &&
     previous?.end === time &&
     (previous.kind === "moving" || previous.kind === "stay")
-      ? previous
-      : found;
+    ? previous
+    : found;
+};
 
+export const timelinePositionAt = (
+  segments: readonly TimelineSegment[],
+  time: number,
+):
+  | { position: TimelinePosition; state: "moving" | "pause" | "stay" }
+  | { position: null; state: "noLocation" } => {
+  const segment = timelineSegmentAt(segments, time);
+  if (!segment) return { position: null, state: "noLocation" };
   switch (segment.kind) {
     case "moving":
       return { position: interpolate(segment, time), state: "moving" };
