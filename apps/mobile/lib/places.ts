@@ -12,6 +12,7 @@ import {
 import { MAX_PLACES_PER_GROUP } from "@openbeacon/schemas";
 import type { ErrorReason } from "@openbeacon/shared";
 import type { RouterOutputs } from "./api.ts";
+import type { Units } from "./units.ts";
 
 export type GroupPlace = RouterOutputs["groupPlaces"]["list"]["places"][number] & {
   geometry: PlaceGeometryV1 | null;
@@ -51,12 +52,14 @@ export const placeRadiusFromSlider = (fraction: number) =>
 export const sliderFromPlaceRadius = (radiusMeters: number) =>
   (snapPlaceRadius(radiusMeters) - PLACE_RADIUS_MIN) / (PLACE_RADIUS_MAX - PLACE_RADIUS_MIN);
 
-export const formatPlaceDistance = (meters: number) =>
-  meters >= 1000 ? `${meters / 1000} km` : `${meters} m`;
+export const formatPlaceDistance = (meters: number, units: Units) => {
+  if (units === "mph") return `${Math.round((meters * 3.28084) / 10) * 10} ft`;
+  return meters >= 1000 ? `${meters / 1000} km` : `${meters} m`;
+};
 
-export const formatPlaceSize = (radiusMeters: number) => {
+export const formatPlaceSize = (radiusMeters: number, units: Units) => {
   const stop = PLACE_SIZE_STOPS.find((item) => item.radiusMeters === radiusMeters);
-  const distance = formatPlaceDistance(radiusMeters);
+  const distance = formatPlaceDistance(radiusMeters, units);
   return stop ? `${stop.label} · ${distance}` : distance;
 };
 

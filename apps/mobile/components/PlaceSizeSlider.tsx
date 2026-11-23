@@ -2,6 +2,7 @@ import { Slider as ComposeSlider } from "@expo/ui/jetpack-compose";
 import { Slider as SwiftSlider } from "@expo/ui/swift-ui";
 import { accessibilityLabel, accessibilityValue, tint } from "@expo/ui/swift-ui/modifiers";
 import { Platform, View } from "react-native";
+import { useUnits } from "../hooks/useUnits.ts";
 import {
   formatPlaceDistance,
   formatPlaceSize,
@@ -25,6 +26,7 @@ export const PlaceSizeSlider = ({
   radiusMeters: number;
 }) => {
   const { palette } = useColors();
+  const { unit } = useUnits();
   const position = sliderFromPlaceRadius(radiusMeters);
   const change = (value: number) => onChange(placeRadiusFromSlider(value));
 
@@ -32,7 +34,9 @@ export const PlaceSizeSlider = ({
     <View className="gap-3">
       <View className="flex-row items-center justify-between">
         <Text className="text-foreground font-semibold">Size</Text>
-        <Text className="font-semibold text-primary-text">{formatPlaceSize(radiusMeters)}</Text>
+        <Text className="font-semibold text-primary-text">
+          {formatPlaceSize(radiusMeters, unit)}
+        </Text>
       </View>
       {Platform.OS === "ios" ? (
         <IosHost matchContents={{ vertical: true }} style={{ width: "100%" }}>
@@ -44,7 +48,7 @@ export const PlaceSizeSlider = ({
             modifiers={[
               tint(palette.action),
               accessibilityLabel("Size"),
-              accessibilityValue(formatPlaceSize(radiusMeters)),
+              accessibilityValue(formatPlaceSize(radiusMeters, unit)),
             ]}
           />
         </IosHost>
@@ -57,7 +61,7 @@ export const PlaceSizeSlider = ({
             min: PLACE_RADIUS_MIN,
             max: PLACE_RADIUS_MAX,
             now: radiusMeters,
-            text: formatPlaceSize(radiusMeters),
+            text: formatPlaceSize(radiusMeters, unit),
           }}
           accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}
           onAccessibilityAction={(event) => {
@@ -81,8 +85,8 @@ export const PlaceSizeSlider = ({
         </View>
       )}
       <View className="flex-row justify-between">
-        <Text className="text-xs text-tertiary">{formatPlaceDistance(PLACE_RADIUS_MIN)}</Text>
-        <Text className="text-xs text-tertiary">{formatPlaceDistance(PLACE_RADIUS_MAX)}</Text>
+        <Text className="text-xs text-tertiary">{formatPlaceDistance(PLACE_RADIUS_MIN, unit)}</Text>
+        <Text className="text-xs text-tertiary">{formatPlaceDistance(PLACE_RADIUS_MAX, unit)}</Text>
       </View>
       <SegmentedControl
         accessibilityLabel="Place size"

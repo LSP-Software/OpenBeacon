@@ -1,12 +1,12 @@
 import { ScrollView, View } from "react-native";
 import { ScreenHeader } from "../../components/headers/ScreenHeader.tsx";
 import { ChoiceList } from "../../components/ui/ChoiceList.tsx";
-import { useSpeedUnit } from "../../hooks/useSpeedUnit.ts";
-import { speedUnitName } from "../../lib/speed.ts";
+import { useUnits } from "../../hooks/useUnits.ts";
+import { unitsName } from "../../lib/units.ts";
 import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 
 const UnitsScreen = () => {
-  const { preference, regionUnit, setPreference } = useSpeedUnit();
+  const { preference, regionUnit, setPreference } = useUnits();
 
   return (
     <View className="flex-1 bg-background">
@@ -19,17 +19,17 @@ const UnitsScreen = () => {
         showsVerticalScrollIndicator={false}
       >
         <ChoiceList
-          title="Speed"
-          footer={`Used for speeds on the map and in Timeline, and for distance travelled in Timeline. This setting stays on this ${thisDeviceNoun()}.`}
-          accessibilityLabel="Speed units"
+          title="Distance and speed"
+          footer={`Used for speeds and place sizes, and for distance travelled in Timeline. This setting stays on this ${thisDeviceNoun()}.`}
+          accessibilityLabel="Distance and speed units"
           options={[
             {
               value: "auto",
               title: `Match this ${thisDeviceNoun()}’s region`,
-              description: `Currently ${speedUnitName(regionUnit)}`,
+              description: `Currently ${unitsName(regionUnit)}`,
             },
-            { value: "mph", title: speedUnitName("mph") },
-            { value: "kmh", title: speedUnitName("kmh") },
+            { value: "mph", title: unitsName("mph") },
+            { value: "kmh", title: unitsName("kmh") },
           ]}
           selected={preference}
           onChange={setPreference}

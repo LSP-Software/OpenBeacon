@@ -50,7 +50,7 @@ mock.module("lucide-react-native", () => ({
 }));
 mock.module("../components/ui/Button.tsx", () => ({ Button: Passthrough }));
 mock.module("../hooks/useSelfDeviceHeading.ts", () => ({ useSelfDeviceHeading: () => null }));
-mock.module("../hooks/useSpeedUnit.ts", () => ({ useSpeedUnit: () => ({ unit: "mph" }) }));
+mock.module("../hooks/useUnits.ts", () => ({ useUnits: () => ({ unit: "mph" }) }));
 mock.module("../hooks/useTimeSince.ts", () => ({
   useTimeSince: (timestamp: string | null) => (timestamp ? "1 min ago" : null),
 }));

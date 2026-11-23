@@ -21,6 +21,7 @@ import { Switch } from "../ui/Switch.tsx";
 import { Text } from "../ui/Text.tsx";
 import { useCachedGroup } from "../../hooks/useCachedGroup.ts";
 import { useMemberNames } from "../../hooks/useMemberNames.ts";
+import { useUnits } from "../../hooks/useUnits.ts";
 import { Alert } from "../../lib/alert.ts";
 import { trpc } from "../../lib/api.ts";
 import { cn } from "../../lib/cn.ts";
@@ -46,6 +47,7 @@ const PlacesTab = ({
   livePositions: readonly LiveMapPosition[];
 }) => {
   const isFocused = useIsFocused();
+  const { unit } = useUnits();
   const queryClient = useQueryClient();
   const { data: session } = authClient.useSession();
   const userId = session?.user.id;
@@ -282,7 +284,7 @@ const PlacesTab = ({
             >
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`${place.name}, ${formatPlaceSize(place.geometry.radiusMeters)}, ${describePeopleHere(here)}. Show on map`}
+                accessibilityLabel={`${place.name}, ${formatPlaceSize(place.geometry.radiusMeters, unit)}, ${describePeopleHere(here)}. Show on map`}
                 className={cn(
                   "flex-row items-center gap-4 p-4 active:bg-container",
                   groupedRowClassName(index),
@@ -295,7 +297,7 @@ const PlacesTab = ({
                 <View className="flex-1 gap-0.5">
                   <Text className="text-foreground text-lg font-semibold">{place.name}</Text>
                   <Text className="text-sm text-tertiary">
-                    {formatPlaceSize(place.geometry.radiusMeters)}
+                    {formatPlaceSize(place.geometry.radiusMeters, unit)}
                   </Text>
                   <Text
                     className={
