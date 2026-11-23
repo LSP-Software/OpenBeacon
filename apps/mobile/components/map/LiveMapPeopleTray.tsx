@@ -1,5 +1,5 @@
 import { memo, useRef } from "react";
-import { ActivityIndicator, Platform, Pressable, ScrollView, View } from "react-native";
+import { ActivityIndicator, Animated, Platform, Pressable, ScrollView, View } from "react-native";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
 import { cn } from "../../lib/cn.ts";
 import type { MapPeople, MapPerson, MapPersonStatus } from "../../lib/mapPeopleTypes.ts";
@@ -7,6 +7,7 @@ import { shortTimeSince, timeSince } from "../../lib/timeSince.ts";
 import { Text } from "../ui/Text.tsx";
 import { LiveMapMarkerPin } from "./LiveMapMarkerPin.tsx";
 import { MapSurface, useMapBottomInset } from "./MapSurface.tsx";
+import { useSwipeDownToDismiss } from "./useSwipeDownToDismiss.ts";
 
 const ios = Platform.OS === "ios";
 
@@ -14,16 +15,19 @@ const countPeople = (count: number) => `${count} ${count === 1 ? "person" : "peo
 
 export const LiveMapPeopleTray = ({
   now,
+  onDismiss,
   onHeightChange,
   onSelectPerson,
   people,
 }: {
   now: number;
+  onDismiss: () => void;
   onHeightChange: (height: number) => void;
   onSelectPerson: (userId: string) => void;
   people: MapPeople;
 }) => {
   const bottomInset = useMapBottomInset();
+  const { dismiss, panHandlers, translateY } = useSwipeDownToDismiss(onDismiss);
   const scrollRef = useRef<ScrollView>(null);
   const sectionXRef = useRef<Record<string, number>>({});
   const sections = [
@@ -64,14 +68,19 @@ export const LiveMapPeopleTray = ({
 
   const content = (
     <>
-      {ios ? null : (
-        <View className="items-center pb-3">
-          <View className="h-1 w-8 rounded-full bg-border-strong" />
-        </View>
-      )}
+      <View className={ios ? "-mt-1 items-center pb-2" : "items-center pb-3"}>
+        <View
+          className="rounded-full bg-border-strong"
+          style={ios ? { height: 5, width: 36, opacity: 0.5 } : { height: 4, width: 32 }}
+        />
+      </View>
       <View className="flex-row items-center justify-between px-5 pb-3">
         <Text
           accessibilityRole="header"
+          accessibilityActions={[{ name: "dismiss", label: "Hide people" }]}
+          onAccessibilityAction={(event) => {
+            if (event.nativeEvent.actionName === "dismiss") dismiss();
+          }}
           className={ios ? "text-foreground text-xl font-bold" : "text-foreground text-[22px]"}
         >
           People
@@ -204,24 +213,28 @@ export const LiveMapPeopleTray = ({
     </>
   );
 
-  return ios ? (
-    <View
-      className="absolute left-3 right-3"
-      style={{ bottom: bottomInset + 12 }}
-      onLayout={(event) => onHeightChange(event.nativeEvent.layout.height + bottomInset + 12)}
+  return (
+    <Animated.View
+      {...panHandlers}
+      className={
+        ios ? "absolute left-3 right-3" : "absolute bottom-0 left-0 right-0 bg-container pb-4 pt-3"
+      }
+      style={[
+        { transform: [{ translateY }] },
+        ios ? { bottom: bottomInset + 12 } : { borderTopLeftRadius: 28, borderTopRightRadius: 28 },
+      ]}
+      onLayout={(event) =>
+        onHeightChange(event.nativeEvent.layout.height + bottomInset + (ios ? 12 : 0))
+      }
     >
-      <MapSurface radius={30}>
-        <View className="pb-4 pt-4">{content}</View>
-      </MapSurface>
-    </View>
-  ) : (
-    <View
-      className="absolute bottom-0 left-0 right-0 bg-container pb-4 pt-3"
-      style={{ borderTopLeftRadius: 28, borderTopRightRadius: 28 }}
-      onLayout={(event) => onHeightChange(event.nativeEvent.layout.height + bottomInset)}
-    >
-      {content}
-    </View>
+      {ios ? (
+        <MapSurface radius={30}>
+          <View className="pb-4 pt-4">{content}</View>
+        </MapSurface>
+      ) : (
+        content
+      )}
+    </Animated.View>
   );
 };
 

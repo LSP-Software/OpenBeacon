@@ -12,6 +12,10 @@ const now = Date.parse("2026-07-19T12:00:00.000Z");
 
 mock.module("react-native", () => ({
   Platform: { OS: "ios" },
+  Animated: {
+    View: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement("animated-view", null, children),
+  },
   ActivityIndicator: () => React.createElement("activity-indicator"),
   Pressable: ({
     accessibilityLabel,
@@ -24,6 +28,9 @@ mock.module("react-native", () => ({
     React.createElement("scroll-view", null, children),
   View: ({ children }: { children?: React.ReactNode }) =>
     React.createElement("view", null, children),
+}));
+mock.module("./useSwipeDownToDismiss.ts", () => ({
+  useSwipeDownToDismiss: () => ({ dismiss: () => {}, panHandlers: {}, translateY: 0 }),
 }));
 mock.module("../ui/Text.tsx", () => ({
   Text: ({ children }: { children?: React.ReactNode }) =>
@@ -86,6 +93,7 @@ const renderTray = async (people: Partial<MapPeople>) => {
       <LiveMapPeopleTray
         now={now}
         people={{ ...emptyPeople, ...people }}
+        onDismiss={() => {}}
         onHeightChange={() => {}}
         onSelectPerson={() => {}}
       />,
