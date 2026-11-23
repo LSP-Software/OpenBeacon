@@ -34,7 +34,7 @@ export const buildLiveMapTrackingCameraStop = ({
 
   if (isNewFocus) {
     return {
-      animationDuration: 500,
+      animationDuration: 1200,
       animationMode: "flyTo" as const,
       centerCoordinate: [longitude, latitude] as [number, number],
       padding,
