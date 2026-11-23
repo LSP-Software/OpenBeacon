@@ -1182,6 +1182,7 @@ const pollPlaceUpdates = ({ onlyWithoutKeys = false }: { onlyWithoutKeys?: boole
         ? null
         : (keyGroupId ?? readCursorGroup(getOwner(device.userId)));
     const accountSync = startAccountSync(trackingModule, device, account);
+    lastAccountSyncAt = Date.now();
     const upload = groupId
       ? tryCatch(
           trpcClient.groupTracking.uploadBatch.mutate(

@@ -1137,6 +1137,19 @@ describe("tracking service", () => {
     };
     const askedForCatchUp = () => uploadCalls.map((call) => call.placeAlertsCursor !== undefined);
 
+    test("an upload just after a push poll leaves out the alerts and account notices", async () => {
+      storedPlaceCursor = "2026-11-15T09:00:00.000Z|";
+      await syncBackgroundTracking("push");
+      const pollUploads = uploadCalls.length;
+      pendingCiphertexts = [createQueueItem({ clientPointId: "p1", groupId: "group-1", id: 1 })];
+      await flushPendingTrackingPoints();
+
+      expect(uploadCalls.slice(pollUploads).map((call) => call.placeAlertsCursor)).toEqual([
+        undefined,
+      ]);
+      expect(accountSyncCalls).toHaveLength(1);
+    });
+
     test("uploads less than a minute apart ask for alerts and account notices once", async () => {
       storedPlaceCursor = "2026-11-15T09:00:00.000Z|";
       const startedAt = Date.now();

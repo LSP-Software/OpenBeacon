@@ -80,6 +80,7 @@ export const useLiveMapCamera = ({
   const initialFitStateRef = useRef(createLiveMapInitialFitState());
   const initialFitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [initialFitRevision, setInitialFitRevision] = useState(0);
+  const [followRevision, setFollowRevision] = useState(0);
   const [styleLoadedRevision, setStyleLoadedRevision] = useState<number | null>(null);
   const isStyleLoaded = styleLoadedRevision === mapRevision;
   const preservedCameraRef = useRef(INITIAL_MAP_CAMERA);
@@ -201,6 +202,8 @@ export const useLiveMapCamera = ({
 
     if (selectedDeviceIdRef.current !== currentSelfMarker.deviceId) {
       onSelectDevice(currentSelfMarker.deviceId);
+    } else {
+      setFollowRevision((revision) => revision + 1);
     }
 
     const stop = buildLiveMapTrackingCameraStop({
@@ -286,6 +289,7 @@ export const useLiveMapCamera = ({
     if (!pin) return;
     edge.follow(deviceId);
     if (selectedDeviceIdRef.current !== deviceId) onSelectDevice(deviceId);
+    else setFollowRevision((revision) => revision + 1);
     clearLiveMapInitialFitTimer(initialFitTimerRef);
     initialFitStateRef.current = reduceLiveMapInitialFit(initialFitStateRef.current, {
       type: "user_camera_control",
@@ -409,6 +413,7 @@ export const useLiveMapCamera = ({
   ]);
 
   useEffect(() => {
+    void followRevision;
     if (!mapStyle || !cameraRef.current) return;
     if (
       selectedDeviceId === null ||
@@ -494,7 +499,14 @@ export const useLiveMapCamera = ({
       if (next.settled) unsubscribe();
     });
     return unsubscribe;
-  }, [cameraPadding, mapStyle, selectedLatitude, selectedLongitude, selectedDeviceId]);
+  }, [
+    cameraPadding,
+    followRevision,
+    mapStyle,
+    selectedLatitude,
+    selectedLongitude,
+    selectedDeviceId,
+  ]);
   const onRegionDidChange = (feature: {
     geometry: { coordinates: number[] };
     properties: { animated: boolean; isUserInteraction: boolean; zoomLevel: number };
