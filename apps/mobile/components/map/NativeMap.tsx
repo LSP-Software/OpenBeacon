@@ -1,4 +1,5 @@
 import { Camera, GeoJSONSource, Layer, Map as MapLibreMap } from "@maplibre/maplibre-react-native";
+import { useIsFocused } from "@react-navigation/native";
 import { Link } from "expo-router";
 import {
   ChevronDownIcon,
@@ -94,6 +95,7 @@ export const NativeMap = ({
   timelineGroupId?: string | null;
 } = {}) => {
   const insets = useSafeAreaInsets();
+  const isFocused = useIsFocused();
   const reduceMotion = useReducedMotion();
   const colors = useColors();
   const [selectedPlaceKey, setSelectedPlaceKey] = useState<string | null>(null);
@@ -252,6 +254,23 @@ export const NativeMap = ({
     maybeSuspendFollowFromRegionChange,
     zoomIntoStack,
   } = camera;
+  const closeTopLayer =
+    canHideGroups && groupMenuOpen
+      ? () => setGroupMenuOpen(false)
+      : selectedPlace
+        ? () => setSelectedPlaceKey(null)
+        : selectedMarker
+          ? clearSelection
+          : isStackSheetOpen
+            ? () => setStackSheetDeviceIds(null)
+            : missingPerson
+              ? () => setMissingUserId(null)
+              : trayPeople
+                ? () => onPeopleTrayOpenChange?.(false)
+                : null;
+  const closeTopLayerRef = useRef(closeTopLayer);
+  closeTopLayerRef.current = closeTopLayer;
+  const canCloseTopLayer = isFocused && closeTopLayer !== null;
   const displayOrder = (members: readonly LiveMapMarker[]) =>
     [...members].sort(
       (first, second) =>
@@ -277,13 +296,13 @@ export const NativeMap = ({
   }, [screenReaderEnabled, toastGroups]);
 
   useEffect(() => {
-    if (!groupMenuOpen) return;
+    if (!canCloseTopLayer) return;
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-      setGroupMenuOpen(false);
+      closeTopLayerRef.current?.();
       return true;
     });
     return () => subscription.remove();
-  }, [groupMenuOpen]);
+  }, [canCloseTopLayer]);
 
   useEffect(() => {
     if (missingUserId === null) return;
