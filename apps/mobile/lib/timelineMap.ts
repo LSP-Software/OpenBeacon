@@ -15,6 +15,8 @@ const projected = ([longitude, latitude]: Coordinate) => {
   };
 };
 
+type Point = { x: number; y: number };
+
 export const timelineRoute = (segments: readonly TimelineSegment[]) => {
   const runs: Coordinate[][] = [];
   const pauses: Array<[Coordinate, Coordinate]> = [];
@@ -40,7 +42,7 @@ export const timelineRoute = (segments: readonly TimelineSegment[]) => {
   const line = runs.flat();
   const runEnds: number[] = [];
   let distance = 0;
-  let previous: { x: number; y: number } | null = null;
+  let previous: Point | null = null;
   const breaks: Array<{ from: number; to: number }> = [];
   for (const [index, current] of runs.entries()) {
     for (const [pointIndex, coordinate] of current.entries()) {
@@ -148,7 +150,7 @@ export const timelineArrows = ({
     const point = projected(coordinate);
     return { x: point.x * worldSize, y: point.y * worldSize };
   };
-  const toCoordinate = ({ x, y }: { x: number; y: number }): Coordinate => [
+  const toCoordinate = ({ x, y }: Point): Coordinate => [
     (x / worldSize - 0.5) * 360,
     (Math.atan(Math.sinh(Math.PI * (1 - (2 * y) / worldSize))) * 180) / Math.PI,
   ];
@@ -165,27 +167,46 @@ export const timelineArrows = ({
     bottom: bottomRight.y + padY,
   };
 
-  const chevrons: Coordinate[][] = [];
-  const placed = new Map<string, Array<{ heading: number; x: number; y: number }>>();
-  const place = (tip: { x: number; y: number }, direction: { x: number; y: number }) => {
+  const marks: Array<{ direction: Point; heading: number; tip: Point; twoWay: boolean }> = [];
+  let chevronCount = 0;
+  const placed = new Map<string, typeof marks>();
+  const place = (tip: Point, direction: Point) => {
     if (tip.x < area.left || tip.x > area.right || tip.y < area.top || tip.y > area.bottom) return;
     const heading = Math.atan2(direction.y, direction.x);
     const cellX = Math.floor(tip.x / spacingPx);
     const cellY = Math.floor(tip.y / spacingPx);
+    let oncoming = false;
+    let partner: { distance: number; mark: (typeof marks)[number] } | null = null;
     for (let dx = -1; dx <= 1; dx += 1) {
       for (let dy = -1; dy <= 1; dy += 1) {
-        const crowded = placed
-          .get(`${cellX + dx}:${cellY + dy}`)
-          ?.some(
-            (other) =>
-              Math.hypot(other.x - tip.x, other.y - tip.y) < spacingPx * 0.75 &&
-              Math.cos(other.heading - heading) > Math.cos(Math.PI / 4),
-          );
-        if (crowded) return;
+        for (const other of placed.get(`${cellX + dx}:${cellY + dy}`) ?? []) {
+          const offsetX = tip.x - other.tip.x;
+          const offsetY = tip.y - other.tip.y;
+          const distance = Math.hypot(offsetX, offsetY);
+          if (distance >= spacingPx * 0.75) continue;
+          const alignment = Math.cos(other.heading - heading);
+          if (alignment > Math.SQRT1_2) return;
+          const sideways = Math.abs(offsetX * other.direction.y - offsetY * other.direction.x);
+          if (alignment > -0.9 || sideways >= sizePx * 2) continue;
+          oncoming = true;
+          if (!other.twoWay && (!partner || distance < partner.distance)) {
+            partner = { distance, mark: other };
+          }
+        }
       }
     }
+    if (partner) {
+      partner.mark.twoWay = true;
+      chevronCount += 1;
+    }
+    if (oncoming) return;
+    const mark = { direction, heading, tip, twoWay: false };
+    marks.push(mark);
+    chevronCount += 1;
     const cell = `${cellX}:${cellY}`;
-    placed.set(cell, [...(placed.get(cell) ?? []), { heading, x: tip.x, y: tip.y }]);
+    placed.set(cell, [...(placed.get(cell) ?? []), mark]);
+  };
+  const chevron = (tip: Point, direction: Point) => {
     const arm = (angle: number) => {
       const cos = Math.cos(angle);
       const sin = Math.sin(angle);
@@ -194,8 +215,20 @@ export const timelineArrows = ({
         y: tip.y - sizePx * (direction.x * sin + direction.y * cos),
       });
     };
-    chevrons.push([arm((40 * Math.PI) / 180), toCoordinate(tip), arm((-40 * Math.PI) / 180)]);
+    return [arm((40 * Math.PI) / 180), toCoordinate(tip), arm((-40 * Math.PI) / 180)];
   };
+  const toChevrons = () =>
+    marks.flatMap(({ direction, tip, twoWay }) => {
+      if (!twoWay) return [chevron(tip, direction)];
+      const gap = sizePx * 1.4;
+      return [
+        chevron({ x: tip.x + direction.x * gap, y: tip.y + direction.y * gap }, direction),
+        chevron(
+          { x: tip.x - direction.x * gap, y: tip.y - direction.y * gap },
+          { x: -direction.x, y: -direction.y },
+        ),
+      ];
+    });
 
   for (const run of runs) {
     const points = run.map(toPixel);
@@ -209,7 +242,7 @@ export const timelineArrows = ({
     let next = length < spacingPx ? length / 2 : spacingPx / 2;
     let travelled = 0;
     for (const leg of legs) {
-      if (chevrons.length >= MAX_ARROWS) return chevrons;
+      if (chevronCount >= MAX_ARROWS) return toChevrons();
       const legEnd = travelled + leg.length;
       if (leg.length === 0 || next >= legEnd) {
         travelled = legEnd;
@@ -229,7 +262,7 @@ export const timelineArrows = ({
         x: (leg.to.x - leg.from.x) / leg.length,
         y: (leg.to.y - leg.from.y) / leg.length,
       };
-      for (; next < legEnd && chevrons.length < MAX_ARROWS; next += spacingPx) {
+      for (; next < legEnd && chevronCount < MAX_ARROWS; next += spacingPx) {
         const along = next - travelled;
         place(
           { x: leg.from.x + direction.x * along, y: leg.from.y + direction.y * along },
@@ -239,7 +272,7 @@ export const timelineArrows = ({
       travelled = legEnd;
     }
   }
-  return chevrons;
+  return toChevrons();
 };
 
 export const timelineLaneRuns = (segments: readonly TimelineSegment[]) => {

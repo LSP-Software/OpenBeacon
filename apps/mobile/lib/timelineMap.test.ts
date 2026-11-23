@@ -161,6 +161,81 @@ describe("timelineArrows", () => {
     expect(westbound.length).toBeGreaterThan(0);
   });
 
+  const degreesPerPixel = 360 / (512 * 2 ** 8);
+  const pointsEast = ([arm, tip]: Coordinate[]) => (tip?.[0] ?? 0) > (arm?.[0] ?? 0);
+  const twoWayHalves = (marks: Coordinate[][]) =>
+    marks.filter((mark) =>
+      marks.some((other) => {
+        const [, tip] = mark;
+        const [, otherTip] = other;
+        if (!tip || !otherTip || pointsEast(mark) === pointsEast(other)) return false;
+        const apart = Math.hypot(tip[0] - otherTip[0], tip[1] - otherTip[1]) / degreesPerPixel;
+        return Math.abs(apart - 2 * 1.4 * 5) < 0.1;
+      }),
+    );
+
+  test("draws one two-way mark where a stretch is travelled both ways", () => {
+    const once = arrows([eastward], 8).length;
+    const marks = arrows([eastward, [...eastward].reverse()], 8);
+    expect(marks.filter(pointsEast)).toHaveLength(once);
+    expect(marks.filter((mark) => !pointsEast(mark))).toHaveLength(once);
+    expect(twoWayHalves(marks)).toHaveLength(marks.length);
+  });
+
+  test("pairs every chevron on a diagonal road travelled back out of step", () => {
+    const along = (pixels: number): Coordinate => [
+      pixels * Math.SQRT1_2 * degreesPerPixel,
+      -pixels * Math.SQRT1_2 * degreesPerPixel,
+    ];
+    for (let offset = 0; offset < 44; offset += 2) {
+      for (const runs of [
+        [
+          [along(440 + offset), along(offset)],
+          [along(0), along(440)],
+        ],
+        [
+          [along(0), along(440)],
+          [along(440 + offset), along(offset)],
+        ],
+      ]) {
+        const marks = arrows(runs, 8);
+        const halves = twoWayHalves(marks);
+        const inside = marks.filter(([, tip]) => {
+          const pixels = ((tip?.[0] ?? 0) / degreesPerPixel) * Math.SQRT2;
+          return pixels > 44 + offset && pixels < 396;
+        });
+        expect(inside.length).toBeGreaterThan(0);
+        expect(inside.every((mark) => halves.includes(mark))).toBe(true);
+      }
+    }
+  });
+
+  test("doesn't draw a two-way mark where two roads cross", () => {
+    const slope = Math.tan(Math.PI / 6);
+    const westwardAt150Degrees: Coordinate[] = [
+      [0.5, -0.5 * slope],
+      [-0.5, 0.5 * slope],
+    ];
+    const marks = arrows(
+      [
+        eastward.map(([longitude, latitude]): Coordinate => [longitude - 0.5, latitude]),
+        westwardAt150Degrees,
+      ],
+      8,
+    );
+    expect(twoWayHalves(marks)).toEqual([]);
+  });
+
+  test("keeps separate chevrons for opposite trips on roads drawn apart", () => {
+    const once = arrows([eastward], 8).length;
+    const westwardNearby = [...eastward]
+      .reverse()
+      .map(([longitude, latitude]): Coordinate => [longitude, latitude + 12 * degreesPerPixel]);
+    const marks = arrows([eastward, westwardNearby], 8);
+    expect(marks).toHaveLength(once * 2);
+    expect(twoWayHalves(marks)).toEqual([]);
+  });
+
   test("places a chevron every spacing in screen pixels", () => {
     const lengthPx = (zoom: number) => (512 * 2 ** zoom) / 360;
     expect(arrows([eastward], 8)).toHaveLength(Math.round(lengthPx(8) / 44));
