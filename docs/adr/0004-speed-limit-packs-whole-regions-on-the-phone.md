@@ -20,5 +20,4 @@ A device checks a Drive for speeding against a Speed limit pack it already holds
 - Whoever runs a server's map storage can see from request logs which regions a device downloaded, by IP address, so roughly which countries or states it has been in. The privacy draft must say this when Drives ship.
 - A Drive in a region whose pack hasn't arrived yet is "Speeding not checked" for that stretch and is never re-checked later.
 - Self-hosted map storage needs roughly 15–25 GB more for the whole world.
-- The pack format is versioned beside the manifest. A device that can't read a newer format treats its region as having no pack.
 - Fuzzy guessed defaults (built-up or not) are stored as unknown, so many minor roads are never checked for speeding.
