@@ -46,7 +46,7 @@
         "@better-auth/expo": "^1.7.22",
         "@expo/ui": "~55.0.17",
         "@hookform/resolvers": "^5.2.2",
-        "@maplibre/maplibre-react-native": "^11.5.1",
+        "@maplibre/maplibre-react-native": "11.5.1",
         "@noble/hashes": "^2.4.0",
         "@openbeacon/api": "workspace:*",
         "@openbeacon/encryption": "workspace:*",
@@ -265,6 +265,9 @@
       "name": "@openbeacon/tsconfig",
       "version": "0.0.0",
     },
+  },
+  "patchedDependencies": {
+    "@maplibre/maplibre-react-native@11.5.1": "patches/@maplibre%2Fmaplibre-react-native@11.5.1.patch",
   },
   "overrides": {
     "effect": "^3.22.5",

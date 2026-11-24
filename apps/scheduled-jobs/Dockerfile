@@ -4,6 +4,7 @@ RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
 FROM base AS prisma
 WORKDIR /app
 COPY package.json bun.lock bunfig.toml ./
+COPY patches patches
 COPY packages/database/package.json packages/database/
 RUN bun install --frozen-lockfile --omit=peer --filter @openbeacon/database
 COPY packages/database packages/database
@@ -12,6 +13,7 @@ RUN DATABASE_URL=postgresql://localhost:5432/openbeacon bun run --cwd packages/d
 FROM base AS deps
 WORKDIR /app
 COPY package.json bun.lock bunfig.toml ./
+COPY patches patches
 COPY apps/backend/package.json apps/backend/
 COPY apps/scheduled-jobs/package.json apps/scheduled-jobs/
 COPY packages/api/package.json packages/api/
