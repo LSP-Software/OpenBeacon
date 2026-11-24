@@ -70,21 +70,21 @@ describe("place size", () => {
   });
 
   test("names the Small, Medium and Large stops and shows other sizes as a distance", () => {
-    expect(formatPlaceSize(100, "kmh")).toBe("Small · 100 m");
-    expect(formatPlaceSize(250, "kmh")).toBe("Medium · 250 m");
-    expect(formatPlaceSize(500, "kmh")).toBe("Large · 500 m");
-    expect(formatPlaceSize(175, "kmh")).toBe("175 m");
-    expect(formatPlaceSize(1000, "kmh")).toBe("1 km");
+    expect(formatPlaceSize(100, "km")).toBe("Small · 100 m");
+    expect(formatPlaceSize(250, "km")).toBe("Medium · 250 m");
+    expect(formatPlaceSize(500, "km")).toBe("Large · 500 m");
+    expect(formatPlaceSize(175, "km")).toBe("175 m");
+    expect(formatPlaceSize(1000, "km")).toBe("1 km");
   });
 
   test("shows place sizes in feet rounded to the nearest 10 for miles", () => {
-    expect(formatPlaceSize(100, "mph")).toBe("Small · 330 ft");
-    expect(formatPlaceSize(250, "mph")).toBe("Medium · 820 ft");
-    expect(formatPlaceSize(500, "mph")).toBe("Large · 1640 ft");
-    expect(formatPlaceSize(175, "mph")).toBe("570 ft");
-    expect(formatPlaceSize(1000, "mph")).toBe("3280 ft");
-    expect(formatPlaceDistance(100, "mph")).toBe("330 ft");
-    expect(formatPlaceDistance(1000, "kmh")).toBe("1 km");
+    expect(formatPlaceSize(100, "mi")).toBe("Small · 330 ft");
+    expect(formatPlaceSize(250, "mi")).toBe("Medium · 820 ft");
+    expect(formatPlaceSize(500, "mi")).toBe("Large · 1640 ft");
+    expect(formatPlaceSize(175, "mi")).toBe("570 ft");
+    expect(formatPlaceSize(1000, "mi")).toBe("3280 ft");
+    expect(formatPlaceDistance(100, "mi")).toBe("330 ft");
+    expect(formatPlaceDistance(1000, "km")).toBe("1 km");
   });
 });
 

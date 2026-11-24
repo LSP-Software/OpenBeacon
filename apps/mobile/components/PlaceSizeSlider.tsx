@@ -26,7 +26,7 @@ export const PlaceSizeSlider = ({
   radiusMeters: number;
 }) => {
   const { palette } = useColors();
-  const { unit } = useUnits();
+  const { distance: unit } = useUnits();
   const position = sliderFromPlaceRadius(radiusMeters);
   const change = (value: number) => onChange(placeRadiusFromSlider(value));
 
