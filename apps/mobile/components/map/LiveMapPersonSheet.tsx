@@ -1,5 +1,6 @@
 import { Link } from "expo-router";
-import { GaugeIcon, HistoryIcon } from "lucide-react-native";
+import { GaugeIcon, HistoryIcon, RadioIcon } from "lucide-react-native";
+import { useEffect, useState } from "react";
 import { Pressable, View } from "react-native";
 import { useLiveSpeedLabel } from "../../hooks/useLiveSpeedLabel.ts";
 import { useTimeSince } from "../../hooks/useTimeSince.ts";
@@ -36,6 +37,7 @@ export const LiveMapPersonSheet = ({
   image,
   initials,
   isSelf = false,
+  liveUntilMs,
   name,
   onDismiss,
   onHeightChange,
@@ -52,6 +54,7 @@ export const LiveMapPersonSheet = ({
   image: string | null;
   initials: string;
   isSelf?: boolean;
+  liveUntilMs?: number | undefined;
   name: string;
   onDismiss: () => void;
   onHeightChange?: (height: number) => void;
@@ -74,6 +77,14 @@ export const LiveMapPersonSheet = ({
     : null;
   const liveSpeed = useLiveSpeedLabel({ speed, timestamp });
   const speedLabel = isMultiDevice ? null : liveSpeed;
+  const [, setLiveEnded] = useState(0);
+  const isLive = !isMultiDevice && !isSelf && liveUntilMs !== undefined && Date.now() < liveUntilMs;
+
+  useEffect(() => {
+    if (liveUntilMs === undefined || liveUntilMs <= Date.now()) return;
+    const timer = setTimeout(() => setLiveEnded((ended) => ended + 1), liveUntilMs - Date.now());
+    return () => clearTimeout(timer);
+  }, [liveUntilMs]);
 
   return (
     <LiveMapBottomSheet
@@ -91,13 +102,20 @@ export const LiveMapPersonSheet = ({
             </Avatar>
             <View className="min-w-0 flex-1 gap-1">
               <Text className="text-foreground text-xl font-bold">{name}</Text>
-              <Text className="text-secondary text-sm">
-                {isMultiDevice
-                  ? `${devices.length} devices`
-                  : updatedAge === null
-                    ? "No location sent yet"
-                    : `${isSelf ? "Location sent" : "Updated"} ${updatedAge}`}
-              </Text>
+              {isLive ? (
+                <View className="flex-row items-center gap-1.5">
+                  <Icon as={RadioIcon} size={16} className="text-success" />
+                  <Text className="text-success text-sm font-medium">Updating live</Text>
+                </View>
+              ) : (
+                <Text className="text-secondary text-sm">
+                  {isMultiDevice
+                    ? `${devices.length} devices`
+                    : updatedAge === null
+                      ? "No location sent yet"
+                      : `${isSelf ? "Location sent" : "Updated"} ${updatedAge}`}
+                </Text>
+              )}
             </View>
           </View>
           {isMultiDevice ? (

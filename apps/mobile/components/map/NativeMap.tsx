@@ -113,6 +113,11 @@ export const NativeMap = ({
   const pinMarkers = useMemo(() => mergeSamePersonDevices(markers), [markers]);
   const pins = useLiveMapPinGroups(pinMarkers);
   const pinGlides = useLiveMapPinGlides(markers, reduceMotion || !isFocused);
+  const selectedGlide = selectedDeviceId === null ? undefined : pinGlides.get(selectedDeviceId);
+  const selectedLiveUntilMs =
+    selectedGlide && selectedGlide.durationMs > 0
+      ? selectedGlide.startedAtMs + selectedGlide.durationMs
+      : undefined;
   const edgeSubjects = useMemo(
     () =>
       pins.groups.map((group) => ({
@@ -406,7 +411,6 @@ export const NativeMap = ({
   ) => {
     const annotationProps = {
       ...motion,
-      getZoom: pins.getZoom,
       glides: pinGlides,
       marker,
       onSelected: () => {
@@ -597,7 +601,6 @@ export const NativeMap = ({
                 <LiveMapStackAnnotation
                   key={group.id}
                   arrival={pins.arrivals.get(group.id)}
-                  getZoom={pins.getZoom}
                   glides={pinGlides}
                   group={group}
                   members={displayOrder(group.members)}
@@ -610,7 +613,6 @@ export const NativeMap = ({
           ]}
           {speedChipMarker && selectedSpeedLabel ? (
             <LiveMapSpeedChipAnnotation
-              getZoom={pins.getZoom}
               glides={pinGlides}
               label={selectedSpeedLabel}
               marker={speedChipMarker}
@@ -859,6 +861,7 @@ export const NativeMap = ({
             image={selectedMarker.image}
             initials={selectedMarker.initials}
             isSelf={selectedMarker.isSelf}
+            liveUntilMs={selectedLiveUntilMs}
             name={selectedMarker.name}
             otherSharedGroupNames={selectedMarker.otherSharedGroupNames}
             speed={selectedMarker.speed}

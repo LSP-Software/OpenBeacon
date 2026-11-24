@@ -4,7 +4,6 @@ import {
   type LiveMapPinGlide,
   liveMapPinGlideOffsetPosition,
   liveMapPinGlidePosition,
-  liveMapPinPixelsBetween,
   restingLiveMapPinGlide,
 } from "./liveMapPinGlide.ts";
 
@@ -236,33 +235,4 @@ test("a pin crossing the 180th meridian takes the short way round", () => {
       nowMs: START + 13_000,
     }).longitude,
   ).toBeCloseTo(179.95, 9);
-});
-
-test("the on-screen distance between two points grows with zoom and towards the poles", () => {
-  const oneDegreeAtZoomZero = 512 / 360;
-
-  expect(
-    liveMapPinPixelsBetween({ latitude: 0, longitude: 0 }, { latitude: 0, longitude: 1 }, 0),
-  ).toBeCloseTo(oneDegreeAtZoomZero, 9);
-  expect(
-    liveMapPinPixelsBetween({ latitude: 0, longitude: 0 }, { latitude: 1, longitude: 0 }, 2),
-  ).toBeCloseTo(oneDegreeAtZoomZero * 4, 9);
-  expect(
-    liveMapPinPixelsBetween({ latitude: 60, longitude: 0 }, { latitude: 61, longitude: 0 }, 0),
-  ).toBeCloseTo(oneDegreeAtZoomZero * 2, 9);
-  expect(
-    liveMapPinPixelsBetween(
-      { latitude: 0, longitude: 179.9 },
-      { latitude: 0, longitude: -179.9 },
-      0,
-    ),
-  ).toBeCloseTo(oneDegreeAtZoomZero * 0.2, 9);
-  for (const latitude of [90, -90]) {
-    const pixels = liveMapPinPixelsBetween(
-      { latitude, longitude: 0 },
-      { latitude: latitude - 1, longitude: 1 },
-      15,
-    );
-    expect(Number.isFinite(pixels)).toBe(true);
-  }
 });

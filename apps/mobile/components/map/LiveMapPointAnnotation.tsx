@@ -1,4 +1,5 @@
 import { ViewAnnotation, type ViewAnnotationRef } from "@maplibre/maplibre-react-native";
+import Animated from "react-native-reanimated";
 import { useEffect, useRef } from "react";
 import { Platform, View } from "react-native";
 import { useLocationStale } from "../../hooks/useLocationStale.ts";
@@ -12,6 +13,8 @@ import { LiveMapPinMotion } from "./LiveMapPinMotion.tsx";
 import { refreshViewAnnotation } from "./refreshViewAnnotation.ts";
 import { useLiveMapPinPosition } from "./useLiveMapPinPosition.ts";
 
+const AnimatedViewAnnotation = Animated.createAnimatedComponent(ViewAnnotation);
+
 export const SelfLiveMapPointAnnotation = (
   props: Omit<Parameters<typeof LiveMapPointAnnotation>[0], "headingDegrees">,
 ) => {
@@ -23,7 +26,6 @@ export const SelfLiveMapPointAnnotation = (
 export const LiveMapPointAnnotation = ({
   arrival,
   gatherTo,
-  getZoom,
   glides,
   headingDegrees,
   marker,
@@ -32,7 +34,6 @@ export const LiveMapPointAnnotation = ({
 }: {
   arrival?: LiveMapPinOffset | undefined;
   gatherTo?: LiveMapPinOffset | undefined;
-  getZoom: () => number;
   glides: ReadonlyMap<string, LiveMapPinGlide>;
   headingDegrees: number | null;
   marker: LiveMapMarker;
@@ -40,10 +41,9 @@ export const LiveMapPointAnnotation = ({
   speedLabel: string | null;
 }) => {
   const annotationRef = useRef<ViewAnnotationRef>(null);
-  const shown = useLiveMapPinPosition({
+  const { animatedProps, lngLat } = useLiveMapPinPosition({
     base: marker,
     deviceIds: [marker.deviceId],
-    getZoom,
     glides,
   });
   const isStale = useLocationStale(marker.timestamp);
@@ -84,10 +84,11 @@ export const LiveMapPointAnnotation = ({
   ]);
 
   return (
-    <ViewAnnotation
+    <AnimatedViewAnnotation
       ref={annotationRef}
       id={marker.deviceId}
-      lngLat={[shown.longitude, shown.latitude]}
+      animatedProps={animatedProps}
+      lngLat={lngLat}
       anchor="center"
       onPress={onSelected}
       {...(Platform.OS === "ios" ? { title: accessibilityLabel } : {})}
@@ -117,6 +118,6 @@ export const LiveMapPointAnnotation = ({
           />
         </LiveMapPinMotion>
       </View>
-    </ViewAnnotation>
+    </AnimatedViewAnnotation>
   );
 };

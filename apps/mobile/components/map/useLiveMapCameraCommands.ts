@@ -26,7 +26,7 @@ export const useLiveMapCameraCommands = (
 
   const setCamera = (stop: {
     animationDuration: number;
-    animationMode?: "flyTo" | "easeTo";
+    animationMode?: "flyTo" | "easeTo" | "linear";
     centerCoordinate: [number, number];
     zoomLevel?: number;
     padding?: {
@@ -55,6 +55,8 @@ export const useLiveMapCameraCommands = (
     };
     if (duration === 0) cameraRef.current.jumpTo(options);
     else if (stop.animationMode === "flyTo") cameraRef.current.flyTo(options);
+    else if (stop.animationMode === "linear")
+      cameraRef.current.easeTo({ ...options, easing: "linear" });
     else cameraRef.current.easeTo(options);
     scheduleRelease(duration);
   };

@@ -18,6 +18,7 @@ mock.module("lucide-react-native", () => ({
   GaugeIcon: () => null,
   EyeIcon: () => null,
   HistoryIcon: () => null,
+  RadioIcon: () => null,
   RefreshCwIcon: () => null,
 }));
 mock.module("../components/ui/Button.tsx", () => ({
@@ -80,10 +81,12 @@ const firstTimestamp = new Date().toISOString();
 
 const renderSheet = async ({
   isSelf = false,
+  liveUntilMs,
   onRequestUpdate,
   timestamp = firstTimestamp,
 }: {
   isSelf?: boolean;
+  liveUntilMs?: number;
   onRequestUpdate: (() => Promise<void>) | undefined;
   timestamp?: string;
 }) => {
@@ -95,6 +98,7 @@ const renderSheet = async ({
         image={null}
         initials="Al"
         isSelf={isSelf}
+        liveUntilMs={liveUntilMs}
         name="Alice"
         onDismiss={() => {}}
         onRequestUpdate={onRequestUpdate}
@@ -126,6 +130,18 @@ test("you can't ask yourself for an update", async () => {
   expect(updateButton()).toBeUndefined();
   await renderSheet({ onRequestUpdate: async () => {} });
   expect(updateButton()).toBeDefined();
+});
+
+test("says it's updating live while the pin glides, then shows the age once it stops", async () => {
+  await renderSheet({ liveUntilMs: Date.now() + 60, onRequestUpdate: undefined });
+  expect(rendered()).toContain("Updating live");
+  expect(rendered()).not.toContain("Updated 1 min ago");
+
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 80));
+  });
+  expect(rendered()).not.toContain("Updating live");
+  expect(rendered()).toContain("Updated 1 min ago");
 });
 
 test("asking waits for a newer location, then lets you ask again", async () => {
