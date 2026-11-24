@@ -17,8 +17,12 @@ One moment in a Drive that counts against the driver: hard braking, rapid accele
 _Avoid_: Behaviour event, incident, alert, violation
 
 **Driving score**:
-A number from 0 to 100 for one Drive, or for one person's week of Drives, worked out on the viewer's phone from the Drive's Driving events and distance. Fewer and milder Driving events per distance give a higher score. A Passenger drive has none.
+A number from 0 to 100 for one Drive, or for one person's week of Drives, worked out on the viewer's phone from the Drive's Driving events and Checked distance. Fewer and milder Driving events per Checked distance give a higher score. A Passenger drive has none.
 _Avoid_: Safety score, risk score, rating, grade
+
+**Checked distance**:
+The part of a Drive's distance the device watched closely enough to look for hard braking, rapid acceleration and speeding. Distance driven while the device was saving battery is recorded but not checked, so it holds no such Driving events and the Driving score counts only Checked distance.
+_Avoid_: Scored distance, monitored distance, covered distance
 
 **Weekly driving report**:
 One person's Drives from Monday to Sunday in that person's time zone: how many, how far, how long, top speed, Driving score and Driving events, compared only with their own previous week. Each viewer sees the part of the week that person shares with them. Passenger drives are listed apart and count towards nothing.
