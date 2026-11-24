@@ -16,6 +16,7 @@ import { Icon } from "../ui/Icon.tsx";
 import { Text } from "../ui/Text.tsx";
 import { LiveMapBottomSheet } from "./LiveMapBottomSheet.tsx";
 import { RequestUpdateButton } from "./RequestUpdateButton.tsx";
+import { DirectionsButton } from "./DirectionsButton.tsx";
 import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 
 type PersonDevice = {
@@ -33,6 +34,7 @@ type PersonDevice = {
 
 export const LiveMapPersonSheet = ({
   battery,
+  destination,
   devices,
   image,
   initials,
@@ -50,6 +52,7 @@ export const LiveMapPersonSheet = ({
   unreadableGroup,
 }: {
   battery: { charging: boolean; level: number | null } | null;
+  destination?: { latitude: number; longitude: number } | undefined;
   devices?: readonly PersonDevice[] | undefined;
   image: string | null;
   initials: string;
@@ -180,6 +183,13 @@ export const LiveMapPersonSheet = ({
               name={name}
               onRequestUpdate={onRequestUpdate}
               phones={isMultiDevice ? "devices" : "phone"}
+            />
+          ) : null}
+          {destination && !isSelf ? (
+            <DirectionsButton
+              destination={destination}
+              name={name}
+              outOfDateAge={isOutOfDate || unreadableGroup ? updatedAge : null}
             />
           ) : null}
           {timeline ? (

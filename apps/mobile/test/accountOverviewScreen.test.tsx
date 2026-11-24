@@ -61,6 +61,7 @@ mock.module("lucide-react-native", () =>
       "MailIcon",
       "MapIcon",
       "MapPinIcon",
+      "NavigationIcon",
       "PencilIcon",
       "ScanFaceIcon",
       "SmartphoneIcon",
@@ -70,6 +71,7 @@ mock.module("lucide-react-native", () =>
   ),
 );
 mock.module("react-native", () => ({
+  Linking: { canOpenURL: async () => false, openURL: async () => true },
   Platform: { OS: "android" },
   Pressable: View,
   ScrollView: View,
@@ -173,6 +175,7 @@ mock.module("../lib/restoreReminders.ts", () => ({
   isRestoreCardDismissed: () => false,
 }));
 mock.module("../lib/storage.ts", () => ({ storage: { getBoolean: () => false, set: () => {} } }));
+mock.module("react-native-mmkv", () => ({ useMMKVString: () => [undefined, () => {}] }));
 mock.module("../providers/LocationPermissionProvider.tsx", () => ({
   useLocationPermissions: () => ({
     openLocationPermissionSettings: () => {},

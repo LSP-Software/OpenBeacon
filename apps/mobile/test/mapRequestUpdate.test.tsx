@@ -63,6 +63,7 @@ mock.module("../components/ui/Avatar.tsx", () => ({
   Avatar: Passthrough,
   AvatarFallback: Passthrough,
 }));
+mock.module("../components/map/DirectionsButton.tsx", () => ({ DirectionsButton: () => null }));
 mock.module("../components/ui/Icon.tsx", () => ({ Icon: () => null }));
 mock.module("../components/ui/Text.tsx", () => ({ Text: Passthrough }));
 

@@ -95,6 +95,7 @@ mock.module("../components/ui/Avatar.tsx", () => ({
   AvatarFallback: Passthrough,
   AvatarImage: () => null,
 }));
+mock.module("../components/map/DirectionsButton.tsx", () => ({ DirectionsButton: () => null }));
 mock.module("../components/ui/Icon.tsx", () => ({ Icon: () => null }));
 mock.module("../components/map/refreshViewAnnotation.ts", () => ({
   refreshViewAnnotation: (annotationRef: { current: { refresh: () => void } | null }) =>

@@ -13,6 +13,7 @@ import {
   ChevronRightIcon,
   EyeIcon,
   GaugeIcon,
+  NavigationIcon,
   HistoryIcon,
   InfoIcon,
   KeyRoundIcon,
@@ -51,6 +52,11 @@ import { Text } from "../../../components/ui/Text.tsx";
 import { useHeldHistoryKeyVersions } from "../../../hooks/useHeldHistoryKeyVersions.ts";
 import { useHistoryShare } from "../../../hooks/useHistoryShare.ts";
 import { useUnits } from "../../../hooks/useUnits.ts";
+import {
+  directionsAppKey,
+  directionsAppName,
+  parseDirectionsApp,
+} from "../../../lib/directions.ts";
 import { trpc } from "../../../lib/api.ts";
 import { useAppLock } from "../../../lib/appLock.ts";
 import { authClient } from "../../../lib/auth-client.ts";
@@ -66,6 +72,7 @@ import {
 import { useNotificationSettings } from "../../../lib/notifications.ts";
 import { dismissRestoreCard, isRestoreCardDismissed } from "../../../lib/restoreReminders.ts";
 import { storage } from "../../../lib/storage.ts";
+import { useMMKVString } from "react-native-mmkv";
 import { thisDeviceNoun } from "../../../lib/thisDeviceNoun.ts";
 import { appVersion } from "../../../lib/versions.ts";
 import { useLocationPermissions } from "../../../providers/LocationPermissionProvider.tsx";
@@ -92,6 +99,8 @@ const AccountScreen = () => {
   const historyShare = useHistoryShare();
   const { appThemePreference } = useTheme();
   const units = useUnits();
+  const [storedDirectionsApp] = useMMKVString(directionsAppKey, storage);
+  const directionsApp = parseDirectionsApp(storedDirectionsApp);
   const unitsLabel = `${units.distance === "mi" ? "Miles" : "Kilometres"}, ${units.speed === "mph" ? "mph" : "km/h"}`;
   const [signOutPhase, setSignOutPhase] = useState<"uploading" | "signingOut" | null>(null);
   const signingOut = useRef(false);
@@ -496,6 +505,13 @@ const AccountScreen = () => {
                     units.speedPreference === "auto" && units.distancePreference === "auto"
                       ? `${unitsLabel} (${thisDeviceNoun()} region)`
                       : unitsLabel,
+                },
+                {
+                  label: "Directions",
+                  icon: NavigationIcon,
+                  color: "green",
+                  href: "/account/directions",
+                  value: directionsApp ? directionsAppName(directionsApp) : "Ask me",
                 },
               ],
             },

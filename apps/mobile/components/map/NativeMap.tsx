@@ -846,6 +846,11 @@ export const NativeMap = ({
           <LiveMapPersonSheet
             key={selectedMarker.userId}
             battery={selectedMarker.battery}
+            destination={
+              selectedMarker.timestamp === null
+                ? undefined
+                : { latitude: selectedMarker.latitude, longitude: selectedMarker.longitude }
+            }
             devices={
               selectedPersonDevices.length >= 2
                 ? selectedPersonDevices.map((device) => ({
