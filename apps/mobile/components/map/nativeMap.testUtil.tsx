@@ -1,5 +1,5 @@
 import type { CameraRef } from "@maplibre/maplibre-react-native";
-import React, { forwardRef, type ReactNode, useEffect, useImperativeHandle } from "react";
+import React, { forwardRef, type ReactNode, useEffect, useImperativeHandle, useState } from "react";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
 
 const cameraCommands: Array<
@@ -482,6 +482,9 @@ export const createMapLibreMockModule = () => {
       },
       ref,
     ) => {
+      const [frozenId] = useState(id);
+      if (id !== frozenId) throw new Error("`id` cannot be changed");
+
       useImperativeHandle(ref, () => ({
         refresh: () => {
           annotationRefreshCalls.push(id);
