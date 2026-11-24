@@ -8,11 +8,7 @@ import {
   liveMapInitialFitClosesAtMs,
   reduceLiveMapInitialFit,
 } from "../../lib/liveMapInitialFit.ts";
-import {
-  type LiveMapPinGlide,
-  liveMapPinPixelsBetween,
-  liveMapPinGlidePosition,
-} from "../../lib/liveMapPinGlide.ts";
+import { type LiveMapPinGlide, liveMapPinGlidePosition } from "../../lib/liveMapPinGlide.ts";
 import {
   buildLiveMapTrackingCameraStop,
   shouldSuspendLiveMapFollowOnRegionChange,
@@ -22,7 +18,6 @@ import {
   mapCameraAfterFittingMarkers,
   mapCameraFromRegionChange,
 } from "../../lib/mapPmtilesCameraState.ts";
-import { subscribeToLiveMapFrames } from "./liveMapFrameTicker.ts";
 import { useLiveMapCameraCommands } from "./useLiveMapCameraCommands.ts";
 import type { useLiveMapEdgeMarkers } from "./useLiveMapEdgeMarkers.ts";
 import type { useNativeMapStyle } from "./useNativeMapStyle.ts";
@@ -69,7 +64,8 @@ export const useLiveMapCamera = ({
 }) => {
   const cameraRef = useRef<CameraRef>(null);
   const cameraAnimationEndsAtMsRef = useRef(0);
-  const { scheduleRelease, setCamera } = useLiveMapCameraCommands(
+  const followEaseEndsAtMsRef = useRef(0);
+  const { cancelRelease, scheduleRelease, setCamera } = useLiveMapCameraCommands(
     cameraRef,
     cameraAnimationEndsAtMsRef,
     reduceMotion,
@@ -113,6 +109,7 @@ export const useLiveMapCamera = ({
     previousPmtilesUrlRef.current = pmtilesUrl;
   }
   const selectedLatitude = selectedMarker?.latitude;
+  const selectedGlide = selectedDeviceId === null ? undefined : pinGlides.get(selectedDeviceId);
   const selectedLongitude = selectedMarker?.longitude;
   const cameraPadding = useMemo(
     () => ({
@@ -319,6 +316,7 @@ export const useLiveMapCamera = ({
   };
 
   const noteUserCameraControl = () => {
+    cancelRelease();
     edge.release();
     edge.follow(null);
     clearLiveMapInitialFitTimer(initialFitTimerRef);
@@ -424,6 +422,12 @@ export const useLiveMapCamera = ({
       trackedCoordinateRef.current = null;
       followSuspendedRef.current = false;
       followOnEdge(null);
+      if (
+        cameraAnimationEndsAtMsRef.current === followEaseEndsAtMsRef.current &&
+        Date.now() < followEaseEndsAtMsRef.current
+      ) {
+        scheduleCameraRelease(0);
+      }
       return;
     }
 
@@ -434,7 +438,8 @@ export const useLiveMapCamera = ({
     };
     const shown = readShownPosition(selected, Date.now());
     const isNewFocus = trackedDeviceIdRef.current !== selectedDeviceId;
-    const animating = Date.now() < cameraAnimationEndsAtMsRef.current;
+    const followingGlide = cameraAnimationEndsAtMsRef.current === followEaseEndsAtMsRef.current;
+    const animating = !followingGlide && Date.now() < cameraAnimationEndsAtMsRef.current;
     const stop =
       isNewFocus || (shown.settled && !animating)
         ? buildLiveMapTrackingCameraStop({
@@ -472,37 +477,46 @@ export const useLiveMapCamera = ({
     followOnEdge(followSuspendedRef.current ? null : selectedDeviceId);
     if (shown.settled && !animating) return;
 
-    const unsubscribe = subscribeToLiveMapFrames((nowMs) => {
-      if (followSuspendedRef.current || trackedDeviceIdRef.current !== selectedDeviceId) {
-        unsubscribe();
+    const glide = pinGlidesRef.current.get(selectedDeviceId);
+    if (!glide) return;
+    const followGlide = () => {
+      const remainingMs = glide.startedAtMs + glide.durationMs - Date.now();
+      if (
+        remainingMs <= 0 ||
+        followSuspendedRef.current ||
+        trackedDeviceIdRef.current !== selectedDeviceId
+      ) {
         return;
       }
-      if (nowMs < cameraAnimationEndsAtMsRef.current) return;
-      const next = readShownPosition(selected, nowMs);
-      const tracked = trackedCoordinateRef.current;
-      if (
-        !tracked ||
-        liveMapPinPixelsBetween(tracked, next, preservedCameraRef.current.zoomLevel) >= 1
-      ) {
-        trackedCoordinateRef.current = { latitude: next.latitude, longitude: next.longitude };
-        moveCamera({
-          animationDuration: 0,
-          centerCoordinate: [next.longitude, next.latitude],
-          padding: cameraPadding,
-        });
-        preservedCameraRef.current = mapCameraFromRegionChange({
-          latitude: next.latitude,
-          longitude: next.longitude,
-          zoomLevel: preservedCameraRef.current.zoomLevel,
-        });
-      }
-      if (next.settled) unsubscribe();
-    });
-    return unsubscribe;
+      trackedCoordinateRef.current = { latitude: glide.latitude, longitude: glide.longitude };
+      moveCamera({
+        animationDuration: remainingMs,
+        animationMode: "linear",
+        centerCoordinate: [glide.longitude, glide.latitude],
+        padding: cameraPadding,
+      });
+      followEaseEndsAtMsRef.current = cameraAnimationEndsAtMsRef.current;
+      preservedCameraRef.current = mapCameraFromRegionChange({
+        latitude: glide.latitude,
+        longitude: glide.longitude,
+        zoomLevel: preservedCameraRef.current.zoomLevel,
+      });
+    };
+    const otherAnimationLeftMs = cameraAnimationEndsAtMsRef.current - Date.now();
+    if (
+      cameraAnimationEndsAtMsRef.current === followEaseEndsAtMsRef.current ||
+      otherAnimationLeftMs <= 0
+    ) {
+      followGlide();
+      return;
+    }
+    const timer = setTimeout(followGlide, otherAnimationLeftMs);
+    return () => clearTimeout(timer);
   }, [
     cameraPadding,
     followRevision,
     mapStyle,
+    selectedGlide,
     selectedLatitude,
     selectedLongitude,
     selectedDeviceId,

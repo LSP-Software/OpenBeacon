@@ -41,11 +41,18 @@ mock.module("react-native", () => ({
     ),
 }));
 mock.module("@maplibre/maplibre-react-native", () => ({ ViewAnnotation: Passthrough }));
+mock.module("react-native-reanimated", () => ({
+  default: { createAnimatedComponent: <T,>(component: T) => component },
+  useAnimatedProps: (props: () => object) => props(),
+  useFrameCallback: () => ({ setActive: () => {} }),
+  useSharedValue: <T,>(value: T) => React.useRef({ value }).current,
+}));
 mock.module("../providers/ThemeProvider.tsx", () => ({ useTheme: () => ({ appTheme: "light" }) }));
 mock.module("expo-router", () => ({ Link: Passthrough }));
 mock.module("lucide-react-native", () => ({
   GaugeIcon: () => null,
   HistoryIcon: () => null,
+  RadioIcon: () => null,
   RefreshCwIcon: () => null,
 }));
 mock.module("../components/ui/Button.tsx", () => ({ Button: Passthrough }));

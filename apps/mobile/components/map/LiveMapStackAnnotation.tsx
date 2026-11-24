@@ -1,4 +1,5 @@
 import { ViewAnnotation, type ViewAnnotationRef } from "@maplibre/maplibre-react-native";
+import Animated from "react-native-reanimated";
 import { useEffect, useRef } from "react";
 import { Platform, View } from "react-native";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
@@ -9,6 +10,8 @@ import { LiveMapPinMotion } from "./LiveMapPinMotion.tsx";
 import { LiveMapStackPin } from "./LiveMapStackPin.tsx";
 import { refreshViewAnnotation } from "./refreshViewAnnotation.ts";
 import { useLiveMapPinPosition } from "./useLiveMapPinPosition.ts";
+
+const AnimatedViewAnnotation = Animated.createAnimatedComponent(ViewAnnotation);
 
 export const LiveMapStackAnnotation = ({
   arrival,
@@ -26,7 +29,7 @@ export const LiveMapStackAnnotation = ({
   onPress: () => void;
 }) => {
   const annotationRef = useRef<ViewAnnotationRef>(null);
-  const shown = useLiveMapPinPosition({
+  const { animatedProps, lngLat } = useLiveMapPinPosition({
     base: group,
     deviceIds: group.members.map((member) => member.deviceId),
     getZoom,
@@ -53,10 +56,11 @@ export const LiveMapStackAnnotation = ({
   }, [appTheme, drawnMembers]);
 
   return (
-    <ViewAnnotation
+    <AnimatedViewAnnotation
       ref={annotationRef}
       id={group.id}
-      lngLat={[shown.longitude, shown.latitude]}
+      animatedProps={animatedProps}
+      lngLat={lngLat}
       anchor="center"
       onPress={onPress}
       {...(Platform.OS === "ios" ? { title: accessibilityLabel } : {})}
@@ -75,6 +79,6 @@ export const LiveMapStackAnnotation = ({
           />
         </LiveMapPinMotion>
       </View>
-    </ViewAnnotation>
+    </AnimatedViewAnnotation>
   );
 };

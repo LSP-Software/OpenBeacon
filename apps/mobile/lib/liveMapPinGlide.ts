@@ -6,6 +6,11 @@ const MAX_MERCATOR_LATITUDE = 85.05112878;
 const METERS_PER_DEGREE = 111_320;
 const SHORTEST_GLIDE_METERS = 5;
 
+const wrapLongitude = (longitude: number) => {
+  "worklet";
+  return longitude >= 180 ? longitude - 360 : longitude < -180 ? longitude + 360 : longitude;
+};
+
 export type LiveMapPinGlide = {
   durationMs: number;
   fixTimeMs: number | null;
@@ -17,6 +22,7 @@ export type LiveMapPinGlide = {
 };
 
 export const liveMapPinGlidePosition = (glide: LiveMapPinGlide, nowMs: number) => {
+  "worklet";
   const travelled =
     glide.durationMs === 0
       ? 1
@@ -108,6 +114,7 @@ export const liveMapPinGlideOffsetPosition = ({
   glides: readonly LiveMapPinGlide[];
   nowMs: number;
 }) => {
+  "worklet";
   let latitude = 0;
   let longitude = 0;
   let settled = true;
@@ -130,6 +137,7 @@ export const liveMapPinPixelsBetween = (
   to: { latitude: number; longitude: number },
   zoom: number,
 ) => {
+  "worklet";
   const latitude = Math.min(Math.max(from.latitude, -MAX_MERCATOR_LATITUDE), MAX_MERCATOR_LATITUDE);
   return (
     (Math.hypot(
@@ -141,6 +149,3 @@ export const liveMapPinPixelsBetween = (
     360
   );
 };
-
-const wrapLongitude = (longitude: number) =>
-  longitude >= 180 ? longitude - 360 : longitude < -180 ? longitude + 360 : longitude;

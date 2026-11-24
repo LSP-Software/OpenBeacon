@@ -332,8 +332,13 @@ export const createMapLibreMockModule = () => {
       },
       jumpTo: (stop: { center: unknown; zoom?: number; padding?: unknown; duration?: number }) =>
         recordStop(stop),
-      easeTo: (stop: { center: unknown; zoom?: number; padding?: unknown; duration?: number }) =>
-        recordStop(stop, "easeTo"),
+      easeTo: (stop: {
+        center: unknown;
+        zoom?: number;
+        padding?: unknown;
+        duration?: number;
+        easing?: string | undefined;
+      }) => recordStop(stop, stop.easing === "linear" ? "linear" : "easeTo"),
       flyTo: (stop: { center: unknown; zoom?: number; padding?: unknown; duration?: number }) =>
         recordStop(stop, "flyTo"),
     }));

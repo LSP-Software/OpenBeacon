@@ -113,6 +113,11 @@ export const NativeMap = ({
   const pinMarkers = useMemo(() => mergeSamePersonDevices(markers), [markers]);
   const pins = useLiveMapPinGroups(pinMarkers);
   const pinGlides = useLiveMapPinGlides(markers, reduceMotion || !isFocused);
+  const selectedGlide = selectedDeviceId === null ? undefined : pinGlides.get(selectedDeviceId);
+  const selectedLiveUntilMs =
+    selectedGlide && selectedGlide.durationMs > 0
+      ? selectedGlide.startedAtMs + selectedGlide.durationMs
+      : undefined;
   const edgeSubjects = useMemo(
     () =>
       pins.groups.map((group) => ({
@@ -859,6 +864,7 @@ export const NativeMap = ({
             image={selectedMarker.image}
             initials={selectedMarker.initials}
             isSelf={selectedMarker.isSelf}
+            liveUntilMs={selectedLiveUntilMs}
             name={selectedMarker.name}
             otherSharedGroupNames={selectedMarker.otherSharedGroupNames}
             speed={selectedMarker.speed}

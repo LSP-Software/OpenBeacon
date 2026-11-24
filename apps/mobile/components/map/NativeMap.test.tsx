@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, setSystemTime, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, jest, mock, setSystemTime, test } from "bun:test";
 import React, { act } from "react";
 import { createRoot, type Root } from "test-renderer";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
@@ -219,6 +219,12 @@ mock.module("@tanstack/react-query", () => ({
 }));
 
 mock.module("@maplibre/maplibre-react-native", createMapLibreMockModule);
+mock.module("react-native-reanimated", () => ({
+  default: { createAnimatedComponent: <T,>(component: T) => component },
+  useAnimatedProps: (props: () => object) => props(),
+  useFrameCallback: () => ({ setActive: () => {} }),
+  useSharedValue: <T,>(value: T) => React.useRef({ value }).current,
+}));
 
 let screenFocused = true;
 mock.module("@react-navigation/native", () => ({
@@ -1879,54 +1885,13 @@ describe("NativeMap over a fake MapLibre", () => {
     );
   });
 
-  test("follows a moving person's pin as it glides to their new location", async () => {
+  describe("following a moving person", () => {
     const alice = createLiveMapMarkerFixture({ userId: "alice" });
     const aliceMoved = createLiveMapMarkerFixture({
       ...alice,
       latitude: 51.5 + 130 / 111_320,
       timestamp: "2026-07-19T10:00:10.000Z",
     });
-
-    setSystemTime(new Date("2026-07-19T10:00:01.000Z"));
-    await renderNativeMap({ markers: [alice], selectedDeviceId: "alice" });
-    await flushEffects();
-    setSystemTime(new Date("2026-07-19T10:00:11.000Z"));
-    await renderNativeMap({ markers: [aliceMoved], selectedDeviceId: "alice" });
-    await flushEffects();
-    const commandsBeforeFrames = getNativeMapCameraCommands().length;
-    setSystemTime(new Date("2026-07-19T10:00:15.000Z"));
-    await runAnimationFrames();
-
-    const followStops = getNativeMapCameraCommands()
-      .slice(commandsBeforeFrames)
-      .flatMap((command) => (command.type === "setCamera" ? [command.stop] : []));
-    expect(followStops).toEqual([
-      {
-        animationDuration: 0,
-        centerCoordinate: [-0.12, expect.closeTo(51.5 + (130 * 4) / 12 / 111_320, 7)],
-        padding: expect.any(Object),
-      },
-    ]);
-
-    emitUserPanAfterProgrammaticCamera();
-    const commandsBeforePan = getNativeMapCameraCommands().length;
-    setSystemTime(new Date("2026-07-19T10:00:17.000Z"));
-    await runAnimationFrames();
-    expect(
-      getNativeMapCameraCommands()
-        .slice(commandsBeforePan)
-        .filter((command) => command.type === "setCamera"),
-    ).toEqual([]);
-  });
-
-  test("waits for the fly-to a person tapped in the tray before following their moving pin", async () => {
-    const alice = createLiveMapMarkerFixture({ userId: "alice" });
-    const aliceMoved = createLiveMapMarkerFixture({
-      ...alice,
-      latitude: 51.5 + 130 / 111_320,
-      timestamp: "2026-07-19T10:00:10.000Z",
-    });
-    const northMetersAt = (latitude: unknown) => ((latitude as number) - 51.5) * 111_320;
     const trayProps = {
       onSelectDeviceId: () => {},
       people: {
@@ -1945,142 +1910,185 @@ describe("NativeMap over a fake MapLibre", () => {
     const setCameraStopsSince = (index: number) =>
       getNativeMapCameraCommands()
         .slice(index)
-        .flatMap((command) =>
-          command.type === "setCamera"
-            ? [
-                command.stop as {
-                  animationDuration: number;
-                  centerCoordinate: [number, number];
-                  padding?: unknown;
-                },
-              ]
-            : [],
-        );
-
-    setSystemTime(new Date("2026-07-19T10:00:01.000Z"));
-    await renderNativeMap({ ...trayProps, markers: [alice] });
-    setSystemTime(new Date("2026-07-19T10:00:11.000Z"));
-    await renderNativeMap({ ...trayProps, markers: [aliceMoved] });
-    const commandsBeforeTap = getNativeMapCameraCommands().length;
-    const [tray] =
-      root?.container.queryAll((instance) => instance.type === "live-map-people-tray") ?? [];
-    await act(async () =>
-      (tray?.props["onSelectPerson"] as ((userId: string) => void) | undefined)?.("alice"),
-    );
-    await renderNativeMap({ ...trayProps, markers: [aliceMoved], selectedDeviceId: "alice" });
-
-    const [flyTo] = setCameraStopsSince(commandsBeforeTap);
-    expect(flyTo).toMatchObject({ animationDuration: 1200, animationMode: "flyTo", zoomLevel: 15 });
-    expect(northMetersAt(flyTo?.centerCoordinate[1])).toBeCloseTo((130 * 1.2) / 12, 4);
-
-    const commandsBeforeFrames = getNativeMapCameraCommands().length;
-    setSystemTime(new Date("2026-07-19T10:00:12.100Z"));
-    await runAnimationFrames();
-    expect(setCameraStopsSince(commandsBeforeFrames)).toEqual([]);
-
-    setSystemTime(new Date("2026-07-19T10:00:13.000Z"));
-    await runAnimationFrames();
-    const followStops = setCameraStopsSince(commandsBeforeFrames);
-    expect(followStops).toEqual([
-      {
-        animationDuration: 0,
-        centerCoordinate: [-0.12, expect.any(Number)],
-        padding: expect.any(Object),
-      },
-    ]);
-    expect(northMetersAt(followStops[0]?.centerCoordinate[1])).toBeCloseTo((130 * 2) / 12, 4);
-  });
-
-  test("follows again when the same person is tapped in the tray after a pan", async () => {
-    const alice = createLiveMapMarkerFixture({ userId: "alice" });
-    const aliceMoved = createLiveMapMarkerFixture({
-      ...alice,
-      latitude: 51.5 + 130 / 111_320,
-      timestamp: "2026-07-19T10:00:10.000Z",
-    });
+        .flatMap((command) => (command.type === "setCamera" ? [command.stop] : []));
     const northMetersAt = (latitude: unknown) => ((latitude as number) - 51.5) * 111_320;
-    const trayProps = {
-      onSelectDeviceId: () => {},
-      people: {
-        cantLocate: [],
-        cantRead: [],
-        finding: [],
-        hidden: [],
-        outOfDate: [],
-        paused: [],
-        upToDate: [],
-        waiting: [],
-        waitingForLocation: [],
-      },
-      peopleTrayOpen: true,
+    const tapAliceInTray = async () => {
+      const [tray] =
+        root?.container.queryAll((instance) => instance.type === "live-map-people-tray") ?? [];
+      await act(async () =>
+        (tray?.props["onSelectPerson"] as ((userId: string) => void) | undefined)?.("alice"),
+      );
     };
-    const setCameraStopsSince = (index: number) =>
-      getNativeMapCameraCommands()
-        .slice(index)
-        .flatMap((command) =>
-          command.type === "setCamera"
-            ? [
-                command.stop as {
-                  animationDuration: number;
-                  centerCoordinate: [number, number];
-                  padding?: unknown;
-                },
-              ]
-            : [],
-        );
+    const waitForFlyToToEnd = () =>
+      act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 1_250));
+      });
 
-    setSystemTime(new Date("2026-07-19T10:00:01.000Z"));
-    await renderNativeMap({ ...trayProps, markers: [alice] });
-    setSystemTime(new Date("2026-07-19T10:00:11.000Z"));
-    await renderNativeMap({ ...trayProps, markers: [aliceMoved] });
-    const commandsBeforeTap = getNativeMapCameraCommands().length;
-    const [tray] =
-      root?.container.queryAll((instance) => instance.type === "live-map-people-tray") ?? [];
-    await act(async () =>
-      (tray?.props["onSelectPerson"] as ((userId: string) => void) | undefined)?.("alice"),
-    );
-    await renderNativeMap({ ...trayProps, markers: [aliceMoved], selectedDeviceId: "alice" });
+    test("moves the camera once, linearly, to where the pin's glide ends", async () => {
+      setSystemTime(new Date("2026-07-19T10:00:01.000Z"));
+      await renderNativeMap({ markers: [alice], selectedDeviceId: "alice" });
+      await flushEffects();
+      const commandsBeforeMove = getNativeMapCameraCommands().length;
+      setSystemTime(new Date("2026-07-19T10:00:11.000Z"));
+      await renderNativeMap({ markers: [aliceMoved], selectedDeviceId: "alice" });
+      await flushEffects();
 
-    const [flyTo] = setCameraStopsSince(commandsBeforeTap);
-    expect(flyTo).toMatchObject({ animationDuration: 1200, animationMode: "flyTo", zoomLevel: 15 });
-    expect(northMetersAt(flyTo?.centerCoordinate[1])).toBeCloseTo((130 * 1.2) / 12, 4);
+      expect(setCameraStopsSince(commandsBeforeMove)).toEqual([
+        {
+          animationDuration: 12_000,
+          animationMode: "linear",
+          centerCoordinate: [-0.12, aliceMoved.latitude],
+          padding: expect.any(Object),
+        },
+      ]);
 
-    const commandsBeforeFrames = getNativeMapCameraCommands().length;
-    setSystemTime(new Date("2026-07-19T10:00:12.100Z"));
-    await runAnimationFrames();
-    expect(setCameraStopsSince(commandsBeforeFrames)).toEqual([]);
+      setSystemTime(new Date("2026-07-19T10:00:15.000Z"));
+      await renderNativeMap({ markers: [aliceMoved], selectedDeviceId: "alice" });
+      await flushEffects();
+      expect(setCameraStopsSince(commandsBeforeMove)).toHaveLength(1);
+    });
 
-    setSystemTime(new Date("2026-07-19T10:00:13.000Z"));
-    await runAnimationFrames();
-    const followStops = setCameraStopsSince(commandsBeforeFrames);
-    expect(followStops).toEqual([
-      {
-        animationDuration: 0,
-        centerCoordinate: [-0.12, expect.any(Number)],
-        padding: expect.any(Object),
-      },
-    ]);
-    expect(northMetersAt(followStops[0]?.centerCoordinate[1])).toBeCloseTo((130 * 2) / 12, 4);
+    test("stops following after a pan", async () => {
+      setSystemTime(new Date("2026-07-19T10:00:01.000Z"));
+      await renderNativeMap({ markers: [alice], selectedDeviceId: "alice" });
+      await flushEffects();
+      emitUserPanAfterProgrammaticCamera();
+      const commandsAfterPan = getNativeMapCameraCommands().length;
+      setSystemTime(new Date("2026-07-19T10:00:11.000Z"));
+      await renderNativeMap({ markers: [aliceMoved], selectedDeviceId: "alice" });
+      await flushEffects();
 
-    emitUserPanAfterProgrammaticCamera();
-    const commandsAfterPan = getNativeMapCameraCommands().length;
-    setSystemTime(new Date("2026-07-19T10:00:14.000Z"));
-    await runAnimationFrames();
-    expect(setCameraStopsSince(commandsAfterPan)).toEqual([]);
+      expect(setCameraStopsSince(commandsAfterPan)).toEqual([]);
+    });
 
-    await act(async () =>
-      (tray?.props["onSelectPerson"] as ((userId: string) => void) | undefined)?.("alice"),
-    );
-    const commandsAfterRetap = getNativeMapCameraCommands().length;
-    setSystemTime(new Date("2026-07-19T10:00:16.000Z"));
-    await runAnimationFrames();
-    expect(setCameraStopsSince(commandsAfterRetap)).toEqual([
-      {
-        animationDuration: 0,
-        centerCoordinate: [-0.12, expect.any(Number)],
-        padding: expect.any(Object),
-      },
-    ]);
+    test("a new location mid-glide starts one new linear move from where the camera is", async () => {
+      setSystemTime(new Date("2026-07-19T10:00:01.000Z"));
+      await renderNativeMap({ markers: [alice], selectedDeviceId: "alice" });
+      await flushEffects();
+      setSystemTime(new Date("2026-07-19T10:00:11.000Z"));
+      await renderNativeMap({ markers: [aliceMoved], selectedDeviceId: "alice" });
+      await flushEffects();
+      const commandsBeforeNextFix = getNativeMapCameraCommands().length;
+      const aliceMovedAgain = createLiveMapMarkerFixture({
+        ...aliceMoved,
+        latitude: aliceMoved.latitude + 130 / 111_320,
+        timestamp: "2026-07-19T10:00:20.000Z",
+      });
+      setSystemTime(new Date("2026-07-19T10:00:21.000Z"));
+      await renderNativeMap({ markers: [aliceMovedAgain], selectedDeviceId: "alice" });
+      await flushEffects();
+
+      expect(getNativeMapCameraCommands().slice(commandsBeforeNextFix)).toEqual([
+        {
+          type: "setCamera",
+          stop: {
+            animationDuration: 12_000,
+            animationMode: "linear",
+            centerCoordinate: [-0.12, aliceMovedAgain.latitude],
+            padding: expect.any(Object),
+          },
+        },
+      ]);
+    });
+
+    test("a pan cancels the camera reset booked for the end of the follow move", async () => {
+      setSystemTime(new Date("2026-07-19T10:00:01.000Z"));
+      await renderNativeMap({ markers: [alice], selectedDeviceId: "alice" });
+      await flushEffects();
+      jest.useFakeTimers({ now: new Date("2026-07-19T10:00:11.000Z") });
+      try {
+        await renderNativeMap({ markers: [aliceMoved], selectedDeviceId: "alice" });
+        await flushEffects();
+        emitUserPanAfterProgrammaticCamera();
+        const commandsAfterPan = getNativeMapCameraCommands().length;
+        await act(async () => {
+          jest.advanceTimersByTime(13_000);
+        });
+
+        expect(getNativeMapCameraCommands().slice(commandsAfterPan)).toEqual([]);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    test("stops the camera when the person is deselected part-way through a glide", async () => {
+      setSystemTime(new Date("2026-07-19T10:00:01.000Z"));
+      await renderNativeMap({ markers: [alice], selectedDeviceId: "alice" });
+      await flushEffects();
+      setSystemTime(new Date("2026-07-19T10:00:11.000Z"));
+      await renderNativeMap({ markers: [aliceMoved], selectedDeviceId: "alice" });
+      await flushEffects();
+      const commandsBeforeDeselect = getNativeMapCameraCommands().length;
+      setSystemTime(new Date("2026-07-19T10:00:14.000Z"));
+      await renderNativeMap({ markers: [aliceMoved], selectedDeviceId: null });
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 80));
+      });
+
+      expect(getNativeMapCameraCommands().slice(commandsBeforeDeselect)).toEqual([
+        { type: "setStop", stop: { duration: 0 } },
+      ]);
+    });
+
+    test("waits for the fly-to a person tapped in the tray, then follows their moving pin", async () => {
+      setSystemTime(new Date("2026-07-19T10:00:01.000Z"));
+      await renderNativeMap({ ...trayProps, markers: [alice] });
+      setSystemTime(new Date("2026-07-19T10:00:11.000Z"));
+      await renderNativeMap({ ...trayProps, markers: [aliceMoved] });
+      const commandsBeforeTap = getNativeMapCameraCommands().length;
+      await tapAliceInTray();
+      await renderNativeMap({ ...trayProps, markers: [aliceMoved], selectedDeviceId: "alice" });
+
+      const [flyTo] = setCameraStopsSince(commandsBeforeTap) as Array<{
+        centerCoordinate: [number, number];
+      }>;
+      expect(flyTo).toMatchObject({
+        animationDuration: 1200,
+        animationMode: "flyTo",
+        zoomLevel: 15,
+      });
+      expect(northMetersAt(flyTo?.centerCoordinate[1])).toBeCloseTo((130 * 1.2) / 12, 4);
+      expect(setCameraStopsSince(commandsBeforeTap)).toHaveLength(1);
+
+      setSystemTime(new Date("2026-07-19T10:00:12.200Z"));
+      await waitForFlyToToEnd();
+      expect(setCameraStopsSince(commandsBeforeTap).slice(1)).toEqual([
+        {
+          animationDuration: 10_800,
+          animationMode: "linear",
+          centerCoordinate: [-0.12, aliceMoved.latitude],
+          padding: expect.any(Object),
+        },
+      ]);
+    });
+
+    test("follows again when the same person is tapped in the tray after a pan", async () => {
+      setSystemTime(new Date("2026-07-19T10:00:01.000Z"));
+      await renderNativeMap({ ...trayProps, markers: [alice] });
+      setSystemTime(new Date("2026-07-19T10:00:11.000Z"));
+      await renderNativeMap({ ...trayProps, markers: [aliceMoved] });
+      const [tray] =
+        root?.container.queryAll((instance) => instance.type === "live-map-people-tray") ?? [];
+      const selectAlice = tray?.props["onSelectPerson"] as (userId: string) => void;
+      await act(async () => selectAlice("alice"));
+      await renderNativeMap({ ...trayProps, markers: [aliceMoved], selectedDeviceId: "alice" });
+      emitUserPanAfterProgrammaticCamera();
+
+      const commandsBeforeRetap = getNativeMapCameraCommands().length;
+      await act(async () => selectAlice("alice"));
+      setSystemTime(new Date("2026-07-19T10:00:12.200Z"));
+      await waitForFlyToToEnd();
+
+      expect(setCameraStopsSince(commandsBeforeRetap)).toEqual([
+        expect.objectContaining({ animationMode: "flyTo" }),
+        {
+          animationDuration: 10_800,
+          animationMode: "linear",
+          centerCoordinate: [-0.12, aliceMoved.latitude],
+          padding: expect.any(Object),
+        },
+      ]);
+    });
   });
 
   test("doesn't swap a followed person's pin for an edge pin, until the map is panned", async () => {
@@ -2107,32 +2115,6 @@ describe("NativeMap over a fake MapLibre", () => {
       await new Promise((resolve) => setTimeout(resolve, 60));
     });
     expect(getRenderedOutput()).toContain("Go to Alice");
-  });
-
-  test("moving pins share one frame loop that stops while the map screen is out of view", async () => {
-    const alice = createLiveMapMarkerFixture({ userId: "alice" });
-    const bob = createLiveMapMarkerFixture({
-      latitude: 40,
-      longitude: 10,
-      name: "Bob",
-      userId: "bob",
-    });
-    const moved = (marker: LiveMapMarker) =>
-      createLiveMapMarkerFixture({
-        ...marker,
-        latitude: marker.latitude + 130 / 111_320,
-        timestamp: "2026-07-19T10:00:10.000Z",
-      });
-
-    setSystemTime(new Date("2026-07-19T10:00:01.000Z"));
-    await renderNativeMap({ markers: [alice, bob] });
-    setSystemTime(new Date("2026-07-19T10:00:11.000Z"));
-    await renderNativeMap({ markers: [moved(alice), moved(bob)] });
-    expect(animationFrames.size).toBe(1);
-
-    screenFocused = false;
-    await renderNativeMap({ markers: [moved(alice), moved(bob)] });
-    expect(animationFrames.size).toBe(0);
   });
 
   test("focuses the same place again each time it's asked for", async () => {

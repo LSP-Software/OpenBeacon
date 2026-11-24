@@ -1,4 +1,5 @@
 import { ViewAnnotation, type ViewAnnotationRef } from "@maplibre/maplibre-react-native";
+import Animated from "react-native-reanimated";
 import { useEffect, useRef } from "react";
 import { View } from "react-native";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
@@ -7,6 +8,8 @@ import { useTheme } from "../../providers/ThemeProvider.tsx";
 import { Text } from "../ui/Text.tsx";
 import { refreshViewAnnotation } from "./refreshViewAnnotation.ts";
 import { useLiveMapPinPosition } from "./useLiveMapPinPosition.ts";
+
+const AnimatedViewAnnotation = Animated.createAnimatedComponent(ViewAnnotation);
 
 export const LiveMapSpeedChipAnnotation = ({
   getZoom,
@@ -20,7 +23,7 @@ export const LiveMapSpeedChipAnnotation = ({
   marker: LiveMapMarker;
 }) => {
   const annotationRef = useRef<ViewAnnotationRef>(null);
-  const shown = useLiveMapPinPosition({
+  const { animatedProps, lngLat } = useLiveMapPinPosition({
     base: marker,
     deviceIds: [marker.deviceId],
     getZoom,
@@ -34,11 +37,12 @@ export const LiveMapSpeedChipAnnotation = ({
   }, [label]);
 
   return (
-    <ViewAnnotation
+    <AnimatedViewAnnotation
       key={appTheme}
       ref={annotationRef}
       id={`speed:${marker.deviceId}`}
-      lngLat={[shown.longitude, shown.latitude]}
+      animatedProps={animatedProps}
+      lngLat={lngLat}
       anchor="top"
       offset={[0, 24]}
     >
@@ -62,6 +66,6 @@ export const LiveMapSpeedChipAnnotation = ({
           </Text>
         </View>
       </View>
-    </ViewAnnotation>
+    </AnimatedViewAnnotation>
   );
 };
