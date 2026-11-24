@@ -1,17 +1,29 @@
 import { useLocales } from "expo-localization";
 import { useMMKVString } from "react-native-mmkv";
-import { defaultUnits, parseUnitsPreference, type Units } from "../lib/units.ts";
+import {
+  defaultUnits,
+  parseDistancePreference,
+  parseSpeedPreference,
+  type DistanceUnit,
+  type SpeedUnit,
+} from "../lib/units.ts";
 import { storage } from "../lib/storage.ts";
 
 export const useUnits = () => {
-  const [stored, setStored] = useMMKVString("units.speed", storage);
+  const [storedSpeed, setStoredSpeed] = useMMKVString("units.speed", storage);
+  const [storedDistance, setStoredDistance] = useMMKVString("units.distance", storage);
   const [locale] = useLocales();
-  const preference = parseUnitsPreference(stored);
-  const regionUnit = defaultUnits(locale);
+  const region = defaultUnits(locale);
+  const speedPreference = parseSpeedPreference(storedSpeed);
+  const distancePreference = parseDistancePreference(storedDistance, storedSpeed);
   return {
-    preference,
-    regionUnit,
-    setPreference: (value: Units | "auto") => setStored(value === "auto" ? undefined : value),
-    unit: preference === "auto" ? regionUnit : preference,
+    region,
+    speedPreference,
+    distancePreference,
+    setSpeedPreference: (value: SpeedUnit | "auto") =>
+      setStoredSpeed(value === "auto" ? undefined : value),
+    setDistancePreference: (value: DistanceUnit | "auto") => setStoredDistance(value),
+    speed: speedPreference === "auto" ? region.speed : speedPreference,
+    distance: distancePreference === "auto" ? region.distance : distancePreference,
   };
 };

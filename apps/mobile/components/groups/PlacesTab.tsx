@@ -47,7 +47,7 @@ const PlacesTab = ({
   livePositions: readonly LiveMapPosition[];
 }) => {
   const isFocused = useIsFocused();
-  const { unit } = useUnits();
+  const { distance: unit } = useUnits();
   const queryClient = useQueryClient();
   const { data: session } = authClient.useSession();
   const userId = session?.user.id;

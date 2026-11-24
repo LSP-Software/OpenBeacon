@@ -116,7 +116,12 @@ mock.module("../hooks/useHeldHistoryKeyVersions.ts", () => ({
   useHeldHistoryKeyVersions: () => query,
 }));
 mock.module("../hooks/useUnits.ts", () => ({
-  useUnits: () => ({ preference: "auto", unit: "mph" }),
+  useUnits: () => ({
+    speedPreference: "auto",
+    distancePreference: "auto",
+    speed: "mph",
+    distance: "mi",
+  }),
 }));
 mock.module("../hooks/useHistoryShare.ts", () => ({ useHistoryShare: () => ({ setting: null }) }));
 mock.module("../lib/appLock.ts", () => ({ useAppLock: () => ({ enabled: false }) }));

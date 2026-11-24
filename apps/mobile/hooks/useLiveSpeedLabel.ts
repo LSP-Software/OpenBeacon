@@ -9,7 +9,7 @@ export const useLiveSpeedLabel = ({
   speed: number | null;
   timestamp: string | null;
 }) => {
-  const { unit } = useUnits();
+  const { speed: unit } = useUnits();
   const [, setTick] = useState(0);
   const label = liveSpeedLabel({ now: Date.now(), speed, timestamp, unit });
   const hidesAt = label === null || timestamp === null ? null : liveSpeedHidesAt(timestamp);

@@ -26,7 +26,7 @@ export const LiveMapPlaceSheet = ({
   onHeightChange: (height: number) => void;
   place: MapPlace;
 }) => {
-  const { unit } = useUnits();
+  const { distance: unit } = useUnits();
   return (
     <LiveMapBottomSheet
       accessibilityLabel={`${place.name}, ${place.groupName}`}
