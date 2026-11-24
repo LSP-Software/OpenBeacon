@@ -304,9 +304,14 @@ mock.module("../../lib/protomaps-style.ts", () => ({
       ],
     };
   },
-  getSymbolLayerIds: (style: { layers: { id: string; type: string }[] }) =>
-    style.layers.filter((layer) => layer.type === "symbol").map((layer) => layer.id),
-  getSymbolVisibility: (showSymbols: boolean) => (showSymbols ? "visible" : "none"),
+  getProtomapsThemeLayers: (_theme: "light" | "dark", showSymbols: boolean) => [
+    { id: "earth", type: "fill" },
+    ...["roads_labels_major", "pois"].map((id) => ({
+      id,
+      type: "symbol",
+      layout: { visibility: showSymbols ? "visible" : "none" },
+    })),
+  ],
 }));
 
 mock.module("../../lib/mapCache.ts", () => ({
@@ -651,6 +656,7 @@ describe("NativeMap over a fake MapLibre", () => {
     const initialStyle = mapStyleProp();
 
     expect(styleLayers()).toEqual([
+      ["earth", undefined],
       ["roads_labels_major", { visibility: "visible" }],
       ["pois", { visibility: "visible" }],
     ]);
@@ -661,6 +667,7 @@ describe("NativeMap over a fake MapLibre", () => {
     });
 
     expect(styleLayers()).toEqual([
+      ["earth", undefined],
       ["roads_labels_major", { visibility: "none" }],
       ["pois", { visibility: "none" }],
     ]);
@@ -1499,18 +1506,19 @@ describe("NativeMap over a fake MapLibre", () => {
       data: {
         expiresAt: "2026-03-31T12:30:00.000Z",
         refreshAt: "2026-03-31T12:29:00.000Z",
-        url: "https://cached.example/pmtiles-2",
+        url: "https://cached.example/pmtiles-1?signature=refreshed",
       },
     };
+
+    const styleBeforeRefresh = getNativeMapStyle();
+    const cameraCommandsBeforeRefresh = getNativeMapCameraCommands().length;
 
     await renderNativeMap({ markers: [alice, bob] });
     await flushEffects();
 
     expect(getNativeMapViewMountCount()).toBe(1);
-    expect(getNativeMapCameraDefaultSettings()).toEqual({
-      centerCoordinate: [-0.13, 51.51],
-      zoomLevel: 12.5,
-    });
+    expect(getNativeMapStyle()).toEqual(styleBeforeRefresh);
+    expect(getNativeMapCameraCommands().length).toBe(cameraCommandsBeforeRefresh);
     expect(
       getNativeMapCameraCommands().filter((command) => command.type === "fitBounds").length,
     ).toBe(fitCountBeforeRefresh);
@@ -3391,7 +3399,7 @@ describe("NativeMap over a fake MapLibre", () => {
     ]);
   });
 
-  test("updates the map style without remounting when the signed pmtiles url changes", async () => {
+  test("keeps the map and its style when only the pmtiles signature changes", async () => {
     const alice = createLiveMapMarkerFixture({ userId: "alice" });
 
     await renderNativeMap({ markers: [alice] });
@@ -3409,39 +3417,25 @@ describe("NativeMap over a fake MapLibre", () => {
       zoomLevel: 14,
     });
 
+    const cameraCommandsBeforeRefresh = getNativeMapCameraCommands().length;
     currentSignedPmtilesUrlQuery = {
       ...currentSignedPmtilesUrlQuery,
       data: {
         expiresAt: "2026-03-31T12:30:00.000Z",
         refreshAt: "2026-03-31T12:29:00.000Z",
-        url: "https://cached.example/pmtiles-2",
+        url: "https://cached.example/pmtiles-1?signature=refreshed",
       },
     };
 
     await renderNativeMap({ markers: [alice] });
     await flushEffects();
-    await finishLoadingStyle();
 
     expect(getNativeMapViewMountCount()).toBe(1);
     expect(getNativeMapStyle()).toMatchObject({
-      pmtilesUrl: "https://cached.example/pmtiles-2",
+      pmtilesUrl: "https://cached.example/pmtiles-1",
       version: 8,
     });
-    expect(getNativeMapCameraDefaultSettings()).toEqual({
-      centerCoordinate: [-0.12, 51.5],
-      zoomLevel: 14,
-    });
-    expect(
-      getNativeMapCameraCommands().some(
-        (command) =>
-          command.type === "setCamera" &&
-          typeof command.stop === "object" &&
-          command.stop !== null &&
-          "centerCoordinate" in command.stop &&
-          (command.stop as { centerCoordinate: [number, number] }).centerCoordinate[0] === -0.12 &&
-          (command.stop as { zoomLevel?: number }).zoomLevel === 14,
-      ),
-    ).toBe(true);
+    expect(getNativeMapCameraCommands().length).toBe(cameraCommandsBeforeRefresh);
   });
 
   describe("groups on the map", () => {

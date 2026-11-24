@@ -10,6 +10,12 @@ type LogEvent = { level: string; message: string; tag: string };
 
 const nativeTransforms = new Map<string, { find: string; replace: string }>();
 let nativeLogHandler: (log: LogEvent) => boolean = () => false;
+let mapTheme: "light" | "dark" = "light";
+const firstSignedPmtilesUrl = {
+  archiveId: "archive-1" as string | null,
+  url: "https://tiles.example/map.pmtiles?X-Amz-Signature=one",
+};
+let signedPmtilesUrl = firstSignedPmtilesUrl;
 
 mock.module("@maplibre/maplibre-react-native", () => ({
   LogManager: {
@@ -38,10 +44,7 @@ mock.module("expo-router", () => ({
 mock.module("react-native", () => ({ Platform: { OS: "android" } }));
 mock.module("../../hooks/useSignedPmtilesUrl.ts", () => ({
   useSignedPmtilesUrl: () => ({
-    data: {
-      archiveId: "archive-1",
-      url: "https://tiles.example/map.pmtiles?X-Amz-Signature=one",
-    },
+    data: signedPmtilesUrl,
     error: null,
     failureCount: 0,
     failureReason: null,
@@ -68,14 +71,14 @@ mock.module("../../lib/mapCache.ts", () => ({
   saveLastMapSource: () => {},
 }));
 mock.module("../../lib/protomaps-style.ts", () => ({
-  getProtomapsMapStyle: (_theme: string, sourceUrl: string) => ({ layers: [], sourceUrl }),
-  getSymbolLayerIds: () => [],
+  getProtomapsThemeLayers: (theme: string) => [{ id: "earth", theme }],
+  getProtomapsMapStyle: (theme: string, sourceUrl: string) => ({ layers: [], sourceUrl, theme }),
 }));
 mock.module("../../lib/storage.ts", () => ({
   storage: { getBoolean: () => undefined, set: () => {} },
 }));
 mock.module("../../providers/ThemeProvider.tsx", () => ({
-  useTheme: () => ({ mapTheme: "light" }),
+  useTheme: () => ({ mapTheme }),
 }));
 
 const { useNativeMapStyle } = await import("./useNativeMapStyle.ts");
@@ -109,6 +112,33 @@ const roots: Root[] = [];
 afterEach(async () => {
   for (const root of roots.splice(0)) await act(async () => root.unmount());
   screens.clear();
+  mapTheme = "light";
+  signedPmtilesUrl = firstSignedPmtilesUrl;
+});
+
+test("a new tile source remounts the map instead of swapping its style", async () => {
+  signedPmtilesUrl = { archiveId: null, url: "https://tiles.example/map.pmtiles?sig=one" };
+  const root = await mountScreen("live");
+  roots.push(root);
+  const initial = screens.get("live");
+
+  signedPmtilesUrl = { archiveId: "archive-2", url: "https://tiles.example/map.pmtiles?sig=two" };
+  await act(async () => root.render(<Screen name="live" />));
+
+  expect(screens.get("live")?.pmtilesUrl).not.toBe(initial?.pmtilesUrl);
+  expect(screens.get("live")?.mapRevision).toBeGreaterThan(initial?.mapRevision ?? 0);
+});
+
+test("changing the map theme restyles the layers without replacing the style", async () => {
+  const root = await mountScreen("live");
+  roots.push(root);
+  const initialStyle = screens.get("live")?.mapStyle;
+
+  mapTheme = "dark";
+  await act(async () => root.render(<Screen name="live" />));
+
+  expect(screens.get("live")?.mapStyle).toBe(initialStyle);
+  expect<unknown>(screens.get("live")?.styleLayers).toEqual([{ id: "earth", theme: "dark" }]);
 });
 
 test("closing a second map screen keeps the live map's tile signing and failure handling", async () => {

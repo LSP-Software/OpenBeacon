@@ -30,13 +30,13 @@ import {
   placeCirclePolygon,
   zoomToFitPlace,
 } from "../../lib/places.ts";
-import { getSymbolVisibility } from "../../lib/protomaps-style.ts";
 import { useColors } from "../../lib/theme.ts";
 import { Icon } from "../ui/Icon.tsx";
 import { Button } from "../ui/Button.tsx";
 import { Text } from "../ui/Text.tsx";
 import { LiveMapEdgeChip } from "./LiveMapEdgeChip.tsx";
 import { MapButtonGroup, MapChip, MapIconButton } from "./MapControls.tsx";
+import { MapStyleLayers } from "./MapStyleLayers.tsx";
 import { MapBottomInset, MapSurface } from "./MapSurface.tsx";
 import { LiveMapGroupMenu, LiveMapHiddenGroupsNotice } from "./LiveMapGroupVisibility.tsx";
 import { LiveMapMissingPersonSheet } from "./LiveMapMissingPersonSheet.tsx";
@@ -104,6 +104,7 @@ export const NativeMap = ({
   const handledFocusPlaceIdRef = useRef<string | null>(null);
   const map = useNativeMapStyle();
   const { mapStyle, pmtilesUrl, showSymbols } = map;
+  const mapStyleJson = useMemo(() => JSON.stringify(mapStyle), [mapStyle]);
   const selectedMarker = markers.find((marker) => marker.deviceId === selectedDeviceId) ?? null;
   const selectedSpeedLabel = useLiveSpeedLabel({
     speed: selectedMarker?.speed ?? null,
@@ -491,7 +492,7 @@ export const NativeMap = ({
           key={map.mapRevision}
           ref={mapRef}
           style={{ flex: 1 }}
-          mapStyle={JSON.stringify(mapStyle)}
+          mapStyle={mapStyleJson}
           attribution={false}
           logo={true}
           touchPitch={false}
@@ -554,14 +555,7 @@ export const NativeMap = ({
                 : {}),
             }}
           />
-          {map.symbolLayerIds.map((id) => (
-            <Layer
-              key={id}
-              id={id}
-              type="symbol"
-              layout={{ visibility: getSymbolVisibility(showSymbols) }}
-            />
-          ))}
+          <MapStyleLayers layers={map.styleLayers} />
           {selectedPlace ? (
             <GeoJSONSource
               id="selected-place"

@@ -18,6 +18,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LiveMapBottomSheet } from "../components/map/LiveMapBottomSheet.tsx";
 import { PlacePin } from "../components/map/PlacePin.tsx";
+import { MapStyleLayers } from "../components/map/MapStyleLayers.tsx";
 import { useNativeMapStyle } from "../components/map/useNativeMapStyle.ts";
 import { PlaceSizeSlider } from "../components/PlaceSizeSlider.tsx";
 import { Button } from "../components/ui/Button.tsx";
@@ -498,6 +499,7 @@ const PlaceEditor = ({
             zoom: place || selfLocation ? 16 : 2,
           }}
         />
+        <MapStyleLayers layers={map.styleLayers} />
       </MapLibreMap>
       <View pointerEvents="none" className="absolute inset-0 items-center justify-center">
         {center ? (

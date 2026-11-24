@@ -21,6 +21,7 @@ const element =
 
 mock.module("@maplibre/maplibre-react-native", () => ({
   Camera: React.forwardRef(() => null),
+  Layer: () => null,
   Map: element("map"),
 }));
 mock.module("expo-router", () => ({
@@ -78,7 +79,7 @@ mock.module("../components/map/LiveMapBottomSheet.tsx", () => ({
 }));
 mock.module("../components/map/PlacePin.tsx", () => ({ PlacePin: () => null }));
 mock.module("../components/map/useNativeMapStyle.ts", () => ({
-  useNativeMapStyle: () => ({ mapRevision: 0, mapStyle: { version: 8 } }),
+  useNativeMapStyle: () => ({ mapRevision: 0, mapStyle: { version: 8 }, styleLayers: [] }),
 }));
 mock.module("../components/PlaceSizeSlider.tsx", () => ({
   PlaceSizeSlider: element("size-slider"),

@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { getProtomapsMapStyle, getSymbolLayerIds } from "./protomaps-style.ts";
+import {
+  getProtomapsLayers,
+  getProtomapsMapStyle,
+  getProtomapsThemeLayers,
+  prefixSpriteImage,
+} from "./protomaps-style.ts";
 
 describe("getProtomapsMapStyle", () => {
   test.each(["light", "dark"] as const)(
@@ -22,25 +27,46 @@ describe("getProtomapsMapStyle", () => {
     },
   );
 
-  test("derives the toggled layers from the style's symbol layers", () => {
-    const style = getProtomapsMapStyle("light", "tiles", "fonts", "sprites", true);
-    const ids = getSymbolLayerIds(style);
+  test("themes differ only in paint values and which sprite sheet icons come from", () => {
+    const withoutTheme = (theme: "light" | "dark") =>
+      JSON.stringify(
+        getProtomapsLayers(theme, true).map(({ paint, ...layer }) => ({
+          ...layer,
+          paint: Object.keys(paint ?? {}).sort(),
+        })),
+      ).replaceAll(`${theme}:`, "sprite:");
 
-    expect(ids).toEqual(
-      expect.arrayContaining([
-        "address_label",
-        "roads_labels_major",
-        "roads_shields",
-        "roads_oneway",
-        "pois",
-        "places_locality",
-        "water_label_ocean",
-      ]),
+    expect(withoutTheme("dark")).toBe(withoutTheme("light"));
+  });
+
+  test.each(["light", "dark"] as const)(
+    "takes every %s icon from its own sprite sheet",
+    (theme) => {
+      const other = theme === "light" ? "dark" : "light";
+      const icons = JSON.stringify(
+        getProtomapsLayers(theme, true).flatMap((layer) =>
+          layer.type === "symbol" && layer.layout?.["icon-image"] !== undefined
+            ? [layer.layout["icon-image"]]
+            : [],
+        ),
+      );
+
+      expect(icons).toContain(`"${theme}:`);
+      expect(icons).not.toContain(`${other}:`);
+    },
+  );
+
+  test("theme layers carry only what a theme switch may change", () => {
+    const style = getProtomapsMapStyle("dark", "tiles", "fonts", "sprites", false);
+
+    expect<unknown>(getProtomapsThemeLayers("dark", false)).toEqual(
+      style.layers.map(({ id, type, paint, layout }) => ({
+        id,
+        type,
+        ...(paint === undefined ? {} : { paint }),
+        ...(layout === undefined ? {} : { layout }),
+      })),
     );
-    expect(ids.length).toBe(style.layers.filter((layer) => layer.type === "symbol").length);
-    expect(
-      style.layers.filter((layer) => !ids.includes(layer.id)).every((l) => l.type !== "symbol"),
-    ).toBe(true);
   });
 
   test("keeps the shield filter and POI icon overrides on hidden layers", () => {
@@ -50,7 +76,7 @@ describe("getProtomapsMapStyle", () => {
 
     expect(JSON.stringify(shields?.type === "symbol" && shields.filter)).toContain("shield_text");
     expect(pois?.type === "symbol" && pois.layout?.["icon-image"]).toEqual(
-      expect.arrayContaining(["match", "townhall", "building"]),
+      expect.arrayContaining(["match", "townhall", "light:building"]),
     );
   });
 
@@ -63,6 +89,49 @@ describe("getProtomapsMapStyle", () => {
       true,
     );
     expect(style.glyphs).toBe("fonts/{fontstack}/{range}.pbf");
-    expect(style.sprite).toBe(`sprites/${theme}`);
+    expect(style.sprite).toEqual([
+      { id: "light", url: "sprites/light" },
+      { id: "dark", url: "sprites/dark" },
+    ]);
+  });
+});
+
+describe("prefixSpriteImage", () => {
+  test("prefixes every image an expression can pick and leaves no icon empty", () => {
+    expect(prefixSpriteImage("arrow", "dark")).toBe("dark:arrow");
+    expect(prefixSpriteImage("", "dark")).toBe("");
+    expect(prefixSpriteImage(["get", "kind"], "dark")).toEqual([
+      "concat",
+      "dark:",
+      ["get", "kind"],
+    ]);
+    expect(prefixSpriteImage(["concat", "shield-", ["get", "n"]], "dark")).toEqual([
+      "concat",
+      "dark:",
+      "shield-",
+      ["get", "n"],
+    ]);
+    expect(
+      prefixSpriteImage(["match", ["get", "kind"], ["a", "b"], "ab", "c", "c", "other"], "light"),
+    ).toEqual(["match", ["get", "kind"], ["a", "b"], "light:ab", "c", "light:c", "light:other"]);
+    expect(prefixSpriteImage(["case", ["has", "capital"], "capital", "town"], "light")).toEqual([
+      "case",
+      ["has", "capital"],
+      "light:capital",
+      "light:town",
+    ]);
+    expect(prefixSpriteImage(["step", ["zoom"], "town", 8, ""], "light")).toEqual([
+      "step",
+      ["zoom"],
+      "light:town",
+      8,
+      "",
+    ]);
+  });
+
+  test("rejects expressions it doesn't know how to prefix", () => {
+    expect(() => prefixSpriteImage(["coalesce", ["image", "a"], ["image", "b"]], "light")).toThrow(
+      "Unsupported icon expression",
+    );
   });
 });
