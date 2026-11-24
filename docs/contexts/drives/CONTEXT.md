@@ -28,6 +28,10 @@ _Avoid_: Weekly summary, driver report, weekly digest
 A device's switch for recording Drives, shown on the phone as "Drive detection". It is on unless the device turns it off, and only that device can change it. While it is off the device records nothing about driving, and other members see "Drive detection is off" where that person's Drives would be.
 _Avoid_: Drive tracking, driving mode, crash detection
 
+**Drive alert**:
+A notification on a Group member's phone that someone has just finished a Drive, giving its distance, duration and top speed, never its Driving score or Driving events. Members only get one for a Drive that ended in the last 30 minutes. The driver chooses per Group whether their Drives send them; members of a Group they don't send to see "Drive alerts are off". Each member can turn Drive alerts off or mute one person or everyone in a Group. Nothing alerts members when a Drive starts or while it is under way.
+_Avoid_: Drive notification, trip alert, drive started alert
+
 **Crash alert**:
 A message a device sends to every Group it shares location with after it suspects a crash during a Drive and nobody on it answers "I'm OK" before a countdown ends. It says when and where, and how fast the vehicle was going. It goes only to Group members, never to emergency services. A device sends Crash alerts only while its "Crash alerts" switch is on, which needs Drive detection on; only that device can change the switch, and other members see "Crash alerts are off" when it isn't. Passenger drives send them too.
 _Avoid_: Crash detection, collision alert, SOS, emergency alert
