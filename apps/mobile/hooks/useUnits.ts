@@ -20,8 +20,10 @@ export const useUnits = () => {
     region,
     speedPreference,
     distancePreference,
-    setSpeedPreference: (value: SpeedUnit | "auto") =>
-      setStoredSpeed(value === "auto" ? undefined : value),
+    setSpeedPreference: (value: SpeedUnit | "auto") => {
+      if (storedDistance === undefined) setStoredDistance(distancePreference);
+      setStoredSpeed(value === "auto" ? undefined : value);
+    },
     setDistancePreference: (value: DistanceUnit | "auto") => setStoredDistance(value),
     speed: speedPreference === "auto" ? region.speed : speedPreference,
     distance: distancePreference === "auto" ? region.distance : distancePreference,
