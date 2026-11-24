@@ -28,6 +28,10 @@ _Avoid_: Weekly summary, driver report, weekly digest
 A device's switch for recording Drives, shown on the phone as "Drive detection". It is on unless the device turns it off, and only that device can change it. While it is off the device records nothing about driving, and other members see "Drive detection is off" where that person's Drives would be.
 _Avoid_: Drive tracking, driving mode, crash detection
 
+**Crash alert**:
+A message a device sends to every Group it shares location with after it suspects a crash during a Drive and nobody on it answers "I'm OK" before a countdown ends. It says when and where, and how fast the vehicle was going. It goes only to Group members, never to emergency services. A device sends Crash alerts only while its "Crash alerts" switch is on, which needs Drive detection on; only that device can change the switch, and other members see "Crash alerts are off" when it isn't. Passenger drives send them too.
+_Avoid_: Crash detection, collision alert, SOS, emergency alert
+
 ## Notes
 
 - See [ADR 0003](../../adr/0003-drives-encrypted-per-group-at-fixed-size.md) for how a Drive is encrypted for each Group and why every one is the same size.
