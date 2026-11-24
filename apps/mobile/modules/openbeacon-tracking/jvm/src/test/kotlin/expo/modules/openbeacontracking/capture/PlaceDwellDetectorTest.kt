@@ -3,6 +3,7 @@ package expo.modules.openbeacontracking.capture
 import expo.modules.openbeacontracking.places.PlaceGeofence
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class PlaceDwellDetectorTest {
@@ -16,7 +17,8 @@ class PlaceDwellDetectorTest {
     atSeconds: Long,
     places: List<PlaceGeofence> = listOf(home),
     accuracy: Double? = 10.0,
-  ) = onFix(places, north(metersNorth), home.longitude, accuracy, atSeconds * 1_000)
+    speed: Double? = null,
+  ) = onFix(places, north(metersNorth), home.longitude, accuracy, atSeconds * 1_000, speed)
 
   @Test
   fun firstFixSetsTheStartingStateWithoutATransition() {
@@ -27,24 +29,82 @@ class PlaceDwellDetectorTest {
   }
 
   @Test
-  fun arriveFiresOnlyAfterTwoMinutesInside() {
+  fun aClearStillArrivalFiresAfterFortyFiveSeconds() {
     val detector = PlaceDwellDetector()
     detector.fix(1_000.0, 0)
-    assertTrue(detector.fix(0.0, 30).isEmpty())
+    assertTrue(detector.fix(0.0, 30, speed = 0.2).isEmpty())
+    assertTrue(detector.isConfirming(30_000))
+    assertTrue(detector.fix(0.0, 60, speed = 0.2).isEmpty())
+    assertEquals(listOf(PlaceCrossing(home, arrived = true, occurredAt = 30_000)), detector.fix(0.0, 75, speed = 0.2))
+    assertFalse(detector.isConfirming(75_000))
     assertTrue(detector.fix(0.0, 90).isEmpty())
-    assertTrue(detector.fix(0.0, 149).isEmpty())
-    val crossings = detector.fix(0.0, 150)
-    assertEquals(listOf(PlaceCrossing(home, arrived = true, occurredAt = 30_000)), crossings)
-    assertTrue(detector.fix(0.0, 180).isEmpty())
   }
 
   @Test
-  fun leaveFiresOnlyAfterTwoMinutesOutside() {
+  fun anUnclearArrivalStillWaitsTwoMinutes() {
+    val detector = PlaceDwellDetector()
+    detector.fix(1_000.0, 0)
+    assertTrue(detector.fix(100.0, 30, accuracy = 80.0).isEmpty())
+    assertTrue(detector.fix(100.0, 90, accuracy = 80.0).isEmpty())
+    assertTrue(detector.fix(100.0, 149, accuracy = 80.0).isEmpty())
+    assertEquals(listOf(PlaceCrossing(home, arrived = true, occurredAt = 30_000)), detector.fix(100.0, 150, accuracy = 80.0))
+  }
+
+  @Test
+  fun walkingThroughAPlaceIsNotAQuickArrival() {
+    val detector = PlaceDwellDetector()
+    detector.fix(1_000.0, 0)
+    assertTrue((10L..110L step 10).flatMap { detector.fix(0.0, it, speed = 1.4) }.isEmpty())
+    assertTrue(detector.fix(1_000.0, 115, speed = 1.4).isEmpty())
+  }
+
+  @Test
+  fun stoppingBrieflyAtLightsInsideAPlaceIsNotAnArrival() {
+    val detector = PlaceDwellDetector()
+    detector.fix(1_000.0, 0)
+    assertTrue(detector.fix(0.0, 10, speed = 12.0).isEmpty())
+    assertTrue((20L..60L step 10).flatMap { detector.fix(0.0, it, speed = 0.0) }.isEmpty())
+    assertTrue(detector.fix(0.0, 70, speed = 8.0).isEmpty())
+    assertTrue(detector.fix(1_000.0, 80, speed = 12.0).isEmpty())
+  }
+
+  @Test
+  fun aClearDepartureFiresAfterThirtySecondsOfMovingAway() {
     val detector = PlaceDwellDetector()
     detector.fix(0.0, 0)
-    assertTrue(detector.fix(500.0, 60).isEmpty())
-    assertTrue(detector.fix(500.0, 170).isEmpty())
-    assertEquals(listOf(PlaceCrossing(home, arrived = false, occurredAt = 60_000)), detector.fix(500.0, 180))
+    assertTrue(detector.fix(500.0, 60, speed = 12.0).isEmpty())
+    assertTrue(detector.fix(500.0, 80, speed = 12.0).isEmpty())
+    assertEquals(listOf(PlaceCrossing(home, arrived = false, occurredAt = 60_000)), detector.fix(800.0, 90, speed = 12.0))
+  }
+
+  @Test
+  fun aJumpOutsideWithoutSpeedStillWaitsTwoMinutes() {
+    val detector = PlaceDwellDetector()
+    detector.fix(0.0, 0)
+    assertTrue(detector.fix(400.0, 60).isEmpty())
+    assertTrue(detector.fix(400.0, 170).isEmpty())
+    assertEquals(listOf(PlaceCrossing(home, arrived = false, occurredAt = 60_000)), detector.fix(400.0, 180))
+  }
+
+  @Test
+  fun anUnclearDepartureStillWaitsTwoMinutes() {
+    val detector = PlaceDwellDetector()
+    detector.fix(0.0, 0)
+    assertTrue(detector.fix(200.0, 60, accuracy = 40.0, speed = 1.0).isEmpty())
+    assertTrue(detector.fix(200.0, 170, accuracy = 40.0, speed = 1.0).isEmpty())
+    assertEquals(listOf(PlaceCrossing(home, arrived = false, occurredAt = 60_000)), detector.fix(200.0, 180, accuracy = 40.0, speed = 1.0))
+  }
+
+  @Test
+  fun confirmingStopsAfterTwoMinutesEvenWithoutAnotherClearFix() {
+    val detector = PlaceDwellDetector()
+    detector.fix(160.0, 0)
+    detector.fix(150.0, 10)
+    detector.fix(0.0, 20)
+    assertTrue(detector.fix(185.0, 30).isEmpty())
+    assertTrue((40L..300L step 10).flatMap { detector.fix(165.0, it) }.isEmpty())
+    assertTrue(detector.isConfirming(149_000))
+    assertFalse(detector.isConfirming(150_000))
   }
 
   @Test
@@ -57,15 +117,15 @@ class PlaceDwellDetectorTest {
   }
 
   @Test
-  fun aBriefTripOutsideThatReturnsWithinTwoMinutesIsIgnored() {
+  fun aStrayFixOutsideThatReturnsIsIgnored() {
     val detector = PlaceDwellDetector()
     detector.fix(0.0, 0)
-    assertTrue(detector.fix(400.0, 30).isEmpty())
-    assertTrue(detector.fix(400.0, 120).isEmpty())
-    assertTrue(detector.fix(0.0, 140).isEmpty())
-    assertTrue(detector.fix(400.0, 200).isEmpty())
-    assertTrue(detector.fix(400.0, 300).isEmpty())
-    assertEquals(1, detector.fix(400.0, 320).size)
+    assertTrue(detector.fix(400.0, 30, speed = 2.0).isEmpty())
+    assertTrue(detector.fix(0.0, 40).isEmpty())
+    assertTrue(detector.fix(400.0, 200, speed = 2.0).isEmpty())
+    assertTrue(detector.fix(0.0, 210).isEmpty())
+    assertTrue(detector.fix(400.0, 240, speed = 2.0).isEmpty())
+    assertEquals(1, detector.fix(400.0, 270, speed = 2.0).size)
   }
 
   @Test

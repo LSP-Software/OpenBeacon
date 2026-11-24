@@ -240,7 +240,8 @@ final class LocationCapture: NSObject, CLLocationManagerDelegate {
       },
       timeSinceLastQueuedMs: queued.map { now - $0.atMs },
       forcedRefresh: refreshGeneration != nil,
-      lowPowerMode: TrackingRuntime.isLowPowerMode()
+      lowPowerMode: TrackingRuntime.isLowPowerMode(),
+      confirmingPlace: TrackingRuntime.places.isConfirming(nowMillis: fixMs)
     )
     TrackingRuntime.locked {
       currentIntervalMs = max(decision.intervalMs, Self.minIntervalMs)
@@ -287,7 +288,8 @@ final class LocationCapture: NSObject, CLLocationManagerDelegate {
           latitude: location.coordinate.latitude,
           longitude: location.coordinate.longitude,
           accuracyMeters: location.horizontalAccuracy >= 0 ? location.horizontalAccuracy : nil,
-          timestampMillis: fixMs
+          timestampMillis: fixMs,
+          speedMetersPerSecond: location.speed >= 0 ? location.speed : nil
         )
       }
     } catch {

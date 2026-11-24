@@ -19,6 +19,7 @@ class PlaceDwellDetector {
     val inside: Boolean? = null,
     val candidateInside: Boolean? = null,
     val candidateSince: Long = 0L,
+    val clearSince: Long? = null,
     val lastFixAt: Long = Long.MIN_VALUE,
   )
 
@@ -30,6 +31,7 @@ class PlaceDwellDetector {
     longitude: Double,
     accuracyMeters: Double?,
     timestampMillis: Long,
+    speedMetersPerSecond: Double? = null,
   ): List<PlaceCrossing> {
     states.keys.retainAll(places.map { it.placeId }.toSet())
     if (accuracyMeters != null && accuracyMeters > MAX_ACCURACY_METERS) return emptyList()
@@ -44,22 +46,43 @@ class PlaceDwellDetector {
           distance > place.radiusMeters + BOUNDARY_MARGIN_METERS -> false
           else -> null
         }
+      val clear =
+        accuracyMeters != null &&
+          when (observedInside) {
+            true ->
+              distance + accuracyMeters <= place.radiusMeters &&
+                (speedMetersPerSecond == null || speedMetersPerSecond < MAX_CLEAR_ARRIVAL_SPEED_MPS)
+            false ->
+              distance - accuracyMeters > place.radiusMeters + BOUNDARY_MARGIN_METERS &&
+                speedMetersPerSecond != null &&
+                speedMetersPerSecond >= MIN_CLEAR_DEPARTURE_SPEED_MPS
+            null -> false
+          }
       val next =
         when {
           observedInside == null -> previous
           previous.inside == null -> previous.copy(inside = observedInside, candidateInside = null)
           observedInside == previous.inside -> previous.copy(candidateInside = null)
-          previous.candidateInside != observedInside -> previous.copy(candidateInside = observedInside, candidateSince = timestampMillis)
-          timestampMillis - previous.candidateSince >= DWELL_MS -> {
-            crossings.add(PlaceCrossing(place, observedInside, previous.candidateSince))
-            previous.copy(inside = observedInside, candidateInside = null)
+          previous.candidateInside != observedInside ->
+            previous.copy(candidateInside = observedInside, candidateSince = timestampMillis, clearSince = timestampMillis.takeIf { clear })
+          else -> {
+            val clearSince = if (clear) previous.clearSince ?: timestampMillis else null
+            val clearDwellMs = if (observedInside) ARRIVAL_CLEAR_DWELL_MS else DEPARTURE_CLEAR_DWELL_MS
+            if (timestampMillis - previous.candidateSince >= DWELL_MS || (clearSince != null && timestampMillis - clearSince >= clearDwellMs)) {
+              crossings.add(PlaceCrossing(place, observedInside, previous.candidateSince))
+              previous.copy(inside = observedInside, candidateInside = null)
+            } else {
+              previous.copy(clearSince = clearSince)
+            }
           }
-          else -> previous
         }
       states[place.placeId] = next.copy(lastFixAt = timestampMillis)
     }
     return crossings
   }
+
+  fun isConfirming(nowMillis: Long): Boolean =
+    states.values.any { it.candidateInside != null && nowMillis - it.candidateSince < DWELL_MS }
 
   fun reset() {
     states.clear()
@@ -67,6 +90,10 @@ class PlaceDwellDetector {
 
   companion object {
     const val DWELL_MS = 120_000L
+    const val ARRIVAL_CLEAR_DWELL_MS = 45_000L
+    const val DEPARTURE_CLEAR_DWELL_MS = 30_000L
+    const val MAX_CLEAR_ARRIVAL_SPEED_MPS = 1.0
+    const val MIN_CLEAR_DEPARTURE_SPEED_MPS = 0.5
     const val BOUNDARY_MARGIN_METERS = 30.0
     const val MAX_ACCURACY_METERS = 200.0
     private const val EARTH_RADIUS_METERS = 6_371_008.8

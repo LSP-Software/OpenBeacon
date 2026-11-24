@@ -31,6 +31,7 @@ object CaptureSamplingPolicy {
     timeSinceLastQueuedMs: Long?,
     forcedRefresh: Boolean = false,
     lowPowerMode: Boolean = false,
+    confirmingPlace: Boolean = false,
   ): CaptureSamplingDecision {
     val batterySaver = isBatterySaver(battery)
     val trustedSpeed = if (accuracyMeters != null && accuracyMeters <= MAX_SPEED_ACCURACY_METERS) speedMetersPerSecond else null
@@ -46,9 +47,9 @@ object CaptureSamplingPolicy {
       }
     val intervalMs =
       when {
-        batterySaver && moving -> BATTERY_SAVER_MOVING_INTERVAL_MS
+        batterySaver && (moving || confirmingPlace) -> BATTERY_SAVER_MOVING_INTERVAL_MS
         batterySaver -> BATTERY_SAVER_DEFAULT_INTERVAL_MS
-        moving -> MOVING_INTERVAL_MS
+        moving || confirmingPlace -> MOVING_INTERVAL_MS
         else -> DEFAULT_INTERVAL_MS
       }
 

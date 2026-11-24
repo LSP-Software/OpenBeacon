@@ -30,6 +30,25 @@ class CaptureSamplingPolicyTest {
   }
 
   @Test
+  fun aStillPhoneConfirmingAPlaceSamplesLikeAMovingOne() {
+    val confirming = { level: Int, saver: Boolean, confirmingPlace: Boolean ->
+      CaptureSamplingPolicy.evaluate(
+        battery = battery(level = level, powerSaveMode = saver),
+        speedMetersPerSecond = 0.0,
+        accuracyMeters = 5.0,
+        distanceFromLastQueuedMeters = 0.0,
+        timeSinceLastQueuedMs = 30_000L,
+        confirmingPlace = confirmingPlace,
+      )
+    }
+    assertEquals(30_000L, confirming(80, false, false).intervalMs)
+    assertEquals(10_000L, confirming(80, false, true).intervalMs)
+    assertEquals(20_000L, confirming(80, true, true).intervalMs)
+    assertEquals(60_000L, confirming(80, false, true).uploadIntervalMs)
+    assertFalse(confirming(80, false, true).shouldQueue)
+  }
+
+  @Test
   fun defaultIntervalWhenIdleAndNotBatterySaver() {
     val decision =
       CaptureSamplingPolicy.evaluate(
