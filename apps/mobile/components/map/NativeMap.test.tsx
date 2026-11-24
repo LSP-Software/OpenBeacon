@@ -424,8 +424,17 @@ mock.module("./LiveMapMarkerPin.tsx", () => ({
 }));
 
 mock.module("./LiveMapSpeedChipAnnotation.tsx", () => ({
-  LiveMapSpeedChipAnnotation: ({ label, marker }: { label: string; marker: { name: string } }) =>
-    React.createElement("speed-chip", { label, name: marker.name }),
+  LiveMapSpeedChipAnnotation: ({
+    label,
+    marker,
+  }: {
+    label: string;
+    marker: { deviceId: string; name: string };
+  }) => {
+    const [annotationId] = React.useState(marker.deviceId);
+    if (annotationId !== marker.deviceId) throw new Error("`id` cannot be changed");
+    return React.createElement("speed-chip", { label, name: marker.name });
+  },
 }));
 
 const { NativeMap }: typeof import("./NativeMap.tsx") = await import("./NativeMap.tsx");
@@ -735,6 +744,12 @@ describe("NativeMap over a fake MapLibre", () => {
       setSystemTime(new Date("2026-07-19T10:03:01.000Z"));
       await renderAtStreetZoom({ markers: [alice, bob], selectedDeviceId: "alice" });
       expect(speedChips()).toEqual([]);
+    });
+
+    test("moves to the next moving person tapped", async () => {
+      await renderAtStreetZoom({ markers: [alice, bob], selectedDeviceId: "alice" });
+      await renderAtStreetZoom({ markers: [alice, bob], selectedDeviceId: "bob" });
+      expect(speedChips()).toEqual([["Bob", "30 mph"]]);
     });
 
     test("hides on a pin merging two of the person's devices", async () => {

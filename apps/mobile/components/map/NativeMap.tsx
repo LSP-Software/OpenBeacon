@@ -615,6 +615,7 @@ export const NativeMap = ({
           ]}
           {speedChipMarker && selectedSpeedLabel ? (
             <LiveMapSpeedChipAnnotation
+              key={speedChipMarker.deviceId}
               getZoom={pins.getZoom}
               glides={pinGlides}
               label={selectedSpeedLabel}
