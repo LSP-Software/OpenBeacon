@@ -16,6 +16,14 @@ _Avoid_: Passenger trip, ride, not driving
 One moment in a Drive that counts against the driver: hard braking, rapid acceleration, speeding or phone use. Each has its own time and position. A Passenger drive shows none.
 _Avoid_: Behaviour event, incident, alert, violation
 
+**Driving score**:
+A number from 0 to 100 for one Drive, or for one person's week of Drives, worked out on the viewer's phone from the Drive's Driving events and distance. Fewer and milder Driving events per distance give a higher score. A Passenger drive has none.
+_Avoid_: Safety score, risk score, rating, grade
+
+**Weekly driving report**:
+One person's Drives from Monday to Sunday in that person's time zone: how many, how far, how long, top speed, Driving score and Driving events, compared only with their own previous week. Each viewer sees the part of the week that person shares with them. Passenger drives are listed apart and count towards nothing.
+_Avoid_: Weekly summary, driver report, weekly digest
+
 **Drive detection**:
 A device's switch for recording Drives, shown on the phone as "Drive detection". It is on unless the device turns it off, and only that device can change it. While it is off the device records nothing about driving, and other members see "Drive detection is off" where that person's Drives would be.
 _Avoid_: Drive tracking, driving mode, crash detection
