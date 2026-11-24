@@ -96,6 +96,31 @@ describe("getProtomapsMapStyle", () => {
   });
 });
 
+describe("dark map labels", () => {
+  const luminance = (hex: string) => {
+    const linear = (start: number) => {
+      const channel = Number.parseInt(hex.slice(start, start + 2), 16) / 255;
+      return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * linear(1) + 0.7152 * linear(3) + 0.0722 * linear(5);
+  };
+
+  test.each(["roads_labels_minor", "roads_labels_major", "address_label"])(
+    "%s text stands out from its halo",
+    (id) => {
+      const layer = getProtomapsLayers("dark", true).find((candidate) => candidate.id === id);
+      if (layer?.type !== "symbol") throw new Error(`Missing symbol layer ${id}`);
+      const text = luminance(String(layer.paint?.["text-color"]));
+      const halo = luminance(String(layer.paint?.["text-halo-color"]));
+
+      expect((Math.max(text, halo) + 0.05) / (Math.min(text, halo) + 0.05)).toBeGreaterThanOrEqual(
+        4.5,
+      );
+      expect(layer.paint?.["text-halo-width"]).toBe(1.5);
+    },
+  );
+});
+
 describe("prefixSpriteImage", () => {
   test("prefixes every image an expression can pick and leaves no icon empty", () => {
     expect(prefixSpriteImage("arrow", "dark")).toBe("dark:arrow");
