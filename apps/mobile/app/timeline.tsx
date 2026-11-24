@@ -1,7 +1,6 @@
 import {
   Camera,
   type CameraRef,
-  Layer,
   Map as MapLibreMap,
   type MapRef,
 } from "@maplibre/maplibre-react-native";
@@ -29,6 +28,7 @@ import {
 } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { MapStyleLayers } from "../components/map/MapStyleLayers.tsx";
 import { useNativeMapStyle } from "../components/map/useNativeMapStyle.ts";
 import { TimelineClockText } from "../components/timeline/TimelineClockText.tsx";
 import { TimelineDecryptCard } from "../components/timeline/TimelineDecryptCard.tsx";
@@ -66,7 +66,6 @@ import { cn } from "../lib/cn.ts";
 import { GROUP_COLOR_PALETTE, getGroupColor } from "../lib/groupColor.ts";
 import { loadPersonalNicknames } from "../lib/personalNicknames.ts";
 import { groupPlacesQueryOptions } from "../lib/placeSync.ts";
-import { getSymbolVisibility } from "../lib/protomaps-style.ts";
 import { formatDistance, timelineSpeedLabel } from "../lib/units.ts";
 import {
   pickPersonDevices,
@@ -788,14 +787,7 @@ const TimelineView = ({
               zoom: firstCoordinate ? 13 : 2,
             }}
           />
-          {map.symbolLayerIds.map((id) => (
-            <Layer
-              key={id}
-              id={id}
-              type="symbol"
-              layout={{ visibility: getSymbolVisibility(map.showSymbols) }}
-            />
-          ))}
+          <MapStyleLayers layers={map.styleLayers} />
           <TimelineMapLayers
             dayKey={timeline?.day.key}
             reduceMotion={reduceMotion}

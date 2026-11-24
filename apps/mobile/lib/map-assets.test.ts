@@ -315,8 +315,10 @@ describe("bundled map assets", () => {
               "fill-extrusion-pattern",
             ].includes(key)
           ) {
-            for (const name of iconNames(value, "filter" in layer ? layer.filter : undefined))
-              expect(names).toContain(name);
+            for (const name of iconNames(value, "filter" in layer ? layer.filter : undefined)) {
+              expect(name.startsWith(`${theme}:`)).toBe(true);
+              expect(names).toContain(name.slice(theme.length + 1));
+            }
           }
         }
       }

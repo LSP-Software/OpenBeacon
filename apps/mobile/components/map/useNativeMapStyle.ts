@@ -21,7 +21,7 @@ import {
   shouldForceRefreshAfterMapLoadFailure,
 } from "../../lib/mapPmtilesLoadFailure.ts";
 import { getPmtilesSource, hasPmtilesArchiveChanged } from "../../lib/pmtilesUrl.ts";
-import { getProtomapsMapStyle, getSymbolLayerIds } from "../../lib/protomaps-style.ts";
+import { getProtomapsMapStyle, getProtomapsThemeLayers } from "../../lib/protomaps-style.ts";
 import { storage } from "../../lib/storage.ts";
 import { useTheme } from "../../providers/ThemeProvider.tsx";
 import { retainUrlTransform, subscribeToMapLibreLogs } from "./mapLibreShared.ts";
@@ -55,6 +55,8 @@ export const useNativeMapStyle = () => {
   );
   const showSymbolsRef = useRef(showSymbols);
   showSymbolsRef.current = showSymbols;
+  const mapThemeRef = useRef(mapTheme);
+  mapThemeRef.current = mapTheme;
   const applyMapLoadFailureState = (next: {
     autoForceRefreshAttempts: number;
     showRecoverableError: boolean;
@@ -156,13 +158,18 @@ export const useNativeMapStyle = () => {
     return retainUrlTransform(`openbeacon-pmtiles:${archiveUrl}`);
   }, [archiveUrl]);
   const sourceUrl = archiveUrl ?? (usingLastMapSource ? (lastMapSource?.sourceUrl ?? null) : null);
+  const [styledSourceUrl, setStyledSourceUrl] = useState(sourceUrl);
+  if (sourceUrl !== styledSourceUrl) {
+    setStyledSourceUrl(sourceUrl);
+    if (styledSourceUrl !== null) setMapRevision((revision) => revision + 1);
+  }
   const mapStyle = useMemo(() => {
     if (!sourceUrl) {
       return null;
     }
 
     return getProtomapsMapStyle(
-      mapTheme,
+      mapThemeRef.current,
       sourceUrl,
       Platform.OS === "ios"
         ? `${Paths.bundle.uri}/map/fonts/{fontstack}/{range}.pbf`
@@ -170,8 +177,11 @@ export const useNativeMapStyle = () => {
       Platform.OS === "ios" ? `${Paths.bundle.uri}/map/sprites` : "asset://map-assets/sprites",
       showSymbolsRef.current,
     );
-  }, [mapTheme, sourceUrl]);
-  const symbolLayerIds = useMemo(() => (mapStyle ? getSymbolLayerIds(mapStyle) : []), [mapStyle]);
+  }, [sourceUrl]);
+  const styleLayers = useMemo(
+    () => getProtomapsThemeLayers(mapTheme, showSymbols),
+    [mapTheme, showSymbols],
+  );
 
   const retryMapLoad = () => {
     if (forceRefreshSignedPmtilesUrlMutation.isPending) {
@@ -278,7 +288,7 @@ export const useNativeMapStyle = () => {
     mapRevision,
     pmtilesUrl: sourceUrl,
     showSymbols,
-    symbolLayerIds,
+    styleLayers,
     showRecoverableError: showRecoverableError || forceRefreshSignedPmtilesUrlMutation.isPaused,
     isError: signedPmtilesUrlQuery.isError,
     isFetching: signedPmtilesUrlQuery.isFetching,
