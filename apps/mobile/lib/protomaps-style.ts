@@ -78,7 +78,7 @@ const darkFlavor: Flavor = {
   subplace_label_halo: darkEarth,
   city_label: "#F1F3F6",
   city_label_halo: "#141A22",
-  state_label: "#6B7486",
+  state_label: "#8E98A6",
   state_label_halo: darkEarth,
   country_label: "#9EA8B6",
 

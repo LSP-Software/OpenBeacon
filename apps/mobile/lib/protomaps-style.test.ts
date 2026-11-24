@@ -105,7 +105,7 @@ describe("dark map labels", () => {
     return 0.2126 * linear(1) + 0.7152 * linear(3) + 0.0722 * linear(5);
   };
 
-  test.each(["roads_labels_minor", "roads_labels_major", "address_label"])(
+  test.each(["roads_labels_minor", "roads_labels_major", "address_label", "places_region"])(
     "%s text stands out from its halo",
     (id) => {
       const layer = getProtomapsLayers("dark", true).find((candidate) => candidate.id === id);
