@@ -109,6 +109,7 @@ export const LiveMapPointAnnotation = ({
             image={marker.image}
             initials={marker.initials}
             name={marker.name}
+            reservesHeadingSpace={marker.isSelf}
             ringColor={marker.ringColor}
             ringColors={marker.ringColors}
             timestamp={marker.timestamp}

@@ -37,10 +37,12 @@ mock.module("react-native", () => ({
   View: ({
     children,
     accessibilityLabel,
+    style,
   }: {
     children?: React.ReactNode;
     accessibilityLabel?: string;
-  }) => React.createElement("view", { accessibilityLabel }, children),
+    style?: unknown;
+  }) => React.createElement("view", { accessibilityLabel, style }, children),
 }));
 mock.module("react-native-svg", () => ({
   default: ({ children }: { children: React.ReactNode }) => children,
@@ -149,6 +151,31 @@ describe("LiveMapMarkerPin", () => {
     expect(refreshes).toBe(1);
     await render(true);
     expect(refreshes).toBe(2);
+  });
+
+  test("keeps a self pin's size whether or not it has a heading", async () => {
+    root = createRoot();
+    const pinWidth = async (headingDegrees: number | null, reservesHeadingSpace: boolean) => {
+      await act(async () => {
+        root?.render(
+          <LiveMapMarkerPin
+            headingDegrees={headingDegrees}
+            image={null}
+            initials="AB"
+            name="Alice"
+            reservesHeadingSpace={reservesHeadingSpace}
+            ringColor="#fff"
+            timestamp={null}
+          />,
+        );
+      });
+      const [pin] = root?.container.queryAll((item) => item.type === "view") ?? [];
+      return (pin?.props["style"] as { width: number } | undefined)?.width;
+    };
+
+    expect(await pinWidth(90, true)).toBe(132);
+    expect(await pinWidth(null, true)).toBe(132);
+    expect(await pinWidth(null, false)).toBe(48);
   });
 
   test("renders equal segments for two through nine distinct colors", async () => {
