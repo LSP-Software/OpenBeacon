@@ -30,7 +30,7 @@ export const useSwipeDownToDismiss = (onDismiss: (() => void) | undefined) => {
       translateY.value = 0;
       return;
     }
-    translateY.value = withSpring(0, { damping: 22, stiffness: 220 });
+    translateY.value = withSpring(0, { damping: 34, mass: 1, stiffness: 260 });
   }, [reduceMotionValue, translateY]);
 
   const dismiss = () => {
