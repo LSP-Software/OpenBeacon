@@ -1,4 +1,5 @@
-export type Units = "mph" | "kmh";
+export type SpeedUnit = "mph" | "kmh";
+export type DistanceUnit = "mi" | "km";
 
 const MOVING_SPEED_MPS = 1;
 const MAX_SHOWN_SPEED_MPS = 90;
@@ -41,32 +42,46 @@ export const defaultUnits = ({
 }: {
   measurementSystem: string | null;
   regionCode: string | null;
-}): Units => {
-  if (regionCode) return MPH_REGIONS.has(regionCode.toUpperCase()) ? "mph" : "kmh";
-  return measurementSystem === "us" || measurementSystem === "uk" ? "mph" : "kmh";
+}): { speed: SpeedUnit; distance: DistanceUnit } => {
+  const miles = regionCode
+    ? MPH_REGIONS.has(regionCode.toUpperCase())
+    : measurementSystem === "us" || measurementSystem === "uk";
+  return miles ? { speed: "mph", distance: "mi" } : { speed: "kmh", distance: "km" };
 };
 
-export const parseUnitsPreference = (stored: string | undefined): Units | "auto" =>
+export const parseSpeedPreference = (stored: string | undefined): SpeedUnit | "auto" =>
   stored === "mph" || stored === "kmh" ? stored : "auto";
 
-export const unitsName = (unit: Units) =>
-  unit === "mph" ? "Miles and mph" : "Kilometres and km/h";
+export const parseDistancePreference = (
+  stored: string | undefined,
+  storedSpeed: string | undefined,
+): DistanceUnit | "auto" => {
+  if (stored === "mi" || stored === "km" || stored === "auto") return stored;
+  const speed = parseSpeedPreference(storedSpeed);
+  return speed === "auto" ? "auto" : speed === "mph" ? "mi" : "km";
+};
 
-export const formatSpeed = (metersPerSecond: number, unit: Units) =>
+export const speedUnitName = (unit: SpeedUnit) =>
+  unit === "mph" ? "Miles per hour (mph)" : "Kilometres per hour (km/h)";
+
+export const distanceUnitName = (unit: DistanceUnit) =>
+  unit === "mi" ? "Miles and feet" : "Kilometres and metres";
+
+export const formatSpeed = (metersPerSecond: number, unit: SpeedUnit) =>
   unit === "mph"
     ? `${Math.round(metersPerSecond * 2.2369362920544)} mph`
     : `${Math.round(metersPerSecond * 3.6)} km/h`;
 
-export const formatDistance = (meters: number, unit: Units) => {
+export const formatDistance = (meters: number, unit: DistanceUnit) => {
   const metres = Math.round(meters);
   const feet = Math.round(meters * 3.28084);
-  if (unit === "kmh" && metres < 1000) return `${metres} m`;
-  if (unit === "mph" && feet < 528) return `${feet} ft`;
-  const value = unit === "kmh" ? meters / 1000 : meters / 1609.344;
-  return `${value < 99.95 ? value.toFixed(1) : Math.round(value)} ${unit === "kmh" ? "km" : "mi"}`;
+  if (unit === "km" && metres < 1000) return `${metres} m`;
+  if (unit === "mi" && feet < 528) return `${feet} ft`;
+  const value = unit === "km" ? meters / 1000 : meters / 1609.344;
+  return `${value < 99.95 ? value.toFixed(1) : Math.round(value)} ${unit}`;
 };
 
-export const movingSpeedLabel = (speed: number | null, unit: Units) =>
+export const movingSpeedLabel = (speed: number | null, unit: SpeedUnit) =>
   speed !== null && speed >= MOVING_SPEED_MPS && speed <= MAX_SHOWN_SPEED_MPS
     ? formatSpeed(speed, unit)
     : null;
@@ -80,7 +95,7 @@ export const liveSpeedLabel = ({
   now: number;
   speed: number | null;
   timestamp: string | null;
-  unit: Units;
+  unit: SpeedUnit;
 }) => {
   if (timestamp === null) return null;
   const age = now - Date.parse(timestamp);
@@ -93,5 +108,5 @@ export const liveSpeedHidesAt = (timestamp: string) =>
 
 export const timelineSpeedLabel = (
   pin: { position: { speed: number | null }; state: "moving" | "pause" | "stay" } | null,
-  unit: Units,
+  unit: SpeedUnit,
 ) => (pin?.state === "moving" ? movingSpeedLabel(pin.position.speed, unit) : null);

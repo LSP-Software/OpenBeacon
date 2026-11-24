@@ -195,7 +195,7 @@ const TimelineView = ({
   const [chosenPeople, setChosenPeople] = useState<string[] | null>(null);
   const [chooserOpen, setChooserOpen] = useState(false);
   const reduceMotion = useReducedMotion();
-  const { unit: units } = useUnits();
+  const units = useUnits();
   const dayStripRef = useRef<ScrollView>(null);
 
   const { data: groups } = useQuery({
@@ -510,7 +510,7 @@ const TimelineView = ({
     }
     switch (selectedSegment.kind) {
       case "moving": {
-        const speedLabel = timelineSpeedLabel(selectedPin, units);
+        const speedLabel = timelineSpeedLabel(selectedPin, units.speed);
         return {
           title: "Moving",
           detail: speedLabel ? `${speedLabel} · ${date}` : date,
@@ -1024,7 +1024,7 @@ const TimelineView = ({
                 <>
                   <View className="flex-row flex-wrap gap-2">
                     <StatCard
-                      value={formatDistance(selectedRoute.stats.distanceMeters, units)}
+                      value={formatDistance(selectedRoute.stats.distanceMeters, units.distance)}
                       label="travelled"
                     />
                     <StatCard

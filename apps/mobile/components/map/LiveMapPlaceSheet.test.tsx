@@ -19,7 +19,9 @@ mock.module("lucide-react-native", () => ({ PencilIcon: () => null, Trash2Icon: 
 mock.module("../../hooks/usePlaceAlertMutes.ts", () => ({
   usePlaceAlertMutes: () => ({ mutes: { data: undefined }, setMute: () => {} }),
 }));
-mock.module("../../hooks/useUnits.ts", () => ({ useUnits: () => ({ unit: "kmh" }) }));
+mock.module("../../hooks/useUnits.ts", () => ({
+  useUnits: () => ({ speed: "kmh", distance: "km" }),
+}));
 mock.module("../ui/Button.tsx", () => ({ Button: passthrough }));
 mock.module("../ui/Icon.tsx", () => ({ Icon: () => null }));
 mock.module("../ui/Switch.tsx", () => ({ Switch: () => null }));

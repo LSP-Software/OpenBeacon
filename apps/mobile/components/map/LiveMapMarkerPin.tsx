@@ -67,6 +67,7 @@ export const LiveMapMarkerPin = ({
   initials,
   name,
   onBitmapContentChange,
+  reservesHeadingSpace = false,
   ringColor,
   ringColors,
   status,
@@ -82,6 +83,7 @@ export const LiveMapMarkerPin = ({
   initials: string;
   name: string;
   onBitmapContentChange?: (() => void) | undefined;
+  reservesHeadingSpace?: boolean;
   ringColor: string;
   ringColors?: string[] | undefined;
   status?: MapPersonStatus | null | undefined;
@@ -96,7 +98,8 @@ export const LiveMapMarkerPin = ({
     refreshBitmap();
   }, [hasUnreadableUpdate, imageStatusChanges, isStale]);
   const showHeading = headingDegrees !== null;
-  const size = showHeading ? OUTER_SIZE : PIN_SIZE;
+  // MapLibre Android packs pin bitmaps into a shared icon atlas, and a bitmap that changes size is suspected of leaving other pins drawing part of it, so the self pin keeps one size
+  const size = showHeading || reservesHeadingSpace ? OUTER_SIZE : PIN_SIZE;
   const badgeIcon = deviceIcon ? deviceIconFor(deviceIcon, devicePlatform) : null;
 
   return (

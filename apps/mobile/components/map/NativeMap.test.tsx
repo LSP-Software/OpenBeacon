@@ -267,7 +267,7 @@ mock.module("../../hooks/useSelfDeviceHeading.ts", () => ({
 }));
 
 mock.module("../../hooks/useUnits.ts", () => ({
-  useUnits: () => ({ unit: "mph" }),
+  useUnits: () => ({ speed: "mph", distance: "mi" }),
 }));
 
 mock.module("../../lib/api.ts", () => ({

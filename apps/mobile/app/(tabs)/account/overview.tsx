@@ -92,7 +92,7 @@ const AccountScreen = () => {
   const historyShare = useHistoryShare();
   const { appThemePreference } = useTheme();
   const units = useUnits();
-  const unitsLabel = units.unit === "mph" ? "Miles" : "Kilometres";
+  const unitsLabel = `${units.distance === "mi" ? "Miles" : "Kilometres"}, ${units.speed === "mph" ? "mph" : "km/h"}`;
   const [signOutPhase, setSignOutPhase] = useState<"uploading" | "signingOut" | null>(null);
   const signingOut = useRef(false);
   const recoveryStatus = useQuery({
@@ -493,7 +493,7 @@ const AccountScreen = () => {
                   color: "blue",
                   href: "/account/units",
                   value:
-                    units.preference === "auto"
+                    units.speedPreference === "auto" && units.distancePreference === "auto"
                       ? `${unitsLabel} (${thisDeviceNoun()} region)`
                       : unitsLabel,
                 },
