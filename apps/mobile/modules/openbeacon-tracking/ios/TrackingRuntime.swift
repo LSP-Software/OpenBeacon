@@ -24,7 +24,8 @@ final class PlaceDetection {
     latitude: Double,
     longitude: Double,
     accuracyMeters: Double?,
-    timestampMillis: Int64
+    timestampMillis: Int64,
+    speedMetersPerSecond: Double?
   ) throws {
     try locked {
       if !sharing.canCapture(timestamp: timestampMillis, now: nowMillis) {
@@ -34,7 +35,7 @@ final class PlaceDetection {
       if timestampMillis > nowMillis + Self.maxFutureFixMillis { return }
       let current = places ?? store.list()
       places = current
-      let rows = detector.onFix(places: current, latitude: latitude, longitude: longitude, accuracyMeters: accuracyMeters, timestampMillis: timestampMillis).map {
+      let rows = detector.onFix(places: current, latitude: latitude, longitude: longitude, accuracyMeters: accuracyMeters, timestampMillis: timestampMillis, speedMetersPerSecond: speedMetersPerSecond).map {
         PlaceTransitionRow(
           clientId: UUID().uuidString.lowercased(),
           owner: owner,
@@ -74,6 +75,10 @@ final class PlaceDetection {
       detector.reset()
       if sharing.isPaused(now: nowMillis) { try TrackingDatabase.shared().deletePlaceTransitions(owner: owner) }
     }
+  }
+
+  func isConfirming(nowMillis: Int64) -> Bool {
+    locked { detector.isConfirming(nowMillis: nowMillis) }
   }
 
   func groups() -> Set<String> {

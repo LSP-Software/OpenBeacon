@@ -32,6 +32,7 @@ class PlaceDetectionTest {
     longitude = place.longitude,
     accuracyMeters = 10.0,
     timestampMillis = (atSeconds + 1) * 1_000,
+    speedMetersPerSecond = null,
   )
 
   private fun PlaceDetection.arriveAtHome(fromSeconds: Long): Int {
@@ -139,6 +140,7 @@ class PlaceDetectionTest {
       longitude = home.longitude,
       accuracyMeters = 10.0,
       timestampMillis = 86_400_000,
+      speedMetersPerSecond = null,
     )
     assertEquals(1, (30L..300L step 30).sumOf { detection.fix(home, 0.0, it) })
   }

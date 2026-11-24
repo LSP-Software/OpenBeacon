@@ -22,6 +22,7 @@ class PlaceDetection(
     longitude: Double,
     accuracyMeters: Double?,
     timestampMillis: Long,
+    speedMetersPerSecond: Double?,
   ): Int {
     if (!sharing.canCapture(timestampMillis, nowMillis)) {
       detector.reset()
@@ -30,7 +31,7 @@ class PlaceDetection(
     if (timestampMillis > nowMillis + MAX_FUTURE_FIX_MILLIS) return 0
     val current = places ?: store.list().also { places = it }
     val rows =
-      detector.onFix(current, latitude, longitude, accuracyMeters, timestampMillis).map { crossing ->
+      detector.onFix(current, latitude, longitude, accuracyMeters, timestampMillis, speedMetersPerSecond).map { crossing ->
         PlaceTransitionRow(
           clientId = newId(),
           owner = owner,
@@ -64,6 +65,9 @@ class PlaceDetection(
     detector.reset()
     if (sharing.isPaused(nowMillis)) queue.deleteByOwner(owner)
   }
+
+  @Synchronized
+  fun isConfirming(nowMillis: Long): Boolean = detector.isConfirming(nowMillis)
 
   @Synchronized
   fun groups(): Set<String> = store.groups()

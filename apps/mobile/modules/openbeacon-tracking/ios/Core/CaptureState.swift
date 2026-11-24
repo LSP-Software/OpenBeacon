@@ -126,7 +126,8 @@ enum CaptureSamplingPolicy {
     distanceFromLastQueuedMeters: Double?,
     timeSinceLastQueuedMs: Int64?,
     forcedRefresh: Bool = false,
-    lowPowerMode: Bool = false
+    lowPowerMode: Bool = false,
+    confirmingPlace: Bool = false
   ) -> (shouldQueue: Bool, intervalMs: Int64, forceUpload: Bool, uploadIntervalMs: Int64) {
     let batterySaver = battery.powerSaveMode || (battery.levelKnown && battery.level <= lowBatteryLevel && !battery.charging)
     let trustedSpeed: Double? = (accuracyMeters.map { $0 <= maxSpeedAccuracyMeters } ?? false) ? speedMetersPerSecond : nil
@@ -138,8 +139,8 @@ enum CaptureSamplingPolicy {
     }()
     let intervalMs: Int64 =
       batterySaver
-        ? (moving ? batterySaverMovingIntervalMs : batterySaverDefaultIntervalMs)
-        : (moving ? movingIntervalMs : defaultIntervalMs)
+        ? (moving || confirmingPlace ? batterySaverMovingIntervalMs : batterySaverDefaultIntervalMs)
+        : (moving || confirmingPlace ? movingIntervalMs : defaultIntervalMs)
 
     let shouldQueue: Bool = {
       if forcedRefresh { return true }
@@ -180,6 +181,10 @@ struct PlaceCrossing: Equatable {
 
 final class PlaceDwellDetector {
   static let dwellMs: Int64 = 120_000
+  static let arrivalClearDwellMs: Int64 = 45_000
+  static let departureClearDwellMs: Int64 = 30_000
+  static let maxClearArrivalSpeedMps = 1.0
+  static let minClearDepartureSpeedMps = 0.5
   static let boundaryMarginMeters = 30.0
   static let maxAccuracyMeters = 200.0
   private static let earthRadiusMeters = 6_371_008.8
@@ -189,6 +194,7 @@ final class PlaceDwellDetector {
     var inside: Bool? = nil
     var candidateInside: Bool? = nil
     var candidateSince: Int64 = 0
+    var clearSince: Int64? = nil
     var lastFixAt: Int64 = .min
   }
 
@@ -199,7 +205,8 @@ final class PlaceDwellDetector {
     latitude: Double,
     longitude: Double,
     accuracyMeters: Double?,
-    timestampMillis: Int64
+    timestampMillis: Int64,
+    speedMetersPerSecond: Double? = nil
   ) -> [PlaceCrossing] {
     let placeIds = Set(places.map(\.placeId))
     states = states.filter { placeIds.contains($0.key) }
@@ -213,6 +220,14 @@ final class PlaceDwellDetector {
       let observedInside: Bool? =
         distance <= place.radiusMeters ? true : distance > place.radiusMeters + Self.boundaryMarginMeters ? false : nil
       if let observedInside {
+        let clear: Bool = {
+          guard let accuracy = accuracyMeters else { return false }
+          if observedInside {
+            return distance + accuracy <= place.radiusMeters && (speedMetersPerSecond.map { $0 < Self.maxClearArrivalSpeedMps } ?? true)
+          }
+          return distance - accuracy > place.radiusMeters + Self.boundaryMarginMeters
+            && (speedMetersPerSecond.map { $0 >= Self.minClearDepartureSpeedMps } ?? false)
+        }()
         if next.inside == nil {
           next.inside = observedInside
           next.candidateInside = nil
@@ -221,16 +236,29 @@ final class PlaceDwellDetector {
         } else if next.candidateInside != observedInside {
           next.candidateInside = observedInside
           next.candidateSince = timestampMillis
-        } else if timestampMillis - next.candidateSince >= Self.dwellMs {
-          crossings.append(PlaceCrossing(place: place, arrived: observedInside, occurredAt: next.candidateSince))
-          next.inside = observedInside
-          next.candidateInside = nil
+          next.clearSince = clear ? timestampMillis : nil
+        } else {
+          let clearSince: Int64? = clear ? (next.clearSince ?? timestampMillis) : nil
+          let clearDwellMs = observedInside ? Self.arrivalClearDwellMs : Self.departureClearDwellMs
+          if timestampMillis - next.candidateSince >= Self.dwellMs
+            || clearSince.map({ timestampMillis - $0 >= clearDwellMs }) ?? false
+          {
+            crossings.append(PlaceCrossing(place: place, arrived: observedInside, occurredAt: next.candidateSince))
+            next.inside = observedInside
+            next.candidateInside = nil
+          } else {
+            next.clearSince = clearSince
+          }
         }
       }
       next.lastFixAt = timestampMillis
       states[place.placeId] = next
     }
     return crossings
+  }
+
+  func isConfirming(nowMillis: Int64) -> Bool {
+    states.values.contains { $0.candidateInside != nil && nowMillis - $0.candidateSince < Self.dwellMs }
   }
 
   func reset() {

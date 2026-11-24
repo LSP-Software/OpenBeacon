@@ -488,6 +488,7 @@ class TrackingCaptureService : Service() {
         timeSinceLastQueuedMs = queued?.let { nowMs - it.atMs },
         forcedRefresh = refreshGeneration != null,
         lowPowerMode = TrackingRuntime.isLowPowerMode(this),
+        confirmingPlace = isConfirmingPlace(location.time),
       )
 
     val nextIntervalMs = decision.intervalMs.coerceAtLeast(MIN_INTERVAL_MS)
@@ -579,8 +580,17 @@ class TrackingCaptureService : Service() {
           longitude = location.longitude,
           accuracyMeters = location.accuracy.toDouble().takeIf { location.hasAccuracy() },
           timestampMillis = location.time,
+          speedMetersPerSecond = location.speed.toDouble().takeIf { location.hasSpeed() },
         ) > 0
       }
+    } catch (error: Exception) {
+      Log.e(TAG, "Failed to check places.", error)
+      false
+    }
+
+  private fun isConfirmingPlace(nowMillis: Long): Boolean =
+    try {
+      TrackingRuntime.placeDetection(this).isConfirming(nowMillis)
     } catch (error: Exception) {
       Log.e(TAG, "Failed to check places.", error)
       false
