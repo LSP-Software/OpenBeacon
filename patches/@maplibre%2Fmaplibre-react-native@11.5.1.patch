@@ -1,0 +1,32 @@
+diff --git a/android/src/main/java/org/maplibre/reactnative/components/mapview/MLRNMapView.kt b/android/src/main/java/org/maplibre/reactnative/components/mapview/MLRNMapView.kt
+index b088909a48c4265219e4e95c529f6c0a63ae7e11..687da3cca324ddb6f84546ee732508dbce81a313 100644
+--- a/android/src/main/java/org/maplibre/reactnative/components/mapview/MLRNMapView.kt
++++ b/android/src/main/java/org/maplibre/reactnative/components/mapview/MLRNMapView.kt
+@@ -122,6 +122,7 @@ open class MLRNMapView(
+     private var lifeCycleListener: LifecycleEventListener? = null
+     private var paused = false
+     private var destroyed = false
++    private var repaintAfterResume = false
+ 
+     private var camera: MLRNCamera? = null
+     private val children: MutableList<MapChild>
+@@ -774,6 +775,11 @@ open class MLRNMapView(
+         frameEncodingTime: Double,
+         frameRenderingTime: Double,
+     ) {
++        // MapLibre's GL thread drops the EGL context when the first swap after a resume reports EGL_CONTEXT_LOST, then waits for a render request that a still map never sends, leaving the map black
++        if (repaintAfterResume) {
++            repaintAfterResume = false
++            mapLibreMap?.triggerRepaint()
++        }
+         if (fully) {
+             handleMapChangedEvent("onDidFinishRenderingFrameFully")
+         } else {
+@@ -1420,6 +1426,7 @@ open class MLRNMapView(
+             object : LifecycleEventListener {
+                 override fun onHostResume() {
+                     onResume()
++                    repaintAfterResume = true
+                 }
+ 
+                 override fun onHostPause() {

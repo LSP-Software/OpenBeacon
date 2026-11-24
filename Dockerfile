@@ -4,6 +4,7 @@ RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
 FROM base AS deps
 WORKDIR /app
 COPY package.json bun.lock bunfig.toml ./
+COPY patches patches
 COPY apps/backend/package.json apps/backend/
 COPY packages/api/package.json packages/api/
 COPY packages/auth/package.json packages/auth/

@@ -228,7 +228,8 @@ export const findMissingVersionBumps = ({
   const shipped = changedFiles
     .filter(isShippedFile)
     .filter((file) => file !== "package.json" || rootPackageChanged);
-  const isSharedFile = (file: string) => sharedFiles.includes(file) || file === "package.json";
+  const isSharedFile = (file: string) =>
+    sharedFiles.includes(file) || file === "package.json" || file.startsWith("patches/");
   const problems: string[] = [];
 
   if (

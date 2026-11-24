@@ -47,5 +47,8 @@
     "@biomejs/biome": "^2.6.4",
     "husky": "^9.1.7",
     "turbo": "2.9.14"
+  },
+  "patchedDependencies": {
+    "@maplibre/maplibre-react-native@11.5.1": "patches/@maplibre%2Fmaplibre-react-native@11.5.1.patch"
   }
 }

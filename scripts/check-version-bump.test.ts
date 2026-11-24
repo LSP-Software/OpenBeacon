@@ -127,12 +127,17 @@ describe("findMissingVersionBumps", () => {
     ).toEqual([]);
   });
 
-  test("requires both versions when the lockfile, the database schema or the root dependencies change", () => {
+  test("requires both versions when the lockfile, a dependency patch, the database schema or the root dependencies change", () => {
     const rootPackage = (catalog: Record<string, string>) =>
       parseRootPackage(JSON.stringify({ name: "openbeacon", workspaces: { catalog } }));
     const changes = [
       { changedFiles: ["bun.lock"], base, head: base },
       { changedFiles: ["packages/database/prisma/schema.prisma"], base, head: base },
+      {
+        changedFiles: ["patches/@maplibre%2Fmaplibre-react-native@11.5.1.patch"],
+        base,
+        head: base,
+      },
       {
         changedFiles: ["package.json"],
         base: { ...base, rootPackage: rootPackage({ react: "19.2.0" }) },
