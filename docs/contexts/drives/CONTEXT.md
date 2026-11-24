@@ -24,6 +24,10 @@ _Avoid_: Safety score, risk score, rating, grade
 The part of a Drive's distance the device watched closely enough to look for hard braking, rapid acceleration and speeding. Distance driven while the device was saving battery is recorded but not checked, so it holds no such Driving events and the Driving score counts only Checked distance.
 _Avoid_: Scored distance, monitored distance, covered distance
 
+**Speed limit pack**:
+The road speed limits for one region (a country, or part of one when a country is too large), kept on a device so it can check a Drive for speeding without asking anyone where it went. A device holds packs only for regions it has been in while Drive detection was on, and fetches each pack whole, never during a Drive. Each road's limit is posted (signed on the road), set by the road type, or unknown; speeding is only checked against a posted or road-type limit.
+_Avoid_: Speed limit tiles, limit data, speed map, region download
+
 **Weekly driving report**:
 One person's Drives from Monday to Sunday in that person's time zone: how many, how far, how long, top speed, Driving score and Driving events, compared only with their own previous week. Each viewer sees the part of the week that person shares with them. Passenger drives are listed apart and count towards nothing.
 _Avoid_: Weekly summary, driver report, weekly digest
@@ -43,3 +47,4 @@ _Avoid_: Crash detection, collision alert, SOS, emergency alert
 ## Notes
 
 - See [ADR 0003](../../adr/0003-drives-encrypted-per-group-at-fixed-size.md) for how a Drive is encrypted for each Group and why every one is the same size.
+- See [ADR 0004](../../adr/0004-speed-limit-packs-whole-regions-on-the-phone.md) for why speed limits come from whole-region packs on the device.
