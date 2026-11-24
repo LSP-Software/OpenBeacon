@@ -24,7 +24,7 @@ export const DirectionsButton = ({
 }) => {
   const open = async (app: DirectionsApp) => {
     if (await openDirections(app, destination)) return;
-    storage.remove(directionsAppKey);
+    if (storage.getString(directionsAppKey) === app) storage.remove(directionsAppKey);
     Alert.alert(
       `Couldn’t open ${directionsAppName(app)}`,
       "Check it’s still installed, then try again.",
@@ -39,6 +39,7 @@ export const DirectionsButton = ({
       await open(savedApp.app);
       return;
     }
+    if (saved) storage.remove(directionsAppKey);
     const [onlyApp] = installed;
     if (installed.length === 1 && onlyApp) {
       await open(onlyApp.app);
@@ -69,6 +70,7 @@ export const DirectionsButton = ({
       variant="secondary"
       className="mt-4"
       accessibilityLabel={`Directions to ${name}`}
+      accessibilityHint="Opens your maps app"
       onPress={() => {
         if (outOfDateAge === null) {
           void chooseAndOpen();

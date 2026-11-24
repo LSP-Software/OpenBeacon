@@ -108,6 +108,7 @@ test("asks again when the remembered app has been removed", async () => {
   await press();
   expect(opened).toEqual([]);
   expect(getSnapshot()[0]?.title).toBe("Get directions with");
+  expect(stored.has("directions.app")).toBe(false);
 });
 
 test("opens the only maps app without asking", async () => {

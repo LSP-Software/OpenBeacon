@@ -189,7 +189,7 @@ export const LiveMapPersonSheet = ({
             <DirectionsButton
               destination={destination}
               name={name}
-              outOfDateAge={isOutOfDate ? updatedAge : null}
+              outOfDateAge={isOutOfDate || unreadableGroup ? updatedAge : null}
             />
           ) : null}
           {timeline ? (
