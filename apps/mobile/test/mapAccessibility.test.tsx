@@ -165,6 +165,7 @@ test.each([
   async (overrides, speedLabel, label) => {
     const [pin] = await elements(
       <LiveMapPointAnnotation
+        getZoom={() => 15}
         glides={new Map()}
         headingDegrees={null}
         marker={marker(overrides)}
@@ -183,6 +184,7 @@ test("an Android map pin, drawn into the map as a picture, hides its views from 
   await act(async () =>
     root?.render(
       <LiveMapPointAnnotation
+        getZoom={() => 15}
         glides={new Map()}
         headingDegrees={null}
         marker={marker({})}

@@ -26,6 +26,7 @@ export const SelfLiveMapPointAnnotation = (
 export const LiveMapPointAnnotation = ({
   arrival,
   gatherTo,
+  getZoom,
   glides,
   headingDegrees,
   marker,
@@ -34,6 +35,7 @@ export const LiveMapPointAnnotation = ({
 }: {
   arrival?: LiveMapPinOffset | undefined;
   gatherTo?: LiveMapPinOffset | undefined;
+  getZoom: () => number;
   glides: ReadonlyMap<string, LiveMapPinGlide>;
   headingDegrees: number | null;
   marker: LiveMapMarker;
@@ -44,6 +46,7 @@ export const LiveMapPointAnnotation = ({
   const { animatedProps, lngLat } = useLiveMapPinPosition({
     base: marker,
     deviceIds: [marker.deviceId],
+    getZoom,
     glides,
   });
   const isStale = useLocationStale(marker.timestamp);

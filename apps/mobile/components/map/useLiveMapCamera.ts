@@ -65,7 +65,7 @@ export const useLiveMapCamera = ({
   const cameraRef = useRef<CameraRef>(null);
   const cameraAnimationEndsAtMsRef = useRef(0);
   const followEaseEndsAtMsRef = useRef(0);
-  const { scheduleRelease, setCamera } = useLiveMapCameraCommands(
+  const { cancelRelease, scheduleRelease, setCamera } = useLiveMapCameraCommands(
     cameraRef,
     cameraAnimationEndsAtMsRef,
     reduceMotion,
@@ -316,6 +316,7 @@ export const useLiveMapCamera = ({
   };
 
   const noteUserCameraControl = () => {
+    cancelRelease();
     edge.release();
     edge.follow(null);
     clearLiveMapInitialFitTimer(initialFitTimerRef);

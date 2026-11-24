@@ -15,12 +15,14 @@ const AnimatedViewAnnotation = Animated.createAnimatedComponent(ViewAnnotation);
 
 export const LiveMapStackAnnotation = ({
   arrival,
+  getZoom,
   glides,
   group,
   members,
   onPress,
 }: {
   arrival: LiveMapPinOffset | undefined;
+  getZoom: () => number;
   glides: ReadonlyMap<string, LiveMapPinGlide>;
   group: LiveMapPinGroup;
   members: readonly LiveMapMarker[];
@@ -30,6 +32,7 @@ export const LiveMapStackAnnotation = ({
   const { animatedProps, lngLat } = useLiveMapPinPosition({
     base: group,
     deviceIds: group.members.map((member) => member.deviceId),
+    getZoom,
     glides,
   });
   const { appTheme } = useTheme();

@@ -411,6 +411,7 @@ export const NativeMap = ({
   ) => {
     const annotationProps = {
       ...motion,
+      getZoom: pins.getZoom,
       glides: pinGlides,
       marker,
       onSelected: () => {
@@ -601,6 +602,7 @@ export const NativeMap = ({
                 <LiveMapStackAnnotation
                   key={group.id}
                   arrival={pins.arrivals.get(group.id)}
+                  getZoom={pins.getZoom}
                   glides={pinGlides}
                   group={group}
                   members={displayOrder(group.members)}
@@ -613,6 +615,7 @@ export const NativeMap = ({
           ]}
           {speedChipMarker && selectedSpeedLabel ? (
             <LiveMapSpeedChipAnnotation
+              getZoom={pins.getZoom}
               glides={pinGlides}
               label={selectedSpeedLabel}
               marker={speedChipMarker}

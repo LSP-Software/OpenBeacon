@@ -68,5 +68,5 @@ export const useLiveMapCameraCommands = (
     [],
   );
 
-  return { scheduleRelease, setCamera };
+  return { cancelRelease: clearReleaseTimer, scheduleRelease, setCamera };
 };

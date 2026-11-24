@@ -12,10 +12,12 @@ import { useLiveMapPinPosition } from "./useLiveMapPinPosition.ts";
 const AnimatedViewAnnotation = Animated.createAnimatedComponent(ViewAnnotation);
 
 export const LiveMapSpeedChipAnnotation = ({
+  getZoom,
   glides,
   label,
   marker,
 }: {
+  getZoom: () => number;
   glides: ReadonlyMap<string, LiveMapPinGlide>;
   label: string;
   marker: LiveMapMarker;
@@ -24,6 +26,7 @@ export const LiveMapSpeedChipAnnotation = ({
   const { animatedProps, lngLat } = useLiveMapPinPosition({
     base: marker,
     deviceIds: [marker.deviceId],
+    getZoom,
     glides,
   });
   const { appTheme } = useTheme();

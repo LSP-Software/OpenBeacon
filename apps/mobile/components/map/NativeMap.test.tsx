@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, setSystemTime, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, jest, mock, setSystemTime, test } from "bun:test";
 import React, { act } from "react";
 import { createRoot, type Root } from "test-renderer";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
@@ -1959,6 +1959,56 @@ describe("NativeMap over a fake MapLibre", () => {
       await flushEffects();
 
       expect(setCameraStopsSince(commandsAfterPan)).toEqual([]);
+    });
+
+    test("a new location mid-glide starts one new linear move from where the camera is", async () => {
+      setSystemTime(new Date("2026-07-19T10:00:01.000Z"));
+      await renderNativeMap({ markers: [alice], selectedDeviceId: "alice" });
+      await flushEffects();
+      setSystemTime(new Date("2026-07-19T10:00:11.000Z"));
+      await renderNativeMap({ markers: [aliceMoved], selectedDeviceId: "alice" });
+      await flushEffects();
+      const commandsBeforeNextFix = getNativeMapCameraCommands().length;
+      const aliceMovedAgain = createLiveMapMarkerFixture({
+        ...aliceMoved,
+        latitude: aliceMoved.latitude + 130 / 111_320,
+        timestamp: "2026-07-19T10:00:20.000Z",
+      });
+      setSystemTime(new Date("2026-07-19T10:00:21.000Z"));
+      await renderNativeMap({ markers: [aliceMovedAgain], selectedDeviceId: "alice" });
+      await flushEffects();
+
+      expect(getNativeMapCameraCommands().slice(commandsBeforeNextFix)).toEqual([
+        {
+          type: "setCamera",
+          stop: {
+            animationDuration: 12_000,
+            animationMode: "linear",
+            centerCoordinate: [-0.12, aliceMovedAgain.latitude],
+            padding: expect.any(Object),
+          },
+        },
+      ]);
+    });
+
+    test("a pan cancels the camera reset booked for the end of the follow move", async () => {
+      setSystemTime(new Date("2026-07-19T10:00:01.000Z"));
+      await renderNativeMap({ markers: [alice], selectedDeviceId: "alice" });
+      await flushEffects();
+      jest.useFakeTimers({ now: new Date("2026-07-19T10:00:11.000Z") });
+      try {
+        await renderNativeMap({ markers: [aliceMoved], selectedDeviceId: "alice" });
+        await flushEffects();
+        emitUserPanAfterProgrammaticCamera();
+        const commandsAfterPan = getNativeMapCameraCommands().length;
+        await act(async () => {
+          jest.advanceTimersByTime(13_000);
+        });
+
+        expect(getNativeMapCameraCommands().slice(commandsAfterPan)).toEqual([]);
+      } finally {
+        jest.useRealTimers();
+      }
     });
 
     test("stops the camera when the person is deselected part-way through a glide", async () => {

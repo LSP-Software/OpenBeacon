@@ -2,6 +2,7 @@ const LATE_UPDATE_ALLOWANCE_MS = 2_000;
 const LATE_ARRIVAL_ALLOWANCE_MS = 30_000;
 const LONGEST_GLIDE_MS = 90_000;
 const MAX_CONTINUOUS_GAP_MS = 180_000;
+const MAX_MERCATOR_LATITUDE = 85.05112878;
 const METERS_PER_DEGREE = 111_320;
 const SHORTEST_GLIDE_METERS = 5;
 
@@ -129,4 +130,22 @@ export const liveMapPinGlideOffsetPosition = ({
     longitude: wrapLongitude(base.longitude + longitude / count),
     settled,
   };
+};
+
+export const liveMapPinPixelsBetween = (
+  from: { latitude: number; longitude: number },
+  to: { latitude: number; longitude: number },
+  zoom: number,
+) => {
+  "worklet";
+  const latitude = Math.min(Math.max(from.latitude, -MAX_MERCATOR_LATITUDE), MAX_MERCATOR_LATITUDE);
+  return (
+    (Math.hypot(
+      wrapLongitude(to.longitude - from.longitude),
+      (to.latitude - from.latitude) / Math.cos((latitude * Math.PI) / 180),
+    ) *
+      512 *
+      2 ** zoom) /
+    360
+  );
 };
