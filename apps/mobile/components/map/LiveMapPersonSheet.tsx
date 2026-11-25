@@ -1,8 +1,17 @@
 import { Link } from "expo-router";
-import { GaugeIcon, HistoryIcon, RadioIcon } from "lucide-react-native";
+import {
+  CircleCheckIcon,
+  GaugeIcon,
+  HistoryIcon,
+  RadioIcon,
+  TriangleAlertIcon,
+} from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { Pressable, View } from "react-native";
 import { useLiveSpeedLabel } from "../../hooks/useLiveSpeedLabel.ts";
+import { useUnits } from "../../hooks/useUnits.ts";
+import { type CrashIncident, formatClock } from "../../lib/crashAlertInbox.ts";
+import { formatSpeed } from "../../lib/units.ts";
 import { useTimeSince } from "../../hooks/useTimeSince.ts";
 import { shortTimeSince } from "../../lib/timeSince.ts";
 import { getBatteryVisual } from "../../lib/batteryVisual.ts";
@@ -34,6 +43,7 @@ type PersonDevice = {
 
 export const LiveMapPersonSheet = ({
   battery,
+  crash = null,
   destination,
   devices,
   image,
@@ -52,6 +62,7 @@ export const LiveMapPersonSheet = ({
   unreadableGroup,
 }: {
   battery: { charging: boolean; level: number | null } | null;
+  crash?: CrashIncident | null;
   destination?: { latitude: number; longitude: number } | undefined;
   devices?: readonly PersonDevice[] | undefined;
   image: string | null;
@@ -96,6 +107,7 @@ export const LiveMapPersonSheet = ({
       onHeightChange={onHeightChange}
       header={
         <>
+          {crash && !isSelf ? <CrashAlertBlock crash={crash} name={name} /> : null}
           <View className="flex-row items-center gap-3">
             <Avatar alt={name} className="size-12">
               <DecryptedAvatarImage url={image} />
@@ -192,6 +204,12 @@ export const LiveMapPersonSheet = ({
               outOfDateAge={isOutOfDate || unreadableGroup ? updatedAge : null}
             />
           ) : null}
+          {crash && !isSelf && !crash.ok ? (
+            <Text className="text-secondary mt-3 text-sm">
+              OpenBeacon hasn’t contacted emergency services. Call 999 if you think {name} needs
+              help. Crash alerts may help, but they can go off when nothing happened.
+            </Text>
+          ) : null}
           {timeline ? (
             <Link href={{ pathname: "/timeline", params: timeline }} asChild>
               <Button variant="secondary" className="mt-4" accessibilityRole="link">
@@ -226,6 +244,53 @@ export const LiveMapPersonSheet = ({
         </View>
       ) : undefined}
     </LiveMapBottomSheet>
+  );
+};
+
+const CrashAlertBlock = ({ crash, name }: { crash: CrashIncident; name: string }) => {
+  const { speed } = useUnits();
+  const crashAt = formatClock(crash.crash.time);
+  if (crash.ok) {
+    return (
+      <View
+        accessibilityRole="alert"
+        className="mb-3 flex-row gap-3 rounded-2xl p-3"
+        style={{ backgroundColor: "#E6F2EA" }}
+      >
+        <CircleCheckIcon size={22} color="#1E6B3A" />
+        <View className="min-w-0 flex-1 gap-0.5">
+          <Text className="font-semibold" style={{ color: "#1E6B3A" }}>
+            {name} says they’re OK
+          </Text>
+          <Text className="text-sm" style={{ color: "#1E6B3A" }}>
+            {formatClock(crash.ok.at)}, after a possible crash at {crashAt}
+            {crash.placeLabel ? ` on ${crash.placeLabel}` : ""}
+          </Text>
+        </View>
+      </View>
+    );
+  }
+  const sharing =
+    crash.sharingUntil !== null && crash.sharingUntil > Date.now()
+      ? ` ${name}’s phone is sharing every 10 s until ${formatClock(crash.sharingUntil)}.`
+      : "";
+  return (
+    <View
+      accessibilityRole="alert"
+      className="mb-3 flex-row gap-3 rounded-2xl p-3"
+      style={{ backgroundColor: "#FBDCD8" }}
+    >
+      <TriangleAlertIcon size={22} color="#2A0A0C" />
+      <View className="min-w-0 flex-1 gap-0.5">
+        <Text className="font-semibold" style={{ color: "#2A0A0C" }}>
+          Possible crash at {crashAt}
+        </Text>
+        <Text className="text-sm" style={{ color: "#2A0A0C" }}>
+          {crash.placeLabel ? `${crash.placeLabel}, ` : ""}
+          {formatSpeed(crash.crash.speedBefore, speed)} just before.{sharing}
+        </Text>
+      </View>
+    </View>
   );
 };
 

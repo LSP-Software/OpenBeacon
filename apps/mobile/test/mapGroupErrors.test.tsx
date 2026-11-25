@@ -40,6 +40,12 @@ let queueEviction: {
 } | null = null;
 const dismissedEvictions: unknown[] = [];
 let offline = false;
+mock.module("../lib/crashAlertSync.ts", () => ({
+  applyCrashAlerts: async () => {},
+  getCrashAlertsCursor: () => null,
+  sendQueuedCrashAlerts: async () => {},
+  useActiveCrash: () => null,
+}));
 mock.module("../lib/networkStatus.ts", () => ({ useOfflineStatus: () => offline }));
 mock.module("../components/AnnouncementBanner.tsx", () => ({ AnnouncementBanner: () => null }));
 mock.module("@tanstack/react-query", () => ({

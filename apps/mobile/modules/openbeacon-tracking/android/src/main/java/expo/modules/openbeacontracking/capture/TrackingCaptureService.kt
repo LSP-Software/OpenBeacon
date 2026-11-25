@@ -39,12 +39,14 @@ import expo.modules.openbeacontracking.Notices
 import expo.modules.openbeacontracking.R
 import expo.modules.openbeacontracking.TrackingRuntime
 import expo.modules.openbeacontracking.crash.CrashCountdownController
+import expo.modules.openbeacontracking.crash.CrashCountdownReceiver
 import expo.modules.openbeacontracking.crash.CrashSensor
 import expo.modules.openbeacontracking.drives.DriveFix
 import expo.modules.openbeacontracking.drives.DriveSensors
 import expo.modules.openbeacontracking.queue.CiphertextQueueRow
 import java.util.Calendar
 import java.util.Date
+import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -513,6 +515,7 @@ class TrackingCaptureService : Service() {
         forcedRefresh = refreshGeneration != null,
         lowPowerMode = TrackingRuntime.isLowPowerMode(this),
         confirmingPlace = isConfirmingPlace(location.time),
+        crashSharing = TrackingRuntime.isCrashSharing(this, nowMs),
       )
 
     val nextIntervalMs =
@@ -771,8 +774,15 @@ class TrackingCaptureService : Service() {
     val paused = sharing.isPaused(System.currentTimeMillis())
     val recordingDrive = !paused && TrackingRuntime.isDriveDetectionOn(this) && TrackingRuntime.driveRecorder(this).recording
     val pausedUntil = sharing.pausedUntil
+    val crashSharingUntil = TrackingRuntime.crashSharingUntil(this)?.takeIf { !paused && it > System.currentTimeMillis() }
     val body =
       when {
+        crashSharingUntil != null ->
+          getString(
+            R.string.openbeacon_crash_sharing_body,
+            DateFormat.getTimeFormat(this).format(Date(crashSharingUntil)),
+            CrashCountdownController.groupsLabel(this).first.replaceFirstChar { it.titlecase(Locale.getDefault()) },
+          )
         !paused -> getString(R.string.openbeacon_tracking_notification_body)
         pausedUntil == null -> getString(R.string.openbeacon_tracking_notification_paused_body)
         isOnDay(pausedUntil, 0) ->
@@ -792,6 +802,7 @@ class TrackingCaptureService : Service() {
         getString(
           when {
             paused -> R.string.openbeacon_tracking_notification_paused_title
+            crashSharingUntil != null -> R.string.openbeacon_crash_sharing_title
             recordingDrive -> R.string.openbeacon_tracking_notification_drive_title
             else -> R.string.openbeacon_tracking_notification_title
           },
@@ -808,7 +819,11 @@ class TrackingCaptureService : Service() {
       .setOnlyAlertOnce(true)
       .setCategory(NotificationCompat.CATEGORY_SERVICE)
       .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-      .build()
+      .apply {
+        if (crashSharingUntil != null) {
+          addAction(0, getString(R.string.openbeacon_crash_im_ok), CrashCountdownReceiver.intent(this@TrackingCaptureService, CrashCountdownReceiver.ACTION_IM_OK))
+        }
+      }.build()
   }
 
   private fun isOnDay(
@@ -862,6 +877,16 @@ class TrackingCaptureService : Service() {
         context.startService(Intent(context, TrackingCaptureService::class.java).apply { action = ACTION_SHOW_NOTICE })
       } catch (error: IllegalStateException) {
         Log.w(TAG, "Android didn't allow the sharing notice to be updated.", error)
+      }
+    }
+
+    fun refreshNow(context: Context) {
+      if (!TrackingRuntime.isCaptureRunning) return
+      try {
+        context.startService(Intent(context, TrackingCaptureService::class.java).apply { action = ACTION_REFRESH })
+        context.startService(Intent(context, TrackingCaptureService::class.java).apply { action = ACTION_SHOW_NOTICE })
+      } catch (error: IllegalStateException) {
+        Log.w(TAG, "Android didn't allow location sharing to change in the background.", error)
       }
     }
 

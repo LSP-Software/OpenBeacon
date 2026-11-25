@@ -159,3 +159,24 @@ export const useNotificationSettings = () => {
 
   return { enabled, turnOn, turningOn: turningOn.isPending };
 };
+
+export const useCrashAlertSound = () => {
+  const [duringDoNotDisturb, setDuringDoNotDisturb] = useState<boolean | null>(null);
+  const refresh = useCallback(async () => {
+    if (Platform.OS !== "android") return;
+    const trackingModule = await loadTrackingModule();
+    const result = await tryCatch(
+      Promise.resolve().then(() => trackingModule?.crashAlertsSoundDuringDoNotDisturb() ?? null),
+    );
+    if (!result.error) setDuringDoNotDisturb(result.data);
+  }, []);
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+  useAppForeground(() => void refresh());
+  const openSettings = async () => {
+    const trackingModule = await loadTrackingModule();
+    await tryCatch(Promise.resolve().then(() => trackingModule?.openCrashAlertSoundSettings()));
+  };
+  return { duringDoNotDisturb, openSettings: () => void openSettings() };
+};

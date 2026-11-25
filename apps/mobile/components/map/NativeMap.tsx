@@ -46,6 +46,7 @@ import { LiveMapSpeedChipAnnotation } from "./LiveMapSpeedChipAnnotation.tsx";
 import { LiveMapPersonSheet } from "./LiveMapPersonSheet.tsx";
 import { LiveMapPlaceSheet } from "./LiveMapPlaceSheet.tsx";
 import { PlaceAnnotation } from "./PlaceAnnotation.tsx";
+import { CrashSpotAnnotation } from "./CrashSpotAnnotation.tsx";
 import { LiveMapStackAnnotation } from "./LiveMapStackAnnotation.tsx";
 import { LiveMapStackSheet } from "./LiveMapStackSheet.tsx";
 import { useLiveMapEdgeMarkers } from "./useLiveMapEdgeMarkers.ts";
@@ -53,10 +54,12 @@ import { useLiveMapCamera } from "./useLiveMapCamera.ts";
 import { useLiveMapPinGroups } from "./useLiveMapPinGroups.ts";
 import { useLiveMapPinGlides } from "./useLiveMapPinGlides.ts";
 import { useNativeMapStyle } from "./useNativeMapStyle.ts";
+import type { CrashIncident } from "../../lib/crashAlertInbox.ts";
 
 export const NativeMap = ({
   awaitingLiveSelfFix = false,
   bottomInset = 0,
+  crash = null,
   devices = [],
   focusPlaceId = null,
   groupOptions = null,
@@ -77,6 +80,7 @@ export const NativeMap = ({
 }: {
   awaitingLiveSelfFix?: boolean;
   bottomInset?: number;
+  crash?: CrashIncident | null;
   devices?: readonly (MapMemberDevice & { paused: boolean; unreadable: boolean })[];
   focusPlaceId?: string | null;
   groupOptions?: readonly MapGroupOption[] | null;
@@ -578,6 +582,13 @@ export const NativeMap = ({
               />
             </GeoJSONSource>
           ) : null}
+          {crash && selectedMarker && !selectedMarker.isSelf ? (
+            <CrashSpotAnnotation
+              latitude={crash.crash.latitude}
+              longitude={crash.crash.longitude}
+              name={selectedMarker.name}
+            />
+          ) : null}
           {places.map((place) => (
             <PlaceAnnotation
               key={`place:${placeKey(place)}`}
@@ -846,6 +857,7 @@ export const NativeMap = ({
           <LiveMapPersonSheet
             key={selectedMarker.userId}
             battery={selectedMarker.battery}
+            crash={crash}
             destination={
               selectedMarker.timestamp === null
                 ? undefined

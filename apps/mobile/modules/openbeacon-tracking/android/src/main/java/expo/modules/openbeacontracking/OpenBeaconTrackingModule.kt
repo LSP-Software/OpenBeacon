@@ -7,6 +7,7 @@ import android.os.SystemClock
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import expo.modules.openbeacontracking.crash.CrashCountdownController
+import expo.modules.openbeacontracking.crash.CrashAlertNotices
 import expo.modules.openbeacontracking.capture.TrackingCaptureService
 import expo.modules.openbeacontracking.capture.SharingCaptureState
 import expo.modules.openbeacontracking.capture.SharingResumeWorker
@@ -148,6 +149,45 @@ class OpenBeaconTrackingModule : Module() {
         TrackingRuntime.driveQueue(requireContext()).deleteByIds(ids.map { it.toLong() })
       }
 
+      AsyncFunction("listQueuedCrashAlerts") {
+        val context = requireContext()
+        CrashCountdownController.expireQueued(context)
+        TrackingRuntime.crashAlertOutbox(context).waiting(System.currentTimeMillis()).map {
+          mapOf(
+            "messageId" to it.messageId,
+            "groupId" to it.groupId,
+            "epochId" to it.epochId,
+            "senderDeviceId" to it.senderDeviceId,
+            "nonce" to it.nonce,
+            "ciphertext" to it.ciphertext,
+          )
+        }
+      }
+
+      AsyncFunction("markCrashAlertsSent") { copies: List<Map<String, String>>, sentAt: Double ->
+        val context = requireContext()
+        TrackingRuntime.crashAlertOutbox(context).markSent(copies.crashCopies(), sentAt.toLong())
+        CrashCountdownController.onDelivered(context)
+      }
+
+      AsyncFunction("dropCrashAlerts") { copies: List<Map<String, String>> ->
+        val context = requireContext()
+        TrackingRuntime.crashAlertOutbox(context).drop(copies.crashCopies())
+        CrashCountdownController.onDelivered(context)
+      }
+
+      Function("showCrashAlertNotice") { kind: String, key: String, title: String, body: String, link: String ->
+        CrashAlertNotices.show(requireContext(), kind == "ok", key, title, body, link)
+      }
+
+      Function("crashAlertsSoundDuringDoNotDisturb") {
+        CrashAlertNotices.soundsDuringDoNotDisturb(requireContext())
+      }
+
+      Function("openCrashAlertSoundSettings") {
+        CrashAlertNotices.openSoundSettings(requireContext())
+      }
+
       Function("isPlaceSearchAvailable") {
         PlaceSearch.isAvailable()
       }
@@ -166,6 +206,7 @@ class OpenBeaconTrackingModule : Module() {
 
       AsyncFunction("clearEventNotices") { keepSecurityAlerts: Boolean ->
         Notices.clearEvents(requireContext(), keepSecurityAlerts)
+        CrashAlertNotices.clear(requireContext())
       }
 
       Function("pendingPushToken") { scope: String ->
@@ -458,3 +499,5 @@ class OpenBeaconTrackingModule : Module() {
     private const val MAX_QUEUED_DRIVES = 200
   }
 }
+
+private fun List<Map<String, String>>.crashCopies() = mapNotNull { copy -> copy["messageId"]?.let { messageId -> copy["groupId"]?.let { messageId to it } } }

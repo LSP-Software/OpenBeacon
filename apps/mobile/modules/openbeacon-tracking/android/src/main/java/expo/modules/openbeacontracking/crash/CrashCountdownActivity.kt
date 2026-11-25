@@ -24,6 +24,7 @@ import expo.modules.openbeacontracking.R
 import expo.modules.openbeacontracking.drives.CrashCountdown
 import expo.modules.openbeacontracking.drives.CrashCountdownPhase
 import java.util.Date
+import expo.modules.openbeacontracking.TrackingRuntime
 import java.util.Locale
 
 class CrashCountdownActivity : Activity() {
@@ -77,7 +78,7 @@ class CrashCountdownActivity : Activity() {
     super.onStop()
   }
 
-  private var shown: Triple<CrashCountdownPhase, Int, String?>? = null
+  private var shown: List<Any?>? = null
 
   private fun render() {
     val countdown = CrashCountdownController.current
@@ -86,13 +87,15 @@ class CrashCountdownActivity : Activity() {
       return
     }
     val seconds = countdown.secondsLeft(System.currentTimeMillis())
-    val key = Triple(countdown.phase, seconds, CrashCountdownController.placeName)
+    val deliveries = if (countdown.phase == CrashCountdownPhase.SENT) CrashCountdownController.deliveries(this) else null
+    val key = listOf(countdown.phase, seconds, CrashCountdownController.placeName, deliveries)
     if (key == shown) return
     shown = key
     root.removeAllViews()
     when (countdown.phase) {
       CrashCountdownPhase.COUNTING -> renderCounting(countdown, seconds)
-      CrashCountdownPhase.SENT -> renderWaiting(countdown)
+      CrashCountdownPhase.SENT ->
+        if (deliveries?.values?.any { it != null } == true) renderSent(countdown, deliveries) else renderWaiting(countdown)
       CrashCountdownPhase.TEST_FINISHED -> renderTestFinished()
       else -> finish()
     }
@@ -187,6 +190,42 @@ class CrashCountdownActivity : Activity() {
     sheet.addView(text(getString(R.string.openbeacon_crash_calls_without_signal), 14f, INK).apply { gravity = Gravity.CENTER }, spaced(6))
     val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
     row.addView(button(getString(R.string.openbeacon_crash_im_ok), TONAL, INK) { CrashCountdownController.imOk(this) }, weighted(0))
+    row.addView(button(getString(R.string.openbeacon_crash_text_someone), TONAL, INK) { textSomeone(countdown) }, weighted(dp(12)))
+    sheet.addView(row, spaced(12))
+    sheet.addView(text(getString(R.string.openbeacon_crash_may_help, number), 16f, INK), spaced(20))
+    root.addView(sheet, fill())
+  }
+
+  private fun renderSent(
+    countdown: CrashCountdown,
+    deliveries: Map<String, Long?>,
+  ) {
+    val number = CrashCountdownController.emergencyNumber(this)
+    val time = DateFormat.getTimeFormat(this)
+    val sharingUntil = TrackingRuntime.crashSharingUntil(this)
+    root.addView(
+      header(top = true).apply {
+        addView(text(getString(R.string.openbeacon_crash_sent_title), 30f, Color.WHITE, bold = true).apply { setPadding(0, dp(12), 0, dp(8)) })
+        if (sharingUntil != null && sharingUntil > System.currentTimeMillis()) {
+          addView(text(getString(R.string.openbeacon_crash_sent_body, time.format(Date(sharingUntil))), 18f, Color.WHITE))
+        }
+      },
+    )
+    val sheet = sheet()
+    sheet.addView(label(getString(R.string.openbeacon_crash_sent_label)))
+    sheet.addView(
+      card(
+        deliveries.map { (groupId, sentAt) ->
+          (CrashCountdownController.groupName(this, groupId) ?: getString(R.string.openbeacon_crash_your_groups)) to
+            (sentAt?.let { time.format(Date(it)) } ?: getString(R.string.openbeacon_crash_waiting_for_signal))
+        },
+      ),
+    )
+    val (groups) = CrashCountdownController.groupsLabel(this)
+    sheet.addView(button(getString(R.string.openbeacon_crash_ok_tell), GREEN, Color.WHITE, large = true) { CrashCountdownController.imOk(this) }, spaced(20))
+    sheet.addView(text(getString(R.string.openbeacon_crash_ok_tell_caption, capitalise(groups)), 14f, INK).apply { gravity = Gravity.CENTER }, spaced(6))
+    val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+    row.addView(button(getString(R.string.openbeacon_crash_call, number), TONAL, INK) { CrashCountdownController.openDialer(this, this) }, weighted(0))
     row.addView(button(getString(R.string.openbeacon_crash_text_someone), TONAL, INK) { textSomeone(countdown) }, weighted(dp(12)))
     sheet.addView(row, spaced(12))
     sheet.addView(text(getString(R.string.openbeacon_crash_may_help, number), 16f, INK), spaced(20))

@@ -19,6 +19,8 @@ swiftc "$dir/../ios/Core/DriveRecordCodec.swift" "$dir/../ios/Core/DriveDetector
 "$out/events-tests" "$dir/../test-cases/driving-events-v1.json"
 swiftc "$dir/../ios/Core/DriveRecordCodec.swift" "$dir/../ios/Core/DriveDetector.swift" "$dir/../ios/Core/CrashDetector.swift" "$dir/../ios/Core/CrashCountdown.swift" "$dir/CrashChecks.swift" "$dir/crash/main.swift" -o "$out/crash-tests"
 "$out/crash-tests" "$dir/../test-cases/crash-detection-v1.json"
+swiftc "$dir/../ios/Core/CrashAlertCodec.swift" "$dir/crashalert/main.swift" -o "$out/crash-alert-tests"
+"$out/crash-alert-tests" "$dir/../../../../../packages/encryption/src/testVectors/crash-alert-v1.json"
 
 if [ "$(uname)" != "Darwin" ]; then
   echo "Skipping the CryptoKit checks: they need macOS."

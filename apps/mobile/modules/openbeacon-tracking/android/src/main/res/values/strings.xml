@@ -69,5 +69,21 @@
   <string name="openbeacon_crash_sms">OpenBeacon thinks I may have been in a crash at %1$s. I was here: %2$s</string>
   <string name="openbeacon_crash_seconds_left">%1$d seconds left</string>
   <string name="openbeacon_crash_test_where">Where you are</string>
+  <string name="openbeacon_crash_sent_title">Crash alert sent</string>
+  <string name="openbeacon_crash_sent_body">Sharing your location every 10 seconds until %1$s</string>
+  <string name="openbeacon_crash_sent_label">Sent</string>
+  <string name="openbeacon_crash_ok_tell">I\'m OK, tell them</string>
+  <string name="openbeacon_crash_ok_tell_caption">%1$s will see that you\'re OK</string>
+  <string name="openbeacon_crash_sharing_title">Sharing every 10 s after a Crash alert</string>
+  <string name="openbeacon_crash_sharing_body">Until %1$s. %2$s can see where you are.</string>
+  <string name="openbeacon_crash_dropped_title">Crash alert not sent</string>
+  <string name="openbeacon_crash_dropped_body">Your phone had no signal for 2 hours after a possible crash at %1$s, so the alert was dropped. Nobody was told.</string>
+  <string name="openbeacon_crash_dropped_body_no_time">Your phone had no signal for 2 hours after a possible crash, so the alert was dropped. Nobody was told.</string>
+  <string name="openbeacon_crash_alerts_channel">Crash alerts</string>
+  <string name="openbeacon_crash_alerts_channel_description">When someone\'s phone sends a Crash alert. Sounds an alarm.</string>
+  <string name="openbeacon_crash_alerts_ok_channel">Crash alert follow-ups</string>
+  <string name="openbeacon_crash_alerts_ok_channel_description">When someone says they\'re OK after a Crash alert.</string>
+  <string name="openbeacon_crash_show_on_map">Show on map</string>
+  <string name="openbeacon_crash_directions">Directions</string>
   <string name="openbeacon_crash_test_speed">How fast you were going</string>
 </resources>
