@@ -11,7 +11,7 @@ import { nicknamesByGroup } from "./nicknamesByGroup.ts";
 import { showEventNotice } from "./notifications.ts";
 import { parseJson } from "./parseJson.ts";
 import { storage } from "./storage.ts";
-import { defaultUnits, parseDistancePreference, parseSpeedPreference } from "./units.ts";
+import { storedUnits } from "./storedUnits.ts";
 
 const SHOWN_KEPT_MS = 2 * 3_600_000;
 
@@ -23,18 +23,6 @@ const shownSchema = z.record(z.string(), z.number());
 export const getDriveAlertsCursor = (userId: string) => {
   const parsed = alertsCursorSchema.safeParse(storage.getString(storageKey(userId, "cursor")));
   return parsed.success ? parsed.data : null;
-};
-
-const units = () => {
-  const locale = new Intl.Locale(Intl.DateTimeFormat().resolvedOptions().locale);
-  const region = defaultUnits({ measurementSystem: null, regionCode: locale.region ?? null });
-  const storedSpeed = storage.getString("units.speed");
-  const speed = parseSpeedPreference(storedSpeed);
-  const distance = parseDistancePreference(storage.getString("units.distance"), storedSpeed);
-  return {
-    speed: speed === "auto" ? region.speed : speed,
-    distance: distance === "auto" ? region.distance : distance,
-  };
 };
 
 export const timelineDriveLink = ({
@@ -107,7 +95,7 @@ export const applyDriveAlerts = async ({
     nameOf: (senderUserId, groupId) => names.get(`${groupId}|${senderUserId}`) ?? "Someone",
     now,
     shown: new Set(Object.keys(shown)),
-    units: units(),
+    units: storedUnits(),
   });
   for (const alert of alerts) shown[alert.driveId] = now;
   if (!isRoundCurrent(round)) return;

@@ -81,6 +81,7 @@ object DriveRecordedNotice {
       id,
       NotificationCompat
         .Builder(context, CHANNEL_ID)
+        .setGroup(TAG)
         .setContentTitle(context.getString(R.string.openbeacon_drive_recorded_title, formatDistance(record.distanceMeters, unit)))
         .setContentText(context.getString(R.string.openbeacon_drive_recorded_body))
         .setSmallIcon(R.drawable.openbeacon_notification_icon)

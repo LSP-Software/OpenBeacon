@@ -287,7 +287,7 @@ const HistoryTab = ({
                         })
                       }
                       className={cn(
-                        "flex-row items-center gap-4 px-4 py-3",
+                        "flex-row items-start gap-4 px-4 py-3",
                         groupedRowClassName(index),
                       )}
                       style={groupedRowStyle(index, items.length)}
@@ -301,15 +301,15 @@ const HistoryTab = ({
                       <View className="flex-1 gap-1">
                         <Text className="text-foreground">{item.title}</Text>
                         {item.chips.length > 0 ? (
-                          <View className="flex-row flex-wrap gap-1.5">
+                          <View className="flex-row flex-wrap gap-1">
                             {item.chips.map((chip, chipIndex) => (
                               <View
                                 key={chip}
-                                className="flex-row items-center gap-1 rounded-lg px-2 py-0.5"
+                                className="flex-row items-center gap-1 rounded-lg px-1.5 py-0.5"
                                 style={{ backgroundColor: "#F4DDE6" }}
                               >
                                 {chipIcons[chipIndex] ? (
-                                  <Icon as={chipIcons[chipIndex]} size={14} color="#7A1240" />
+                                  <Icon as={chipIcons[chipIndex]} size={13} color="#7A1240" />
                                 ) : null}
                                 <Text
                                   className="text-sm font-semibold"

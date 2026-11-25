@@ -22,7 +22,8 @@ import { nicknamesByGroup } from "./nicknamesByGroup.ts";
 import { parseJson } from "./parseJson.ts";
 import { storage } from "./storage.ts";
 import { loadTrackingModule } from "./trackingModule.ts";
-import { defaultUnits, formatSpeed, parseSpeedPreference } from "./units.ts";
+import { storedUnits } from "./storedUnits.ts";
+import { formatSpeed } from "./units.ts";
 
 type ReceivedCrashAlerts = NonNullable<
   RouterOutputs["groupTracking"]["uploadBatch"]["crashAlerts"]
@@ -65,16 +66,9 @@ export const getCrashAlertsCursor = (userId: string) => {
   return parsed.success ? parsed.data : null;
 };
 
-const speedUnit = () => {
-  const preference = parseSpeedPreference(storage.getString("units.speed"));
-  if (preference !== "auto") return preference;
-  const locale = new Intl.Locale(Intl.DateTimeFormat().resolvedOptions().locale);
-  return defaultUnits({ measurementSystem: null, regionCode: locale.region ?? null }).speed;
-};
-
 export const crashWords = (name: (userId: string) => string) => ({
   name,
-  speed: (metersPerSecond: number) => formatSpeed(metersPerSecond, speedUnit()),
+  speed: (metersPerSecond: number) => formatSpeed(metersPerSecond, storedUnits().speed),
   time: formatClock,
 });
 

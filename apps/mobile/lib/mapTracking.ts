@@ -37,6 +37,7 @@ export const isCursorAfter = (candidate: MapTrackingCursor, current: MapTracking
 const toLiveMapPosition = ({
   battery,
   deviceId,
+  driveAlertsOff,
   latitude,
   longitude,
   sourceGroupId,
@@ -46,6 +47,7 @@ const toLiveMapPosition = ({
 }: LiveMapEntry): LiveMapPosition => ({
   battery,
   deviceId,
+  ...(driveAlertsOff ? { driveAlertsOff } : {}),
   latitude,
   longitude,
   sourceGroupId,
