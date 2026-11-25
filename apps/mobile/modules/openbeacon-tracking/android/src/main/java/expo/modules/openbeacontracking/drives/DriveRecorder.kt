@@ -3,7 +3,6 @@ package expo.modules.openbeacontracking.drives
 import expo.modules.openbeacontracking.capture.CaptureHistoryShare
 import expo.modules.openbeacontracking.crypto.DriveRecord
 import expo.modules.openbeacontracking.crypto.DriveRecordCodec
-import expo.modules.openbeacontracking.crypto.DrivingEventType
 import expo.modules.openbeacontracking.keys.ProvisionedEpochKey
 
 class DriveRecorder(
@@ -18,12 +17,26 @@ class DriveRecorder(
   private var detector = DriveDetector()
   private var owner: String? = null
   private var startKeys = emptyList<ProvisionedEpochKey>()
+  private val events = DrivingEventFinder()
 
   val recording: Boolean
     @Synchronized get() = detector.recording
 
   val wantsFastFixes: Boolean
     @Synchronized get() = detector.wantsFastFixes
+
+  val wantsSensors: Boolean
+    @Synchronized get() = detector.watching
+
+  @Synchronized
+  fun onAccelerometer(samples: List<AccelerometerSample>) {
+    events.onAccelerometer(samples)
+  }
+
+  @Synchronized
+  fun onPhoneUse(change: PhoneUseChange) {
+    events.onPhoneUse(change)
+  }
 
   @Synchronized
   fun onFixes(owner: String, fixes: List<DriveFix>): List<DriveRecord> {
@@ -34,6 +47,7 @@ class DriveRecorder(
       step.finished?.let { drive -> finish(owner, drive)?.let { finished += it } }
       if (step.started) startKeys = epochKeys()
     }
+    (detector.retainedFixes.firstOrNull() ?: fixes.lastOrNull())?.let { events.trimBefore(it.timeMillis) }
     persist(owner)
     return finished
   }
@@ -103,6 +117,7 @@ class DriveRecorder(
   private fun finish(owner: String, drive: DetectedDrive): DriveRecord? {
     val keys = startKeys
     startKeys = emptyList()
+    val found = events.find(drive.fixes)
     val built =
       DriveRecord(
         driveId = newDriveId(),
@@ -114,11 +129,11 @@ class DriveRecorder(
         topSpeed = drive.topSpeed,
         averageSpeed = drive.averageSpeed,
         utcOffsetMinutes = utcOffsetMinutes(drive.start.timeMillis),
-        counts = DrivingEventType.entries.associateWith { 0 },
+        counts = found.counts,
         passenger = false,
         speedLimitsChecked = false,
         tellGroup = true,
-        events = emptyList(),
+        events = found.events,
       )
     val record = DriveRecordCodec.encode(built)?.let { DriveRecordCodec.decode(it) } ?: return null
     DriveUploads.enqueue(

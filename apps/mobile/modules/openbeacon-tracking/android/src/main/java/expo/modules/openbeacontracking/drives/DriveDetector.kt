@@ -24,6 +24,7 @@ data class DetectedDrive(
   val durationSeconds: Double,
   val topSpeed: Double,
   val averageSpeed: Double,
+  val fixes: List<DriveFix>,
 )
 
 data class DriveStep(
@@ -47,6 +48,9 @@ class DriveDetector {
 
   var recording = false
     private set
+
+  val watching: Boolean
+    get() = recording || candidate != null
 
   val wantsFastFixes: Boolean
     get() = (recording || candidate != null) && previous?.batterySaver == false
@@ -191,6 +195,7 @@ class DriveDetector {
       durationSeconds = duration,
       topSpeed = fixes.maxOf { it.speed ?: 0.0 },
       averageSpeed = distance / duration,
+      fixes = fixes,
     )
   }
 

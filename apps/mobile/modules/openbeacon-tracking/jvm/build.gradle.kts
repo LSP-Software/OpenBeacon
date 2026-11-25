@@ -54,6 +54,7 @@ sourceSets {
       exclude("**/RoomDriveQueue.kt")
       exclude("**/SecureDriveLog.kt")
       exclude("**/SecureDriveRecordStore.kt")
+      exclude("**/DriveSensors.kt")
     }
   }
   test {
@@ -66,6 +67,7 @@ sourceSets {
     resources {
       srcDir("../test-cases")
       include("drive-detection-v1.json")
+      include("driving-events-v1.json")
     }
     resources {
       srcDir("../../../../speed-limit-packs/testVectors")

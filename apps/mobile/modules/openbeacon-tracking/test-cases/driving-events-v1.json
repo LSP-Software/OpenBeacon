@@ -1,0 +1,283 @@
+{
+  "about": "Drives shared by the Kotlin and Swift Driving event tests. The first fix is at startTime with speed `from` (m/s). Each segment adds a fix every `every` seconds (default 1) for `seconds` seconds, ramping the speed linearly to `to`; `repeat` runs its segments `times` times. Fixes move east by their speed. `batterySaver` marks the segment's fixes. The accelerometer gives 10 samples a second from startTime to the last fix, each up * 9.81 + forward * the GPS speed slope of that second, in the phone frame given by `phone` (unit vectors). A segment's `accel` changes its seconds: `none` gives no samples, `flat` no forward force, `bump` alternates up * 8 and -8 with one forward * 6 sample, `drop` makes the first second free fall (5 samples of up * 0.5) then an impact (5 samples of forward * 25 + up * 9.81). `knock` makes the first second normal then an impact (5 samples of forward * 25 + up * 9.81) and turns the phone to `dropped` from then on. `turn` swaps the forward force for side * 5, where side = up x forward. `tilt` turns the phone 40 degrees about its forward axis for the segment. `accelLagSeconds` shifts every forward force later. Signals are seconds after startTime. Expected events are in stored order; start is seconds after the first fix, peak within 0.05. `kept` counts each type among the first 48 events, and `leading` checks the first events only.",
+  "startTime": 1764000000000,
+  "origin": { "latitude": 51.5, "longitude": -0.1 },
+  "phone": { "up": [0, 0.7071068, 0.7071068], "forward": [0, 0.7071068, -0.7071068] },
+  "dropped": { "up": [1, 0, 0], "forward": [0, 1, 0] },
+  "cases": [
+    {
+      "name": "hard braking just over the threshold is found and confirmed",
+      "from": 20,
+      "segments": [
+        { "to": 20, "seconds": 10 },
+        { "to": 16.8, "seconds": 1 },
+        { "to": 16.8, "seconds": 10 }
+      ],
+      "events": [{ "type": "HARD_BRAKING", "start": 10, "duration": 1, "peak": 3.2 }],
+      "counts": { "HARD_BRAKING": 1 }
+    },
+    {
+      "name": "braking just under the threshold is not counted",
+      "from": 20,
+      "segments": [
+        { "to": 20, "seconds": 10 },
+        { "to": 17, "seconds": 1 },
+        { "to": 17, "seconds": 10 }
+      ],
+      "events": [],
+      "counts": {}
+    },
+    {
+      "name": "a sustained hard stop is one event with its peak",
+      "from": 25,
+      "segments": [
+        { "to": 25, "seconds": 10 },
+        { "to": 21, "seconds": 1 },
+        { "to": 17.5, "seconds": 1 },
+        { "to": 14.3, "seconds": 1 },
+        { "to": 12, "seconds": 1 },
+        { "to": 12, "seconds": 10 }
+      ],
+      "events": [{ "type": "HARD_BRAKING", "start": 10, "duration": 3, "peak": 4 }],
+      "counts": { "HARD_BRAKING": 1 }
+    },
+    {
+      "name": "rapid acceleration over the threshold counts and under it does not",
+      "from": 5,
+      "segments": [
+        { "to": 5, "seconds": 10 },
+        { "to": 8.3, "seconds": 1 },
+        { "to": 8.3, "seconds": 10 },
+        { "to": 11.3, "seconds": 1 },
+        { "to": 11.3, "seconds": 10 }
+      ],
+      "events": [{ "type": "RAPID_ACCELERATION", "start": 10, "duration": 1, "peak": 3.3 }],
+      "counts": { "RAPID_ACCELERATION": 1 }
+    },
+    {
+      "name": "the accelerometer confirms a little after the GPS speed change",
+      "from": 20,
+      "accelLagSeconds": 1,
+      "segments": [
+        { "to": 20, "seconds": 10 },
+        { "to": 15, "seconds": 1 },
+        { "to": 15, "seconds": 10 }
+      ],
+      "events": [{ "type": "HARD_BRAKING", "start": 10, "duration": 1, "peak": 5 }],
+      "counts": { "HARD_BRAKING": 1 }
+    },
+    {
+      "name": "a GPS speed drop the accelerometer does not feel is not counted",
+      "from": 20,
+      "segments": [
+        { "to": 20, "seconds": 10 },
+        { "to": 15, "seconds": 1, "accel": "flat" },
+        { "to": 15, "seconds": 10 }
+      ],
+      "events": [],
+      "counts": {}
+    },
+    {
+      "name": "a speed bump is not counted",
+      "from": 20,
+      "segments": [
+        { "to": 20, "seconds": 10 },
+        { "to": 15, "seconds": 1, "accel": "bump" },
+        { "to": 15, "seconds": 10 }
+      ],
+      "events": [],
+      "counts": {}
+    },
+    {
+      "name": "a dropped phone is not counted",
+      "from": 20,
+      "segments": [
+        { "to": 20, "seconds": 10 },
+        { "to": 15, "seconds": 1, "accel": "drop" },
+        { "to": 15, "seconds": 10 }
+      ],
+      "events": [],
+      "counts": {}
+    },
+    {
+      "name": "a phone knocked into a new position is not counted",
+      "from": 20,
+      "segments": [
+        { "to": 20, "seconds": 10 },
+        { "to": 15, "seconds": 1, "accel": "knock" },
+        { "to": 15, "seconds": 10 }
+      ],
+      "events": [],
+      "counts": {}
+    },
+    {
+      "name": "a sharp turn during a GPS speed drop is not counted",
+      "from": 20,
+      "segments": [
+        { "to": 20, "seconds": 10 },
+        { "to": 16, "seconds": 1 },
+        { "to": 16, "seconds": 10 },
+        { "to": 20, "seconds": 1 },
+        { "to": 20, "seconds": 10 },
+        { "to": 15, "seconds": 1, "accel": "turn" },
+        { "to": 15, "seconds": 10 }
+      ],
+      "events": [
+        { "type": "HARD_BRAKING", "start": 10, "duration": 1, "peak": 4 },
+        { "type": "RAPID_ACCELERATION", "start": 21, "duration": 1, "peak": 4 }
+      ],
+      "counts": { "HARD_BRAKING": 1, "RAPID_ACCELERATION": 1 }
+    },
+    {
+      "name": "without the accelerometer nothing confirms braking",
+      "from": 20,
+      "segments": [
+        { "to": 20, "seconds": 10 },
+        { "to": 15, "seconds": 1, "accel": "none" },
+        { "to": 15, "seconds": 10 }
+      ],
+      "events": [],
+      "counts": {}
+    },
+    {
+      "name": "battery saver stretches give no braking or acceleration",
+      "from": 20,
+      "segments": [
+        { "to": 20, "seconds": 10 },
+        { "to": 15, "seconds": 1, "batterySaver": true },
+        { "to": 15, "seconds": 5, "batterySaver": true },
+        { "to": 20, "seconds": 1, "batterySaver": true },
+        { "to": 20, "seconds": 60, "every": 20, "batterySaver": true },
+        { "to": 10, "seconds": 20, "every": 20, "batterySaver": true },
+        { "to": 10, "seconds": 10 }
+      ],
+      "events": [],
+      "counts": {}
+    },
+    {
+      "name": "an unlock just over 3 s above 15 km/h is phone use",
+      "from": 4.2,
+      "segments": [{ "to": 4.2, "seconds": 60 }],
+      "signals": [
+        { "at": 20, "type": "UNLOCKED" },
+        { "at": 24, "type": "SCREEN_OFF" }
+      ],
+      "events": [{ "type": "PHONE_USE", "start": 20, "duration": 4, "peak": 4.2 }],
+      "counts": { "PHONE_USE": 1 }
+    },
+    {
+      "name": "an unlock of 3 s is not phone use",
+      "from": 4.2,
+      "segments": [{ "to": 4.2, "seconds": 60 }],
+      "signals": [
+        { "at": 20, "type": "UNLOCKED" },
+        { "at": 23, "type": "SCREEN_OFF" }
+      ],
+      "events": [],
+      "counts": {}
+    },
+    {
+      "name": "an unlock just under 15 km/h is not phone use",
+      "from": 4.1,
+      "segments": [{ "to": 4.1, "seconds": 60 }],
+      "signals": [
+        { "at": 20, "type": "UNLOCKED" },
+        { "at": 40, "type": "SCREEN_OFF" }
+      ],
+      "events": [],
+      "counts": {}
+    },
+    {
+      "name": "phone use stops counting while the car is slow",
+      "from": 10,
+      "segments": [
+        { "to": 10, "seconds": 30 },
+        { "to": 2, "seconds": 4 },
+        { "to": 2, "seconds": 20 },
+        { "to": 10, "seconds": 4 },
+        { "to": 10, "seconds": 30 }
+      ],
+      "signals": [
+        { "at": 25, "type": "UNLOCKED" },
+        { "at": 60, "type": "SCREEN_OFF" }
+      ],
+      "events": [
+        { "type": "PHONE_USE", "start": 25, "duration": 7, "peak": 10 },
+        { "type": "PHONE_USE", "start": 56, "duration": 4, "peak": 10 }
+      ],
+      "counts": { "PHONE_USE": 2 }
+    },
+    {
+      "name": "the screen lighting up in a mount is not phone use",
+      "from": 10,
+      "segments": [{ "to": 10, "seconds": 60 }],
+      "signals": [
+        { "at": 10, "type": "SCREEN_ON" },
+        { "at": 50, "type": "SCREEN_OFF" }
+      ],
+      "events": [],
+      "counts": {}
+    },
+    {
+      "name": "the screen on with the phone picked up is phone use",
+      "from": 10,
+      "segments": [
+        { "to": 10, "seconds": 20 },
+        { "to": 10, "seconds": 20, "tilt": true },
+        { "to": 10, "seconds": 20 }
+      ],
+      "signals": [
+        { "at": 10, "type": "SCREEN_ON" },
+        { "at": 50, "type": "SCREEN_OFF" }
+      ],
+      "events": [{ "type": "PHONE_USE", "start": 20, "duration": 30, "peak": 10 }],
+      "counts": { "PHONE_USE": 1 }
+    },
+    {
+      "name": "a handheld call while moving is phone use",
+      "from": 12,
+      "segments": [{ "to": 12, "seconds": 90 }],
+      "signals": [
+        { "at": 30, "type": "HANDHELD_CALL_STARTED" },
+        { "at": 75, "type": "HANDHELD_CALL_ENDED" }
+      ],
+      "events": [{ "type": "PHONE_USE", "start": 30, "duration": 45, "peak": 12 }],
+      "counts": { "PHONE_USE": 1 }
+    },
+    {
+      "name": "the 48 most severe keep positions and counts stay exact",
+      "from": 20,
+      "segments": [
+        { "to": 20, "seconds": 10 },
+        {
+          "repeat": {
+            "times": 30,
+            "segments": [
+              { "to": 16, "seconds": 1 },
+              { "to": 16, "seconds": 10 },
+              { "to": 20, "seconds": 1 },
+              { "to": 20, "seconds": 10 }
+            ]
+          }
+        },
+        { "to": 14, "seconds": 1 },
+        { "to": 14, "seconds": 10 }
+      ],
+      "signals": [
+        { "at": 100, "type": "UNLOCKED" },
+        { "at": 110, "type": "SCREEN_OFF" },
+        { "at": 400, "type": "HANDHELD_CALL_STARTED" },
+        { "at": 460, "type": "HANDHELD_CALL_ENDED" }
+      ],
+      "leading": [
+        { "type": "PHONE_USE", "duration": 60 },
+        { "type": "HARD_BRAKING", "peak": 6 },
+        { "type": "RAPID_ACCELERATION", "peak": 4 },
+        { "type": "PHONE_USE", "duration": 10 },
+        { "type": "HARD_BRAKING", "peak": 4 }
+      ],
+      "kept": { "PHONE_USE": 2, "HARD_BRAKING": 23, "RAPID_ACCELERATION": 23 },
+      "counts": { "HARD_BRAKING": 31, "RAPID_ACCELERATION": 30, "PHONE_USE": 2 }
+    }
+  ]
+}

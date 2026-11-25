@@ -3,6 +3,7 @@ package expo.modules.openbeacontracking.drives
 import expo.modules.openbeacontracking.capture.CaptureHistoryShare
 import expo.modules.openbeacontracking.crypto.DriveRecord
 import expo.modules.openbeacontracking.crypto.DriveRecordCodec
+import expo.modules.openbeacontracking.crypto.DrivingEventType
 import expo.modules.openbeacontracking.crypto.SealedDriveRecord
 import expo.modules.openbeacontracking.keys.ProvisionedEpochKey
 import kotlin.math.cos
@@ -44,6 +45,26 @@ class DriveRecorderTest {
     time += 1_000
     longitude += speed / (111_320.0 * cos(Math.toRadians(51.5)))
     DriveFix(time, 51.5, longitude, speed, 5.0, batterySaver = false)
+  }
+
+  private fun driveWithSensors(
+    recorder: DriveRecorder,
+    speeds: List<Double>,
+  ): List<DriveRecord> {
+    var previous = speeds.first()
+    return speeds.chunked(10).flatMap { batch ->
+      val fixes = mutableListOf<DriveFix>()
+      val samples = mutableListOf<AccelerometerSample>()
+      for (speed in batch) {
+        samples += (0 until 10).map { AccelerometerSample(time + it * 100L, 0.0, speed - previous, 9.81) }
+        previous = speed
+        time += 1_000
+        longitude += speed / (111_320.0 * cos(Math.toRadians(51.5)))
+        fixes += DriveFix(time, 51.5, longitude, speed, 5.0, batterySaver = false)
+      }
+      recorder.onAccelerometer(samples)
+      recorder.onFixes("owner", fixes)
+    }
   }
 
   private fun open(row: DriveQueueRow, epochId: String): DriveRecord? =
@@ -144,5 +165,38 @@ class DriveRecorderTest {
     recorder.deleteDrives("owner", listOf(driveId))
     assertEquals(emptyList(), recorder.driveIds("owner"))
     assertEquals(emptyList(), queue.list("owner", 10))
+  }
+
+  @Test
+  fun aFinishedDriveCarriesItsMostSevereEventsWithExactCounts() {
+    val recorder = recorder()
+    val speeds = MutableList(20) { 20.0 }
+    repeat(30) {
+      speeds += List(11) { 16.0 }
+      speeds += List(11) { 20.0 }
+    }
+    recorder.onPhoneUse(PhoneUseChange(startTime + 100_000, PhoneUseSignal.UNLOCKED))
+    recorder.onPhoneUse(PhoneUseChange(startTime + 110_000, PhoneUseSignal.SCREEN_OFF))
+    val record = (driveWithSensors(recorder, speeds) + driveWithSensors(recorder, List(300) { 0.0 })).single()
+
+    assertEquals(
+      mapOf(DrivingEventType.HARD_BRAKING to 30, DrivingEventType.RAPID_ACCELERATION to 30, DrivingEventType.SPEEDING to 0, DrivingEventType.PHONE_USE to 1),
+      record.counts,
+    )
+    assertEquals(48, record.events.size)
+    assertEquals(DrivingEventType.PHONE_USE, record.events.first().type)
+    assertEquals(99.0, record.events.first().timeOffsetSeconds)
+    assertEquals(10.0, record.events.first().durationSeconds)
+    queue.list("owner", 10).forEach { row -> assertEquals(record, open(row, row.epochId)) }
+  }
+
+  @Test
+  fun aDriveWithoutAccelerometerReadingsRecordsNoBrakingOrAcceleration() {
+    val recorder = recorder()
+    recorder.onFixes("owner", fixes(20.0, 20) + fixes(16.0, 60) + fixes(20.0, 60))
+    val record = recorder.onFixes("owner", fixes(0.0, 300)).single()
+    assertEquals(0, record.counts[DrivingEventType.HARD_BRAKING])
+    assertEquals(0, record.counts[DrivingEventType.RAPID_ACCELERATION])
+    assertTrue(record.events.isEmpty())
   }
 }

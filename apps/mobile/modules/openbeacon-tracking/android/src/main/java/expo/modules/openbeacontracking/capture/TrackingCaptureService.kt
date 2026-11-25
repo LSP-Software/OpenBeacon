@@ -39,6 +39,7 @@ import expo.modules.openbeacontracking.Notices
 import expo.modules.openbeacontracking.R
 import expo.modules.openbeacontracking.TrackingRuntime
 import expo.modules.openbeacontracking.drives.DriveFix
+import expo.modules.openbeacontracking.drives.DriveSensors
 import expo.modules.openbeacontracking.queue.CiphertextQueueRow
 import java.util.Calendar
 import java.util.Date
@@ -54,6 +55,7 @@ class TrackingCaptureService : Service() {
   private val captureScope =
     CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
   private val captureStateLock = TrackingRuntime.captureLock
+  private val driveSensors by lazy { DriveSensors(this, TrackingRuntime.driveRecorder(this)) }
 
   private var currentIntervalMs = DEFAULT_INTERVAL_MS
   private var lastQueued: LastQueuedFix? = null
@@ -289,6 +291,7 @@ class TrackingCaptureService : Service() {
         val locations = result.locations
         captureScope.launch {
           recordDrive(locations, generation)
+          updateDriveSensors()
           enqueueEncryptedFix(location, generation)
           if (isOnline()) requestUploadIfDue(generation)
         }
@@ -393,6 +396,7 @@ class TrackingCaptureService : Service() {
 
   private fun stopCapture() {
     interruptDrive()
+    driveSensors.update(false)
     networkCallback?.let { getSystemService(ConnectivityManager::class.java)?.unregisterNetworkCallback(it) }
     networkCallback = null
     sharingHandler.removeCallbacks(resumeSharing)
@@ -421,6 +425,7 @@ class TrackingCaptureService : Service() {
     }
     if (sharing.isPaused(System.currentTimeMillis())) {
       interruptDrive()
+      driveSensors.update(false)
       synchronized(captureStateLock) {
         locationCallback?.let { fusedLocationClient.removeLocationUpdates(it) }
         locationCallback = null
@@ -643,6 +648,15 @@ class TrackingCaptureService : Service() {
       Log.e(TAG, "Failed to record a drive.", error)
     }
     if (recorder.recording != wasRecording) showNotice()
+  }
+
+  private fun updateDriveSensors() {
+    val watching =
+      TrackingRuntime.isCaptureRunning &&
+        TrackingRuntime.isDriveDetectionOn(this) &&
+        !TrackingRuntime.sharingState(this).isPaused(System.currentTimeMillis()) &&
+        TrackingRuntime.driveRecorder(this).wantsSensors
+    driveSensors.update(watching)
   }
 
   private fun endDriveAtPlace() {
