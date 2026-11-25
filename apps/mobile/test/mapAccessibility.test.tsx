@@ -105,6 +105,9 @@ mock.module("../components/map/refreshViewAnnotation.ts", () => ({
 }));
 mock.module("../components/ui/Text.tsx", () => ({ Text: Passthrough }));
 
+mock.module("../components/map/PersonDriveAlertsRow.tsx", () => ({
+  PersonDriveAlertsRow: () => null,
+}));
 const { LiveMapPointAnnotation } = await import("../components/map/LiveMapPointAnnotation.tsx");
 const { LiveMapPersonSheet } = await import("../components/map/LiveMapPersonSheet.tsx");
 

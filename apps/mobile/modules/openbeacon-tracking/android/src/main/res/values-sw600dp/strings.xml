@@ -8,6 +8,7 @@
   <string name="openbeacon_notice_signed_out_body">This tablet has stopped sharing your location. Sign in again to keep sharing.</string>
   <string name="openbeacon_notice_sharing_resumed_body">You turned sharing on from another device. Tap to start sharing from this tablet.</string>
   <string name="openbeacon_notice_sharing_changed_body">Sharing was changed from another device. Tap to update this tablet.</string>
+  <string name="openbeacon_drive_recorded_channel_description">A quiet notice after each drive this tablet records.</string>
   <string name="openbeacon_crash_channel_description">Sounds an alarm when this tablet suspects a crash during a drive, so you can say you\'re OK before anyone is told.</string>
   <string name="openbeacon_crash_not_sent_body">It sends as soon as this tablet connects.</string>
   <string name="openbeacon_crash_test_finished_body">In a real crash, %1$s would have got a Crash alert now, and this tablet would share its location every 10 seconds for 15 minutes. Nobody was alerted.</string>

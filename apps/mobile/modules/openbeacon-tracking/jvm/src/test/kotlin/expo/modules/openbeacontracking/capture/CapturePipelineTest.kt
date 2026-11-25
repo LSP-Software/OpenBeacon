@@ -77,6 +77,29 @@ class CapturePipelineTest {
   }
 
   @Test
+  fun onlyTheGroupsTheDriverStoppedTellingSeeDriveAlertsAreOff() {
+    val keys = InMemoryEpochKeyStore()
+    keys.replaceAll(
+      listOf(
+        ProvisionedEpochKey("family", "epoch", ByteArray(32), "tablet", "trackingPoint"),
+        ProvisionedEpochKey("work", "epoch", ByteArray(32), "tablet", "trackingPoint"),
+      ),
+    )
+    val queue = InMemoryCiphertextQueue()
+    val pipeline = CapturePipeline(epochKeyStore = keys, ciphertextQueue = queue, queueOwner = { "owner" }, driveAlertsOff = { it == "work" })
+    pipeline.onFix(51.5, 0.0, at("2026-07-13T18:45:00.000Z"), null, 80, false)
+    val flags =
+      queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).associate { row ->
+        row.groupId to
+          GroupPayloadEncrypt.decryptGroupPayload(
+            ByteArray(32),
+            EncryptedGroupPayload(row.algorithm, row.ciphertext, row.epochId, row.groupId, row.kind, row.nonce, row.senderDeviceId),
+          )[22].toInt()
+      }
+    assertEquals(mapOf("family" to 0, "work" to 8), flags)
+  }
+
+  @Test
   fun aGroupWhoseKeyCannotEncryptDoesNotBlockTheOtherGroups() {
     val keys = InMemoryEpochKeyStore()
     keys.replaceAll(

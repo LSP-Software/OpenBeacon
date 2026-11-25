@@ -77,6 +77,7 @@ enum NotificationType {
   DEVICE_REMOVED
   DELETION_SCHEDULED
   CRASH_ALERTS
+  DRIVES
 }
 
 model NotificationSetting {
@@ -290,6 +291,21 @@ model PlaceAlertMute {
   @@index([mutedUserId, groupId])
 }
 
+model DriveAlertMute {
+  id          String       @id @default(uuid(7))
+  groupId     String
+  muterUserId String
+  muter       GroupMember  @relation("DriveAlertMuteMuter", fields: [muterUserId, groupId], references: [userId, groupId], onDelete: Cascade)
+  mutedUserId String?
+  muted       GroupMember? @relation("DriveAlertMuteMuted", fields: [mutedUserId, groupId], references: [userId, groupId], onDelete: Cascade)
+  createdAt   DateTime     @default(now())
+
+  @@unique([groupId, muterUserId, mutedUserId], map: "DriveAlertMute_person_key", where: raw("\"mutedUserId\" IS NOT NULL"))
+  @@unique([groupId, muterUserId], map: "DriveAlertMute_everyone_key", where: raw("\"mutedUserId\" IS NULL"))
+  @@index([muterUserId, groupId])
+  @@index([mutedUserId, groupId])
+}
+
 model PlaceSharing {
   deviceId  String
   device    UserDevice  @relation(fields: [deviceId], references: [id], onDelete: Cascade)
@@ -412,6 +428,8 @@ model GroupMember {
   placeSharing PlaceSharing[]
   placeAlertMutesSet PlaceAlertMute[] @relation("PlaceAlertMuteMuter")
   placeAlertMutesAbout PlaceAlertMute[] @relation("PlaceAlertMuteMuted")
+  driveAlertMutesSet DriveAlertMute[] @relation("DriveAlertMuteMuter")
+  driveAlertMutesAbout DriveAlertMute[] @relation("DriveAlertMuteMuted")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

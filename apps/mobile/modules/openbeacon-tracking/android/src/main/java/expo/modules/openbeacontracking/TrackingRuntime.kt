@@ -29,6 +29,7 @@ import expo.modules.openbeacontracking.crash.PrefsCrashAlertStore
 import expo.modules.openbeacontracking.drives.CrashAlertOutbox
 import expo.modules.openbeacontracking.drives.CrashDetector
 import expo.modules.openbeacontracking.drives.DriveQueueDatabase
+import expo.modules.openbeacontracking.drives.DriveRecordedNotice
 import expo.modules.openbeacontracking.drives.DriveRecorder
 import expo.modules.openbeacontracking.drives.SecureDriveLog
 import expo.modules.openbeacontracking.drives.SecureDriveRecordStore
@@ -117,6 +118,8 @@ object TrackingRuntime {
           historyShare = { historyShare(context) },
           utcOffsetMinutes = { TimeZone.getDefault().getOffset(it) / 60_000 },
           findSpeeding = { fixes -> speedLimitPackStore(context).withPacks { SpeedingFinder.find(fixes, it) } },
+          tellGroup = { groupId -> tellsGroup(context, groupId) },
+          onFinished = { record, groupIds -> DriveRecordedNotice.show(context.applicationContext, record, groupIds) },
         ).also { driveRecorder = it }
     }
   }
@@ -221,6 +224,7 @@ object TrackingRuntime {
       historyShare = { historyShare(context) },
       driveDetectionOff = { !isDriveDetectionOn(context) },
       crashAlertsOff = { !areCrashAlertsActive(context) },
+      driveAlertsOff = { groupId -> !tellsGroup(context, groupId) },
       loadAllowance = { group ->
         val parts = context.getSharedPreferences("openbeacon_tracking_history_allowance", Context.MODE_PRIVATE)
           .getString(org.json.JSONArray(group).toString(), null)
@@ -264,6 +268,41 @@ object TrackingRuntime {
       .putLong("$scope.after", state.resumeAfter)
       .putString("$scope.confirmed", state.confirmedRevision(replacing = previous))
       .commit())
+  }
+
+  private fun quietGroupKey(
+    owner: String,
+    groupId: String,
+  ) = org.json.JSONArray(listOf(owner, groupId)).toString()
+
+  fun tellsGroup(
+    context: Context,
+    groupId: String,
+  ): Boolean {
+    val owner = queueOwner(context) ?: return true
+    return quietGroupKey(owner, groupId) !in
+      context.getSharedPreferences("openbeacon_drive_alerts", Context.MODE_PRIVATE).getStringSet("quietGroups", emptySet()).orEmpty()
+  }
+
+  fun quietGroups(context: Context): List<String> {
+    val owner = queueOwner(context) ?: return emptyList()
+    return context
+      .getSharedPreferences("openbeacon_drive_alerts", Context.MODE_PRIVATE)
+      .getStringSet("quietGroups", emptySet())
+      .orEmpty()
+      .mapNotNull { key -> org.json.JSONArray(key).takeIf { it.optString(0) == owner }?.optString(1) }
+  }
+
+  fun setTellGroup(
+    context: Context,
+    groupId: String,
+    tell: Boolean,
+  ) {
+    val owner = queueOwner(context) ?: throw IllegalStateException("No signed-in owner.")
+    val preferences = context.getSharedPreferences("openbeacon_drive_alerts", Context.MODE_PRIVATE)
+    val current = preferences.getStringSet("quietGroups", emptySet()).orEmpty()
+    val key = quietGroupKey(owner, groupId)
+    check(preferences.edit().putStringSet("quietGroups", if (tell) current - key else current + key).commit())
   }
 
   fun historyShare(context: Context): CaptureHistoryShare {

@@ -3,7 +3,7 @@ import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { LogOutIcon, MapIcon, Trash2Icon } from "lucide-react-native";
+import { CarIcon, LogOutIcon, MapIcon, Trash2Icon } from "lucide-react-native";
 import { Platform, TextInput, View } from "react-native";
 import { HistoryShareChoices } from "../HistoryShareChoices.tsx";
 import { GroupImage } from "../image/GroupImage.tsx";
@@ -19,6 +19,7 @@ import { useHiddenMapGroupIds } from "../../hooks/useHiddenMapGroupIds.ts";
 import { useMemberRemoval } from "../../hooks/useMemberRemoval.tsx";
 import { trpc } from "../../lib/api.ts";
 import { authClient } from "../../lib/auth-client.ts";
+import { setTellGroup, useTellsGroup } from "../../lib/driveSettings.ts";
 import { groupHistoryShare } from "../../lib/historyShare.ts";
 import { forgetHiddenMapGroup, setMapGroupHidden } from "../../lib/hiddenMapGroups.ts";
 import { canHideMapGroups } from "../../lib/mapGroupVisibility.ts";
@@ -41,6 +42,7 @@ const SettingsTab = ({ groupId }: { groupId: string }) => {
   const deleteGroup = useMutation(trpc.groupLifecycle.delete.mutationOptions());
   const historyShare = useHistoryShare();
   const leaving = useMemberRemoval(groupId);
+  const tellsGroup = useTellsGroup(groupId);
   const role = group?.members.find((member) => member.userId === session?.user.id)?.role;
 
   return (
@@ -116,6 +118,29 @@ const SettingsTab = ({ groupId }: { groupId: string }) => {
             Timeline. Only you can change this.
           </Text>
         </View>
+      ) : null}
+      {!ios ? (
+        <ListSection
+          title="Your drives"
+          footer={`Your drives show in ${group?.name ?? "this group"}’s Timeline either way. Only you can change this. Also in Account › Drive detection.`}
+        >
+          <ListRow
+            title={`Tell ${group?.name ?? "this group"} when I finish a drive`}
+            icon={CarIcon}
+            iconColor="teal"
+            subtitle="Members get a Drive alert with the distance, time and top speed. Never your score or Driving events."
+            accessibilityRole="switch"
+            accessibilityState={{ checked: tellsGroup }}
+            onPress={() => void setTellGroup(groupId, !tellsGroup)}
+            trailing={
+              <Switch
+                accessibilityLabel={`Tell ${group?.name ?? "this group"} when I finish a drive`}
+                value={tellsGroup}
+                onValueChange={(next) => void setTellGroup(groupId, next)}
+              />
+            }
+          />
+        </ListSection>
       ) : null}
       <View className="gap-2">
         <Text variant="label">Appearance</Text>

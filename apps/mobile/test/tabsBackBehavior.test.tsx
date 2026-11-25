@@ -43,6 +43,7 @@ mock.module("../hooks/useAppForeground.ts", () => ({ useAppForeground: () => {} 
 mock.module("../hooks/useRefetchWhileFocused.ts", () => ({ useRefetchWhileFocused: () => {} }));
 mock.module("../hooks/useUnits.ts", () => ({ useUnits: () => ({ speed: "mph" }) }));
 mock.module("../lib/crashAlerts.ts", () => ({ syncCrashAlertContext: () => {} }));
+mock.module("../lib/driveSettings.ts", () => ({ syncDriveDistanceUnit: () => {} }));
 mock.module("../hooks/useUnseenGroupHistory.ts", () => ({
   useUnseenGroupHistory: () => ({ unseenGroupIds: new Set() }),
 }));

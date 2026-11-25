@@ -197,6 +197,46 @@ export const createPushSender = ({
     return devicesOf([...recipients]);
   };
 
+  const driveRecipients = async ({
+    groupId,
+    driveIds,
+  }: {
+    groupId: string;
+    driveIds: string[];
+  }) => {
+    const drives = await db.driveCopy.findMany({
+      where: { groupId, driveId: { in: driveIds } },
+      select: { senderUserId: true, receivedAt: true },
+    });
+    const recipients = new Set<string>();
+    for (const drive of drives) {
+      const members = await db.groupMember.findMany({
+        where: {
+          groupId,
+          userId: { not: drive.senderUserId },
+          createdAt: { lte: drive.receivedAt },
+        },
+        select: { userId: true },
+      });
+      const mutes = await db.driveAlertMute.findMany({
+        where: {
+          groupId,
+          muterUserId: { in: members.map(({ userId }) => userId) },
+          OR: [{ mutedUserId: null }, { mutedUserId: drive.senderUserId }],
+        },
+        select: { muterUserId: true },
+      });
+      const muted = new Set(mutes.map(({ muterUserId }) => muterUserId));
+      for (const userId of await usersWithPhoneOn(
+        members.map(({ userId }) => userId).filter((userId) => !muted.has(userId)),
+        "DRIVES",
+      )) {
+        recipients.add(userId);
+      }
+    }
+    return devicesOf([...recipients]);
+  };
+
   const queued = new Map<string, WakeKind>();
   const urgent = new Set<string>();
   const lastWokenAt = new Map<string, number>();
@@ -311,6 +351,9 @@ export const createPushSender = ({
     },
     groupEvents: (eventIds: string[]) => {
       if (eventIds.length > 0) wakeAfterSettle(() => groupEventRecipients(eventIds));
+    },
+    drives: (drives: { groupId: string; driveIds: string[] }) => {
+      if (drives.driveIds.length > 0) wakeAfterSettle(() => driveRecipients(drives));
     },
     accountNotice: (noticeId: string) => wakeAfterSettle(() => accountNoticeRecipients(noticeId)),
     crashAlerts: (rowIds: string[]) => {

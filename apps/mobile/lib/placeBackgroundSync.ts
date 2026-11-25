@@ -13,6 +13,7 @@ import { queryClient, type RouterOutputs, trpc, trpcClient } from "./api.ts";
 import { getBaseUrl } from "./currentServer.ts";
 import { getRegisteredDeviceKey } from "./deviceKeys.ts";
 import { applyCrashAlerts } from "./crashAlertSync.ts";
+import { applyDriveAlerts } from "./driveAlertSync.ts";
 import { catchUpGroupImageKeys } from "./imageKeyCatchUp.ts";
 import { imageKeyCatchUpWaitMs } from "./imageKeyCatchUpBackoff.ts";
 import { showNotices } from "./noticeBackgroundSync.ts";
@@ -36,6 +37,7 @@ export type PlaceUpdates = {
   imageKeysNeedCatchUp?: RouterOutputs["groupTracking"]["uploadBatch"]["imageKeysNeedCatchUp"];
   notices?: RouterOutputs["groupTracking"]["uploadBatch"]["notices"];
   crashAlerts?: RouterOutputs["groupTracking"]["uploadBatch"]["crashAlerts"];
+  driveAlerts?: RouterOutputs["groupTracking"]["uploadBatch"]["driveAlerts"];
 };
 
 type Groups = () => Promise<RouterOutputs["groupMembership"]["list"]>;
@@ -353,6 +355,9 @@ export const applyPlaceUpdates = async ({
   }
   if (updates.crashAlerts) {
     await tryCatch(applyCrashAlerts({ crashAlerts: updates.crashAlerts, groups, round }));
+  }
+  if (updates.driveAlerts) {
+    await tryCatch(applyDriveAlerts({ driveAlerts: updates.driveAlerts, groups, round }));
   }
   if (updates.notices) {
     await tryCatch(showNotices({ notices: updates.notices, groups, round }));

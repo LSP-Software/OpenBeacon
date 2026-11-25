@@ -2,6 +2,7 @@ import type { DriveRecord } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
 import {
   BatteryLowIcon,
+  BellOffIcon,
   EllipsisVerticalIcon,
   SmartphoneIcon,
   Trash2Icon,
@@ -9,7 +10,7 @@ import {
   Undo2Icon,
   UserRoundIcon,
 } from "lucide-react-native";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, ScrollView, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Alert } from "../../lib/alert.ts";
@@ -25,12 +26,15 @@ import { Button } from "../ui/Button.tsx";
 import { Icon } from "../ui/Icon.tsx";
 import { Text } from "../ui/Text.tsx";
 import { DriveScoreBadge, DrivingEventIcon } from "./DriveBadges.tsx";
+import { DriveInfoBox } from "./DrivesList.tsx";
 
 export const DriveSheet = ({
+  askPassenger = false,
   date,
   deviceName,
   driverName,
   formatClock,
+  groupName,
   groupNames,
   isOwn,
   onClose,
@@ -44,10 +48,12 @@ export const DriveSheet = ({
   title,
   units,
 }: {
+  askPassenger?: boolean;
   date: string;
   deviceName: string;
   driverName: string;
   formatClock: (time: number) => string;
+  groupName: string;
   groupNames: readonly string[];
   isOwn: boolean;
   onClose: () => void;
@@ -91,6 +97,11 @@ export const DriveSheet = ({
       ],
     );
   };
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the passenger question opens once, when a "I was a passenger" link opens the sheet
+  useEffect(() => {
+    if (askPassenger && isOwn && !record.passenger) confirmPassenger();
+  }, []);
 
   const confirmDelete = () => {
     setMenuOpen(false);
@@ -178,6 +189,18 @@ export const DriveSheet = ({
             </View>
           </View>
         ) : null}
+
+        {record.tellGroup ? null : (
+          <DriveInfoBox
+            icon={BellOffIcon}
+            title="Drive alerts are off."
+            text={
+              isOwn
+                ? `You don’t send ${groupName} a Drive alert when you finish a drive. Your drives still show here.`
+                : `${driverName} doesn’t send ${groupName} a Drive alert when they finish a drive. Their drives still show here. Only ${driverName} can change this.`
+            }
+          />
+        )}
 
         <View className="flex-row flex-wrap gap-2">
           <Figure value={formatDistance(record.distance, units.distance)} label="distance" />

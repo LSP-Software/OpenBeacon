@@ -56,7 +56,7 @@ mock.module("@tanstack/react-query", () => ({
   useQuery: () => ({ ...query, isError: false, isPending: false }),
   useQueryClient: () => queryClient,
 }));
-mock.module("react-native", () => ({ ScrollView: View, View }));
+mock.module("react-native", () => ({ Platform: { OS: "android" }, ScrollView: View, View }));
 mock.module("react-native-safe-area-context", () => ({ SafeAreaView: View }));
 mock.module("lucide-react-native", () => ({ BellOffIcon: View }));
 mock.module("../components/LoadingIndicator.tsx", () => ({ LoadingIndicator: () => null }));
@@ -113,6 +113,12 @@ mock.module("../lib/api.ts", () => ({
   },
 }));
 
+mock.module("../lib/driveSettings.ts", () => ({
+  setDriveRecordedNotice: async () => {},
+  setTellGroup: async () => {},
+  useDriveRecordedNotice: () => true,
+  useTellsGroup: () => true,
+}));
 const { default: NotificationsScreen } = await import("../app/account/notifications.tsx");
 
 const settingsFor = (canSendEmail: boolean) => ({
@@ -156,6 +162,8 @@ test("with email, security types get an Email and a Phone switch and the rest on
 
   expect(switches.map(({ accessibilityLabel }) => accessibilityLabel)).toEqual([
     "Place arrivals and departures, phone",
+    "Drive alerts, phone",
+    "Drive recorded",
     "Crash alerts, phone",
     "Someone joined a group, phone",
     "Someone left or was removed, phone",
@@ -184,7 +192,7 @@ test("without email, every type has one switch and nothing mentions email", asyn
   query.data = settingsFor(false);
   const { switches, text } = await render();
 
-  expect(switches).toHaveLength(Object.keys(notificationTypes).length);
+  expect(switches).toHaveLength(Object.keys(notificationTypes).length + 1);
   expect(switches.map(({ accessibilityLabel }) => accessibilityLabel)).toContain("New sign-in");
   expect(text).not.toContain("Email");
   expect(text).not.toContain("sends an email");
@@ -206,7 +214,7 @@ test("a setting a newer server added is left out instead of breaking the screen"
   };
   const { switches } = await render();
 
-  expect(switches).toHaveLength(Object.keys(notificationTypes).length);
+  expect(switches).toHaveLength(Object.keys(notificationTypes).length + 1);
 });
 
 test("the Notifications are off card shows only when this phone's notifications are off", async () => {

@@ -4,6 +4,7 @@ export type LiveMapEntry = {
     level: number | null;
   };
   deviceId: string;
+  driveAlertsOff?: true;
   latitude: number;
   longitude: number;
   serverUpdatedAt: Date;

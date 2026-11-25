@@ -63,6 +63,7 @@ import {
   updatePlaceSchema,
 } from "./schemas/group/places.ts";
 import {
+  getDriveAlertMutesSchema,
   getPlaceAlertMutesSchema,
   getPlaceSharingSchema,
   groupHistoryCategorySchema,
@@ -70,6 +71,7 @@ import {
   alertsCursorSchema,
   placeTransitionSchema,
   recentPlaceTransitionsSchema,
+  setDriveAlertMuteSchema,
   setPlaceAlertMuteSchema,
   setPlaceSharingSchema,
 } from "./schemas/group/placeTransitions.ts";
@@ -137,6 +139,7 @@ export {
   deletePlaceSchema,
   emailCodeSchema,
   encryptedImageKeySchema,
+  getDriveAlertMutesSchema,
   getPlaceAlertMutesSchema,
   getPlaceSharingSchema,
   FEEDBACK_MESSAGE_MAX_LENGTH,
@@ -175,6 +178,7 @@ export {
   reEncryptPlacesSchema,
   recentPlaceTransitionsSchema,
   serverNameSchema,
+  setDriveAlertMuteSchema,
   setPlaceAlertMuteSchema,
   setPlaceSharingSchema,
   registerDeviceKeySchema,

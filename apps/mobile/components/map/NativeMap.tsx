@@ -879,6 +879,11 @@ export const NativeMap = ({
                   }))
                 : undefined
             }
+            driveAlerts={
+              personTimelineGroupId && Platform.OS === "android"
+                ? { groupId: personTimelineGroupId, userId: selectedMarker.userId }
+                : undefined
+            }
             image={selectedMarker.image}
             initials={selectedMarker.initials}
             isSelf={selectedMarker.isSelf}

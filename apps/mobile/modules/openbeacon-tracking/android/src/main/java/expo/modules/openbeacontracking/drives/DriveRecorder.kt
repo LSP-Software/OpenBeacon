@@ -15,6 +15,8 @@ class DriveRecorder(
   private val utcOffsetMinutes: (Long) -> Int,
   private val newDriveId: () -> String = { DriveRecordCodec.newDriveId() },
   private val findSpeeding: (List<DriveFix>) -> SpeedingResult = { SpeedingResult(checked = false, events = emptyList()) },
+  private val tellGroup: (String) -> Boolean = { true },
+  private val onFinished: (DriveRecord, List<String>) -> Unit = { _, _ -> },
 ) {
   private var detector = DriveDetector()
   private var owner: String? = null
@@ -142,15 +144,18 @@ class DriveRecorder(
         events = DrivingEventFinder.mostSevereFirst(found.events + speeding.events),
       )
     val record = DriveRecordCodec.encode(built)?.let { DriveRecordCodec.decode(it) } ?: return null
-    DriveUploads.enqueue(
-      owner = owner,
-      record = record,
-      startKeys = keys,
-      currentGroupIds = epochKeys().map { it.groupId }.toSet(),
-      historyShare = historyShare(),
-      queue = queue,
-    )
+    val groupIds =
+      DriveUploads.enqueue(
+        owner = owner,
+        record = record,
+        startKeys = keys,
+        currentGroupIds = epochKeys().map { it.groupId }.toSet(),
+        historyShare = historyShare(),
+        queue = queue,
+        tellGroup = tellGroup,
+      )
     records.save(owner, record)
+    onFinished(record, groupIds)
     return record
   }
 }

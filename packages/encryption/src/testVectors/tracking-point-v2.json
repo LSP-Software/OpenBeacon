@@ -120,6 +120,70 @@
       }
     },
     {
+      "name": "drive-alerts-off",
+      "point": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "time": 1783968300000,
+        "stayUntil": null,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": 72,
+          "charging": false
+        },
+        "driveAlertsOff": true
+      },
+      "hex": "021eb367d0ffec7fd0019f5ccbfbe000000030008c4808",
+      "decoded": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "time": 1783968300000,
+        "stayUntil": null,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": 72,
+          "charging": false
+        },
+        "driveAlertsOff": true
+      }
+    },
+    {
+      "name": "drive-detection-crash-alerts-and-drive-alerts-off",
+      "point": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "time": 1783968300000,
+        "stayUntil": null,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": 72,
+          "charging": false
+        },
+        "crashAlertsOff": true,
+        "driveDetectionOff": true,
+        "driveAlertsOff": true
+      },
+      "hex": "021eb367d0ffec7fd0019f5ccbfbe000000030008c480e",
+      "decoded": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "time": 1783968300000,
+        "stayUntil": null,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": 72,
+          "charging": false
+        },
+        "crashAlertsOff": true,
+        "driveDetectionOff": true,
+        "driveAlertsOff": true
+      }
+    },
+    {
       "name": "drive-detection-and-crash-alerts-off",
       "point": {
         "latitude": 51.5074,
@@ -733,7 +797,7 @@
     },
     {
       "name": "unknown-flag",
-      "hex": "021eb367d0ffec7fd0019f5ccbfbe000000030008c4808"
+      "hex": "021eb367d0ffec7fd0019f5ccbfbe000000030008c4810"
     },
     {
       "name": "stay-minutes-without-stay-flag",

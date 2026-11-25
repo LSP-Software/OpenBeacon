@@ -1,7 +1,10 @@
 import { useIsFocused } from "@react-navigation/native";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import {
+  CarIcon,
   CircleCheckIcon,
+  ClockIcon,
+  GaugeIcon,
   ImageIcon,
   LogInIcon,
   LogOutIcon,
@@ -10,6 +13,7 @@ import {
   MapPinPlusIcon,
   PencilIcon,
   RefreshCwIcon,
+  RouteIcon,
   ShieldIcon,
   SirenIcon,
   SparklesIcon,
@@ -17,6 +21,7 @@ import {
   UserPlusIcon,
   UserXIcon,
 } from "lucide-react-native";
+import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, View } from "react-native";
 import { LoadingIndicator } from "../LoadingIndicator.tsx";
@@ -25,13 +30,19 @@ import { groupedListClassName, groupedRowClassName, groupedRowStyle } from "./gr
 import { Button } from "../ui/Button.tsx";
 import { Icon } from "../ui/Icon.tsx";
 import { Text } from "../ui/Text.tsx";
+import { useGroupDrives } from "../../hooks/useGroupDrives.ts";
 import { useMemberNameList } from "../../hooks/useMemberNames.ts";
+import { useUnits } from "../../hooks/useUnits.ts";
 import { type RouterInputs, trpcClient } from "../../lib/api.ts";
 import { authClient } from "../../lib/auth-client.ts";
 import { describeGroupEvent, groupByDay, markGroupHistorySeen } from "../../lib/groupHistory.ts";
 import { crashHistoryItems } from "../../lib/crashAlertInbox.ts";
 import { crashWords, useGroupCrashAlerts } from "../../lib/crashAlertSync.ts";
+import { driveHistoryItems } from "../../lib/driveHistory.ts";
 import { ownedDeviceName } from "../../lib/ownedDeviceName.ts";
+
+const HOUR_MS = 3_600_000;
+const chipIcons = [RouteIcon, ClockIcon, GaugeIcon];
 
 const eventIcons = {
   GROUP_CREATED: SparklesIcon,
@@ -92,6 +103,13 @@ const HistoryTab = ({
     getNextPageParam: (page) => page.nextBefore,
     subscribed: isFocused,
   });
+
+  const router = useRouter();
+  const units = useUnits();
+  const [driveWindowStart] = useState(
+    () => new Date(Math.floor((Date.now() - 14 * 24 * HOUR_MS) / HOUR_MS) * HOUR_MS),
+  );
+  const groupDrives = useGroupDrives(groupId, category === null ? driveWindowStart : null);
 
   const crashAlerts = useGroupCrashAlerts({
     enabled: category === null && isFocused,
@@ -203,8 +221,18 @@ const HistoryTab = ({
             }),
         ).filter((item) => oldestShown === undefined || item.at.getTime() >= oldestShown)
       : [];
+  const driveItems =
+    category === null
+      ? driveHistoryItems({
+          drives: groupDrives.query.data?.drives ?? [],
+          nameOf: (personId) => memberName(personId) ?? "Someone",
+          units,
+        }).filter((item) => oldestShown === undefined || item.at.getTime() >= oldestShown)
+      : [];
   const sections = groupByDay({
-    items: [...serverItems, ...crashItems].sort((a, b) => b.at.getTime() - a.at.getTime()),
+    items: [...serverItems, ...crashItems, ...driveItems].sort(
+      (a, b) => b.at.getTime() - a.at.getTime(),
+    ),
     now: new Date(),
   });
 
@@ -245,6 +273,62 @@ const HistoryTab = ({
             <View className={groupedListClassName}>
               {items.map((item, index) => {
                 const time = item.at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+                if (item.kind === "drive") {
+                  return (
+                    <Pressable
+                      key={item.id}
+                      accessibilityRole="link"
+                      accessibilityLabel={`${[item.title, ...item.chips, item.note ?? ""].filter(Boolean).join(", ")}, ${time}`}
+                      accessibilityHint="Opens this drive in Timeline"
+                      onPress={() =>
+                        router.push({
+                          pathname: "/timeline",
+                          params: { groupId, driveId: item.driveId },
+                        })
+                      }
+                      className={cn(
+                        "flex-row items-center gap-4 px-4 py-3",
+                        groupedRowClassName(index),
+                      )}
+                      style={groupedRowStyle(index, items.length)}
+                    >
+                      <View
+                        className="size-11 items-center justify-center rounded-full"
+                        style={{ backgroundColor: "#7A1240" }}
+                      >
+                        <Icon as={CarIcon} size={22} className="text-white" />
+                      </View>
+                      <View className="flex-1 gap-1">
+                        <Text className="text-foreground">{item.title}</Text>
+                        {item.chips.length > 0 ? (
+                          <View className="flex-row flex-wrap gap-1.5">
+                            {item.chips.map((chip, chipIndex) => (
+                              <View
+                                key={chip}
+                                className="flex-row items-center gap-1 rounded-lg px-2 py-0.5"
+                                style={{ backgroundColor: "#F4DDE6" }}
+                              >
+                                {chipIcons[chipIndex] ? (
+                                  <Icon as={chipIcons[chipIndex]} size={14} color="#7A1240" />
+                                ) : null}
+                                <Text
+                                  className="text-sm font-semibold"
+                                  style={{ color: "#7A1240" }}
+                                >
+                                  {chip}
+                                </Text>
+                              </View>
+                            ))}
+                          </View>
+                        ) : null}
+                        {item.note ? (
+                          <Text className="text-sm text-secondary">{item.note}</Text>
+                        ) : null}
+                        <Text className="text-sm text-tertiary">{time}</Text>
+                      </View>
+                    </Pressable>
+                  );
+                }
                 if (item.kind === "crash") {
                   return (
                     <View

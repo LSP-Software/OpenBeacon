@@ -8,6 +8,7 @@ import type { DriveRecord } from "@openbeacon/encryption";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
+  BellOffIcon,
   ChevronDownIcon,
   ChevronLeftIcon,
   FastForwardIcon,
@@ -16,6 +17,7 @@ import {
   PlayIcon,
   RewindIcon,
   SkipBackIcon,
+  SirenIcon,
   SkipForwardIcon,
 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -109,8 +111,15 @@ const NO_SENDERS: readonly TimelineSender[] = [];
 const NO_DRIVES: readonly LoadedDrive[] = [];
 
 const TimelineScreen = () => {
-  const { groupId, userId } = useLocalSearchParams<{
+  const {
+    driveId: linkDriveId,
+    groupId,
+    passenger: linkPassenger,
+    userId,
+  } = useLocalSearchParams<{
+    driveId?: string;
     groupId: string;
+    passenger?: string;
     userId?: string;
   }>();
   const router = useRouter();
@@ -168,6 +177,7 @@ const TimelineScreen = () => {
       key={group.id}
       group={group}
       initialPersonId={userId ?? null}
+      link={{ driveId: linkDriveId ?? null, passenger: linkPassenger === "1" }}
       onClose={close}
       onSwitchGroup={switchGroup}
       selfUserId={selfUserId}
@@ -178,6 +188,7 @@ const TimelineScreen = () => {
 const TimelineView = ({
   group,
   initialPersonId,
+  link,
   onClose,
   onSwitchGroup,
   selfUserId,
@@ -193,6 +204,7 @@ const TimelineView = ({
     name: string;
   };
   initialPersonId: string | null;
+  link: { driveId: string | null; passenger: boolean };
   onClose: () => void;
   onSwitchGroup: (groupId: string) => void;
   selfUserId: string;
@@ -552,18 +564,44 @@ const TimelineView = ({
     driveTitle(drivePlaceName(record.start), drivePlaceName(record.end));
   const driveUnder =
     selectedPerson && !openRecord ? driveAt(drives, selectedPerson.device.deviceId, time) : null;
-  const driveDetectionOff =
-    dayQuery.data?.devices
-      .find((device) => device.deviceId === selectedPerson?.device.deviceId)
-      ?.points.at(-1)?.driveDetectionOff === true;
+  const deviceName = (deviceId: string) =>
+    memberDevices.data?.find((device) => device.deviceId === deviceId)?.name ?? "Another device";
+  const latestPoint = dayQuery.data?.devices
+    .find((device) => device.deviceId === selectedPerson?.device.deviceId)
+    ?.points.at(-1);
+  const driveDetectionOff = latestPoint?.driveDetectionOff === true;
+  const statusBoxes = selectedPerson ? (
+    <>
+      {!driveDetectionOff && latestPoint?.crashAlertsOff ? (
+        <DriveInfoBox
+          icon={SirenIcon}
+          title="Crash alerts are off."
+          text={
+            selectedPerson.isSelf
+              ? `${deviceName(selectedPerson.device.deviceId)} won’t send a Crash alert after a possible crash. You can turn them on in Account › Drive detection on that device.`
+              : `${selectedPerson.name}’s ${deviceName(selectedPerson.device.deviceId)} won’t send a Crash alert after a possible crash. Only ${selectedPerson.name} can change this.`
+          }
+        />
+      ) : null}
+      {!driveDetectionOff && latestPoint?.driveAlertsOff ? (
+        <DriveInfoBox
+          icon={BellOffIcon}
+          title="Drive alerts are off."
+          text={
+            selectedPerson.isSelf
+              ? `You don’t send ${group.name} a Drive alert when you finish a drive. Your drives still show here.`
+              : `${selectedPerson.name} doesn’t send ${group.name} a Drive alert when they finish a drive. Their drives still show here. Only ${selectedPerson.name} can change this.`
+          }
+        />
+      ) : null}
+    </>
+  ) : null;
   const driveDetectionOffText = (person: {
     device: { deviceId: string };
     isSelf: boolean;
     name: string;
   }) =>
     `Drive detection is off on ${deviceName(person.device.deviceId)}, so ${person.isSelf ? "your" : `${person.name}’s`} drives aren’t recorded there.`;
-  const deviceName = (deviceId: string) =>
-    memberDevices.data?.find((device) => device.deviceId === deviceId)?.name ?? "Another device";
   const drivePath = useMemo((): Coordinate[] => {
     if (!openRecord || !openDrive) return [];
     const segments =
@@ -628,6 +666,28 @@ const TimelineView = ({
     setOpenDriveId(null);
     setSheetHeight(0);
   };
+
+  const [askPassengerFor, setAskPassengerFor] = useState<string | null>(null);
+  const handledLink = useRef<string | null>(null);
+  const linkRetries = useRef(0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a linked drive opens once, when it has loaded; until then the list is refetched a few times in case it is still uploading
+  useEffect(() => {
+    const { driveId } = link;
+    if (!driveId || handledLink.current === driveId) return;
+    const found = drives.find((drive) => drive.driveId === driveId);
+    if (found?.record) {
+      handledLink.current = driveId;
+      if (link.passenger) setAskPassengerFor(driveId);
+      openDriveFrom({ ...found, record: found.record });
+      return;
+    }
+    if (groupDrives.query.isFetching || linkRetries.current >= 6) return;
+    const timer = setTimeout(() => {
+      linkRetries.current += 1;
+      void groupDrives.query.refetch();
+    }, 10_000);
+    return () => clearTimeout(timer);
+  }, [drives, groupDrives.query.isFetching, link.driveId]);
 
   const personGroupDrives = drives.filter((drive) => drive.senderUserId === personId);
   const allPersonDrives = [...personGroupDrives, ...(personDrives.data?.drives ?? [])];
@@ -1140,10 +1200,12 @@ const TimelineView = ({
       {openRecord && openDrive ? (
         <DriveSheet
           key={openDrive.driveId}
+          askPassenger={askPassengerFor === openDrive.driveId}
           date={formatDate(openRecord.start.time)}
           deviceName={deviceName(openDrive.senderDeviceId)}
           driverName={memberLook(openDrive.senderUserId).name}
           formatClock={formatClock}
+          groupName={group.name}
           groupNames={groups?.map((item) => item.name) ?? [group.name]}
           isOwn={openDrive.senderUserId === selfUserId}
           onClose={closeDrive}
@@ -1310,6 +1372,7 @@ const TimelineView = ({
                 {selectedPerson && driveDetectionOff ? (
                   <DriveInfoBox text={driveDetectionOffText(selectedPerson)} />
                 ) : null}
+                {statusBoxes}
                 {selectedPerson && selectedRoute ? (
                   <>
                     <View className="flex-row flex-wrap gap-2">
@@ -1458,6 +1521,7 @@ const TimelineView = ({
               {selectedPerson && driveDetectionOff ? (
                 <DriveInfoBox text={driveDetectionOffText(selectedPerson)} />
               ) : null}
+              {statusBoxes}
             </>
           }
           loading={personId !== null && groupDrives.query.isPending}
@@ -1517,7 +1581,12 @@ const TimelineView = ({
               />
             ) : null
           }
-          header={deviceSwitch}
+          header={
+            <>
+              {deviceSwitch}
+              {statusBoxes}
+            </>
+          }
           isOwn={personId === selfUserId}
           loading={personDrives.isPending}
           name={selectedName ?? "this person"}

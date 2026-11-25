@@ -127,6 +127,7 @@ export const groupTrackingUploadBatchSchema = z
     placeAlertsCursor: alertsCursorSchema.nullable().optional(),
     noticesCursor: alertsCursorSchema.nullable().optional(),
     crashAlertsCursor: alertsCursorSchema.nullable().optional(),
+    driveAlertsCursor: alertsCursorSchema.nullable().optional(),
   })
   .refine(
     (batch) =>
@@ -135,7 +136,8 @@ export const groupTrackingUploadBatchSchema = z
       (batch.placeTransitions?.length ?? 0) > 0 ||
       batch.placeAlertsCursor !== undefined ||
       batch.noticesCursor !== undefined ||
-      batch.crashAlertsCursor !== undefined,
+      batch.crashAlertsCursor !== undefined ||
+      batch.driveAlertsCursor !== undefined,
     {
       message: "An upload needs at least one point, drive, place transition or cursor",
       path: ["points"],

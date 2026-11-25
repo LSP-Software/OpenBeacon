@@ -69,6 +69,9 @@ mock.module("../components/map/DirectionsButton.tsx", () => ({ DirectionsButton:
 mock.module("../components/ui/Icon.tsx", () => ({ Icon: () => null }));
 mock.module("../components/ui/Text.tsx", () => ({ Text: Passthrough }));
 
+mock.module("../components/map/PersonDriveAlertsRow.tsx", () => ({
+  PersonDriveAlertsRow: () => null,
+}));
 const { LiveMapPersonSheet } = await import("../components/map/LiveMapPersonSheet.tsx");
 const { LiveMapMissingPersonSheet } =
   await import("../components/map/LiveMapMissingPersonSheet.tsx");

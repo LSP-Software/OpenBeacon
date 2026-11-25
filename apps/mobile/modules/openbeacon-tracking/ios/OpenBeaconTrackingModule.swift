@@ -221,6 +221,23 @@ public class OpenBeaconTrackingModule: Module {
       TrackingRuntime.setCrashAlerts(on)
     }
 
+    Function("quietDriveGroups") { () -> [String] in
+      []
+    }
+
+    Function("setTellGroup") { (_: String, _: Bool) in
+    }
+
+    Function("isDriveRecordedNoticeOn") {
+      true
+    }
+
+    Function("setDriveRecordedNotice") { (_: Bool) in
+    }
+
+    Function("setDriveDistanceUnit") { (_: String) in
+    }
+
     Function("setCrashAlertContext") { (_: [String: String], _: String) in
     }
 

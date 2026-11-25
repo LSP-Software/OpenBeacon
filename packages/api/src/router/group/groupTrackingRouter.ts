@@ -21,6 +21,7 @@ import {
 } from "../../lib/groupTracking.ts";
 import { readGroupNotices } from "../../lib/accountNotices.ts";
 import { readCrashAlertsSince } from "../../lib/crashAlerts.ts";
+import { readDriveAlertsSince } from "../../lib/driveAlerts.ts";
 import {
   DRIVES_PER_DEVICE_GROUP_DAY,
   readGroupDrives,
@@ -261,6 +262,9 @@ export const groupTrackingRouter = {
         ),
       ]);
       const result = transaction.data;
+      if ("drives" in result && result.drives.accepted.length > 0) {
+        ctx.push?.drives({ groupId: input.groupId, driveIds: result.drives.accepted });
+      }
       if ("placeTransitions" in result) {
         ctx.push?.placeTransitions({
           deviceId: ctx.deviceId,
@@ -270,7 +274,8 @@ export const groupTrackingRouter = {
       const asksToCatchUp =
         input.placeAlertsCursor !== undefined ||
         input.noticesCursor !== undefined ||
-        input.crashAlertsCursor !== undefined;
+        input.crashAlertsCursor !== undefined ||
+        input.driveAlertsCursor !== undefined;
       const catchUpBudget = asksToCatchUp
         ? await ctx.cache.rateLimits.consume(
             {
@@ -291,28 +296,34 @@ export const groupTrackingRouter = {
       const placeAlertsCursor = catchUpBudget.allowed ? input.placeAlertsCursor : undefined;
       const noticesCursor = catchUpBudget.allowed ? input.noticesCursor : undefined;
       const crashAlertsCursor = catchUpBudget.allowed ? input.crashAlertsCursor : undefined;
-      const [placeUpdates, imageKeysNeedCatchUp, notices, crashAlerts] = await Promise.all([
-        placeAlertsCursor === undefined
-          ? null
-          : tryCatch(
-              Promise.all([
-                readPlacesSummary({ db: ctx.db, userId }),
-                readPlaceAlerts({ cursor: placeAlertsCursor, db: ctx.db, userId }),
-              ]),
-            ),
-        placeAlertsCursor === undefined
-          ? null
-          : tryCatch(readImageKeysNeedCatchUp({ db: ctx.db, userId })),
-        noticesCursor === undefined
-          ? null
-          : tryCatch(readGroupNotices({ cursor: noticesCursor, db: ctx.db, userId })),
-        crashAlertsCursor === undefined
-          ? null
-          : tryCatch(readCrashAlertsSince({ cursor: crashAlertsCursor, db: ctx.db, userId })),
-      ]);
+      const driveAlertsCursor = catchUpBudget.allowed ? input.driveAlertsCursor : undefined;
+      const [placeUpdates, imageKeysNeedCatchUp, notices, crashAlerts, driveAlerts] =
+        await Promise.all([
+          placeAlertsCursor === undefined
+            ? null
+            : tryCatch(
+                Promise.all([
+                  readPlacesSummary({ db: ctx.db, userId }),
+                  readPlaceAlerts({ cursor: placeAlertsCursor, db: ctx.db, userId }),
+                ]),
+              ),
+          placeAlertsCursor === undefined
+            ? null
+            : tryCatch(readImageKeysNeedCatchUp({ db: ctx.db, userId })),
+          noticesCursor === undefined
+            ? null
+            : tryCatch(readGroupNotices({ cursor: noticesCursor, db: ctx.db, userId })),
+          crashAlertsCursor === undefined
+            ? null
+            : tryCatch(readCrashAlertsSince({ cursor: crashAlertsCursor, db: ctx.db, userId })),
+          driveAlertsCursor === undefined
+            ? null
+            : tryCatch(readDriveAlertsSince({ cursor: driveAlertsCursor, db: ctx.db, userId })),
+        ]);
       const catchUpFields = {
         ...(notices && !notices.error ? { notices: notices.data } : {}),
         ...(crashAlerts && !crashAlerts.error ? { crashAlerts: crashAlerts.data } : {}),
+        ...(driveAlerts && !driveAlerts.error ? { driveAlerts: driveAlerts.data } : {}),
         ...(placeUpdates && !placeUpdates.error
           ? { places: placeUpdates.data[0], placeAlerts: placeUpdates.data[1] }
           : {}),

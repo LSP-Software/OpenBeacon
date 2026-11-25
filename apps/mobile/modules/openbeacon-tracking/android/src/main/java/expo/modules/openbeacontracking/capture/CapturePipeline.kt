@@ -26,6 +26,7 @@ class CapturePipeline(
   private val historySettings: HistoryFilterSettings = HistoryFilterSettings(),
   private val driveDetectionOff: () -> Boolean = { false },
   private val crashAlertsOff: () -> Boolean = { false },
+  private val driveAlertsOff: (String) -> Boolean = { false },
   private val loadAllowance: (List<String>) -> HistoryAllowance? = { null },
   private val saveAllowance: (List<String>, HistoryAllowance) -> Unit = { _, _ -> },
   private val onRowFailure: (String, Exception) -> Unit = { _, _ -> },
@@ -117,6 +118,7 @@ class CapturePipeline(
             batteryCharging = point.batteryCharging,
             driveDetectionOff = drivesOff,
             crashAlertsOff = crashOff,
+            driveAlertsOff = driveAlertsOff(key.groupId),
           ) ?: return@mapNotNull null
         try {
           val encrypted =
