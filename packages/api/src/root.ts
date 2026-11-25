@@ -5,6 +5,7 @@ import { accountRouter } from "./router/accountRouter.ts";
 import { authRouter } from "./router/authRouter.ts";
 import { deviceLinkRouter } from "./router/deviceLinkRouter.ts";
 import { deviceRouter } from "./router/deviceRouter.ts";
+import { drivesRouter } from "./router/drivesRouter.ts";
 import { emailAlertsRouter } from "./router/emailAlertsRouter.ts";
 import { feedbackRouter } from "./router/feedbackRouter.ts";
 import { groupImageKeysRouter } from "./router/group/groupImageKeysRouter.ts";
@@ -41,6 +42,7 @@ export const appRouter = createTRPCRouter({
   auth: authRouter,
   device: deviceRouter,
   deviceLink: deviceLinkRouter,
+  drives: drivesRouter,
   emailAlerts: emailAlertsRouter,
   feedback: feedbackRouter,
   maps: mapsRouter,

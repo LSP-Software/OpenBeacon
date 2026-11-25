@@ -17,5 +17,5 @@ if [ "$(uname)" != "Darwin" ]; then
   exit 0
 fi
 
-swiftc "$dir"/../ios/Core/*.swift "$dir/main.swift" -o "$out/core-tests"
-"$out/core-tests" "$dir/../../../../../packages/encryption/src/testVectors/group-payload-interop-v1.json" "$dir/../../../../../packages/encryption/src/testVectors/tracking-point-v2.json"
+swiftc "$dir"/../ios/Core/*.swift "$dir/DriveRecordChecks.swift" "$dir/main.swift" -o "$out/core-tests"
+"$out/core-tests" "$dir/../../../../../packages/encryption/src/testVectors/group-payload-interop-v1.json" "$dir/../../../../../packages/encryption/src/testVectors/tracking-point-v2.json" "$dir/../../../../../packages/encryption/src/testVectors/drive-record-v1.json"

@@ -23,6 +23,7 @@ let emptyStreams: string[] = [];
 const windowDeletes: Array<{ values: unknown[] }> = [];
 const departedDeletes: Array<{ limit: unknown }> = [];
 const streamLocks: Array<{ after: unknown; limit: unknown }> = [];
+const driveDeletes: unknown[][] = [];
 
 const queryRaw = mock(async (query: TemplateStringsArray | Prisma.Sql, ...args: unknown[]) => {
   const [strings, values] = Array.isArray(query) ? [query, args] : [query.strings, query.values];
@@ -102,6 +103,10 @@ const executeRaw = mock(async (query: TemplateStringsArray | Prisma.Sql, ...args
     historyBacklog[historyTable] -= count;
     return count;
   }
+  if (strings.join("?").trimStart().startsWith('DELETE FROM "DriveCopy"')) {
+    driveDeletes.push(values);
+    return 0;
+  }
   const tidyTable = (["TrackingLatestPoint", "TrackingStream"] as const).find((table) =>
     strings.join("?").trimStart().startsWith(`DELETE FROM "${table}"`),
   );
@@ -140,6 +145,7 @@ beforeEach(() => {
   streamLocks.length = 0;
   windowDeletes.length = 0;
   departedDeletes.length = 0;
+  driveDeletes.length = 0;
 });
 
 test("deletes location points older than database time minus exactly 14 days in batches, then stale latest points and empty streams", async () => {
@@ -158,6 +164,8 @@ test("deletes location points older than database time minus exactly 14 days in 
   expect(windowDeletes).toHaveLength(1);
   expect(windowDeletes[0]?.values).toContain(272_856 + 14 * 24 - 5);
   expect(departedDeletes).toEqual([{ limit: 1000 }]);
+  expect(driveDeletes[0]).toEqual([cutoffHour]);
+  expect(driveDeletes).toHaveLength(3);
   expect(tidyDeletes).toEqual([
     { table: "TrackingLatestPoint", values: [cutoff] },
     { table: "TrackingLatestPoint", values: [] },

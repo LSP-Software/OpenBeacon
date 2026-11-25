@@ -249,6 +249,7 @@ enum TrackingRuntime {
         DispatchQueue.main.async { LocationCapture.shared.stop() }
         try epochKeys.revoke(nil)
         try places.removeGroups(nil)
+        try TrackingDatabase.shared().deleteQueuedDrives(owner: nil)
       }
       if let previousOwner, previousOwner != owner { CapturePipeline.clearAllowances(owner: previousOwner) }
       defaults.set(owner, forKey: "openbeacon_tracking_queue.owner")

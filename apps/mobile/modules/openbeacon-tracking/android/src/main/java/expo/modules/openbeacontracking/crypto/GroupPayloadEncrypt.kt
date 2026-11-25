@@ -67,8 +67,9 @@ object GroupPayloadEncrypt {
     epochId: String,
     kind: String,
     senderDeviceId: String,
+    driveId: String? = null,
   ): ByteArray =
-    """{"context":${jsonString(DOMAIN_CONTEXT)},"epochId":${jsonString(epochId)},"groupId":${jsonString(groupId)},"kind":${jsonString(kind)},"purpose":${jsonString(PURPOSE)},"senderDeviceId":${jsonString(senderDeviceId)}}"""
+    """{"context":${jsonString(DOMAIN_CONTEXT)},${driveId?.let { "\"driveId\":${jsonString(it)}," } ?: ""}"epochId":${jsonString(epochId)},"groupId":${jsonString(groupId)},"kind":${jsonString(kind)},"purpose":${jsonString(PURPOSE)},"senderDeviceId":${jsonString(senderDeviceId)}}"""
       .toByteArray(Charsets.UTF_8)
 
   fun encodeBase64(bytes: ByteArray): String = Base64Codec.encode(bytes)

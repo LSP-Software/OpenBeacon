@@ -3,10 +3,15 @@ import {
   PAYLOAD_ENCRYPTION_ALGORITHM,
   TRACKING_POINT_KIND,
 } from "@openbeacon/encryption";
-import { groupTrackingPointSchema, placeTransitionSchema } from "@openbeacon/schemas";
+import {
+  driveCopySchema,
+  groupTrackingPointSchema,
+  placeTransitionSchema,
+} from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import type {
   CiphertextQueueItem,
+  QueuedDrive,
   QueuedPlaceTransition,
 } from "../modules/openbeacon-tracking/index.ts";
 import { trpcClient } from "./api.ts";
@@ -704,7 +709,22 @@ const takeAccountSync = (
 const placeUploadFields = (
   transitions: readonly QueuedPlaceTransition[],
   cursor: PlaceRound["cursor"],
+  drives: readonly QueuedDrive[],
 ) => ({
+  ...(drives.length > 0
+    ? {
+        drives: drives.map(
+          ({ ciphertext, driveId, epochId, nonce, senderDeviceId, startHour }) => ({
+            ciphertext,
+            driveId,
+            epochId,
+            nonce,
+            senderDeviceId,
+            startHour,
+          }),
+        ),
+      }
+    : {}),
   ...(transitions.length > 0
     ? {
         placeTransitions: transitions.map(
@@ -725,11 +745,19 @@ const settlePlaceResponse = async (
   trackingModule: NonNullable<Awaited<ReturnType<typeof loadTrackingModule>>>,
   round: PlaceRound,
   response: {
+    drives?: { accepted: string[]; discarded: string[]; duplicates: string[]; expired: string[] };
     keyState?: string;
     placeTransitions?: { accepted: string[]; duplicates: string[]; discarded: string[] };
   } & PlaceUpdates,
+  sentDrives: readonly QueuedDrive[],
 ) => {
   if (response.keyState && noteTrackingKeyState(response.keyState)) uploadRejectedKeys = true;
+  if (response.drives) {
+    const { accepted, discarded, duplicates, expired } = response.drives;
+    const answered = new Set([...accepted, ...discarded, ...duplicates, ...expired]);
+    const done = sentDrives.filter(({ driveId }) => answered.has(driveId)).map(({ id }) => id);
+    if (done.length > 0) await trackingModule.deleteQueuedDrives(done);
+  }
   if (response.placeTransitions) {
     const { accepted, duplicates, discarded } = response.placeTransitions;
     await trackingModule.deletePlaceTransitions([...accepted, ...duplicates, ...discarded]);
@@ -754,24 +782,28 @@ const uploadPlaceTransitionsAlone = async (
   round: PlaceRound,
   groupId: string,
   transitions: readonly QueuedPlaceTransition[],
+  drives: readonly QueuedDrive[],
   signal: AbortSignal,
 ) => {
   const cursor = takePlaceAlertsCursor(round);
   takeAccountSync(trackingModule, round, signal);
   const result = await tryCatch(
     trpcClient.groupTracking.uploadBatch.mutate(
-      { groupId, points: [], ...placeUploadFields(transitions, cursor) },
+      { groupId, points: [], ...placeUploadFields(transitions, cursor, drives) },
       accountRequest(round.account, signal),
     ),
   );
   if (!result.error) {
-    await settlePlaceResponse(trackingModule, round, result.data);
+    await settlePlaceResponse(trackingModule, round, result.data, drives);
     return;
   }
   const code = getErrorCode(result.error);
   const reason = errorReason(result.error);
   if (code === "BAD_REQUEST" || reason === "NOT_GROUP_MEMBER" || reason === "GROUP_GONE") {
-    await trackingModule.deletePlaceTransitions(transitions.map(({ clientId }) => clientId));
+    if (transitions.length > 0) {
+      await trackingModule.deletePlaceTransitions(transitions.map(({ clientId }) => clientId));
+    }
+    if (drives.length > 0) await trackingModule.deleteQueuedDrives(drives.map(({ id }) => id));
     return;
   }
   if (code === "UNAUTHORIZED") {
@@ -798,7 +830,11 @@ const uploadClaimedItems = async (
   const groupId = items[0]?.groupId ?? "";
   const carriesPlaces = items[0]?.senderDeviceId === round.deviceId;
   const transitions = carriesPlaces ? (round.transitions.get(groupId) ?? []) : [];
-  if (carriesPlaces) round.transitions.delete(groupId);
+  const drives = carriesPlaces ? (round.drives.get(groupId) ?? []) : [];
+  if (carriesPlaces) {
+    round.transitions.delete(groupId);
+    round.drives.delete(groupId);
+  }
   const cursor = carriesPlaces ? takePlaceAlertsCursor(round) : null;
   const sentAt = new Date().toISOString();
   takeAccountSync(trackingModule, round, signal);
@@ -806,7 +842,7 @@ const uploadClaimedItems = async (
     trpcClient.groupTracking.uploadBatch.mutate(
       {
         groupId,
-        ...placeUploadFields(transitions, cursor),
+        ...placeUploadFields(transitions, cursor, drives),
         points: items.map(
           ({ capturedHour, ciphertext, clientPointId, epochId, nonce, role, senderDeviceId }) => ({
             ...(capturedHour === null ? {} : { capturedHour }),
@@ -830,9 +866,10 @@ const uploadClaimedItems = async (
   if (
     uploadResult.error &&
     getErrorCode(uploadResult.error) === "BAD_REQUEST" &&
-    (transitions.length > 0 || cursor)
+    (transitions.length > 0 || drives.length > 0 || cursor)
   ) {
     if (transitions.length > 0) round.retryAlone.set(groupId, transitions);
+    if (drives.length > 0) round.retryDrivesAlone.set(groupId, drives);
     return uploadClaimedItems(trackingModule, owner, items, signal, round);
   }
   if (uploadResult.error) {
@@ -902,7 +939,7 @@ const uploadClaimedItems = async (
     expired?: string[];
   } = uploadResult.data;
 
-  await settlePlaceResponse(trackingModule, round, uploadResult.data);
+  await settlePlaceResponse(trackingModule, round, uploadResult.data, drives);
 
   if (accepted.length > 0 && items[0]) {
     const { senderDeviceId, groupId } = items[0];
@@ -974,7 +1011,9 @@ type PlaceRound = {
   accountSync: ReturnType<typeof startAccountSync> | null;
   cursor: { placeAlerts: string | null; notices: string | null } | null;
   deviceId: string;
+  drives: Map<string, QueuedDrive[]>;
   retryAlone: Map<string, QueuedPlaceTransition[]>;
+  retryDrivesAlone: Map<string, QueuedDrive[]>;
   transitions: Map<string, QueuedPlaceTransition[]>;
   updates: PlaceUpdates | null;
   userId: string;
@@ -992,7 +1031,9 @@ const startPlaceRound = async (
       accountSync: null,
       cursor: null,
       deviceId: "",
+      drives: new Map(),
       retryAlone: new Map(),
+      retryDrivesAlone: new Map(),
       transitions: new Map(),
       updates: null,
       userId: "",
@@ -1018,6 +1059,19 @@ const startPlaceRound = async (
     const group = transitions.get(transition.groupId) ?? [];
     if (group.length < 50) transitions.set(transition.groupId, [...group, transition]);
   }
+  const queuedDrives = (await tryCatch(trackingModule.listQueuedDrives(owner))).data ?? [];
+  const sendableDrives = queuedDrives.filter(
+    (drive) => drive.senderDeviceId === device.deviceId && driveCopySchema.safeParse(drive).success,
+  );
+  const staleDrives = queuedDrives.filter((drive) => !sendableDrives.includes(drive));
+  if (staleDrives.length > 0) {
+    await tryCatch(trackingModule.deleteQueuedDrives(staleDrives.map(({ id }) => id)));
+  }
+  const drives = new Map<string, QueuedDrive[]>();
+  for (const drive of sendableDrives) {
+    const group = drives.get(drive.groupId) ?? [];
+    if (group.length < 10) drives.set(drive.groupId, [...group, drive]);
+  }
   const sinceAccountSync = Date.now() - lastAccountSyncAt;
   const accountSyncDue = !trackingPaused && (sinceAccountSync < 0 || sinceAccountSync >= 50_000);
   return {
@@ -1031,7 +1085,9 @@ const startPlaceRound = async (
         }
       : null,
     deviceId: device.deviceId,
+    drives,
     retryAlone: new Map(),
+    retryDrivesAlone: new Map(),
     transitions,
     updates: null,
     userId: device.userId,
@@ -1087,9 +1143,24 @@ const flushPendingTrackingPointsInternal = async (
     afterId = pending[pending.length - 1]?.id ?? afterId;
   }
   if (!signal.aborted) {
+    const aloneGroups = new Map<
+      string,
+      { drives: QueuedDrive[]; transitions: QueuedPlaceTransition[] }
+    >();
+    const aloneGroup = (groupId: string) => {
+      const group = aloneGroups.get(groupId) ?? { drives: [], transitions: [] };
+      aloneGroups.set(groupId, group);
+      return group;
+    };
+    for (const [groupId, transitions] of [...round.transitions, ...round.retryAlone]) {
+      aloneGroup(groupId).transitions.push(...transitions);
+    }
+    for (const [groupId, drives] of [...round.drives, ...round.retryDrivesAlone]) {
+      aloneGroup(groupId).drives.push(...drives);
+    }
     const alone = await Promise.allSettled(
-      [...round.transitions, ...round.retryAlone].map(([groupId, transitions]) =>
-        uploadPlaceTransitionsAlone(trackingModule, round, groupId, transitions, signal),
+      [...aloneGroups].map(([groupId, { drives, transitions }]) =>
+        uploadPlaceTransitionsAlone(trackingModule, round, groupId, transitions, drives, signal),
       ),
     );
     failed ||= alone.some((result) => result.status === "rejected");

@@ -78,6 +78,7 @@ class OpenBeaconTrackingModule : Module() {
         }
         TrackingRuntime.epochKeyStore(requireContext()).revoke(groupIds)
         TrackingRuntime.placeDetection(requireContext()).removeGroups(groupIds?.takeIf { it.isNotEmpty() })
+        if (!groupIds.isNullOrEmpty()) TrackingRuntime.driveQueue(requireContext()).deleteByGroups(groupIds)
       }
 
       AsyncFunction("setGroupPlaces") { owner: String, deviceId: String, groupId: String, places: List<Map<String, Any?>> ->
@@ -122,6 +123,25 @@ class OpenBeaconTrackingModule : Module() {
 
       AsyncFunction("deletePlaceTransitions") { clientIds: List<String> ->
         TrackingRuntime.placeDetection(requireContext()).acknowledge(clientIds)
+      }
+
+      AsyncFunction("listQueuedDrives") { owner: String ->
+        TrackingRuntime.driveQueue(requireContext()).list(owner, MAX_QUEUED_DRIVES).map {
+          mapOf(
+            "id" to it.id.toDouble(),
+            "groupId" to it.groupId,
+            "driveId" to it.driveId,
+            "epochId" to it.epochId,
+            "senderDeviceId" to it.senderDeviceId,
+            "startHour" to it.startHour.toDouble(),
+            "nonce" to it.nonce,
+            "ciphertext" to it.ciphertext,
+          )
+        }
+      }
+
+      AsyncFunction("deleteQueuedDrives") { ids: List<Double> ->
+        TrackingRuntime.driveQueue(requireContext()).deleteByIds(ids.map { it.toLong() })
       }
 
       Function("isPlaceSearchAvailable") {
@@ -357,5 +377,6 @@ class OpenBeaconTrackingModule : Module() {
     private const val DEFAULT_KIND = "trackingPoint"
     private const val DEFAULT_PENDING_LIMIT = 100
     private const val MAX_PLACE_TRANSITIONS = 200
+    private const val MAX_QUEUED_DRIVES = 200
   }
 }

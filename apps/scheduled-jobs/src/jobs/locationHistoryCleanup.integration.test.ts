@@ -133,6 +133,19 @@ const epochNumbers = async (groupId: string) =>
     })
   ).map(({ epochNumber }) => epochNumber);
 
+const addDrive = async (groupId: string, epoch: number, startedAt: Date, driveId: string) => {
+  await prisma.$executeRaw`
+    INSERT INTO "DriveCopy" ("groupId", "driveId", "epochId", "senderDeviceId", "senderUserId", "startHour", "payload", "receivedAt")
+    VALUES (${groupId}, ${driveId}, ${`${groupId}-epoch-${epoch}`}, ${deviceId}, ${userId},
+      ${hourOf(startedAt)}, '\\x00'::bytea, (${startedAt.toISOString()}::timestamptz AT TIME ZONE 'UTC'))
+  `;
+};
+
+const driveIds = async (groupId: string) =>
+  (await prisma.driveCopy.findMany({ where: { groupId }, select: { driveId: true } }))
+    .map(({ driveId }) => driveId)
+    .sort();
+
 const payloadCount = async (groupId: string) => (await payloadNames(groupId)).length;
 
 describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history clean-up", () => {
@@ -503,5 +516,37 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history
     expect(await payloadNames(memberGroupId)).toEqual(["recent"]);
     expect(await prisma.trackingLatestPoint.count({ where: { groupId: memberGroupId } })).toBe(1);
     expect(await streamEpochs(memberGroupId)).toEqual([1]);
+  });
+
+  test("deletes Drives that started past the maximum, past each sender's window, or after they left", async () => {
+    const maximum = await createGroup("drives-maximum", [200]);
+    const shortened = await createGroup("drives-shortened", [200]);
+    const departed = await createGroup("drives-departed", [200]);
+    await prisma.groupMember.update({
+      where: { userId_groupId: { userId, groupId: shortened } },
+      data: { historyShare: "HOURS_6" },
+    });
+    for (const groupId of [maximum, shortened, departed]) {
+      await addDrive(groupId, 1, ago(15), "old");
+      await addDrive(groupId, 1, ago(13), "13d");
+      await addDrive(groupId, 1, ago(2 / 24), "2h");
+    }
+    await prisma.groupMember.delete({ where: { userId_groupId: { userId, groupId: departed } } });
+
+    await createLocationHistoryCleanup()();
+
+    expect(await driveIds(maximum)).toEqual(["13d", "2h"]);
+    expect(await driveIds(shortened)).toEqual(["2h"]);
+    expect(await driveIds(departed)).toEqual([]);
+  });
+
+  test("keeps an epoch that a stored Drive uses and deletes it once the Drive is gone", async () => {
+    const groupId = await createGroup("drive-epoch", [200, 100]);
+    await addDrive(groupId, 1, ago(1), "drive");
+    await createEpochCleanup()();
+    expect(await epochNumbers(groupId)).toEqual([1, 2]);
+    await prisma.driveCopy.deleteMany({ where: { groupId } });
+    await createEpochCleanup()();
+    expect(await epochNumbers(groupId)).toEqual([2]);
   });
 });
