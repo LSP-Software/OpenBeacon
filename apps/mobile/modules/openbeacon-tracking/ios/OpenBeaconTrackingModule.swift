@@ -69,7 +69,7 @@ public class OpenBeaconTrackingModule: Module {
     }
 
     AsyncFunction("setGroupPlaces") { (owner: String, deviceId: String, groupId: String, places: [[String: Any]]) -> Bool in
-      let parsed = try places.map { place in
+      let parsed = try places.filter { ($0["sharesTransitions"] as? Bool) ?? true }.map { place in
         PlaceGeofence(
           groupId: groupId,
           placeId: try Self.string(place, "placeId"),
@@ -203,6 +203,21 @@ public class OpenBeaconTrackingModule: Module {
 
     Function("setLowPowerMode") { (enabled: Bool) in
       TrackingRuntime.setLowPowerMode(enabled)
+    }
+
+    Function("isDriveDetectionOn") {
+      TrackingRuntime.isDriveDetectionOn()
+    }
+
+    Function("setDriveDetection") { (on: Bool) in
+      TrackingRuntime.setDriveDetection(on)
+    }
+
+    AsyncFunction("listDriveIds") { (_: String) -> [String] in
+      []
+    }
+
+    AsyncFunction("deleteDrives") { (_: String, _: [String]) in
     }
 
     Function("areNotificationsEnabled") {

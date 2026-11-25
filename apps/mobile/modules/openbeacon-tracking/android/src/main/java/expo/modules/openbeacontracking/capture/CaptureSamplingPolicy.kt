@@ -75,7 +75,7 @@ object CaptureSamplingPolicy {
     )
   }
 
-  private fun isBatterySaver(battery: BatterySnapshot): Boolean =
+  fun isBatterySaver(battery: BatterySnapshot): Boolean =
     battery.powerSaveMode ||
       (battery.levelKnown && battery.level <= LOW_BATTERY_LEVEL && !battery.charging)
 

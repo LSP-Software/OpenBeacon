@@ -23,6 +23,7 @@ class PlaceDetection(
     accuracyMeters: Double?,
     timestampMillis: Long,
     speedMetersPerSecond: Double?,
+    onArrive: () -> Unit = {},
   ): Int {
     if (!sharing.canCapture(timestampMillis, nowMillis)) {
       detector.reset()
@@ -30,8 +31,10 @@ class PlaceDetection(
     }
     if (timestampMillis > nowMillis + MAX_FUTURE_FIX_MILLIS) return 0
     val current = places ?: store.list().also { places = it }
+    val crossings = detector.onFix(current, latitude, longitude, accuracyMeters, timestampMillis, speedMetersPerSecond)
+    if (crossings.any { it.arrived }) onArrive()
     val rows =
-      detector.onFix(current, latitude, longitude, accuracyMeters, timestampMillis, speedMetersPerSecond).map { crossing ->
+      crossings.filter { it.place.sharesTransitions }.map { crossing ->
         PlaceTransitionRow(
           clientId = newId(),
           owner = owner,
@@ -50,7 +53,7 @@ class PlaceDetection(
   fun setGroupPlaces(groupId: String, groupPlaces: List<PlaceGeofence>) {
     store.replaceGroup(groupId, groupPlaces)
     places = null
-    queue.deleteByGroupExcept(groupId, groupPlaces.map { it.placeId })
+    queue.deleteByGroupExcept(groupId, groupPlaces.filter { it.sharesTransitions }.map { it.placeId })
   }
 
   @Synchronized

@@ -24,9 +24,13 @@ import expo.modules.openbeacontracking.places.PlaceTransitionDatabase
 import expo.modules.openbeacontracking.places.RoomPlaceTransitionQueue
 import expo.modules.openbeacontracking.places.SecurePlaceStore
 import expo.modules.openbeacontracking.drives.DriveQueueDatabase
+import expo.modules.openbeacontracking.drives.DriveRecorder
+import expo.modules.openbeacontracking.drives.SecureDriveLog
+import expo.modules.openbeacontracking.drives.SecureDriveRecordStore
 import expo.modules.openbeacontracking.drives.RoomDriveQueue
 import expo.modules.openbeacontracking.queue.CiphertextQueueDatabase
 import expo.modules.openbeacontracking.queue.RoomCiphertextQueue
+import java.util.TimeZone
 
 object TrackingRuntime {
   val captureLock = Any()
@@ -42,6 +46,9 @@ object TrackingRuntime {
 
   @Volatile
   private var driveQueue: RoomDriveQueue? = null
+
+  @Volatile
+  private var driveRecorder: DriveRecorder? = null
 
   @Volatile
   var isCaptureRunning: Boolean = false
@@ -78,6 +85,36 @@ object TrackingRuntime {
     }
   }
 
+  fun driveRecorder(context: Context): DriveRecorder {
+    driveRecorder?.let {
+      return it
+    }
+
+    return synchronized(this) {
+      driveRecorder
+        ?: DriveRecorder(
+          log = SecureDriveLog(context.applicationContext),
+          records = SecureDriveRecordStore(context.applicationContext),
+          queue = driveQueue(context),
+          epochKeys = { epochKeyStore(context).list() },
+          historyShare = { historyShare(context) },
+          utcOffsetMinutes = { TimeZone.getDefault().getOffset(it) / 60_000 },
+        ).also { driveRecorder = it }
+    }
+  }
+
+  fun isDriveDetectionOn(context: Context): Boolean =
+    context.getSharedPreferences("openbeacon_tracking_capture", Context.MODE_PRIVATE).getBoolean("driveDetection", true)
+
+  fun setDriveDetection(
+    context: Context,
+    on: Boolean,
+  ) {
+    check(context.getSharedPreferences("openbeacon_tracking_capture", Context.MODE_PRIVATE).edit().putBoolean("driveDetection", on).commit())
+    if (!on) driveRecorder(context).discard()
+    TrackingCaptureService.showNoticeNow(context)
+  }
+
   fun placeDetection(context: Context): PlaceDetection {
     placeDetection?.let {
       return it
@@ -102,6 +139,7 @@ object TrackingRuntime {
       bootId = Settings.Global.getInt(context.contentResolver, Settings.Global.BOOT_COUNT, -1).takeIf { it >= 0 }?.toString(),
       sharingState = { sharingState(context) },
       historyShare = { historyShare(context) },
+      driveDetectionOff = { !isDriveDetectionOn(context) },
       loadAllowance = { group ->
         val parts = context.getSharedPreferences("openbeacon_tracking_history_allowance", Context.MODE_PRIVATE)
           .getString(org.json.JSONArray(group).toString(), null)

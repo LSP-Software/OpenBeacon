@@ -55,6 +55,7 @@ class SecurePlaceStore(
             latitude = item.getDouble("latitude"),
             longitude = item.getDouble("longitude"),
             radiusMeters = item.getDouble("radiusMeters"),
+            sharesTransitions = item.optBoolean("sharesTransitions", true),
           )
         }
       val groups = stored.optJSONArray("groups")
@@ -77,7 +78,8 @@ class SecurePlaceStore(
           .put("placeId", place.placeId)
           .put("latitude", place.latitude)
           .put("longitude", place.longitude)
-          .put("radiusMeters", place.radiusMeters),
+          .put("radiusMeters", place.radiusMeters)
+          .put("sharesTransitions", place.sharesTransitions),
       )
     }
     val stored = JSONObject().put("groups", JSONArray(groups.toList())).put("places", array)

@@ -26,6 +26,7 @@ class TrackingPointCodecTest {
       speedMetersPerSecond = if (point.isNull("speed")) null else point.getDouble("speed"),
       batteryLevel = if (battery.isNull("level")) null else battery.getInt("level"),
       batteryCharging = battery.getBoolean("charging"),
+      driveDetectionOff = point.optBoolean("driveDetectionOff", false),
     )
   }
 

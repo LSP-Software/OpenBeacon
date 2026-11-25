@@ -49,4 +49,8 @@ class RoomDriveQueue(
   override fun deleteByGroups(groupIds: List<String>) {
     if (groupIds.isNotEmpty()) dao.deleteByGroups(groupIds)
   }
+
+  override fun deleteByDrives(owner: String, driveIds: List<String>) {
+    driveIds.chunked(500).forEach { dao.deleteByDrives(owner, it) }
+  }
 }

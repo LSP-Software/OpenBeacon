@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { LockIcon, ShieldCheckIcon } from "lucide-react-native";
+import { CarIcon, LockIcon, ShieldCheckIcon } from "lucide-react-native";
 import { useEffect, useEffectEvent, useState } from "react";
 import { View } from "react-native";
 import { BeaconIcon } from "../../components/BeaconIcon.tsx";
@@ -98,11 +98,8 @@ const WelcomeScreen = () => {
     >
       <View className="rounded-3xl bg-card px-4">
         {[`Name this ${noun}`, "Allow location and notifications", "Create recovery phrase"].map(
-          (item, index, items) => (
-            <View
-              key={item}
-              className={`flex-row items-center gap-4 py-3 ${index < items.length - 1 ? "border-b border-border/50" : ""}`}
-            >
+          (item, index) => (
+            <View key={item} className="flex-row items-center gap-4 border-b border-border/50 py-3">
               <View className="size-8 items-center justify-center rounded-full bg-primary-soft">
                 <Text className="text-primary-text text-sm font-bold">{index + 1}</Text>
               </View>
@@ -110,6 +107,14 @@ const WelcomeScreen = () => {
             </View>
           ),
         )}
+        <View className="flex-row items-center gap-4 py-3">
+          <View className="size-8 items-center justify-center rounded-full bg-primary-soft">
+            <Icon as={CarIcon} className="text-primary-text size-4" />
+          </View>
+          <Text className="text-foreground flex-1 text-base">
+            Your drives are recorded and shared with your groups.
+          </Text>
+        </View>
       </View>
       <View className="flex-row items-center justify-center gap-2">
         <Icon as={LockIcon} className="text-tertiary size-4" />

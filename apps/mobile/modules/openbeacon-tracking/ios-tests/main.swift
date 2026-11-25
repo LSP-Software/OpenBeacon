@@ -67,7 +67,8 @@ let encodePoint = { (point: [String: Any]) -> Data? in
     accuracyMeters: (point["accuracy"] as? NSNumber)?.doubleValue,
     speedMetersPerSecond: (point["speed"] as? NSNumber)?.doubleValue,
     batteryLevel: (battery["level"] as? NSNumber)?.intValue,
-    batteryCharging: battery["charging"] as! Bool
+    batteryCharging: battery["charging"] as! Bool,
+    driveDetectionOff: point["driveDetectionOff"] as? Bool ?? false
   )
 }
 let encodeVectors = pointVectors["encode"] as! [[String: Any]]
@@ -334,6 +335,8 @@ check(!historyShare.isLiveOnly("family"), "a group's own history choice beats th
 check(historyShare.isLiveOnly("club"), "a group set to last location only queues no history")
 check(historyShare.isLiveOnly("new-group"), "a group with no choice of its own follows the account setting")
 check(!CaptureHistoryShare().isLiveOnly("new-group"), "the default shares history")
+
+try runDriveDetectorChecks(casesPath: CommandLine.arguments[4]) { check($0, $1) }
 
 if failures > 0 {
   print("\(failures) iOS tracking core checks failed")
