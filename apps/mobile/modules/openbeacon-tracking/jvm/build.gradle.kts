@@ -35,6 +35,7 @@ sourceSets {
       exclude("**/BatteryReader.kt")
       exclude("**/Notices.kt")
       exclude("**/PlaceSearch.kt")
+      exclude("**/AppUpdate.kt")
       exclude("**/SecureEpochKeyStore.kt")
       exclude("**/Base64Codec.kt")
       exclude("**/CiphertextQueueEntity.kt")

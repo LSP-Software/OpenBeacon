@@ -37,6 +37,7 @@ mock.module("@tanstack/react-query", () => ({
   useMutation: () => ({ mutate: () => {} }),
   useQuery: () => ({ data: undefined }),
 }));
+mock.module("../components/AppUpdateSheet.tsx", () => ({ AppUpdateSheet: () => null }));
 mock.module("../components/HistoryShareNotice.tsx", () => ({ HistoryShareNotice: () => null }));
 mock.module("../components/LoadingIndicator.tsx", () => ({ LoadingIndicator: () => null }));
 mock.module("../hooks/useAppForeground.ts", () => ({ useAppForeground: () => {} }));
