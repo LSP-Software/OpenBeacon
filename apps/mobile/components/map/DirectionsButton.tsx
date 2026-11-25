@@ -53,14 +53,16 @@ export const DirectionsButton = ({
       "Get directions with",
       "OpenBeacon will remember this. You can change it in Account under Directions.",
       [
-        ...installed.map((option) => ({
-          text: option.name,
-          onPress: () => {
-            storage.set(directionsAppKey, option.app);
-            void open(option.app);
-          },
-        })),
         { text: "Cancel", style: "cancel" as const },
+        ...installed
+          .map((option) => ({
+            text: option.name,
+            onPress: () => {
+              storage.set(directionsAppKey, option.app);
+              void open(option.app);
+            },
+          }))
+          .reverse(),
       ],
     );
   };
@@ -80,8 +82,8 @@ export const DirectionsButton = ({
           `${name}’s location is out of date`,
           `Directions will go to where ${name} was ${outOfDateAge}.`,
           [
-            { text: "Get directions", onPress: () => void chooseAndOpen() },
             { text: "Cancel", style: "cancel" },
+            { text: "Get directions", onPress: () => void chooseAndOpen() },
           ],
         );
       }}

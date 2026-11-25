@@ -84,9 +84,9 @@ test("asks which maps app to use and remembers the answer", async () => {
   await press();
   expect(getSnapshot()[0]?.title).toBe("Get directions with");
   expect(getSnapshot()[0]?.buttons.map((button) => button.text)).toEqual([
-    "Google Maps",
-    "Another maps app",
     "Cancel",
+    "Another maps app",
+    "Google Maps",
   ]);
   await tapAlertButton("Google Maps");
   expect(opened).toEqual(["google.navigation:q=51.500000,-0.120000"]);
