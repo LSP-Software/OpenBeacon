@@ -1,0 +1,17 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="fonts.css"><link rel="stylesheet" href="common.css"><script src="icons.js"></script><script src="parts.js"></script><script src="crash.js"></script><script src="drive.js"></script></head><body><script>
+const hist=(today,yest)=>screen('Family',tabs('History')+dayH('Today')+`<div class="grp">${today}</div>`+dayH('Yesterday')+`<div class="grp">${yest}</div>`);
+const place=hrow('map-pin','#857377','Sam arrived at Home','18:14');
+const crashOk=hrow('circle-check','#2E7D32',"Sam says they're OK",'09:21');
+const crash=hrow('siren',RED,"Sam's phone sent a Crash alert: possible crash at 09:12 near Barnet Lane",'09:13');
+document.body.innerHTML=[
+frame("HA&ensp;One sentence, like the Crash alert entries","Each finished drive is one line with the same three numbers as the Drive alert. Tapping it opens the drive in Timeline. A Passenger drive gets a line with no numbers.",
+hist(place+hrow('car',DRV,"Sam finished a 14.2-mile drive in 42 minutes, top speed 58 mph",'18:12')+hrow('car',DRV,"Jo finished a passenger drive",'13:05')+crashOk+crash+hrow('car',DRV,"Sam finished a 9.8-mile drive in 29 minutes, top speed 47 mph",'08:58'),
+hrow('car',DRV,"Sam finished a 3.1-mile drive in 11 minutes, top speed 34 mph",'17:40')+hrow('user','#857377','Lou joined','09:12'))),
+frame("HB&ensp;Short title, numbers underneath","The title says who drove. The second line holds the numbers and when they set off, and a chevron shows it opens the drive in Timeline.",
+hist(place+hrow('car',DRV,"Sam finished a drive",'18:12','14.2 miles in 42 minutes, top speed 58 mph. Left at 17:30.',true)+hrow('car',DRV,"Jo finished a passenger drive",'13:05','Jo marked it “I was a passenger”.',true)+crashOk+crash+hrow('car',DRV,"Sam finished a drive",'08:58','9.8 miles in 29 minutes, top speed 47 mph. Left at 08:29.',true),
+hrow('car',DRV,"Sam finished a drive",'17:40','3.1 miles in 11 minutes, top speed 34 mph. Left at 17:29.',true)+hrow('user','#857377','Lou joined','09:12'))),
+frame("HC&ensp;One line per person per day","Drives roll up into one line per person per day, placed at the last drive. Tapping it opens that day's Drives list in Timeline. Passenger drives are counted apart.",
+hist(place+hrow('car',DRV,"Sam drove twice today, 24 miles in total",'18:12','Longest 14.2 miles in 42 minutes. Top speed 58 mph.',true)+hrow('car',DRV,"Jo was a passenger once today",'13:05','',true)+crashOk+crash,
+hrow('car',DRV,"Sam drove once, 3.1 miles",'17:40','11 minutes. Top speed 34 mph.',true)+hrow('user','#857377','Lou joined','09:12'))),
+].join("");
+</script></body></html>

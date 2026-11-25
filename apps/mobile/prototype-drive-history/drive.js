@@ -1,0 +1,8 @@
+const DRV='#7A1240';
+const HEAD=`<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="fonts.css"><link rel="stylesheet" href="common.css"></head><body>`;
+const hrow=(icon,c,t,time,sub='',chev=false)=>`<div class="item" style="min-height:56px"><div class="ic" style="background:${c};color:#fff">${ic(icon,19,'#fff')}</div><div class="t" style="font-size:15px">${t}${sub?`<small>${sub}</small>`:''}</div><span class="muted" style="font-size:13px">${time}</span>${chev?ic('chevron-right',18,'var(--onv)'):''}</div>`;
+const tabs=(on)=>`<div style="padding:4px 16px 10px"><div class="seg">${['Members','Places','History','Settings'].map(t=>`<div class="${t===on?'on':''}">${t}</div>`).join('')}</div></div>`;
+const dayH=(t)=>`<div class="day" style="font-size:14px;color:var(--p);letter-spacing:0">${t}</div>`;
+const sw=(on,dis=false)=>`<div style="width:52px;height:32px;border-radius:16px;background:${on?'var(--p)':'var(--sch)'};border:2px solid ${on?'var(--p)':'var(--ol)'};position:relative;flex:none;${dis?'opacity:.4':''}"><div style="position:absolute;top:${on?3:6}px;${on?'right:3px':'left:6px'};width:${on?22:16}px;height:${on?22:16}px;border-radius:11px;background:${on?'#fff':'var(--ol)'}"></div></div>`;
+const foot=(t)=>`<div class="muted" style="font-size:14px;margin:8px 24px 0;line-height:1.4">${t}</div>`;
+const memberSw=(i,c,name,state,on,dis=false)=>`<div class="row" style="border-top:1px solid var(--sch);padding:12px 0">${av(i,40,c)}<div class="sp" style="font-size:17px">${name}${state?`<div class="muted" style="font-size:14px">${state}</div>`:''}</div>${sw(on,dis)}</div>`;
