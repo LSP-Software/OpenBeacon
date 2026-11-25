@@ -1,5 +1,5 @@
 import { tryCatch } from "@openbeacon/shared";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { Image, View } from "react-native";
 import { useAppForeground } from "../hooks/useAppForeground.ts";
 import { type AppUpdate, findAppUpdate, skipAppUpdate } from "../lib/appUpdate.ts";
@@ -19,7 +19,7 @@ export const AppUpdateSheet = () => {
   const compatibilityGateShown = useApiCompatibilityGateShown();
   const checking = useRef(false);
 
-  const check = async () => {
+  const check = useEffectEvent(async () => {
     if (offeredThisLaunch || checking.current) return;
     checking.current = true;
     const found = await tryCatch(findAppUpdate());
@@ -27,7 +27,7 @@ export const AppUpdateSheet = () => {
     if (found.error || !found.data || offeredThisLaunch) return;
     offeredThisLaunch = true;
     setUpdate(found.data);
-  };
+  });
 
   useEffect(() => {
     void check();
