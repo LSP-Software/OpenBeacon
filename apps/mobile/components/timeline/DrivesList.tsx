@@ -110,9 +110,13 @@ export const DrivesList = <Drive extends { driveId: string; record: DriveRecord 
                     onPress={() => onOpen(item.drive)}
                     className="flex-row items-center gap-3 border-b border-border px-4 py-3"
                   >
-                    <View className="w-14">
-                      <Text className="text-foreground">{formatClock(record.start.time)}</Text>
-                      <Text className="text-foreground">{formatClock(record.end.time)}</Text>
+                    <View className="shrink-0">
+                      <Text className="text-foreground" numberOfLines={1}>
+                        {formatClock(record.start.time)}
+                      </Text>
+                      <Text className="text-foreground" numberOfLines={1}>
+                        {formatClock(record.end.time)}
+                      </Text>
                     </View>
                     <View className="flex-1 gap-0.5">
                       <Text className="text-lg text-foreground" numberOfLines={2}>

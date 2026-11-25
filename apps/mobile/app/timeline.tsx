@@ -575,10 +575,10 @@ const TimelineView = ({
   }, [openDrive, openRecord, people]);
 
   const fittedDrive = useRef("");
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the camera fits a drive once when it opens or its path arrives, not on every layout change
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the camera fits a drive when it opens, its path arrives or the space around it changes, not on every frame
   useEffect(() => {
     if (!openDriveId || !styleLoaded || sheetHeight === 0 || drivePath.length === 0) return;
-    const key = `${openDriveId}:${drivePath.length}`;
+    const key = `${openDriveId}:${drivePath.length}:${topHeight}:${sheetHeight}`;
     if (fittedDrive.current === key) return;
     fittedDrive.current = key;
     setFollowing(false);
@@ -589,7 +589,7 @@ const TimelineView = ({
       duration: 600,
       padding: cameraPadding,
     });
-  }, [drivePath, openDriveId, sheetHeight, styleLoaded]);
+  }, [drivePath, openDriveId, sheetHeight, styleLoaded, topHeight]);
 
   const seekedDrive = useRef<string | null>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: the scrubber jumps to a drive's start once, when its day has loaded
@@ -764,104 +764,110 @@ const TimelineView = ({
             ))}
           </View>
         ) : null}
-        <SegmentedControl
-          accessibilityLabel="Timeline view"
-          options={[
-            { label: "Day", value: "day" as const },
-            { label: "Drives", value: "drives" as const },
-          ]}
-          selected={view}
-          onChange={(next) => {
-            setPlaying(false);
-            setOpenDriveId(null);
-            setView(next);
-          }}
-        />
-        {days && view === "day" ? (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerClassName="gap-1.5"
-            ref={dayStripRef}
-            onContentSizeChange={() => dayStripRef.current?.scrollToEnd({ animated: false })}
-          >
-            {days.map((item) => {
-              const isToday = item === days.at(-1);
-              const selected = item.key === day?.key;
-              const date = new Date(item.start);
-              return (
-                <Pressable
-                  key={item.key}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${formatDate(item.start)}${isToday ? ", today" : ""}${item.pointCount > 0 ? "" : ", no new locations"}`}
-                  accessibilityState={{ disabled: !item.selectable, selected }}
-                  disabled={!item.selectable}
-                  onPress={() => {
-                    setPlaying(false);
-                    setDeviceChoice({});
-                    setPickedDayKey(item.key);
-                  }}
-                  className={cn(
-                    "w-[52px] items-center rounded-xl border py-1.5",
-                    selected ? "border-foreground bg-foreground" : "border-border bg-card",
-                    !item.selectable && "opacity-40",
-                  )}
-                >
-                  <Text className={cn("text-xs", selected ? "text-background" : "text-secondary")}>
-                    {isToday
-                      ? "Today"
-                      : date.toLocaleDateString(undefined, {
-                          weekday: "short",
-                        })}
-                  </Text>
-                  <Text
-                    className={cn(
-                      "text-lg font-semibold",
-                      selected ? "text-background" : "text-foreground",
-                    )}
-                  >
-                    {date.getDate()}
-                  </Text>
-                  <View
-                    className={cn(
-                      "size-1.5 rounded-full",
-                      item.pointCount > 0
-                        ? selected
-                          ? "bg-background"
-                          : "bg-primary"
-                        : "bg-transparent",
-                    )}
-                  />
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-        ) : null}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerClassName="gap-1.5"
-        >
-          <PersonChip
-            label="Everyone"
-            selected={personId === null}
-            onPress={() => setPersonId(null)}
-          />
-          {members.map((member) => (
-            <PersonChip
-              key={member.userId}
-              color={member.color}
-              image={member.image}
-              initials={member.initials}
-              label={member.name}
-              notShown={budget !== null && !budget.shown.includes(member.userId)}
-              selected={member.userId === personId}
-              onPress={() => {
-                setPersonId(member.userId);
+        {openDriveId ? null : (
+          <>
+            <SegmentedControl
+              accessibilityLabel="Timeline view"
+              options={[
+                { label: "Day", value: "day" as const },
+                { label: "Drives", value: "drives" as const },
+              ]}
+              selected={view}
+              onChange={(next) => {
+                setPlaying(false);
+                setOpenDriveId(null);
+                setView(next);
               }}
             />
-          ))}
-        </ScrollView>
+            {days && view === "day" ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerClassName="gap-1.5"
+                ref={dayStripRef}
+                onContentSizeChange={() => dayStripRef.current?.scrollToEnd({ animated: false })}
+              >
+                {days.map((item) => {
+                  const isToday = item === days.at(-1);
+                  const selected = item.key === day?.key;
+                  const date = new Date(item.start);
+                  return (
+                    <Pressable
+                      key={item.key}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${formatDate(item.start)}${isToday ? ", today" : ""}${item.pointCount > 0 ? "" : ", no new locations"}`}
+                      accessibilityState={{ disabled: !item.selectable, selected }}
+                      disabled={!item.selectable}
+                      onPress={() => {
+                        setPlaying(false);
+                        setDeviceChoice({});
+                        setPickedDayKey(item.key);
+                      }}
+                      className={cn(
+                        "w-[52px] items-center rounded-xl border py-1.5",
+                        selected ? "border-foreground bg-foreground" : "border-border bg-card",
+                        !item.selectable && "opacity-40",
+                      )}
+                    >
+                      <Text
+                        className={cn("text-xs", selected ? "text-background" : "text-secondary")}
+                      >
+                        {isToday
+                          ? "Today"
+                          : date.toLocaleDateString(undefined, {
+                              weekday: "short",
+                            })}
+                      </Text>
+                      <Text
+                        className={cn(
+                          "text-lg font-semibold",
+                          selected ? "text-background" : "text-foreground",
+                        )}
+                      >
+                        {date.getDate()}
+                      </Text>
+                      <View
+                        className={cn(
+                          "size-1.5 rounded-full",
+                          item.pointCount > 0
+                            ? selected
+                              ? "bg-background"
+                              : "bg-primary"
+                            : "bg-transparent",
+                        )}
+                      />
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            ) : null}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerClassName="gap-1.5"
+            >
+              <PersonChip
+                label="Everyone"
+                selected={personId === null}
+                onPress={() => setPersonId(null)}
+              />
+              {members.map((member) => (
+                <PersonChip
+                  key={member.userId}
+                  color={member.color}
+                  image={member.image}
+                  initials={member.initials}
+                  label={member.name}
+                  notShown={budget !== null && !budget.shown.includes(member.userId)}
+                  selected={member.userId === personId}
+                  onPress={() => {
+                    setPersonId(member.userId);
+                  }}
+                />
+              ))}
+            </ScrollView>
+          </>
+        )}
       </View>
     ),
     [
@@ -875,6 +881,7 @@ const TimelineView = ({
       members,
       onClose,
       onSwitchGroup,
+      openDriveId,
       personId,
       setPlaying,
       view,
@@ -1416,7 +1423,7 @@ const TimelineView = ({
             const when =
               localDayOf(Date.now()).key === day.key ? "today" : `on ${formatDate(day.start)}`;
             return {
-              label: `${selectedName ? `${selectedName === "You" ? "Your" : `${selectedName}’s`} ` : ""}${name} recorded ${other.count === 1 ? "1 drive" : `${other.count} drives`} ${when} too. Switch to ${name} to see ${other.count === 1 ? "it" : "them"}.`,
+              label: `${name} recorded ${other.count === 1 ? "1 drive" : `${other.count} drives`} ${when} too. Switch to ${name} to see ${other.count === 1 ? "it" : "them"}.`,
               onPress: () => {
                 if (personId) {
                   setDeviceChoice((current) => ({

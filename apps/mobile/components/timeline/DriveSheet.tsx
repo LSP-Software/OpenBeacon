@@ -111,7 +111,7 @@ export const DriveSheet = ({
   return (
     <View
       className="absolute inset-x-0 bottom-0 rounded-t-3xl bg-card shadow-md shadow-black/15"
-      style={{ maxHeight: height * 0.62 }}
+      style={{ maxHeight: height * 0.5 }}
       onLayout={(event) => onHeight(event.nativeEvent.layout.height)}
     >
       <Pressable
