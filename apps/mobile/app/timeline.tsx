@@ -4,6 +4,7 @@ import {
   Map as MapLibreMap,
   type MapRef,
 } from "@maplibre/maplibre-react-native";
+import type { DriveRecord } from "@openbeacon/encryption";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
@@ -29,6 +30,10 @@ import {
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MapStyleLayers } from "../components/map/MapStyleLayers.tsx";
+import { DriveSheet } from "../components/timeline/DriveSheet.tsx";
+import { DriveInfoBox, DrivesList } from "../components/timeline/DrivesList.tsx";
+import { TimelineDriveLayers } from "../components/timeline/TimelineDriveLayers.tsx";
+import { TimelineDriveRow } from "../components/timeline/TimelineDriveRow.tsx";
 import { useNativeMapStyle } from "../components/map/useNativeMapStyle.ts";
 import { TimelineClockText } from "../components/timeline/TimelineClockText.tsx";
 import { TimelineDecryptCard } from "../components/timeline/TimelineDecryptCard.tsx";
@@ -49,8 +54,10 @@ import { DecryptedAvatarImage } from "../components/image/DecryptedAvatarImage.t
 import { Avatar, AvatarFallback } from "../components/ui/Avatar.tsx";
 import { Button } from "../components/ui/Button.tsx";
 import { Icon } from "../components/ui/Icon.tsx";
+import { SegmentedControl } from "../components/ui/SegmentedControl.tsx";
 import { Text } from "../components/ui/Text.tsx";
 import { useCachedGroup } from "../hooks/useCachedGroup.ts";
+import { useGroupDrives } from "../hooks/useGroupDrives.ts";
 import { useReducedMotion } from "../hooks/useReducedMotion.ts";
 import { useTimelineClock } from "../hooks/useTimelineClock.ts";
 import { useUnits } from "../hooks/useUnits.ts";
@@ -61,6 +68,11 @@ import { trpc } from "../lib/api.ts";
 import { authClient } from "../lib/auth-client.ts";
 import { initialsFromName } from "../lib/buildLiveMapMarkers.ts";
 import { mapFitBounds } from "../lib/fitLiveMapMarkers.ts";
+import { driveFigures, driveTitle } from "../lib/driveFormat.ts";
+import { driveAt, driveListDays, drivePlaceId } from "../lib/driveList.ts";
+import type { LoadedDrive } from "../lib/driveLoad.ts";
+import { drivingScore } from "../lib/drivingScore.ts";
+import { localDayOf } from "../lib/timelineDays.ts";
 import { historyShareNote, timelineEmptyLines } from "../lib/historyShare.ts";
 import { cn } from "../lib/cn.ts";
 import { GROUP_COLOR_PALETTE, getGroupColor } from "../lib/groupColor.ts";
@@ -86,15 +98,19 @@ import {
   timelineRoute,
 } from "../lib/timelineMap.ts";
 import { packTimelineTrack, timelineMinuteLabels } from "../lib/timelineTrack.ts";
-import type { TimelineSender } from "../lib/timelineTypes.ts";
+import type { Coordinate, TimelineSender } from "../lib/timelineTypes.ts";
 import { thisDeviceNoun } from "../lib/thisDeviceNoun.ts";
 
 const SPEEDS = [60, 300, 900] as const;
 const STEP_MS = 15 * 60_000;
 const NO_SENDERS: readonly TimelineSender[] = [];
+const NO_DRIVES: readonly LoadedDrive[] = [];
 
 const TimelineScreen = () => {
-  const { groupId, userId } = useLocalSearchParams<{ groupId: string; userId?: string }>();
+  const { groupId, userId } = useLocalSearchParams<{
+    groupId: string;
+    userId?: string;
+  }>();
   const router = useRouter();
   const { data: session } = authClient.useSession();
   const selfUserId = session?.user.id;
@@ -166,7 +182,12 @@ const TimelineView = ({
 }: {
   group: {
     id: string;
-    members: ReadonlyArray<{ id: string; image: string | null; name: string; userId: string }>;
+    members: ReadonlyArray<{
+      id: string;
+      image: string | null;
+      name: string;
+      userId: string;
+    }>;
     name: string;
   };
   initialPersonId: string | null;
@@ -194,6 +215,9 @@ const TimelineView = ({
   const fittedView = useRef({ moved: false, view: "" });
   const [chosenPeople, setChosenPeople] = useState<string[] | null>(null);
   const [chooserOpen, setChooserOpen] = useState(false);
+  const [view, setView] = useState<"day" | "drives">("day");
+  const [openDriveId, setOpenDriveId] = useState<string | null>(null);
+  const [sheetHeight, setSheetHeight] = useState(0);
   const reduceMotion = useReducedMotion();
   const units = useUnits();
   const dayStripRef = useRef<ScrollView>(null);
@@ -212,6 +236,10 @@ const TimelineView = ({
     trpc.groupMembership.listMemberDevices.queryOptions({ groupId: group.id }),
   );
   const { days, query: daysQuery, windowStart } = useTimelineDays(group.id, personId ?? undefined);
+  const groupDrives = useGroupDrives(group.id, windowStart);
+  const drives = groupDrives.query.data?.drives ?? NO_DRIVES;
+  const openDrive = drives.find((drive) => drive.driveId === openDriveId);
+  const openRecord = openDrive?.record ?? null;
   const day =
     days?.find((item) => item.key === pickedDayKey && item.selectable) ??
     days?.findLast((item) => item.selectable) ??
@@ -330,7 +358,10 @@ const TimelineView = ({
   const routes = useMemo(() => {
     const placeList = places.data ?? [];
     return shownPeople.map((person) => {
-      const stats = timelineDayStats({ places: placeList, segments: person.device.segments });
+      const stats = timelineDayStats({
+        places: placeList,
+        segments: person.device.segments,
+      });
       return {
         ...timelineRoute(person.device.segments),
         color: person.color,
@@ -391,13 +422,27 @@ const TimelineView = ({
       : !daysQuery.isError,
     reduceMotion,
   });
-  const panelHeight = card.height === 0 ? 0 : card.height + insets.bottom + 8;
+  const panelHeight = openRecord
+    ? sheetHeight
+    : card.height === 0
+      ? 0
+      : card.height + insets.bottom + 8;
   const cameraPadding = {
     top: topHeight + 24,
     bottom: panelHeight + 24,
     left: 40,
     right: 40,
   };
+
+  useEffect(() => {
+    if (!openRecord && view === "day") return;
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (openRecord) setOpenDriveId(null);
+      else setView("day");
+      return true;
+    });
+    return () => subscription.remove();
+  }, [openRecord, view]);
 
   useEffect(() => {
     if (!groupMenuOpen) return;
@@ -444,7 +489,7 @@ const TimelineView = ({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: the camera moves only when the day, people or layout change, not on every frame
   useEffect(() => {
-    if (!styleLoaded || topHeight === 0 || panelHeight === 0) return;
+    if (!styleLoaded || topHeight === 0 || panelHeight === 0 || openDriveId) return;
     const sameView = fittedView.current.view === fit.view;
     if (sameView && (fittedView.current.moved || (following && selectedPerson))) return;
     fittedView.current = { moved: false, view: fit.view };
@@ -492,6 +537,110 @@ const TimelineView = ({
     if (toAfter) return `from ${formatClock(stop.start)}`;
     return `${formatClock(stop.start)}–${formatClock(stop.end)}`;
   };
+  const drivePlaceName = (position: { latitude: number; longitude: number }) =>
+    placeName(drivePlaceId(places.data ?? [], position));
+  const driveLabel = (record: DriveRecord) =>
+    driveTitle(drivePlaceName(record.start), drivePlaceName(record.end));
+  const driveUnder =
+    selectedPerson && !openRecord ? driveAt(drives, selectedPerson.device.deviceId, time) : null;
+  const driveDetectionOff =
+    dayQuery.data?.devices
+      .find((device) => device.deviceId === selectedPerson?.device.deviceId)
+      ?.points.at(-1)?.driveDetectionOff === true;
+  const driveDetectionOffText = (person: {
+    device: { deviceId: string };
+    isSelf: boolean;
+    name: string;
+  }) =>
+    `Drive detection is off on ${deviceName(person.device.deviceId)}, so ${person.isSelf ? "your" : `${person.name}’s`} drives aren’t recorded there.`;
+  const deviceName = (deviceId: string) =>
+    memberDevices.data?.find((device) => device.deviceId === deviceId)?.name ?? "Another device";
+  const drivePath = useMemo((): Coordinate[] => {
+    if (!openRecord || !openDrive) return [];
+    const segments =
+      people
+        .flatMap((person) => person.devices)
+        .find((device) => device.deviceId === openDrive.senderDeviceId)?.segments ?? [];
+    const { end, start } = openRecord;
+    const path: Coordinate[] = [[start.longitude, start.latitude]];
+    for (const segment of segments) {
+      if (segment.kind !== "moving" || segment.end < start.time || segment.start > end.time) {
+        continue;
+      }
+      if (segment.start >= start.time) path.push([segment.from.longitude, segment.from.latitude]);
+      if (segment.end <= end.time) path.push([segment.to.longitude, segment.to.latitude]);
+    }
+    path.push([end.longitude, end.latitude]);
+    return path;
+  }, [openDrive, openRecord, people]);
+
+  const fittedDrive = useRef("");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the camera fits a drive when it opens, its path arrives or the space around it changes, not on every frame
+  useEffect(() => {
+    if (!openDriveId || !styleLoaded || sheetHeight === 0 || drivePath.length === 0) return;
+    const key = `${openDriveId}:${drivePath.length}:${topHeight}:${sheetHeight}`;
+    if (fittedDrive.current === key) return;
+    fittedDrive.current = key;
+    setFollowing(false);
+    const { ne, sw } = mapFitBounds(
+      drivePath.map(([longitude, latitude]) => ({ latitude, longitude })),
+    );
+    cameraRef.current?.fitBounds([sw[0], sw[1], ne[0], ne[1]], {
+      duration: 600,
+      padding: cameraPadding,
+    });
+  }, [drivePath, openDriveId, sheetHeight, styleLoaded, topHeight]);
+
+  const seekedDrive = useRef<string | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the scrubber jumps to a drive's start once, when its day has loaded
+  useEffect(() => {
+    if (!openRecord || !openDriveId || !timeline || seekedDrive.current === openDriveId) return;
+    if (openRecord.start.time < timeline.day.start || openRecord.start.time >= timeline.day.end) {
+      return;
+    }
+    seekedDrive.current = openDriveId;
+    clock.seek(Math.min(Math.max(openRecord.start.time, timeline.from), timeline.to));
+  }, [openDriveId, openRecord, timeline]);
+
+  const openDriveFrom = (drive: LoadedDrive & { record: DriveRecord }) => {
+    clock.setPlaying(false);
+    setView("day");
+    setPickedDayKey(localDayOf(drive.record.start.time).key);
+    setPersonId(drive.senderUserId);
+    setDeviceChoice((current) => ({
+      ...current,
+      [drive.senderUserId]: drive.senderDeviceId,
+    }));
+    seekedDrive.current = null;
+    fittedDrive.current = "";
+    setOpenDriveId(drive.driveId);
+  };
+  const closeDrive = () => {
+    setOpenDriveId(null);
+    setSheetHeight(0);
+  };
+
+  const personDrives = drives.filter((drive) => drive.senderUserId === personId);
+  const listDeviceIds = [
+    ...new Set([
+      ...(selectedPerson?.devices.map((device) => device.deviceId) ?? []),
+      ...personDrives.map((drive) => drive.senderDeviceId),
+    ]),
+  ];
+  const listDeviceId =
+    (personId ? deviceChoice[personId] : undefined) ??
+    selectedPerson?.device.deviceId ??
+    personDrives.find((drive) => drive.record)?.senderDeviceId ??
+    null;
+  const drivesListDays =
+    personId && listDeviceId
+      ? driveListDays({
+          deviceId: listDeviceId,
+          drives: personDrives,
+          places: places.data ?? [],
+        })
+      : [];
+
   const undecryptable = shownPeople.reduce(
     (total, person) => total + person.device.undecryptable,
     0,
@@ -512,7 +661,7 @@ const TimelineView = ({
       case "moving": {
         const speedLabel = timelineSpeedLabel(selectedPin, units.speed);
         return {
-          title: "Moving",
+          title: driveUnder && !driveUnder.record.passenger ? "Driving" : "Moving",
           detail: speedLabel ? `${speedLabel} · ${date}` : date,
           speed: speedLabel,
         };
@@ -615,87 +764,110 @@ const TimelineView = ({
             ))}
           </View>
         ) : null}
-        {days ? (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerClassName="gap-1.5"
-            ref={dayStripRef}
-            onContentSizeChange={() => dayStripRef.current?.scrollToEnd({ animated: false })}
-          >
-            {days.map((item) => {
-              const isToday = item === days.at(-1);
-              const selected = item.key === day?.key;
-              const date = new Date(item.start);
-              return (
-                <Pressable
-                  key={item.key}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${formatDate(item.start)}${isToday ? ", today" : ""}${item.pointCount > 0 ? "" : ", no new locations"}`}
-                  accessibilityState={{ disabled: !item.selectable, selected }}
-                  disabled={!item.selectable}
-                  onPress={() => {
-                    setPlaying(false);
-                    setDeviceChoice({});
-                    setPickedDayKey(item.key);
-                  }}
-                  className={cn(
-                    "w-[52px] items-center rounded-xl border py-1.5",
-                    selected ? "border-foreground bg-foreground" : "border-border bg-card",
-                    !item.selectable && "opacity-40",
-                  )}
-                >
-                  <Text className={cn("text-xs", selected ? "text-background" : "text-secondary")}>
-                    {isToday ? "Today" : date.toLocaleDateString(undefined, { weekday: "short" })}
-                  </Text>
-                  <Text
-                    className={cn(
-                      "text-lg font-semibold",
-                      selected ? "text-background" : "text-foreground",
-                    )}
-                  >
-                    {date.getDate()}
-                  </Text>
-                  <View
-                    className={cn(
-                      "size-1.5 rounded-full",
-                      item.pointCount > 0
-                        ? selected
-                          ? "bg-background"
-                          : "bg-primary"
-                        : "bg-transparent",
-                    )}
-                  />
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-        ) : null}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerClassName="gap-1.5"
-        >
-          <PersonChip
-            label="Everyone"
-            selected={personId === null}
-            onPress={() => setPersonId(null)}
-          />
-          {members.map((member) => (
-            <PersonChip
-              key={member.userId}
-              color={member.color}
-              image={member.image}
-              initials={member.initials}
-              label={member.name}
-              notShown={budget !== null && !budget.shown.includes(member.userId)}
-              selected={member.userId === personId}
-              onPress={() => {
-                setPersonId(member.userId);
+        {openDriveId ? null : (
+          <>
+            <SegmentedControl
+              accessibilityLabel="Timeline view"
+              options={[
+                { label: "Day", value: "day" as const },
+                { label: "Drives", value: "drives" as const },
+              ]}
+              selected={view}
+              onChange={(next) => {
+                setPlaying(false);
+                setOpenDriveId(null);
+                setView(next);
               }}
             />
-          ))}
-        </ScrollView>
+            {days && view === "day" ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerClassName="gap-1.5"
+                ref={dayStripRef}
+                onContentSizeChange={() => dayStripRef.current?.scrollToEnd({ animated: false })}
+              >
+                {days.map((item) => {
+                  const isToday = item === days.at(-1);
+                  const selected = item.key === day?.key;
+                  const date = new Date(item.start);
+                  return (
+                    <Pressable
+                      key={item.key}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${formatDate(item.start)}${isToday ? ", today" : ""}${item.pointCount > 0 ? "" : ", no new locations"}`}
+                      accessibilityState={{ disabled: !item.selectable, selected }}
+                      disabled={!item.selectable}
+                      onPress={() => {
+                        setPlaying(false);
+                        setDeviceChoice({});
+                        setPickedDayKey(item.key);
+                      }}
+                      className={cn(
+                        "w-[52px] items-center rounded-xl border py-1.5",
+                        selected ? "border-foreground bg-foreground" : "border-border bg-card",
+                        !item.selectable && "opacity-40",
+                      )}
+                    >
+                      <Text
+                        className={cn("text-xs", selected ? "text-background" : "text-secondary")}
+                      >
+                        {isToday
+                          ? "Today"
+                          : date.toLocaleDateString(undefined, {
+                              weekday: "short",
+                            })}
+                      </Text>
+                      <Text
+                        className={cn(
+                          "text-lg font-semibold",
+                          selected ? "text-background" : "text-foreground",
+                        )}
+                      >
+                        {date.getDate()}
+                      </Text>
+                      <View
+                        className={cn(
+                          "size-1.5 rounded-full",
+                          item.pointCount > 0
+                            ? selected
+                              ? "bg-background"
+                              : "bg-primary"
+                            : "bg-transparent",
+                        )}
+                      />
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            ) : null}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerClassName="gap-1.5"
+            >
+              <PersonChip
+                label="Everyone"
+                selected={personId === null}
+                onPress={() => setPersonId(null)}
+              />
+              {members.map((member) => (
+                <PersonChip
+                  key={member.userId}
+                  color={member.color}
+                  image={member.image}
+                  initials={member.initials}
+                  label={member.name}
+                  notShown={budget !== null && !budget.shown.includes(member.userId)}
+                  selected={member.userId === personId}
+                  onPress={() => {
+                    setPersonId(member.userId);
+                  }}
+                />
+              ))}
+            </ScrollView>
+          </>
+        )}
       </View>
     ),
     [
@@ -709,20 +881,33 @@ const TimelineView = ({
       members,
       onClose,
       onSwitchGroup,
+      openDriveId,
       personId,
       setPlaying,
+      view,
     ],
   );
   const lanes = useMemo(
     () =>
       routes.map((route) => ({
         color: route.color,
+        drives: drives.flatMap((drive) =>
+          drive.record && drive.senderDeviceId === route.deviceId
+            ? [
+                {
+                  end: drive.record.end.time,
+                  passenger: drive.record.passenger,
+                  start: drive.record.start.time,
+                },
+              ]
+            : [],
+        ),
         historyStart: route.person.device.historyStart,
         id: route.deviceId,
         initials: route.person.initials,
         runs: route.lanes,
       })),
-    [routes],
+    [drives, routes],
   );
 
   const { playing, speed } = clock;
@@ -743,7 +928,11 @@ const TimelineView = ({
   const previousStop = timelineStopJump({ direction: "previous", stops, time });
   const nextStop = timelineStopJump({ direction: "next", stops, time });
   const jumpToStop = (direction: "next" | "previous") => {
-    const target = timelineStopJump({ direction, stops, time: clock.time.value });
+    const target = timelineStopJump({
+      direction,
+      stops,
+      time: clock.time.value,
+    });
     if (target !== null) clock.seek(target);
   };
 
@@ -794,6 +983,14 @@ const TimelineView = ({
             routes={routes}
             viewport={viewport}
           />
+          {openRecord && openDrive ? (
+            <TimelineDriveLayers
+              dotted={!openRecord.passenger && !openRecord.speedLimitsChecked}
+              driveId={openDrive.driveId}
+              events={openRecord.events}
+              path={drivePath}
+            />
+          ) : null}
           {visitedPlaces.map((place) =>
             place.geometry ? (
               <TimelinePlaceLabel
@@ -884,260 +1081,368 @@ const TimelineView = ({
         top={topHeight + 40}
       />
 
-      <TimelinePlayerCard
-        bottom={insets.bottom + 8}
-        card={card}
-        miniStatus={{
-          date: dayLabel,
-          speed: status && "speed" in status ? status.speed : null,
-          title: status && status.title !== dayLabel ? status.title : null,
-        }}
-        miniScrubber={
-          timeline ? (
-            <TimelineMiniScrubber
-              clock={clock.scrubber}
-              day={timeline.day}
-              from={timeline.from}
-              step={STEP_MS}
-              to={timeline.to}
-              valueLabel={status ? `${clockLabel}, ${status.title}` : clockLabel}
-              onSeek={clock.seek}
+      {openRecord && openDrive ? (
+        <DriveSheet
+          key={openDrive.driveId}
+          date={formatDate(openRecord.start.time)}
+          deviceName={deviceName(openDrive.senderDeviceId)}
+          driverName={memberLook(openDrive.senderUserId).name}
+          formatClock={formatClock}
+          groupNames={groups?.map((item) => item.name) ?? [group.name]}
+          isOwn={openDrive.senderUserId === selfUserId}
+          onClose={closeDrive}
+          onDelete={async () => {
+            await groupDrives.remove(openDrive);
+            closeDrive();
+          }}
+          onDriving={() => groupDrives.rewrite(openDrive, "driving")}
+          onHeight={setSheetHeight}
+          onPassenger={() => groupDrives.rewrite(openDrive, "passenger")}
+          placeNameAt={drivePlaceName}
+          record={openRecord}
+          recordedHere={openDrive.senderDeviceId === groupDrives.query.data?.thisDeviceId}
+          title={driveLabel(openRecord)}
+          units={units}
+        />
+      ) : (
+        <TimelinePlayerCard
+          bottom={insets.bottom + 8}
+          card={card}
+          miniStatus={{
+            date: dayLabel,
+            speed: status && "speed" in status ? status.speed : null,
+            title: status && status.title !== dayLabel ? status.title : null,
+          }}
+          miniScrubber={
+            timeline ? (
+              <TimelineMiniScrubber
+                clock={clock.scrubber}
+                day={timeline.day}
+                from={timeline.from}
+                step={STEP_MS}
+                to={timeline.to}
+                valueLabel={status ? `${clockLabel}, ${status.title}` : clockLabel}
+                onSeek={clock.seek}
+              />
+            ) : (
+              <View className="h-11 items-center justify-center">
+                <ActivityIndicator size="small" className="text-primary" />
+              </View>
+            )
+          }
+        >
+          {daysQuery.isError && !days ? (
+            <ProblemNote
+              message={`Couldn’t load the Timeline for ${group.name}. Check your connection and try again.`}
+              loading={daysQuery.isFetching}
+              onRetry={() => void daysQuery.refetch()}
             />
-          ) : (
-            <View className="h-11 items-center justify-center">
-              <ActivityIndicator size="small" className="text-primary" />
+          ) : !days ? (
+            <Animated.View {...card.fullOnly}>
+              <ActivityIndicator className="py-6 text-primary" />
+            </Animated.View>
+          ) : !day ? (
+            <View className="gap-1 py-4">
+              {timelineEmptyLines({
+                groupName: group.name,
+                notes: shareNotes,
+                personSelected: personId !== null,
+              }).map((line) => (
+                <Text key={line} className="text-center text-tertiary">
+                  {line}
+                </Text>
+              ))}
             </View>
-          )
-        }
-      >
-        {daysQuery.isError && !days ? (
-          <ProblemNote
-            message={`Couldn’t load the Timeline for ${group.name}. Check your connection and try again.`}
-            loading={daysQuery.isFetching}
-            onRetry={() => void daysQuery.refetch()}
-          />
-        ) : !days ? (
-          <Animated.View {...card.fullOnly}>
-            <ActivityIndicator className="py-6 text-primary" />
-          </Animated.View>
-        ) : !day ? (
-          <View className="gap-1 py-4">
-            {timelineEmptyLines({
-              groupName: group.name,
-              notes: shareNotes,
-              personSelected: personId !== null,
-            }).map((line) => (
-              <Text key={line} className="text-center text-tertiary">
-                {line}
-              </Text>
-            ))}
-          </View>
-        ) : dayQuery.isError && !timeline ? (
-          <ProblemNote
-            message="Couldn’t load this day. Check your connection and try again."
-            loading={dayQuery.isFetching}
-            onRetry={() => void dayQuery.refetch()}
-          />
-        ) : !timeline ? (
-          <Animated.View {...card.fullOnly}>
-            <ActivityIndicator className="py-6 text-primary" />
-          </Animated.View>
-        ) : (
-          <View className="gap-3">
-            {daysQuery.isError || dayQuery.isError ? (
-              <Animated.View {...card.fullOnly}>
-                <Text className="text-sm text-secondary">
-                  Couldn’t reach the server, so this may be out of date.
-                </Text>
-              </Animated.View>
-            ) : null}
-            <View
-              className="flex-row flex-wrap items-center gap-3"
-              onLayout={card.measure("topRow")}
-            >
-              <TimelineCardShared motion={card.shared.clock}>
-                <TimelineClockText
-                  key={timeline.day.key}
-                  accessibilityLabel={clockLabel}
-                  day={timeline.day}
-                  endLabel={dayEndLabel}
-                  labels={minuteLabels}
-                  time={clock.time}
-                />
-              </TimelineCardShared>
-              <Animated.View {...card.fullOnly} className="min-w-16 flex-1">
-                <Text
-                  accessibilityLiveRegion="polite"
-                  className="font-semibold text-foreground"
-                  numberOfLines={1}
-                >
-                  {status?.title}
-                </Text>
-                {status?.detail ? (
-                  <Text className="text-sm text-secondary" numberOfLines={2}>
-                    {status.detail}
+          ) : dayQuery.isError && !timeline ? (
+            <ProblemNote
+              message="Couldn’t load this day. Check your connection and try again."
+              loading={dayQuery.isFetching}
+              onRetry={() => void dayQuery.refetch()}
+            />
+          ) : !timeline ? (
+            <Animated.View {...card.fullOnly}>
+              <ActivityIndicator className="py-6 text-primary" />
+            </Animated.View>
+          ) : (
+            <View className="gap-3">
+              {daysQuery.isError || dayQuery.isError ? (
+                <Animated.View {...card.fullOnly}>
+                  <Text className="text-sm text-secondary">
+                    Couldn’t reach the server, so this may be out of date.
                   </Text>
+                </Animated.View>
+              ) : null}
+              <View
+                className="flex-row flex-wrap items-center gap-3"
+                onLayout={card.measure("topRow")}
+              >
+                <TimelineCardShared motion={card.shared.clock}>
+                  <TimelineClockText
+                    key={timeline.day.key}
+                    accessibilityLabel={clockLabel}
+                    day={timeline.day}
+                    endLabel={dayEndLabel}
+                    labels={minuteLabels}
+                    time={clock.time}
+                  />
+                </TimelineCardShared>
+                <Animated.View {...card.fullOnly} className="min-w-16 flex-1">
+                  <Text
+                    accessibilityLiveRegion="polite"
+                    className="font-semibold text-foreground"
+                    numberOfLines={1}
+                  >
+                    {status?.title}
+                  </Text>
+                  {status?.detail ? (
+                    <Text className="text-sm text-secondary" numberOfLines={2}>
+                      {status.detail}
+                    </Text>
+                  ) : null}
+                </Animated.View>
+                <TimelineCardShared motion={card.shared.speed}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Playback speed, ${speed} times. Double tap for ${nextSpeed} times`}
+                    onPress={() => clock.setSpeed(nextSpeed)}
+                    className="min-h-11 min-w-14 items-center justify-center rounded-full bg-container px-3"
+                  >
+                    <Text className="font-semibold text-foreground">{speed}×</Text>
+                  </Pressable>
+                </TimelineCardShared>
+              </View>
+              <Animated.View {...card.fullOnly} className="gap-3">
+                {routes.length > 0 ? (
+                  <TimelineScrubber
+                    clock={clock.scrubber}
+                    day={timeline.day}
+                    from={timeline.from}
+                    historyStart={timeline.historyStart}
+                    lanes={lanes}
+                    step={STEP_MS}
+                    to={timeline.to}
+                    uses24HourClock={uses24HourClock}
+                    valueLabel={status ? `${clockLabel}, ${status.title}` : clockLabel}
+                    onSeek={clock.seek}
+                  />
+                ) : (
+                  <Text className="py-2 text-center text-tertiary">
+                    {personId
+                      ? `No locations from ${selectedName ?? "this person"} on this day.`
+                      : "No locations on this day."}
+                  </Text>
+                )}
+                {routes.length > 0 ? (
+                  <TimelineKey
+                    color={selectedPerson?.color}
+                    showDrives={lanes.some((lane) => lane.drives.length > 0)}
+                    showNotAvailable={
+                      timeline.historyStart > timeline.day.start ||
+                      lanes.some((lane) => lane.historyStart > timeline.day.start)
+                    }
+                  />
+                ) : null}
+                {driveUnder ? (
+                  <TimelineDriveRow
+                    detail={`${formatClock(driveUnder.record.start.time)}–${formatClock(driveUnder.record.end.time)} · ${driveFigures(driveUnder.record, units)}`}
+                    onPress={() => openDriveFrom(driveUnder)}
+                    passenger={driveUnder.record.passenger}
+                    score={drivingScore(driveUnder.record)?.score ?? null}
+                    title={driveLabel(driveUnder.record)}
+                  />
+                ) : null}
+                {selectedPerson && driveDetectionOff ? (
+                  <DriveInfoBox text={driveDetectionOffText(selectedPerson)} />
+                ) : null}
+                {selectedPerson && selectedRoute ? (
+                  <>
+                    <View className="flex-row flex-wrap gap-2">
+                      <StatCard
+                        value={formatDistance(selectedRoute.stats.distanceMeters, units.distance)}
+                        label="travelled"
+                      />
+                      <StatCard
+                        value={String(selectedRoute.stats.stops.length)}
+                        label={selectedRoute.stats.stops.length === 1 ? "stop" : "stops"}
+                      />
+                      <StatCard
+                        value={formatDuration(selectedRoute.stats.movingMs)}
+                        label="moving"
+                      />
+                    </View>
+                    {selectedPerson.devices.length > 1 ? (
+                      <DeviceSwitch
+                        current={selectedPerson.device.deviceId}
+                        deviceIds={selectedPerson.devices.map((device) => device.deviceId)}
+                        names={memberDevices.data ?? []}
+                        onSwitch={(deviceId) =>
+                          setDeviceChoice((current) => ({
+                            ...current,
+                            [selectedPerson.userId]: deviceId,
+                          }))
+                        }
+                      />
+                    ) : null}
+                  </>
                 ) : null}
               </Animated.View>
-              <TimelineCardShared motion={card.shared.speed}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Playback speed, ${speed} times. Double tap for ${nextSpeed} times`}
-                  onPress={() => clock.setSpeed(nextSpeed)}
-                  className="min-h-11 min-w-14 items-center justify-center rounded-full bg-container px-3"
+              {routes.length > 0 ? (
+                <View className="flex-row items-center" onLayout={card.measure("controls")}>
+                  <Animated.View {...card.fullOnly} className="flex-1 flex-row justify-around">
+                    <ControlButton
+                      disabled={previousStop === null}
+                      icon={SkipBackIcon}
+                      label="Previous stop"
+                      onPress={() => jumpToStop("previous")}
+                    />
+                    <ControlButton
+                      icon={RewindIcon}
+                      label="Back 15 minutes"
+                      onPress={() => clock.seek(clock.time.value - STEP_MS)}
+                    />
+                  </Animated.View>
+                  <TimelineCardShared motion={card.shared.play}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={playing ? "Pause" : "Play"}
+                      accessibilityState={{ disabled: !styleLoaded }}
+                      disabled={!styleLoaded}
+                      onPress={() => {
+                        if (playing) {
+                          clock.setPlaying(false);
+                          return;
+                        }
+                        clock.play(
+                          timelinePlayStart({
+                            from: timeline.from,
+                            located,
+                            scrubbed: clock.scrubbed,
+                            time: clock.time.value,
+                            to: timeline.to,
+                            today: showingToday,
+                          }),
+                        );
+                        setFollowing(true);
+                      }}
+                      className="size-14 items-center justify-center rounded-full bg-primary"
+                    >
+                      <Icon as={playing ? PauseIcon : PlayIcon} size={24} className="text-white" />
+                    </Pressable>
+                  </TimelineCardShared>
+                  <Animated.View {...card.fullOnly} className="flex-1 flex-row justify-around">
+                    <ControlButton
+                      icon={FastForwardIcon}
+                      label="Forward 15 minutes"
+                      onPress={() => clock.seek(clock.time.value + STEP_MS)}
+                    />
+                    <ControlButton
+                      disabled={nextStop === null}
+                      icon={SkipForwardIcon}
+                      label="Next stop"
+                      onPress={() => jumpToStop("next")}
+                    />
+                  </Animated.View>
+                </View>
+              ) : null}
+              {personId === null && hiddenCount > 0 ? (
+                <Animated.View
+                  {...card.fullOnly}
+                  className="gap-2 rounded-2xl border border-warning-accent bg-card p-3"
                 >
-                  <Text className="font-semibold text-foreground">{speed}×</Text>
-                </Pressable>
-              </TimelineCardShared>
+                  <Text className="text-sm text-foreground">
+                    There are too many locations on this day to show everyone, so Timeline is
+                    showing {peopleWithLocations.length - hiddenCount} of{" "}
+                    {peopleWithLocations.length} people.
+                  </Text>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="self-start"
+                    onPress={() => setChooserOpen(true)}
+                  >
+                    <Text>Choose people</Text>
+                  </Button>
+                </Animated.View>
+              ) : null}
+              {undecryptable > 0 ? (
+                <Animated.View {...card.fullOnly}>
+                  <Text className="text-xs text-secondary">
+                    {undecryptable === 1
+                      ? `1 location couldn’t be decrypted on this ${thisDeviceNoun()}, so it’s left out.`
+                      : `${undecryptable.toLocaleString()} locations couldn’t be decrypted on this ${thisDeviceNoun()}, so they’re left out.`}
+                  </Text>
+                </Animated.View>
+              ) : null}
             </View>
-            <Animated.View {...card.fullOnly} className="gap-3">
-              {routes.length > 0 ? (
-                <TimelineScrubber
-                  clock={clock.scrubber}
-                  day={timeline.day}
-                  from={timeline.from}
-                  historyStart={timeline.historyStart}
-                  lanes={lanes}
-                  step={STEP_MS}
-                  to={timeline.to}
-                  uses24HourClock={uses24HourClock}
-                  valueLabel={status ? `${clockLabel}, ${status.title}` : clockLabel}
-                  onSeek={clock.seek}
-                />
-              ) : (
-                <Text className="py-2 text-center text-tertiary">
-                  {personId
-                    ? `No locations from ${selectedName ?? "this person"} on this day.`
-                    : "No locations on this day."}
-                </Text>
-              )}
-              {routes.length > 0 ? (
-                <TimelineKey
-                  color={selectedPerson?.color}
-                  showNotAvailable={
-                    timeline.historyStart > timeline.day.start ||
-                    lanes.some((lane) => lane.historyStart > timeline.day.start)
+          )}
+        </TimelinePlayerCard>
+      )}
+
+      {view === "drives" ? (
+        <DrivesList
+          days={drivesListDays}
+          emptyText={
+            personId
+              ? `No drives from ${selectedName ?? "this person"} in the history shared with ${group.name}.`
+              : "Choose someone above to see their drives."
+          }
+          footer={
+            groupDrives.query.isError ? (
+              <ProblemNote
+                message="Couldn’t load drives. Check your connection and try again."
+                loading={groupDrives.query.isFetching}
+                onRetry={() => void groupDrives.query.refetch()}
+              />
+            ) : null
+          }
+          formatClock={formatClock}
+          header={
+            <>
+              {personId && listDeviceId && listDeviceIds.length > 1 ? (
+                <DeviceSwitch
+                  current={listDeviceId}
+                  deviceIds={listDeviceIds}
+                  names={memberDevices.data ?? []}
+                  onSwitch={(deviceId) =>
+                    setDeviceChoice((current) => ({
+                      ...current,
+                      [personId]: deviceId,
+                    }))
                   }
                 />
               ) : null}
-              {selectedPerson && selectedRoute ? (
-                <>
-                  <View className="flex-row flex-wrap gap-2">
-                    <StatCard
-                      value={formatDistance(selectedRoute.stats.distanceMeters, units.distance)}
-                      label="travelled"
-                    />
-                    <StatCard
-                      value={String(selectedRoute.stats.stops.length)}
-                      label={selectedRoute.stats.stops.length === 1 ? "stop" : "stops"}
-                    />
-                    <StatCard value={formatDuration(selectedRoute.stats.movingMs)} label="moving" />
-                  </View>
-                  {selectedPerson.devices.length > 1 ? (
-                    <DeviceSwitch
-                      current={selectedPerson.device.deviceId}
-                      deviceIds={selectedPerson.devices.map((device) => device.deviceId)}
-                      names={memberDevices.data ?? []}
-                      onSwitch={(deviceId) =>
-                        setDeviceChoice((current) => ({
-                          ...current,
-                          [selectedPerson.userId]: deviceId,
-                        }))
-                      }
-                    />
-                  ) : null}
-                </>
+              {selectedPerson && driveDetectionOff ? (
+                <DriveInfoBox text={driveDetectionOffText(selectedPerson)} />
               ) : null}
-            </Animated.View>
-            {routes.length > 0 ? (
-              <View className="flex-row items-center" onLayout={card.measure("controls")}>
-                <Animated.View {...card.fullOnly} className="flex-1 flex-row justify-around">
-                  <ControlButton
-                    disabled={previousStop === null}
-                    icon={SkipBackIcon}
-                    label="Previous stop"
-                    onPress={() => jumpToStop("previous")}
-                  />
-                  <ControlButton
-                    icon={RewindIcon}
-                    label="Back 15 minutes"
-                    onPress={() => clock.seek(clock.time.value - STEP_MS)}
-                  />
-                </Animated.View>
-                <TimelineCardShared motion={card.shared.play}>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={playing ? "Pause" : "Play"}
-                    accessibilityState={{ disabled: !styleLoaded }}
-                    disabled={!styleLoaded}
-                    onPress={() => {
-                      if (playing) {
-                        clock.setPlaying(false);
-                        return;
-                      }
-                      clock.play(
-                        timelinePlayStart({
-                          from: timeline.from,
-                          located,
-                          scrubbed: clock.scrubbed,
-                          time: clock.time.value,
-                          to: timeline.to,
-                          today: showingToday,
-                        }),
-                      );
-                      setFollowing(true);
-                    }}
-                    className="size-14 items-center justify-center rounded-full bg-primary"
-                  >
-                    <Icon as={playing ? PauseIcon : PlayIcon} size={24} className="text-white" />
-                  </Pressable>
-                </TimelineCardShared>
-                <Animated.View {...card.fullOnly} className="flex-1 flex-row justify-around">
-                  <ControlButton
-                    icon={FastForwardIcon}
-                    label="Forward 15 minutes"
-                    onPress={() => clock.seek(clock.time.value + STEP_MS)}
-                  />
-                  <ControlButton
-                    disabled={nextStop === null}
-                    icon={SkipForwardIcon}
-                    label="Next stop"
-                    onPress={() => jumpToStop("next")}
-                  />
-                </Animated.View>
-              </View>
-            ) : null}
-            {personId === null && hiddenCount > 0 ? (
-              <Animated.View
-                {...card.fullOnly}
-                className="gap-2 rounded-2xl border border-warning-accent bg-card p-3"
-              >
-                <Text className="text-sm text-foreground">
-                  There are too many locations on this day to show everyone, so Timeline is showing{" "}
-                  {peopleWithLocations.length - hiddenCount} of {peopleWithLocations.length} people.
-                </Text>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="self-start"
-                  onPress={() => setChooserOpen(true)}
-                >
-                  <Text>Choose people</Text>
-                </Button>
-              </Animated.View>
-            ) : null}
-            {undecryptable > 0 ? (
-              <Animated.View {...card.fullOnly}>
-                <Text className="text-xs text-secondary">
-                  {undecryptable === 1
-                    ? `1 location couldn’t be decrypted on this ${thisDeviceNoun()}, so it’s left out.`
-                    : `${undecryptable.toLocaleString()} locations couldn’t be decrypted on this ${thisDeviceNoun()}, so they’re left out.`}
-                </Text>
-              </Animated.View>
-            ) : null}
-          </View>
-        )}
-      </TimelinePlayerCard>
+            </>
+          }
+          loading={personId !== null && groupDrives.query.isPending}
+          onOpen={openDriveFrom}
+          otherDeviceNote={(day, other) => {
+            const name = deviceName(other.deviceId);
+            const when =
+              localDayOf(Date.now()).key === day.key ? "today" : `on ${formatDate(day.start)}`;
+            return {
+              label: `${name} recorded ${other.count === 1 ? "1 drive" : `${other.count} drives`} ${when} too. Switch to ${name} to see ${other.count === 1 ? "it" : "them"}.`,
+              onPress: () => {
+                if (personId) {
+                  setDeviceChoice((current) => ({
+                    ...current,
+                    [personId]: other.deviceId,
+                  }));
+                }
+              },
+            };
+          }}
+          placeName={placeName}
+          rowOf={(drive) => ({
+            figures: driveFigures(drive.record, units),
+            score: drivingScore(drive.record)?.score ?? null,
+            title: driveLabel(drive.record),
+          })}
+          top={topHeight + 4}
+        />
+      ) : null}
 
       {budget ? (
         <TimelinePeopleChooser

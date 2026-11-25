@@ -89,6 +89,9 @@ class DriveRecorder(
   fun driveIds(owner: String): List<String> = records.list(owner).map { it.driveId }
 
   @Synchronized
+  fun record(owner: String, driveId: String): DriveRecord? = records.list(owner).find { it.driveId == driveId }
+
+  @Synchronized
   fun deleteDrives(owner: String, driveIds: List<String>) {
     records.delete(owner, driveIds.toSet())
     queue.deleteByDrives(owner, driveIds)

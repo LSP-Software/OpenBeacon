@@ -11,6 +11,7 @@ import expo.modules.openbeacontracking.capture.TrackingCaptureService
 import expo.modules.openbeacontracking.capture.SharingCaptureState
 import expo.modules.openbeacontracking.capture.SharingResumeWorker
 import expo.modules.openbeacontracking.capture.UploadTasks
+import expo.modules.openbeacontracking.crypto.DriveRecordCodec
 import expo.modules.openbeacontracking.crypto.GroupPayloadEncrypt
 import expo.modules.openbeacontracking.drives.PackRequest
 import expo.modules.openbeacontracking.drives.SpeedLimitPackWorker
@@ -284,6 +285,13 @@ class OpenBeaconTrackingModule : Module() {
 
       AsyncFunction("listDriveIds") { owner: String ->
         TrackingRuntime.driveRecorder(requireContext()).driveIds(owner)
+      }
+
+      AsyncFunction("readDriveRecord") { owner: String, driveId: String ->
+        TrackingRuntime.driveRecorder(requireContext())
+          .record(owner, driveId)
+          ?.let { DriveRecordCodec.encode(it) }
+          ?.map { it.toInt() and 0xff }
       }
 
       AsyncFunction("deleteDrives") { owner: String, driveIds: List<String> ->
