@@ -16,7 +16,9 @@ import androidx.work.testing.SynchronousExecutor
 import androidx.work.testing.TestListenableWorkerBuilder
 import androidx.work.testing.WorkManagerTestInitHelper
 import expo.modules.openbeacontracking.TrackingRuntime
+import expo.modules.openbeacontracking.keys.EpochKeyHistory
 import expo.modules.openbeacontracking.keys.InMemoryEpochKeyStore
+import expo.modules.openbeacontracking.keys.InMemoryTimedEpochKeyStore
 import expo.modules.openbeacontracking.keys.ProvisionedEpochKey
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -49,7 +51,7 @@ class SharingResumeTest {
     application.getSharedPreferences("openbeacon_tracking_queue", Context.MODE_PRIVATE).edit().putString("owner", "test-owner").putString("deviceId", "tablet").commit()
     TrackingRuntime.setCaptureEnabled(application, true)
     TrackingRuntime.setSharingState(application, SharingCaptureState(revisionPrefix = "s0.1:"))
-    val keys = InMemoryEpochKeyStore()
+    val keys = EpochKeyHistory(InMemoryEpochKeyStore(), InMemoryTimedEpochKeyStore())
     keys.replaceAll(listOf(ProvisionedEpochKey("group", "epoch", ByteArray(32), "tablet", "trackingPoint")))
     keysField.set(null, keys)
     shadowOf(application).grantPermissions(

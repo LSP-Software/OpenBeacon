@@ -28,7 +28,9 @@ import com.google.android.gms.tasks.Tasks
 import expo.modules.openbeacontracking.Notice
 import expo.modules.openbeacontracking.Notices
 import expo.modules.openbeacontracking.TrackingRuntime
+import expo.modules.openbeacontracking.keys.EpochKeyHistory
 import expo.modules.openbeacontracking.keys.InMemoryEpochKeyStore
+import expo.modules.openbeacontracking.keys.InMemoryTimedEpochKeyStore
 import expo.modules.openbeacontracking.keys.ProvisionedEpochKey
 import expo.modules.openbeacontracking.places.InMemoryPlaceStore
 import expo.modules.openbeacontracking.places.InMemoryPlaceTransitionQueue
@@ -73,7 +75,7 @@ class TrackingCaptureServiceTest {
     application.getSharedPreferences("openbeacon_tracking_queue", Context.MODE_PRIVATE).edit().putString("owner", "test-owner").putString("deviceId", "tablet").commit()
     TrackingRuntime.setCaptureEnabled(application, true)
     TrackingRuntime.setSharingState(application, SharingCaptureState(revisionPrefix = "s0.1:", paused = true, pausedUntil = System.currentTimeMillis() + 3_600_000L))
-    val keys = InMemoryEpochKeyStore()
+    val keys = EpochKeyHistory(InMemoryEpochKeyStore(), InMemoryTimedEpochKeyStore())
     keys.replaceAll(listOf(ProvisionedEpochKey("group", "epoch", ByteArray(32), "tablet", "trackingPoint")))
     keysField.set(null, keys)
     shadowOf(application).grantPermissions(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_BACKGROUND_LOCATION, Manifest.permission.POST_NOTIFICATIONS)
@@ -173,7 +175,7 @@ class TrackingCaptureServiceTest {
 
   @Test
   fun restoredCaptureNeedsItsKeysAndPermissions() {
-    keysField.set(null, InMemoryEpochKeyStore())
+    keysField.set(null, EpochKeyHistory(InMemoryEpochKeyStore(), InMemoryTimedEpochKeyStore()))
     assertFalse(TrackingRuntime.shouldRestoreCapture(application))
     setUp()
     shadowOf(application).denyPermissions(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
