@@ -32,6 +32,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MapStyleLayers } from "../components/map/MapStyleLayers.tsx";
 import { DriveSheet } from "../components/timeline/DriveSheet.tsx";
 import { DriveInfoBox, DrivesList } from "../components/timeline/DrivesList.tsx";
+import { WeeklyDrivingReport } from "../components/timeline/WeeklyDrivingReport.tsx";
 import { TimelineDriveLayers } from "../components/timeline/TimelineDriveLayers.tsx";
 import { TimelineDriveRow } from "../components/timeline/TimelineDriveRow.tsx";
 import { useNativeMapStyle } from "../components/map/useNativeMapStyle.ts";
@@ -57,7 +58,7 @@ import { Icon } from "../components/ui/Icon.tsx";
 import { SegmentedControl } from "../components/ui/SegmentedControl.tsx";
 import { Text } from "../components/ui/Text.tsx";
 import { useCachedGroup } from "../hooks/useCachedGroup.ts";
-import { useGroupDrives } from "../hooks/useGroupDrives.ts";
+import { useGroupDrives, usePersonDrives } from "../hooks/useGroupDrives.ts";
 import { useReducedMotion } from "../hooks/useReducedMotion.ts";
 import { useTimelineClock } from "../hooks/useTimelineClock.ts";
 import { useUnits } from "../hooks/useUnits.ts";
@@ -72,6 +73,7 @@ import { driveFigures, driveTitle } from "../lib/driveFormat.ts";
 import { driveAt, driveListDays, drivePlaceId } from "../lib/driveList.ts";
 import type { LoadedDrive } from "../lib/driveLoad.ts";
 import { drivingScore } from "../lib/drivingScore.ts";
+import { driverWeekOf, weeklyDrivingReport } from "../lib/weeklyDrivingReport.ts";
 import { localDayOf } from "../lib/timelineDays.ts";
 import { historyShareNote, timelineEmptyLines } from "../lib/historyShare.ts";
 import { cn } from "../lib/cn.ts";
@@ -215,7 +217,13 @@ const TimelineView = ({
   const fittedView = useRef({ moved: false, view: "" });
   const [chosenPeople, setChosenPeople] = useState<string[] | null>(null);
   const [chooserOpen, setChooserOpen] = useState(false);
-  const [view, setView] = useState<"day" | "drives">("day");
+  const [view, setView] = useState<"day" | "drives" | "week">("day");
+  const [weekStep, setWeekStep] = useState(0);
+  const [weekPersonId, setWeekPersonId] = useState(initialPersonId);
+  if (weekPersonId !== personId) {
+    setWeekPersonId(personId);
+    setWeekStep(0);
+  }
   const [openDriveId, setOpenDriveId] = useState<string | null>(null);
   const [sheetHeight, setSheetHeight] = useState(0);
   const reduceMotion = useReducedMotion();
@@ -237,6 +245,7 @@ const TimelineView = ({
   );
   const { days, query: daysQuery, windowStart } = useTimelineDays(group.id, personId ?? undefined);
   const groupDrives = useGroupDrives(group.id, windowStart);
+  const personDrives = usePersonDrives(personId, view === "week");
   const drives = groupDrives.query.data?.drives ?? NO_DRIVES;
   const openDrive = drives.find((drive) => drive.driveId === openDriveId);
   const openRecord = openDrive?.record ?? null;
@@ -620,26 +629,69 @@ const TimelineView = ({
     setSheetHeight(0);
   };
 
-  const personDrives = drives.filter((drive) => drive.senderUserId === personId);
+  const personGroupDrives = drives.filter((drive) => drive.senderUserId === personId);
+  const allPersonDrives = [...personGroupDrives, ...(personDrives.data?.drives ?? [])];
   const listDeviceIds = [
     ...new Set([
       ...(selectedPerson?.devices.map((device) => device.deviceId) ?? []),
-      ...personDrives.map((drive) => drive.senderDeviceId),
+      ...allPersonDrives.map((drive) => drive.senderDeviceId),
     ]),
   ];
   const listDeviceId =
     (personId ? deviceChoice[personId] : undefined) ??
     selectedPerson?.device.deviceId ??
-    personDrives.find((drive) => drive.record)?.senderDeviceId ??
+    allPersonDrives.find((drive) => drive.record)?.senderDeviceId ??
     null;
   const drivesListDays =
     personId && listDeviceId
       ? driveListDays({
           deviceId: listDeviceId,
-          drives: personDrives,
+          drives: personGroupDrives,
           places: places.data ?? [],
         })
       : [];
+
+  const weekDrives = (personDrives.data?.drives ?? []).filter(
+    (drive) => drive.senderDeviceId === listDeviceId,
+  );
+  const weekOffset =
+    weekDrives
+      .flatMap((drive) => (drive.record ? [drive.record] : []))
+      .sort((first, second) => second.start.time - first.start.time)[0]?.utcOffsetMinutes ??
+    -new Date().getTimezoneOffset();
+  const thisMonday = driverWeekOf(Date.now(), weekOffset).monday;
+  const weekReport =
+    personId && personDrives.data
+      ? weeklyDrivingReport({
+          drives: weekDrives,
+          monday: thisMonday + weekStep * 7,
+          now: Date.now(),
+          offsetMinutes: weekOffset,
+          visibleFrom: personDrives.data.visibleFrom,
+        })
+      : null;
+  const sharedWithNames = (personDrives.data?.groups ?? [])
+    .filter((item) => item.members > 1)
+    .map((item) => item.name);
+  const sharedWith =
+    sharedWithNames.length > 1
+      ? `${sharedWithNames.slice(0, -1).join(", ")} and ${sharedWithNames.at(-1)}`
+      : (sharedWithNames[0] ?? group.name);
+
+  const deviceSwitch =
+    personId && listDeviceId && listDeviceIds.length > 1 ? (
+      <DeviceSwitch
+        current={listDeviceId}
+        deviceIds={listDeviceIds}
+        names={memberDevices.data ?? []}
+        onSwitch={(deviceId) =>
+          setDeviceChoice((current) => ({
+            ...current,
+            [personId]: deviceId,
+          }))
+        }
+      />
+    ) : null;
 
   const undecryptable = shownPeople.reduce(
     (total, person) => total + person.device.undecryptable,
@@ -771,6 +823,7 @@ const TimelineView = ({
               options={[
                 { label: "Day", value: "day" as const },
                 { label: "Drives", value: "drives" as const },
+                { label: "Week", value: "week" as const },
               ]}
               selected={view}
               onChange={(next) => {
@@ -796,7 +849,10 @@ const TimelineView = ({
                       key={item.key}
                       accessibilityRole="button"
                       accessibilityLabel={`${formatDate(item.start)}${isToday ? ", today" : ""}${item.pointCount > 0 ? "" : ", no new locations"}`}
-                      accessibilityState={{ disabled: !item.selectable, selected }}
+                      accessibilityState={{
+                        disabled: !item.selectable,
+                        selected,
+                      }}
                       disabled={!item.selectable}
                       onPress={() => {
                         setPlaying(false);
@@ -1104,7 +1160,7 @@ const TimelineView = ({
           title={driveLabel(openRecord)}
           units={units}
         />
-      ) : (
+      ) : view === "day" ? (
         <TimelinePlayerCard
           bottom={insets.bottom + 8}
           card={card}
@@ -1376,7 +1432,7 @@ const TimelineView = ({
             </View>
           )}
         </TimelinePlayerCard>
-      )}
+      ) : null}
 
       {view === "drives" ? (
         <DrivesList
@@ -1398,19 +1454,7 @@ const TimelineView = ({
           formatClock={formatClock}
           header={
             <>
-              {personId && listDeviceId && listDeviceIds.length > 1 ? (
-                <DeviceSwitch
-                  current={listDeviceId}
-                  deviceIds={listDeviceIds}
-                  names={memberDevices.data ?? []}
-                  onSwitch={(deviceId) =>
-                    setDeviceChoice((current) => ({
-                      ...current,
-                      [personId]: deviceId,
-                    }))
-                  }
-                />
-              ) : null}
+              {deviceSwitch}
               {selectedPerson && driveDetectionOff ? (
                 <DriveInfoBox text={driveDetectionOffText(selectedPerson)} />
               ) : null}
@@ -1441,6 +1485,59 @@ const TimelineView = ({
             title: driveLabel(drive.record),
           })}
           top={topHeight + 4}
+        />
+      ) : null}
+
+      {view === "week" && personId === null ? (
+        <View
+          className="absolute inset-x-0 bottom-0 items-center bg-background px-6 pt-10"
+          style={{ top: topHeight + 4 }}
+        >
+          <Text className="text-center text-tertiary">
+            Choose someone above to see their week of driving.
+          </Text>
+        </View>
+      ) : null}
+      {view === "week" && personId ? (
+        <WeeklyDrivingReport
+          canGoForward={weekStep < 0}
+          detectionOffText={
+            selectedPerson && driveDetectionOff
+              ? selectedPerson.isSelf
+                ? `${deviceName(selectedPerson.device.deviceId)} isn’t recording drives. You can turn it on in Account on that device.`
+                : `${selectedPerson.name}’s ${deviceName(selectedPerson.device.deviceId)} isn’t recording drives. Only ${selectedPerson.name} can turn it on.`
+              : null
+          }
+          footer={
+            personDrives.isError ? (
+              <ProblemNote
+                message="Couldn’t load drives. Check your connection and try again."
+                loading={personDrives.isFetching}
+                onRetry={() => void personDrives.refetch()}
+              />
+            ) : null
+          }
+          header={deviceSwitch}
+          isOwn={personId === selfUserId}
+          loading={personDrives.isPending}
+          name={selectedName ?? "this person"}
+          onOpen={(drive) => {
+            const inGroup = drives.find((item) => item.driveId === drive.driveId);
+            if (inGroup?.record) openDriveFrom({ ...inGroup, record: inGroup.record });
+          }}
+          onSeeAll={() => setView("drives")}
+          onStep={(weeks) => setWeekStep((current) => Math.min(0, current + weeks))}
+          report={weekReport}
+          rowOf={(drive) => ({
+            canOpen: drives.some((item) => item.driveId === drive.driveId && item.record),
+            figures: driveFigures(drive.record, units),
+            score: drivingScore(drive.record)?.score ?? null,
+            title: driveLabel(drive.record),
+          })}
+          sharedWith={sharedWith}
+          thisMonday={thisMonday}
+          top={topHeight + 4}
+          units={units}
         />
       ) : null}
 
