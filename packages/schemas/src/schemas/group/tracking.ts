@@ -1,5 +1,6 @@
 import {
   decodeBase64,
+  ENCRYPTED_DRIVE_RECORD_LENGTH,
   ENCRYPTED_TRACKING_POINT_LENGTH,
   encodeBase64,
   TRACKING_POINT_KIND,
@@ -52,10 +53,37 @@ export const groupTrackingPointSchema = z.object({
   senderDeviceId: z.string().min(1).max(128),
 });
 
+export const driveIdSchema = z.string().regex(/^[0-9a-f]{32}$/, "Invalid drive ID.");
+
+export const driveCiphertextSchema = z
+  .string()
+  .length(Math.ceil(ENCRYPTED_DRIVE_RECORD_LENGTH / 3) * 4)
+  .refine(
+    (ciphertext) =>
+      decodesTo(ciphertext, (decoded) => decoded.length === ENCRYPTED_DRIVE_RECORD_LENGTH),
+    "Invalid drive ciphertext.",
+  );
+
+export const driveCopySchema = z.object({
+  ciphertext: driveCiphertextSchema,
+  driveId: driveIdSchema,
+  epochId: z.string().min(1).max(128),
+  nonce: groupPayloadNonceSchema,
+  senderDeviceId: z.string().min(1).max(128),
+  startHour: z.number().int().min(438_288).max(1_000_000),
+});
+
 export const groupTrackingUploadBatchSchema = z
   .object({
     groupId: z.string().min(1),
     points: z.array(groupTrackingPointSchema).max(100),
+    drives: z
+      .array(driveCopySchema)
+      .max(10)
+      .refine((drives) => new Set(drives.map(({ driveId }) => driveId)).size === drives.length, {
+        message: "Each drive can only be sent once per request",
+      })
+      .optional(),
     placeTransitions: z
       .array(placeTransitionSchema)
       .max(50)
@@ -71,11 +99,12 @@ export const groupTrackingUploadBatchSchema = z
   .refine(
     (batch) =>
       batch.points.length > 0 ||
+      (batch.drives?.length ?? 0) > 0 ||
       (batch.placeTransitions?.length ?? 0) > 0 ||
       batch.placeAlertsCursor !== undefined ||
       batch.noticesCursor !== undefined,
     {
-      message: "An upload needs at least one point, place transition or cursor",
+      message: "An upload needs at least one point, drive, place transition or cursor",
       path: ["points"],
     },
   );
@@ -137,3 +166,41 @@ export const groupTrackingHistoryRangeSchema = z
     message: "A history range can be at most 26 hours long",
     path: ["toHour"],
   });
+
+export const groupTrackingDrivesSchema = z
+  .object({
+    groupId: z.string().min(1),
+    fromHour: z.number().int().min(0).max(1_000_000),
+    toHour: z.number().int().min(0).max(1_000_000),
+    cursor: z.object({ startHour: z.number().int(), driveId: driveIdSchema }).optional(),
+    limit: z.number().int().min(1).max(500).optional(),
+  })
+  .refine((range) => range.fromHour < range.toHour, {
+    message: "fromHour must be before toHour",
+    path: ["toHour"],
+  });
+
+export const replaceDriveSchema = z.object({
+  driveId: driveIdSchema,
+  copies: z
+    .array(
+      z.object({
+        ciphertext: driveCiphertextSchema,
+        groupId: z.string().min(1).max(128),
+        nonce: groupPayloadNonceSchema,
+      }),
+    )
+    .min(1)
+    .max(100)
+    .refine((copies) => new Set(copies.map(({ groupId }) => groupId)).size === copies.length, {
+      message: "Each group can only have one copy",
+    }),
+});
+
+export const deleteDrivesSchema = z.object({
+  driveIds: z
+    .array(driveIdSchema)
+    .min(1)
+    .max(500)
+    .refine((ids) => new Set(ids).size === ids.length, { message: "Each drive once" }),
+});

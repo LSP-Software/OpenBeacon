@@ -23,6 +23,8 @@ import expo.modules.openbeacontracking.places.PlaceDetection
 import expo.modules.openbeacontracking.places.PlaceTransitionDatabase
 import expo.modules.openbeacontracking.places.RoomPlaceTransitionQueue
 import expo.modules.openbeacontracking.places.SecurePlaceStore
+import expo.modules.openbeacontracking.drives.DriveQueueDatabase
+import expo.modules.openbeacontracking.drives.RoomDriveQueue
 import expo.modules.openbeacontracking.queue.CiphertextQueueDatabase
 import expo.modules.openbeacontracking.queue.RoomCiphertextQueue
 
@@ -37,6 +39,9 @@ object TrackingRuntime {
 
   @Volatile
   private var placeDetection: PlaceDetection? = null
+
+  @Volatile
+  private var driveQueue: RoomDriveQueue? = null
 
   @Volatile
   var isCaptureRunning: Boolean = false
@@ -60,6 +65,16 @@ object TrackingRuntime {
     return synchronized(this) {
       ciphertextQueue
         ?: RoomCiphertextQueue(CiphertextQueueDatabase.getInstance(context.applicationContext)).also { ciphertextQueue = it }
+    }
+  }
+
+  fun driveQueue(context: Context): RoomDriveQueue {
+    driveQueue?.let {
+      return it
+    }
+
+    return synchronized(this) {
+      driveQueue ?: RoomDriveQueue(DriveQueueDatabase.getInstance(context.applicationContext)).also { driveQueue = it }
     }
   }
 
@@ -207,6 +222,7 @@ object TrackingRuntime {
         context.stopService(Intent(context, TrackingCaptureService::class.java))
         epochKeyStore(context).revoke(null)
         placeDetection(context).removeGroups(null)
+        driveQueue(context).deleteByOwner(null)
       }
       if (previousOwner != null && previousOwner != owner) clearHistoryAllowance(context, previousOwner)
       if (previousOwner != owner || previousDeviceId != deviceId) {

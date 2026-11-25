@@ -365,6 +365,9 @@ export const groupMembershipRouter = {
               recipientDevice: { userId: member.userId },
             },
           });
+          await tx.driveCopy.deleteMany({
+            where: { groupId: input.groupId, senderUserId: member.userId },
+          });
           await tx.groupEpochHistoryWrap.deleteMany({
             where: {
               groupEpoch: { groupId: input.groupId },

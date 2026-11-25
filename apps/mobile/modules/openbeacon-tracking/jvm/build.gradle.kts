@@ -48,6 +48,10 @@ sourceSets {
       exclude("**/PlaceTransitionDao.kt")
       exclude("**/PlaceTransitionDatabase.kt")
       exclude("**/RoomPlaceTransitionQueue.kt")
+      exclude("**/DriveQueueEntity.kt")
+      exclude("**/DriveQueueDao.kt")
+      exclude("**/DriveQueueDatabase.kt")
+      exclude("**/RoomDriveQueue.kt")
     }
   }
   test {
@@ -55,6 +59,7 @@ sourceSets {
       srcDir("../../../../../packages/encryption/src/testVectors")
       include("group-payload-interop-v1.json")
       include("tracking-point-v2.json")
+      include("drive-record-v1.json")
     }
   }
 }

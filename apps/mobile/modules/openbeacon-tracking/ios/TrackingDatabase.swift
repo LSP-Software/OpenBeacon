@@ -38,6 +38,18 @@ struct PlaceTransitionRow {
   let occurredAt: Int64
 }
 
+struct DriveQueueRow {
+  var id: Int64 = 0
+  let owner: String
+  let groupId: String
+  let driveId: String
+  let epochId: String
+  let senderDeviceId: String
+  let startHour: Int64
+  let nonce: String
+  let ciphertext: String
+}
+
 enum SQLValue {
   case text(String?)
   case integer(Int64?)
@@ -51,6 +63,7 @@ final class TrackingDatabase {
   static let maxDatabaseBytes: Int64 = 9 * 1024 * 1024
   static let maxWalBytes: Int64 = 1024 * 1024
   static let maxPlaceTransitions = 500
+  static let maxQueuedDrives = 500
 
   private static let instanceLock = NSLock()
   private static var instance: TrackingDatabase?
@@ -159,6 +172,23 @@ final class TrackingDatabase {
     try execute("CREATE UNIQUE INDEX IF NOT EXISTS place_transition_queue_clientId ON place_transition_queue (clientId)")
     try execute("CREATE INDEX IF NOT EXISTS place_transition_queue_owner_id ON place_transition_queue (owner, id)")
     try execute("CREATE INDEX IF NOT EXISTS place_transition_queue_group_place ON place_transition_queue (groupId, placeId)")
+    try execute(
+      """
+      CREATE TABLE IF NOT EXISTS drive_queue (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        owner TEXT NOT NULL,
+        groupId TEXT NOT NULL,
+        driveId TEXT NOT NULL,
+        epochId TEXT NOT NULL,
+        senderDeviceId TEXT NOT NULL,
+        startHour INTEGER NOT NULL,
+        nonce TEXT NOT NULL,
+        ciphertext TEXT NOT NULL
+      )
+      """
+    )
+    try execute("CREATE UNIQUE INDEX IF NOT EXISTS drive_queue_group_drive ON drive_queue (groupId, driveId)")
+    try execute("CREATE INDEX IF NOT EXISTS drive_queue_owner_id ON drive_queue (owner, id)")
   }
 
   func transaction<T>(_ body: () throws -> T) throws -> T {
@@ -540,6 +570,61 @@ final class TrackingDatabase {
   func deletePlaceTransitions(groupIds: [String]) throws {
     try forEachChunk(groupIds) { chunk in
       try execute("DELETE FROM place_transition_queue WHERE groupId IN (\(placeholders(chunk.count)))", chunk.map { .text($0) })
+    }
+  }
+
+  func insertQueuedDrives(_ rows: [DriveQueueRow]) throws {
+    if rows.isEmpty { return }
+    try transaction {
+      for row in rows {
+        try execute(
+          "INSERT OR IGNORE INTO drive_queue (owner, groupId, driveId, epochId, senderDeviceId, startHour, nonce, ciphertext) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+          [.text(row.owner), .text(row.groupId), .text(row.driveId), .text(row.epochId), .text(row.senderDeviceId), .integer(row.startHour), .text(row.nonce), .text(row.ciphertext)]
+        )
+      }
+      try execute(
+        "DELETE FROM drive_queue WHERE id NOT IN (SELECT id FROM drive_queue ORDER BY id DESC LIMIT ?)",
+        [.integer(Int64(Self.maxQueuedDrives))]
+      )
+    }
+  }
+
+  func listQueuedDrives(owner: String, limit: Int) throws -> [DriveQueueRow] {
+    try query(
+      "SELECT id, owner, groupId, driveId, epochId, senderDeviceId, startHour, nonce, ciphertext FROM drive_queue WHERE owner = ? ORDER BY id ASC LIMIT ?",
+      [.text(owner), .integer(Int64(limit))]
+    ) {
+      DriveQueueRow(
+        id: sqlite3_column_int64($0, 0),
+        owner: Self.text($0, 1) ?? "",
+        groupId: Self.text($0, 2) ?? "",
+        driveId: Self.text($0, 3) ?? "",
+        epochId: Self.text($0, 4) ?? "",
+        senderDeviceId: Self.text($0, 5) ?? "",
+        startHour: sqlite3_column_int64($0, 6),
+        nonce: Self.text($0, 7) ?? "",
+        ciphertext: Self.text($0, 8) ?? ""
+      )
+    }
+  }
+
+  func deleteQueuedDrives(ids: [Int64]) throws {
+    try forEachChunk(ids) { chunk in
+      try execute("DELETE FROM drive_queue WHERE id IN (\(placeholders(chunk.count)))", chunk.map { .integer($0) })
+    }
+  }
+
+  func deleteQueuedDrives(owner: String?) throws {
+    if let owner {
+      try execute("DELETE FROM drive_queue WHERE owner = ?", [.text(owner)])
+    } else {
+      try execute("DELETE FROM drive_queue")
+    }
+  }
+
+  func deleteQueuedDrives(groupIds: [String]) throws {
+    try forEachChunk(groupIds) { chunk in
+      try execute("DELETE FROM drive_queue WHERE groupId IN (\(placeholders(chunk.count)))", chunk.map { .text($0) })
     }
   }
 }

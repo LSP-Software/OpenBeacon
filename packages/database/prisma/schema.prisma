@@ -40,6 +40,7 @@ model User {
   sentGroupMemberInvites     GroupMemberInvite[] @relation("GroupMemberInviteInviter")
   receivedGroupMemberInvites GroupMemberInvite[] @relation("GroupMemberInviteRecipient")
   trackingStreams            TrackingStream[]
+  driveCopies                DriveCopy[]
   groupEventsActed           GroupEvent[] @relation("GroupEventActor")
   groupEventsAbout           GroupEvent[] @relation("GroupEventSubject")
   createdSharedInvites       GroupSharedInvite[]
@@ -208,6 +209,7 @@ model Group {
   groupEpochs            GroupEpoch[]
   trackingStreams        TrackingStream[]
   latestTrackingPoints   TrackingLatestPoint[]
+  driveCopies            DriveCopy[]
   places                 Place[]
 
   createdAt DateTime @default(now())
@@ -457,6 +459,7 @@ model UserDevice {
   recipientEpochKeys     GroupEpochRecipientKey[] @relation("GroupEpochRecipientDevice")
   trackingStreams        TrackingStream[]
   latestTrackingPoints   TrackingLatestPoint[]
+  driveCopies            DriveCopy[]
   sentHistoryWraps       GroupEpochHistoryWrap[]
   deviceLink             DeviceLink?              @relation("DeviceLinkNewDevice")
   approvedDeviceLinks    DeviceLink[]             @relation("DeviceLinkApprover")
@@ -545,6 +548,7 @@ model GroupEpoch {
   recipientKeys          GroupEpochRecipientKey[]
   historyWraps           GroupEpochHistoryWrap[]
   trackingStreams        TrackingStream[]
+  driveCopies            DriveCopy[]
 
   @@unique([groupId, epochNumber])
   @@index([createdAt, id])
@@ -597,6 +601,28 @@ model TrackingLatestPoint {
   @@id([groupId, senderDeviceId])
   @@index([streamId])
   @@index([senderDeviceId])
+}
+
+model DriveCopy {
+  groupId        String
+  group          Group      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  driveId        String
+  epochId        String
+  epoch          GroupEpoch @relation(fields: [epochId], references: [id], onDelete: Restrict)
+  senderDeviceId String
+  senderDevice   UserDevice @relation(fields: [senderDeviceId], references: [id], onDelete: Cascade)
+  senderUserId   String
+  senderUser     User       @relation(fields: [senderUserId], references: [id], onDelete: Cascade)
+  startHour      Int
+  payload        Bytes
+  receivedAt     DateTime
+  replacedAt     DateTime?
+
+  @@id([groupId, driveId])
+  @@index([groupId, startHour])
+  @@index([senderUserId, driveId])
+  @@index([senderDeviceId])
+  @@index([epochId])
 }
 
 model GroupEpochRecipientKey {

@@ -65,6 +65,7 @@ public class OpenBeaconTrackingModule: Module {
       }
       try TrackingRuntime.epochKeys.revoke(groups)
       try TrackingRuntime.places.removeGroups(groups)
+      if let groups { try TrackingDatabase.shared().deleteQueuedDrives(groupIds: groups) }
     }
 
     AsyncFunction("setGroupPlaces") { (owner: String, deviceId: String, groupId: String, places: [[String: Any]]) -> Bool in
@@ -106,6 +107,25 @@ public class OpenBeaconTrackingModule: Module {
 
     AsyncFunction("deletePlaceTransitions") { (clientIds: [String]) in
       try TrackingRuntime.places.acknowledge(clientIds: clientIds)
+    }
+
+    AsyncFunction("listQueuedDrives") { (owner: String) -> [[String: Any]] in
+      try TrackingDatabase.shared().listQueuedDrives(owner: owner, limit: 200).map {
+        [
+          "id": Double($0.id),
+          "groupId": $0.groupId,
+          "driveId": $0.driveId,
+          "epochId": $0.epochId,
+          "senderDeviceId": $0.senderDeviceId,
+          "startHour": Double($0.startHour),
+          "nonce": $0.nonce,
+          "ciphertext": $0.ciphertext,
+        ]
+      }
+    }
+
+    AsyncFunction("deleteQueuedDrives") { (ids: [Double]) in
+      try TrackingDatabase.shared().deleteQueuedDrives(ids: ids.map { Int64($0) })
     }
 
     Function("isPlaceSearchAvailable") { () -> Bool in

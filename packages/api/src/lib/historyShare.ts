@@ -44,7 +44,7 @@ export const deleteHistoryOutsideShare = async ({
   historyShare,
   userId,
 }: {
-  db: Pick<Prisma.TransactionClient, "$queryRaw">;
+  db: Pick<Prisma.TransactionClient, "$executeRaw" | "$queryRaw">;
   groupIds: string[];
   historyShare: HistoryShare;
   userId: string;
@@ -54,6 +54,11 @@ export const deleteHistoryOutsideShare = async ({
     Prisma.sql`SELECT ${transactionHourSql} AS "nowHour"`,
   );
   const firstHour = historyFirstHour(historyShare, nowHour, 0);
+  await db.$executeRaw(Prisma.sql`
+    DELETE FROM "DriveCopy"
+    WHERE "senderUserId" = ${userId} AND "groupId" IN (${Prisma.join(groupIds)})
+      AND "startHour" < ${firstHour}
+  `);
   return deleteTrackingPointsInBatches({
     db,
     streams: Prisma.sql`"stream"."senderUserId" = ${userId} AND "stream"."groupId" IN (${Prisma.join(groupIds)})`,

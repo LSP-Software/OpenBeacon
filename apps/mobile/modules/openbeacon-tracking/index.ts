@@ -10,5 +10,6 @@ export {
   type PlaceSearchOutcome,
   type ProvisionedEpochKeyInfo,
   type ProvisionedEpochKeyInput,
+  type QueuedDrive,
   type QueuedPlaceTransition,
 } from "./src/index.ts";

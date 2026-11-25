@@ -521,3 +521,24 @@ export {
   openProfileImageKey,
   sealProfileImageKey,
 } from "./image.ts";
+export {
+  decodeDriveRecord,
+  DRIVE_RECORD_KIND,
+  DRIVE_RECORD_LENGTH,
+  DRIVE_RECORD_MAX_EVENTS,
+  DRIVE_RECORD_VERSION,
+  driveRecordAssociatedData,
+  DRIVING_EVENT_TYPES,
+  encodeDriveRecord,
+  ENCRYPTED_DRIVE_RECORD_LENGTH,
+  markPassengerDrive,
+  openDriveRecord,
+  sealDriveRecord,
+  SPEED_LIMIT_SOURCES,
+} from "./driveRecord.ts";
+export type {
+  DriveRecord,
+  DrivingEvent,
+  DrivingEventType,
+  SealedDriveRecord,
+} from "./driveRecord.ts";
