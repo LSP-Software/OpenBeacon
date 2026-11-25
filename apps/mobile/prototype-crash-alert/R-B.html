@@ -2,9 +2,9 @@
 const banner=(bg,fg,icon,t,s,x=true)=>`<div style="position:absolute;left:12px;right:12px;top:118px;background:${bg};color:${fg};border-radius:20px;padding:14px 16px;z-index:7;box-shadow:0 2px 10px rgba(0,0,0,.25);display:flex;gap:12px"><div style="flex:none">${ic(icon,24,fg)}</div><div class="sp"><div style="font-size:17px;font-weight:600">${t}</div><div style="font-size:14px;line-height:1.4;margin-top:3px;opacity:.92">${s}</div></div>${x?ic('x',20,fg):''}</div>`;
 const base=(b,extra='')=>phone(plainMap+status.replace('18:20','18:06')+mapTop+b+crashAt(196,470)+pinAt(232,505)+`<div class="card">${personHead()}${extra}${btnRow(updBtns)}<div class="btn tonal" style="margin-top:10px">${ic('history',18)}See today's route</div></div>`);
 document.body.innerHTML=[
-frame("RB1 · Tapped the Crash alert","A red banner sits across the top of the map, over every screen of the map, until it's closed. The person card underneath is the usual one.",
-base(banner(RED,'#fff','siren','Sam: possible crash at 18:04','Barnet Lane · 42 mph just before. Live every 10 s until 18:19. OpenBeacon hasn\'t contacted emergency services. Call 999 if you think Sam needs help.'))),
-frame("RB2 · Sam says they're OK","The banner turns green. Closing it removes the red diamond.",
-base(banner(GREEN,'#fff','circle-check',"Sam says they're OK",'18:09 · after a possible crash at 18:04 on Barnet Lane'))),
+frame("RB1&ensp;Tapped the Crash alert","A red banner sits across the top of the map, over every screen of the map, until it's closed. The person card underneath is the usual one.",
+base(banner(RED,'#fff','siren','Sam: possible crash at 18:04','Barnet Lane, 42 mph just before. Live every 10 s until 18:19. OpenBeacon hasn\'t contacted emergency services. Call 999 if you think Sam needs help.'))),
+frame("RB2&ensp;Sam says they're OK","The banner turns green. Closing it removes the red diamond.",
+base(banner(GREEN,'#fff','circle-check',"Sam says they're OK",'18:09, after a possible crash at 18:04 on Barnet Lane'))),
 ].join("");
 </script></body></html>
