@@ -148,6 +148,26 @@ declare class OpenBeaconTrackingModule extends NativeModule<{
   setDriveDetection(on: boolean): void;
   listDriveIds(owner: string): Promise<string[]>;
   deleteDrives(owner: string, driveIds: string[]): Promise<void>;
+  isDriveRecording(): boolean;
+  speedLimitPacks(): Promise<{
+    currentRegion: string | null;
+    packs: {
+      regionId: string;
+      build: string;
+      sha256: string;
+      size: number;
+      lastInAt: number;
+    }[];
+  }>;
+  noteSpeedLimitRegion(regionId: string): Promise<void>;
+  downloadSpeedLimitPack(request: {
+    regionId: string;
+    build: string;
+    url: string;
+    size: number;
+    sha256: string;
+  }): void;
+  deleteSpeedLimitPacks(): Promise<void>;
   countUnassignedCiphertexts(senderDeviceId: string): Promise<number>;
   assignUnassignedCiphertexts(senderDeviceId: string, owner: string): Promise<void>;
   listPendingCiphertexts(

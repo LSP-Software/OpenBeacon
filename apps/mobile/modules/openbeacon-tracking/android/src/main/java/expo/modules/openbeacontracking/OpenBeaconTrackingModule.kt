@@ -11,6 +11,8 @@ import expo.modules.openbeacontracking.capture.SharingCaptureState
 import expo.modules.openbeacontracking.capture.SharingResumeWorker
 import expo.modules.openbeacontracking.capture.UploadTasks
 import expo.modules.openbeacontracking.crypto.GroupPayloadEncrypt
+import expo.modules.openbeacontracking.drives.PackRequest
+import expo.modules.openbeacontracking.drives.SpeedLimitPackWorker
 import expo.modules.openbeacontracking.keys.ProvisionedEpochKey
 import expo.modules.openbeacontracking.places.PlaceGeofence
 import expo.modules.openbeacontracking.places.PlaceSearch
@@ -269,6 +271,48 @@ class OpenBeaconTrackingModule : Module() {
 
       AsyncFunction("deleteDrives") { owner: String, driveIds: List<String> ->
         TrackingRuntime.driveRecorder(requireContext()).deleteDrives(owner, driveIds)
+      }
+
+      Function("isDriveRecording") {
+        TrackingRuntime.driveRecorder(requireContext()).recording
+      }
+
+      AsyncFunction("speedLimitPacks") {
+        val store = TrackingRuntime.speedLimitPackStore(requireContext())
+        mapOf(
+          "currentRegion" to store.currentRegion,
+          "packs" to
+            store.list().map {
+              mapOf(
+                "regionId" to it.regionId,
+                "build" to it.build,
+                "sha256" to it.sha256,
+                "size" to it.size.toDouble(),
+                "lastInAt" to it.lastInMillis.toDouble(),
+              )
+            },
+        )
+      }
+
+      AsyncFunction("noteSpeedLimitRegion") { regionId: String ->
+        TrackingRuntime.speedLimitPackStore(requireContext()).noteRegion(regionId, System.currentTimeMillis())
+      }
+
+      Function("downloadSpeedLimitPack") { request: Map<String, Any?> ->
+        SpeedLimitPackWorker.enqueue(
+          requireContext(),
+          PackRequest(
+            regionId = request["regionId"] as String,
+            build = request["build"] as String,
+            url = request["url"] as String,
+            size = (request["size"] as Number).toLong(),
+            sha256 = request["sha256"] as String,
+          ),
+        )
+      }
+
+      AsyncFunction("deleteSpeedLimitPacks") {
+        TrackingRuntime.deleteSpeedLimitPacks(requireContext())
       }
 
       Function("areNotificationsEnabled") {

@@ -24,6 +24,7 @@ data class DetectedDrive(
   val durationSeconds: Double,
   val topSpeed: Double,
   val averageSpeed: Double,
+  val fixes: List<DriveFix> = emptyList(),
 )
 
 data class DriveStep(
@@ -191,6 +192,7 @@ class DriveDetector {
       durationSeconds = duration,
       topSpeed = fixes.maxOf { it.speed ?: 0.0 },
       averageSpeed = distance / duration,
+      fixes = fixes,
     )
   }
 

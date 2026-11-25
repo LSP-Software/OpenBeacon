@@ -229,6 +229,9 @@ export const endSession = async ({
   if (clears.credentials === "signOutAndDropRevokeToken") {
     await tryCatch(forgetSessionTokenToRevoke());
   }
+  if (clears.credentials !== "keep") {
+    await tryCatch(import("./speedLimitPacks.ts").then((packs) => packs.deleteSpeedLimitData()));
+  }
   if (clears.pendingJoinCodes) clearPendingJoinCodes();
   queryClient.clear();
   await tryCatch(Promise.resolve().then(clearImageCache));

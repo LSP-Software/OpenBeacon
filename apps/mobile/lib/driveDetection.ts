@@ -5,6 +5,7 @@ import { Alert } from "./alert.ts";
 import { deleteDrivesEverywhere } from "./deleteDrives.ts";
 import { trpcClient } from "./api.ts";
 import { thisDeviceNoun } from "./thisDeviceNoun.ts";
+import { deleteSpeedLimitData } from "./speedLimitPacks.ts";
 import { getOwner } from "./tracking.ts";
 
 let on: boolean | null = null;
@@ -59,6 +60,7 @@ export const setDriveDetection = async (next: boolean, userId: string | undefine
   }
   on = next;
   for (const listener of listeners) listener();
+  if (!next) await tryCatch(deleteSpeedLimitData());
   if (!next && userId) await offerToDeleteDrives(userId);
 };
 

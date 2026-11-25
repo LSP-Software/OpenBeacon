@@ -3,6 +3,8 @@ package expo.modules.openbeacontracking.drives
 import expo.modules.openbeacontracking.capture.CaptureHistoryShare
 import expo.modules.openbeacontracking.crypto.DriveRecord
 import expo.modules.openbeacontracking.crypto.DriveRecordCodec
+import expo.modules.openbeacontracking.crypto.DrivingEventType
+import expo.modules.openbeacontracking.crypto.SpeedLimitSource
 import expo.modules.openbeacontracking.crypto.SealedDriveRecord
 import expo.modules.openbeacontracking.keys.ProvisionedEpochKey
 import kotlin.math.cos
@@ -27,7 +29,7 @@ class DriveRecorderTest {
     epochId: String,
   ) = ProvisionedEpochKey(groupId, epochId, ByteArray(32) { epochId.length.toByte() }, "device-1", "trackingPoint")
 
-  private fun recorder() =
+  private fun recorder(roads: SpeedLimitRoads? = null) =
     DriveRecorder(
       log = log,
       records = records,
@@ -35,6 +37,7 @@ class DriveRecorderTest {
       epochKeys = { keys },
       historyShare = { share },
       utcOffsetMinutes = { 60 },
+      findSpeeding = { fixes -> SpeedingFinder.find(fixes, roads) },
     )
 
   private fun fixes(
@@ -73,6 +76,41 @@ class DriveRecorderTest {
     assertTrue(record.counts.values.all { it == 0 } && record.events.isEmpty() && !record.speedLimitsChecked && !record.passenger)
     assertEquals(listOf(record), records.list("owner"))
     assertNull(log.read())
+  }
+
+  @Test
+  fun speedingOnAPostedRoadIsCountedBeforeTheDriveIsQueued() {
+    val road =
+      PackRoadPiece(
+        roadId = 1,
+        roadClass = 3,
+        oneway = false,
+        forward = RoadLimit(RoadLimitSource.Posted, 483),
+        backward = RoadLimit(RoadLimitSource.Posted, 483),
+        lonE5 = intArrayOf(-10_100, 0),
+        latE5 = intArrayOf(5_150_000, 5_150_000),
+      )
+    val recorder = recorder(SpeedLimitRoads { _, _, _ -> listOf(road) })
+    recorder.onFixes("owner", fixes(13.0, 60) + fixes(20.0, 40) + fixes(13.0, 60))
+    val record = recorder.onFixes("owner", fixes(0.0, 300)).single()
+
+    assertTrue(record.speedLimitsChecked)
+    assertEquals(1, record.counts[DrivingEventType.SPEEDING])
+    val event = record.events.single()
+    assertEquals(DrivingEventType.SPEEDING, event.type)
+    assertEquals(SpeedLimitSource.POSTED, event.limit?.source)
+    assertEquals(13.42, event.limit!!.speed, 0.01)
+    assertEquals(20.0, event.peak, 0.01)
+    queue.list("owner", 10).forEach { row -> assertEquals(record, open(row, row.epochId)) }
+  }
+
+  @Test
+  fun aDriveWithNoSpeedLimitPackSaysSpeedingWasNotChecked() {
+    val recorder = recorder()
+    recorder.onFixes("owner", fixes(30.0, 150))
+    val record = recorder.onFixes("owner", fixes(0.0, 300)).single()
+
+    assertTrue(!record.speedLimitsChecked && record.events.isEmpty())
   }
 
   @Test

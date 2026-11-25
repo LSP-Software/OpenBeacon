@@ -9,6 +9,11 @@ import { useMapVersion } from "../../hooks/useMapVersion.ts";
 import { trpc } from "../../lib/api.ts";
 import { Alert } from "../../lib/alert.ts";
 import { clearSavedMap, mapCacheLimitMb } from "../../lib/mapCache.ts";
+import {
+  deleteSpeedLimitData,
+  readSpeedLimitDataSize,
+  speedLimitPackBudgetMb,
+} from "../../lib/speedLimitPacks.ts";
 import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 import { timeSince } from "../../lib/timeSince.ts";
 import { getPushStatus } from "../../lib/tracking.ts";
@@ -51,6 +56,18 @@ const AboutScreen = () => {
   const mapVersion = useMapVersion();
   const mapNotLoaded = "Open the map to load it";
   const deleteSavedMap = useMutation({ mutationFn: clearSavedMap, networkMode: "always" });
+  const speedLimitSize = useQuery({
+    queryKey: ["speedLimitDataSize"],
+    queryFn: readSpeedLimitDataSize,
+    enabled: Platform.OS === "android",
+    gcTime: 0,
+    networkMode: "always",
+  });
+  const deleteSpeedLimits = useMutation({
+    mutationFn: deleteSpeedLimitData,
+    onSettled: () => speedLimitSize.refetch(),
+    networkMode: "always",
+  });
 
   return (
     <View className="flex-1 bg-background">
@@ -190,12 +207,60 @@ const AboutScreen = () => {
             </Text>
           ) : null}
         </View>
+        {Platform.OS === "android" ? (
+          <View className="gap-2">
+            <ListSection
+              title="Speed limit data"
+              footer={`Speed limits for the region this ${thisDeviceNoun()} is in are downloaded on Wi-Fi while Drive detection is on, up to ${speedLimitPackBudgetMb} MB, so drives can be checked for speeding here. When that space is full, the region you were in longest ago is removed first. Speed limit data is deleted when you sign out or turn Drive detection off. Speed limits © OpenStreetMap contributors, available under the Open Database Licence.`}
+            >
+              <ListRow
+                title="Speed limit data"
+                value={
+                  speedLimitSize.data === undefined
+                    ? "…"
+                    : speedLimitSize.data === 0
+                      ? "None"
+                      : `${Math.max(1, Math.round(speedLimitSize.data / 1_000_000))} MB`
+                }
+              />
+              <ListRow
+                title={
+                  deleteSpeedLimits.isPending
+                    ? "Deleting speed limit data…"
+                    : "Delete speed limit data"
+                }
+                icon={Trash2Icon}
+                tone="danger"
+                disabled={deleteSpeedLimits.isPending || !speedLimitSize.data}
+                onPress={() =>
+                  Alert.alert(
+                    "Delete speed limit data?",
+                    "Until it downloads again on Wi-Fi, drives won’t be checked for speeding.",
+                    [
+                      { text: "Cancel", style: "cancel" },
+                      {
+                        text: "Delete",
+                        style: "destructive",
+                        onPress: () => deleteSpeedLimits.mutate(),
+                      },
+                    ],
+                  )
+                }
+              />
+            </ListSection>
+            {deleteSpeedLimits.isError ? (
+              <Text accessibilityLiveRegion="polite" className="text-destructive-text px-4 text-sm">
+                Couldn’t delete speed limit data. Try again.
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
         <SettingsContainer
           categories={[
             {
               label: "Licences and attribution",
               footer:
-                "OpenBeacon is open source software. Map data © OpenStreetMap contributors, available under the Open Database Licence. Map rendering uses MapLibre React Native (MIT). Map styles and bundled assets are from Protomaps. Bundled Noto fonts are © 2022 The Noto Project Authors and licensed under the SIL Open Font License 1.1. Bundled sprites include Mapzen artwork © 2017 Mapzen, licensed under MIT.",
+                "OpenBeacon is open source software. Map and speed limit data © OpenStreetMap contributors, available under the Open Database Licence. Map rendering uses MapLibre React Native (MIT). Map styles and bundled assets are from Protomaps. Bundled Noto fonts are © 2022 The Noto Project Authors and licensed under the SIL Open Font License 1.1. Bundled sprites include Mapzen artwork © 2017 Mapzen, licensed under MIT.",
               settings: [
                 {
                   label: "OpenBeacon licence",
