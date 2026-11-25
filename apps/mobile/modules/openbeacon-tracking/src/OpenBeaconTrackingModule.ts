@@ -160,6 +160,7 @@ declare class OpenBeaconTrackingModule extends NativeModule<{
   setCrashAlertContext(groups: Record<string, string>, speedUnit: "mph" | "kmh"): void;
   startCrashTest(): void;
   listDriveIds(owner: string): Promise<string[]>;
+  readDriveRecord(owner: string, driveId: string): Promise<number[] | null>;
   deleteDrives(owner: string, driveIds: string[]): Promise<void>;
   isDriveRecording(): boolean;
   speedLimitPacks(): Promise<{

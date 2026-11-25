@@ -116,6 +116,7 @@ test("time before history starts is drawn apart from the no-location hatch", asy
             historyStart: start + 4 * hour,
             id: "lane",
             initials: "AB",
+            drives: [],
             runs: [{ end: start + 6 * hour, kind: "noLocation", start: start + 5 * hour }],
           },
         ]}
@@ -227,9 +228,11 @@ test("screen reader adjustments move by one step and stay inside the shown hours
   await track.unmount();
 });
 
-const keyLabels = async (showNotAvailable: boolean) => {
+const keyLabels = async (showNotAvailable: boolean, showDrives = false) => {
   const root = createRoot();
-  await act(async () => root.render(<TimelineKey showNotAvailable={showNotAvailable} />));
+  await act(async () =>
+    root.render(<TimelineKey showDrives={showDrives} showNotAvailable={showNotAvailable} />),
+  );
   const labels = root.container
     .queryAll((node) => node.type === "text")
     .map((node) => node.children.join(""));
@@ -245,5 +248,16 @@ test("the key only lists Not available when the day has unavailable time", async
     "Paused",
     "No location",
     "Not available",
+  ]);
+});
+
+test("the key lists Drive and Passenger when the lanes show drives", async () => {
+  expect(await keyLabels(false, true)).toEqual([
+    "Moving",
+    "Stopped",
+    "Paused",
+    "No location",
+    "Drive",
+    "Passenger",
   ]);
 });
