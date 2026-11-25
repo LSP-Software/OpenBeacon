@@ -177,7 +177,7 @@ declare class OpenBeaconTrackingModule extends NativeModule<{
   checkAppUpdate(): Promise<
     { status: "available" | "inProgress"; versionCode: number } | { status: "none" }
   >;
-  startAppUpdate(): Promise<boolean>;
+  startAppUpdate(): Promise<"started" | "cancelled" | "failed">;
 }
 
 export default requireNativeModule<OpenBeaconTrackingModule>("OpenBeaconTracking");

@@ -63,7 +63,7 @@ const findAndroidUpdate = async (): Promise<AppUpdate | null> => {
     store: "Google Play",
     start: async () => {
       const started = await tryCatch(OpenBeaconTracking.startAppUpdate());
-      if (!started.error) return started.data;
+      if (!started.error && started.data !== "failed") return started.data === "started";
       await openPlayStore();
       return true;
     },

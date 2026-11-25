@@ -15,19 +15,27 @@ object AppUpdate {
       .addOnFailureListener { finish(mapOf("status" to "none")) }
   }
 
-  fun start(activity: Activity, finish: (Boolean) -> Unit) {
+  fun start(activity: Activity, finish: (String) -> Unit) {
     val manager = AppUpdateManagerFactory.create(activity)
     manager.appUpdateInfo
       .addOnSuccessListener { info ->
         if (describe(info)["status"] == "none") {
-          finish(false)
+          finish("failed")
           return@addOnSuccessListener
         }
         manager.startUpdateFlow(info, activity, AppUpdateOptions.defaultOptions(AppUpdateType.IMMEDIATE))
-          .addOnSuccessListener { finish(it == Activity.RESULT_OK) }
-          .addOnFailureListener { finish(false) }
+          .addOnSuccessListener {
+            finish(
+              when (it) {
+                Activity.RESULT_OK -> "started"
+                Activity.RESULT_CANCELED -> "cancelled"
+                else -> "failed"
+              },
+            )
+          }
+          .addOnFailureListener { finish("failed") }
       }
-      .addOnFailureListener { finish(false) }
+      .addOnFailureListener { finish("failed") }
   }
 
   private fun describe(info: AppUpdateInfo): Map<String, Any?> {

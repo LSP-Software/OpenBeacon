@@ -143,7 +143,7 @@ class OpenBeaconTrackingModule : Module() {
       AsyncFunction("startAppUpdate") { promise: Promise ->
         val activity = appContext.currentActivity
         if (activity == null) {
-          promise.resolve(false)
+          promise.resolve("failed")
           return@AsyncFunction
         }
         AppUpdate.start(activity) { promise.resolve(it) }

@@ -6,6 +6,8 @@ let playCheck: { status: "available" | "inProgress"; versionCode: number } | { s
   status: "none",
 };
 let playStarts = 0;
+let playStartResult: "started" | "cancelled" | "failed" = "started";
+const opened: string[] = [];
 
 mock.module("react-native-mmkv", () => ({
   createMMKV: () => ({
@@ -17,13 +19,21 @@ mock.module("react-native-mmkv", () => ({
   }),
 }));
 mock.module("expo-localization", () => ({ getLocales: () => [{ regionCode: "GB" }] }));
-mock.module("react-native", () => ({ Platform: platform, Linking: { openURL: async () => true } }));
+mock.module("react-native", () => ({
+  Platform: platform,
+  Linking: {
+    openURL: async (url: string) => {
+      opened.push(url);
+      return true;
+    },
+  },
+}));
 mock.module("../modules/openbeacon-tracking/index.ts", () => ({
   default: {
     checkAppUpdate: async () => playCheck,
     startAppUpdate: async () => {
       playStarts += 1;
-      return true;
+      return playStartResult;
     },
   },
 }));
@@ -36,6 +46,8 @@ beforeEach(() => {
   platform.OS = "android";
   playCheck = { status: "none" };
   playStarts = 0;
+  playStartResult = "started";
+  opened.length = 0;
 });
 
 describe("isNewerVersion", () => {
@@ -105,6 +117,20 @@ describe("findAppUpdate on Android", () => {
     expect(playStarts).toBe(0);
     await update?.start();
     expect(playStarts).toBe(1);
+  });
+});
+
+describe("starting a Play update", () => {
+  test.each([
+    ["started", true, []],
+    ["cancelled", false, []],
+    ["failed", true, ["market://details?id=net.openbeacon.app"]],
+  ] as const)("when Play reports %s", async (result, expected, listing) => {
+    playCheck = { status: "available", versionCode: 120 };
+    playStartResult = result;
+    const update = await findAppUpdate();
+    expect(await update?.start()).toBe(expected);
+    expect(opened).toEqual([...listing]);
   });
 });
 
