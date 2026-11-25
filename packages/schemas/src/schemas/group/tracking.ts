@@ -1,5 +1,6 @@
 import {
   decodeBase64,
+  ENCRYPTED_CRASH_ALERT_LENGTH,
   ENCRYPTED_DRIVE_RECORD_LENGTH,
   ENCRYPTED_TRACKING_POINT_LENGTH,
   encodeBase64,
@@ -73,6 +74,36 @@ export const driveCopySchema = z.object({
   startHour: z.number().int().min(438_288).max(1_000_000),
 });
 
+export const crashAlertCopySchema = z.object({
+  ciphertext: z
+    .string()
+    .length(Math.ceil(ENCRYPTED_CRASH_ALERT_LENGTH / 3) * 4)
+    .refine(
+      (ciphertext) =>
+        decodesTo(ciphertext, (decoded) => decoded.length === ENCRYPTED_CRASH_ALERT_LENGTH),
+      "Invalid crash alert ciphertext.",
+    ),
+  epochId: z.string().min(1).max(128),
+  groupId: z.string().min(1).max(128),
+  messageId: z.string().regex(/^[0-9a-f]{32}$/, "Invalid crash alert ID."),
+  nonce: groupPayloadNonceSchema,
+});
+
+export const sendCrashAlertsSchema = z.object({
+  copies: z
+    .array(crashAlertCopySchema)
+    .min(1)
+    .max(20)
+    .refine(
+      (copies) =>
+        new Set(copies.map(({ groupId, messageId }) => `${groupId}|${messageId}`)).size ===
+        copies.length,
+      { message: "Each crash alert can only be sent once per group" },
+    ),
+});
+
+export const groupCrashAlertsSchema = z.object({ groupId: z.string().min(1) });
+
 export const groupTrackingUploadBatchSchema = z
   .object({
     groupId: z.string().min(1),
@@ -95,6 +126,7 @@ export const groupTrackingUploadBatchSchema = z
       .optional(),
     placeAlertsCursor: alertsCursorSchema.nullable().optional(),
     noticesCursor: alertsCursorSchema.nullable().optional(),
+    crashAlertsCursor: alertsCursorSchema.nullable().optional(),
   })
   .refine(
     (batch) =>
@@ -102,7 +134,8 @@ export const groupTrackingUploadBatchSchema = z
       (batch.drives?.length ?? 0) > 0 ||
       (batch.placeTransitions?.length ?? 0) > 0 ||
       batch.placeAlertsCursor !== undefined ||
-      batch.noticesCursor !== undefined,
+      batch.noticesCursor !== undefined ||
+      batch.crashAlertsCursor !== undefined,
     {
       message: "An upload needs at least one point, drive, place transition or cursor",
       path: ["points"],
