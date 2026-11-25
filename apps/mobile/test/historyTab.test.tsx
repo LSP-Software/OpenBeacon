@@ -28,7 +28,11 @@ mock.module("../lib/crashAlertSync.ts", () => ({
 }));
 mock.module("nativewind", () => ({ cssInterop: () => {} }));
 mock.module("lucide-react-native", () => ({
+  CarIcon: () => null,
   CircleCheckIcon: () => null,
+  ClockIcon: () => null,
+  GaugeIcon: () => null,
+  RouteIcon: () => null,
   SirenIcon: () => null,
   ImageIcon: icon("Image"),
   LogInIcon: icon("LogIn"),
@@ -61,6 +65,13 @@ mock.module("../components/ui/Button.tsx", () => ({
 }));
 mock.module("../components/ui/Text.tsx", () => ({
   Text: ({ children }: { children: React.ReactNode }) => children,
+}));
+mock.module("expo-router", () => ({ useRouter: () => ({ push: () => {} }) }));
+mock.module("../hooks/useGroupDrives.ts", () => ({
+  useGroupDrives: () => ({ query: { data: undefined } }),
+}));
+mock.module("../hooks/useUnits.ts", () => ({
+  useUnits: () => ({ distance: "mi", speed: "mph" }),
 }));
 mock.module("../hooks/useMemberNames.ts", () => ({
   useMemberNameList: () => () => [],

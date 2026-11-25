@@ -1,6 +1,13 @@
 import { isSharingPaused } from "@openbeacon/shared";
 import { useQuery } from "@tanstack/react-query";
-import { CarIcon, FlaskConicalIcon, InfoIcon, ServerIcon, SirenIcon } from "lucide-react-native";
+import {
+  CarIcon,
+  FlaskConicalIcon,
+  InfoIcon,
+  ServerIcon,
+  SirenIcon,
+  UsersIcon,
+} from "lucide-react-native";
 import { Platform, Pressable, ScrollView, View } from "react-native";
 import { ScreenHeader } from "../../components/headers/ScreenHeader.tsx";
 import { Button } from "../../components/ui/Button.tsx";
@@ -18,6 +25,7 @@ import {
   useCrashAlerts,
 } from "../../lib/crashAlerts.ts";
 import { setDriveDetection, useDriveDetection } from "../../lib/driveDetection.ts";
+import { setTellGroup, useQuietDriveGroups } from "../../lib/driveSettings.ts";
 import { hasLocallyPausedSharing, serverNow } from "../../lib/locationSharing.ts";
 import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 import { getPushStatus } from "../../lib/tracking.ts";
@@ -25,6 +33,7 @@ import { getPushStatus } from "../../lib/tracking.ts";
 const DriveDetectionScreen = () => {
   const on = useDriveDetection();
   const crashAlerts = useCrashAlerts();
+  const quietGroups = useQuietDriveGroups();
   const { data: session } = authClient.useSession();
   const change = (next: boolean) => void setDriveDetection(next, session?.user.id);
   const groups = useQuery(trpc.groupMembership.list.queryOptions());
@@ -104,6 +113,48 @@ const DriveDetectionScreen = () => {
             }
           />
         </ListSection>
+
+        {groups.data && groups.data.length > 0 ? (
+          <ListSection
+            title="Tell these groups when I finish a drive"
+            footer={`A Drive alert gives the distance, time and top speed of a drive you just finished. It never includes your score or Driving events. ${
+              quietGroups.length > 0
+                ? `Members of ${joinGroupNames(
+                    groups.data
+                      .filter((group) => quietGroups.includes(group.id))
+                      .map((group) => group.name),
+                  )} see “Drive alerts are off”.`
+                : "Groups you turn off see “Drive alerts are off”."
+            }`}
+          >
+            {groups.data.map((group) => {
+              const tells = !quietGroups.includes(group.id);
+              return (
+                <ListRow
+                  key={group.id}
+                  title={group.name}
+                  icon={UsersIcon}
+                  iconColor="teal"
+                  subtitle={
+                    tells
+                      ? "Members get a Drive alert"
+                      : "No Drive alerts. Your drives still show in their Timeline."
+                  }
+                  accessibilityRole="switch"
+                  accessibilityState={{ checked: tells }}
+                  onPress={() => void setTellGroup(group.id, !tells)}
+                  trailing={
+                    <Switch
+                      accessibilityLabel={`Tell ${group.name} when I finish a drive`}
+                      value={tells}
+                      onValueChange={(next) => void setTellGroup(group.id, next)}
+                    />
+                  }
+                />
+              );
+            })}
+          </ListSection>
+        ) : null}
 
         {slowServer && crashOn ? (
           <View className="gap-2 rounded-2xl border border-warning-border bg-warning p-4">

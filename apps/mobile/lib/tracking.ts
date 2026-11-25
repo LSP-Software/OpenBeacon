@@ -72,6 +72,7 @@ import {
   rememberCursorGroup,
 } from "./trackingKeyCheck.ts";
 import { getCrashAlertsCursor, sendQueuedCrashAlerts } from "./crashAlertSync.ts";
+import { getDriveAlertsCursor } from "./driveAlertSync.ts";
 import { loadTrackingModule } from "./trackingModule.ts";
 import { recordTrackingUpload } from "./trackingUploadTime.ts";
 import { notifyGroupEpochChange } from "./trackingEvents.ts";
@@ -744,6 +745,7 @@ const placeUploadFields = (
         placeAlertsCursor: cursor.placeAlerts,
         noticesCursor: cursor.notices,
         crashAlertsCursor: cursor.crashAlerts,
+        driveAlertsCursor: cursor.driveAlerts,
       }
     : {}),
 });
@@ -774,7 +776,8 @@ const settlePlaceResponse = async (
     response.placeAlerts !== undefined ||
     response.imageKeysNeedCatchUp !== undefined ||
     response.notices !== undefined ||
-    response.crashAlerts !== undefined
+    response.crashAlerts !== undefined ||
+    response.driveAlerts !== undefined
   ) {
     round.updates = {
       places: response.places,
@@ -782,6 +785,7 @@ const settlePlaceResponse = async (
       imageKeysNeedCatchUp: response.imageKeysNeedCatchUp,
       notices: response.notices,
       crashAlerts: response.crashAlerts,
+      driveAlerts: response.driveAlerts,
     };
   }
 };
@@ -1018,7 +1022,12 @@ type PlaceRound = {
   account: AccountRound | null;
   accountDevice: { deviceId: string; userId: string } | null;
   accountSync: ReturnType<typeof startAccountSync> | null;
-  cursor: { placeAlerts: string | null; notices: string | null; crashAlerts: string | null } | null;
+  cursor: {
+    placeAlerts: string | null;
+    notices: string | null;
+    crashAlerts: string | null;
+    driveAlerts: string | null;
+  } | null;
   deviceId: string;
   drives: Map<string, QueuedDrive[]>;
   retryAlone: Map<string, QueuedPlaceTransition[]>;
@@ -1092,6 +1101,7 @@ const startPlaceRound = async (
           placeAlerts: getPlaceAlertsCursor(device.userId),
           notices: getNoticesCursor(device.userId),
           crashAlerts: getCrashAlertsCursor(device.userId),
+          driveAlerts: getDriveAlertsCursor(device.userId),
         }
       : null,
     deviceId: device.deviceId,
@@ -1276,6 +1286,7 @@ const pollPlaceUpdates = ({ onlyWithoutKeys = false }: { onlyWithoutKeys?: boole
               placeAlertsCursor: getPlaceAlertsCursor(device.userId),
               noticesCursor: getNoticesCursor(device.userId),
               crashAlertsCursor: getCrashAlertsCursor(device.userId),
+              driveAlertsCursor: getDriveAlertsCursor(device.userId),
             },
             accountRequest(account),
           ),
@@ -1294,6 +1305,7 @@ const pollPlaceUpdates = ({ onlyWithoutKeys = false }: { onlyWithoutKeys?: boole
         imageKeysNeedCatchUp: response.imageKeysNeedCatchUp,
         notices: response.notices,
         crashAlerts: response.crashAlerts,
+        driveAlerts: response.driveAlerts,
       },
       round: account,
     });

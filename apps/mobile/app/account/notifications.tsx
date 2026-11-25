@@ -1,7 +1,7 @@
 import { notificationTypes } from "@openbeacon/schemas";
 import { useMutation, useMutationState, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BellOffIcon } from "lucide-react-native";
-import { ScrollView, View } from "react-native";
+import { Platform, ScrollView, View } from "react-native";
 import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
 import { PromptCard } from "../../components/PromptCard.tsx";
 import { ScreenHeader } from "../../components/headers/ScreenHeader.tsx";
@@ -11,12 +11,14 @@ import { Switch } from "../../components/ui/Switch.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { Alert } from "../../lib/alert.ts";
 import { trpc } from "../../lib/api.ts";
+import { setDriveRecordedNotice, useDriveRecordedNotice } from "../../lib/driveSettings.ts";
 import { useCrashAlertSound, useNotificationSettings } from "../../lib/notifications.ts";
 import { userMessage } from "../../lib/userMessage.ts";
 import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 
 const sections = [
   { key: "places", title: "Places" },
+  { key: "drives", title: "Drives" },
   { key: "crashes", title: "Crash alerts" },
   { key: "groups", title: "Groups" },
   { key: "security", title: "Security" },
@@ -26,6 +28,8 @@ const descriptions: Partial<Record<keyof typeof notificationTypes, string>> = {
   PLACE_ALERTS:
     "When someone arrives at or leaves a place. You can still mute people at each place.",
   ROLE_CHANGED: "When someone becomes an owner, admin or member.",
+  DRIVES:
+    "When someone finishes a drive, with its distance, time and top speed. You can still mute people in each group.",
   CRASH_ALERTS: "When someone’s phone sends a Crash alert. Sounds an alarm.",
   NEW_SIGN_IN: "When a new phone or tablet signs in to your account.",
 };
@@ -34,6 +38,7 @@ const NotificationsScreen = () => {
   const queryClient = useQueryClient();
   const notifications = useNotificationSettings();
   const crashAlertSound = useCrashAlertSound();
+  const driveRecordedNotice = useDriveRecordedNotice();
   const settings = useQuery(trpc.notificationSettings.get.queryOptions());
   const settingsKey = trpc.notificationSettings.get.queryKey();
   const mutationKey = trpc.notificationSettings.set.mutationKey();
@@ -189,6 +194,22 @@ const NotificationsScreen = () => {
                     />
                   );
                 })}
+                {section.key === "drives" && Platform.OS === "android" ? (
+                  <ListRow
+                    title="Drive recorded"
+                    subtitle={`A quiet notice on this ${thisDeviceNoun()} after each of your drives, with an “I was a passenger” button. Only this ${thisDeviceNoun()}.`}
+                    accessibilityRole="switch"
+                    accessibilityState={{ checked: driveRecordedNotice }}
+                    onPress={() => void setDriveRecordedNotice(!driveRecordedNotice)}
+                    trailing={
+                      <Switch
+                        accessibilityLabel="Drive recorded"
+                        value={driveRecordedNotice}
+                        onValueChange={(on) => void setDriveRecordedNotice(on)}
+                      />
+                    }
+                  />
+                ) : null}
                 {section.key === "crashes" && crashAlertSound.duringDoNotDisturb !== null ? (
                   <ListRow
                     title="Sound during Do Not Disturb"

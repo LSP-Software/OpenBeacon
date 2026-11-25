@@ -30,6 +30,13 @@
   <string name="openbeacon_place_alerts_channel">Place alerts</string>
   <string name="openbeacon_place_alerts_channel_description">When someone in your groups arrives at or leaves a place.</string>
   <string name="openbeacon_places_changed_manage">Manage</string>
+  <string name="openbeacon_drive_alerts_channel">Drive alerts</string>
+  <string name="openbeacon_drive_alerts_channel_description">When someone in your groups finishes a drive.</string>
+  <string name="openbeacon_drive_recorded_channel">Your drives</string>
+  <string name="openbeacon_drive_recorded_channel_description">A quiet notice after each drive this phone records.</string>
+  <string name="openbeacon_drive_recorded_title">Drive recorded · %1$s</string>
+  <string name="openbeacon_drive_recorded_body">Tap to see it in Timeline.</string>
+  <string name="openbeacon_drive_recorded_passenger">I was a passenger</string>
   <string name="openbeacon_group_activity_channel">Group activity</string>
   <string name="openbeacon_group_activity_channel_description">When someone joins or leaves your groups, or a role changes.</string>
   <string name="openbeacon_account_alerts_channel">Security alerts</string>

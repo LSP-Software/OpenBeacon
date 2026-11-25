@@ -45,6 +45,7 @@ const uploadCalls: Array<{
   placeAlertsCursor?: string | null;
   noticesCursor?: string | null;
   crashAlertsCursor?: string | null;
+  driveAlertsCursor?: string | null;
   drives?: { driveId: string }[];
 }> = [];
 let pendingPushToken: string | null = null;
@@ -189,6 +190,10 @@ let uploadGroup = async ({
 });
 
 const storedNoticesCursor: string | null = "2026-11-17T09:00:00.000Z|";
+mock.module("./driveAlertSync.ts", () => ({
+  applyDriveAlerts: async () => {},
+  getDriveAlertsCursor: () => null,
+}));
 mock.module("./crashAlertSync.ts", () => ({
   applyCrashAlerts: async () => {},
   getCrashAlertsCursor: () => null,
@@ -557,6 +562,7 @@ mock.module("./api.ts", () => ({
             placeAlertsCursor?: string | null;
             noticesCursor?: string | null;
             crashAlertsCursor?: string | null;
+            driveAlertsCursor?: string | null;
           },
           options?: { context?: { accountRound?: { userId: string } } },
         ) => {
@@ -870,6 +876,7 @@ describe("tracking service", () => {
           placeAlertsCursor: null,
           noticesCursor: "2026-11-17T09:00:00.000Z|",
           crashAlertsCursor: null,
+          driveAlertsCursor: null,
         },
       ]);
       expect(uploadsBatchedWithSync).toEqual([true]);
@@ -901,6 +908,7 @@ describe("tracking service", () => {
         placeAlertsCursor: null,
         noticesCursor: "2026-11-17T09:00:00.000Z|",
         crashAlertsCursor: null,
+        driveAlertsCursor: null,
       };
 
       await syncBackgroundTracking("push");
@@ -1059,6 +1067,7 @@ describe("tracking service", () => {
       placeAlertsCursor?: string | null;
       noticesCursor?: string | null;
       crashAlertsCursor?: string | null;
+      driveAlertsCursor?: string | null;
     }) => ({
       accepted: input.points.map((point) => (point as { clientPointId: string }).clientPointId),
       duplicates: [],

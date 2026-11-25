@@ -70,6 +70,7 @@ enum class EventNoticeKind(
   val aboutOthers: Boolean,
 ) {
   ALERT("alert", "openbeacon_place_alert", EventChannel.PLACE_ALERTS, true),
+  DRIVE_ALERT("driveAlert", "openbeacon_drive_alert", EventChannel.DRIVE_ALERTS, true),
   PLACES_CHANGED("placesChanged", "openbeacon_places_changed", null, true),
   GROUP_ACTIVITY("groupActivity", "openbeacon_group_activity", EventChannel.GROUP_ACTIVITY, true),
   ACCOUNT_ALERT("accountAlert", "openbeacon_account_alert", EventChannel.ACCOUNT_ALERTS, false),
@@ -90,6 +91,12 @@ enum class EventChannel(
     "openbeacon_place_alerts",
     R.string.openbeacon_place_alerts_channel,
     R.string.openbeacon_place_alerts_channel_description,
+    NotificationManagerCompat.IMPORTANCE_DEFAULT,
+  ),
+  DRIVE_ALERTS(
+    "openbeacon_drive_alerts",
+    R.string.openbeacon_drive_alerts_channel,
+    R.string.openbeacon_drive_alerts_channel_description,
     NotificationManagerCompat.IMPORTANCE_DEFAULT,
   ),
   GROUP_ACTIVITY(

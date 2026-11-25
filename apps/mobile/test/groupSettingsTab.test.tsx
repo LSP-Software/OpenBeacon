@@ -47,6 +47,7 @@ mock.module("../components/ui/Icon.tsx", () => ({ Icon: () => null }));
 mock.module("../components/ui/List.tsx", () => ({ ListRow: View, ListSection: View }));
 mock.module("../components/image/GroupImage.tsx", () => ({ GroupImage: () => null }));
 mock.module("lucide-react-native", () => ({
+  CarIcon: () => null,
   LogOutIcon: () => null,
   MapIcon: () => null,
   Trash2Icon: () => null,
@@ -85,6 +86,12 @@ mock.module("../lib/groupEncryption.ts", () => ({
 }));
 mock.module("../lib/trackingEvents.ts", () => ({ requestTrackingSync: () => {} }));
 
+mock.module("../lib/driveSettings.ts", () => ({
+  setDriveRecordedNotice: async () => {},
+  setTellGroup: async () => {},
+  useDriveRecordedNotice: () => true,
+  useTellsGroup: () => true,
+}));
 const { default: SettingsTab } = await import("../components/groups/SettingsTab.tsx");
 
 const owner = { id: "member-1", userId: "user-1", role: "OWNER", name: "Sam" } as const;

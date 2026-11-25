@@ -8,6 +8,7 @@ enum TrackingPointCodec {
   private static let stayFlag: UInt8 = 1
   private static let driveDetectionOffFlag: UInt8 = 2
   private static let crashAlertsOffFlag: UInt8 = 4
+  private static let driveAlertsOffFlag: UInt8 = 8
   private static let maxTimeMillis: Int64 = (1 << 48) - 1
 
   static func encode(
@@ -20,7 +21,8 @@ enum TrackingPointCodec {
     batteryLevel: Int?,
     batteryCharging: Bool,
     driveDetectionOff: Bool = false,
-    crashAlertsOff: Bool = false
+    crashAlertsOff: Bool = false,
+    driveAlertsOff: Bool = false
   ) -> Data? {
     guard latitude.isFinite, latitude >= -90, latitude <= 90 else { return nil }
     guard longitude.isFinite, longitude >= -180, longitude <= 180 else { return nil }
@@ -39,7 +41,7 @@ enum TrackingPointCodec {
     append(&bytes, encodeUInt16(accuracyMeters, scale: 10))
     append(&bytes, encodeUInt16(speedMetersPerSecond, scale: 100))
     bytes.append((batteryCharging ? 0x80 : 0) | level)
-    bytes.append((stayUntilMillis == nil ? 0 : stayFlag) | (driveDetectionOff ? driveDetectionOffFlag : 0) | (crashAlertsOff ? crashAlertsOffFlag : 0))
+    bytes.append((stayUntilMillis == nil ? 0 : stayFlag) | (driveDetectionOff ? driveDetectionOffFlag : 0) | (crashAlertsOff ? crashAlertsOffFlag : 0) | (driveAlertsOff ? driveAlertsOffFlag : 0))
     return bytes
   }
 

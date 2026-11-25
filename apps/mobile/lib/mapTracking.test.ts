@@ -167,6 +167,34 @@ describe("createMapTrackingSession", () => {
     ]);
   });
 
+  test("a member who stopped telling this group about drives keeps that on their live position", async () => {
+    const row = point({
+      createdAt: new Date("2026-07-17T12:00:00.000Z"),
+      id: "point-1",
+      senderUserId: "user-1",
+    });
+    const { session } = createSession({
+      getLatest: async () => ({ points: [row] }),
+      decryptPoint: async ({ groupId, point: encrypted }) => ({
+        status: "ok",
+        entry: {
+          ...liveEntry({
+            serverUpdatedAt: encrypted.updatedAt,
+            sourceGroupId: groupId,
+            timestamp: encrypted.updatedAt.toISOString(),
+            userId: encrypted.senderUserId,
+          }),
+          driveAlertsOff: true,
+        },
+      }),
+    });
+
+    session.setActive(true);
+    await session.tick();
+
+    expect(session.getLivePositions().map(({ driveAlertsOff }) => driveAlertsOff)).toEqual([true]);
+  });
+
   test("empty cold start stays cold and retries getLatest on the next tick", async () => {
     const { getLatestCalls, pollCalls, session } = createSession({
       getLatest: async () => ({ points: [] }),

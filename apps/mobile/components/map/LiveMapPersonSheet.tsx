@@ -26,6 +26,7 @@ import { Text } from "../ui/Text.tsx";
 import { LiveMapBottomSheet } from "./LiveMapBottomSheet.tsx";
 import { RequestUpdateButton } from "./RequestUpdateButton.tsx";
 import { DirectionsButton } from "./DirectionsButton.tsx";
+import { PersonDriveAlertsRow } from "./PersonDriveAlertsRow.tsx";
 import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 
 type PersonDevice = {
@@ -46,6 +47,7 @@ export const LiveMapPersonSheet = ({
   crash = null,
   destination,
   devices,
+  driveAlerts,
   image,
   initials,
   isSelf = false,
@@ -65,6 +67,7 @@ export const LiveMapPersonSheet = ({
   crash?: CrashIncident | null;
   destination?: { latitude: number; longitude: number } | undefined;
   devices?: readonly PersonDevice[] | undefined;
+  driveAlerts?: { groupId: string; userId: string } | undefined;
   image: string | null;
   initials: string;
   isSelf?: boolean;
@@ -209,6 +212,13 @@ export const LiveMapPersonSheet = ({
               OpenBeacon hasn’t contacted emergency services. Call 999 if you think {name} needs
               help. Crash alerts may help, but they can go off when nothing happened.
             </Text>
+          ) : null}
+          {driveAlerts && !isSelf ? (
+            <PersonDriveAlertsRow
+              groupId={driveAlerts.groupId}
+              name={name}
+              userId={driveAlerts.userId}
+            />
           ) : null}
           {timeline ? (
             <Link href={{ pathname: "/timeline", params: timeline }} asChild>

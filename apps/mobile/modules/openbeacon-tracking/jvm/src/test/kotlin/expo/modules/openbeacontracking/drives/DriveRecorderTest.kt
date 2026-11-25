@@ -79,6 +79,28 @@ class DriveRecorderTest {
     )
 
   @Test
+  fun eachGroupsCopySaysWhetherTheDriverTellsThatGroupAndTheDriverHearsOnce() {
+    val heard = mutableListOf<Pair<String, List<String>>>()
+    val recorder =
+      DriveRecorder(
+        log = log,
+        records = records,
+        queue = queue,
+        epochKeys = { keys },
+        historyShare = { share },
+        utcOffsetMinutes = { 60 },
+        tellGroup = { groupId -> groupId != "work" },
+        onFinished = { record, groupIds -> heard += record.driveId to groupIds.sorted() },
+      )
+    recorder.onFixes("owner", fixes(15.0, 200))
+    val finished = recorder.onFixes("owner", fixes(0.0, 300)).single()
+
+    val told = queue.list("owner", 10).associate { row -> row.groupId to open(row, "${row.groupId}-epoch-1")?.tellGroup }
+    assertEquals(mapOf("family" to true, "work" to false), told)
+    assertEquals(listOf(finished.driveId to listOf("family", "work")), heard)
+  }
+
+  @Test
   fun aFinishedDriveIsQueuedForEachGroupUnderTheEpochCurrentWhenItStarted() {
     val recorder = recorder()
     recorder.onFixes("owner", fixes(15.0, 100))

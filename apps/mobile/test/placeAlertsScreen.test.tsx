@@ -56,6 +56,17 @@ mock.module("../hooks/usePlaceAlertMutes.ts", () => ({
     setMute: () => {},
   }),
 }));
+mock.module("../hooks/useDriveAlertMutes.ts", () => ({
+  useDriveAlertMutes: () => ({
+    mutes: { data: { mutes: [] }, isError: false, isPending: false, refetch: async () => {} },
+    setMute: () => {},
+  }),
+}));
+mock.module("../hooks/useLiveTrackingPositions.ts", () => ({
+  useLiveTrackingPositions: () => ({ positions: [] }),
+}));
+mock.module("../components/ui/Icon.tsx", () => ({ Icon: () => null }));
+mock.module("lucide-react-native", () => ({ CarIcon: () => null }));
 mock.module("../lib/api.ts", () => ({
   trpc: { groupMembership: { list: { queryOptions: () => ({}) } } },
 }));

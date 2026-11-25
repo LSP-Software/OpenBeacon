@@ -26,6 +26,10 @@ let provisionedKeys: { epochId: string; groupId: string; senderDeviceId: string 
 let imageCatchUpGate: Promise<void> | null = null;
 let groupListCalls = 0;
 
+mock.module("./driveAlertSync.ts", () => ({
+  applyDriveAlerts: async () => {},
+  getDriveAlertsCursor: () => null,
+}));
 mock.module("./crashAlertSync.ts", () => ({
   applyCrashAlerts: async () => {},
   getCrashAlertsCursor: () => null,

@@ -60,6 +60,9 @@ mock.module("react-native-safe-area-context", () => ({
   SafeAreaView: ({ children }: { children: React.ReactNode }) => children,
 }));
 mock.module("lucide-react-native", () => ({
+  CarIcon: () => null,
+  GaugeIcon: () => null,
+  RouteIcon: () => null,
   CircleCheckIcon: () => null,
   SirenIcon: () => null,
   ClockIcon: () => null,
@@ -143,6 +146,12 @@ mock.module("../hooks/useMemberNames.ts", () => ({
 }));
 mock.module("../components/ui/Icon.tsx", () => ({ Icon: () => null }));
 mock.module("../components/groups/PlacesTab.tsx", () => ({ default: () => null }));
+mock.module("../hooks/useGroupDrives.ts", () => ({
+  useGroupDrives: () => ({ query: { data: undefined } }),
+}));
+mock.module("../hooks/useUnits.ts", () => ({
+  useUnits: () => ({ distance: "mi", speed: "mph" }),
+}));
 mock.module("../hooks/useUnseenGroupHistory.ts", () => ({
   useUnseenGroupHistory: () => ({
     latest: [{ groupId: routeGroupId, latestAt }],

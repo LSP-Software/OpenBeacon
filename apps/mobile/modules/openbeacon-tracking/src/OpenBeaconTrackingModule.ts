@@ -157,6 +157,11 @@ declare class OpenBeaconTrackingModule extends NativeModule<{
   setDriveDetection(on: boolean): void;
   isCrashAlertsOn(): boolean;
   setCrashAlerts(on: boolean): void;
+  quietDriveGroups(): string[];
+  setTellGroup(groupId: string, tell: boolean): void;
+  isDriveRecordedNoticeOn(): boolean;
+  setDriveRecordedNotice(on: boolean): void;
+  setDriveDistanceUnit(unit: "mi" | "km"): void;
   setCrashAlertContext(groups: Record<string, string>, speedUnit: "mph" | "kmh"): void;
   startCrashTest(): void;
   listDriveIds(owner: string): Promise<string[]>;
@@ -231,7 +236,7 @@ declare class OpenBeaconTrackingModule extends NativeModule<{
   crashAlertsSoundDuringDoNotDisturb(): boolean | null;
   openCrashAlertSoundSettings(): void;
   showEventNotice(
-    kind: "alert" | "placesChanged" | "groupActivity" | "accountAlert",
+    kind: "alert" | "driveAlert" | "placesChanged" | "groupActivity" | "accountAlert",
     key: string,
     title: string,
     body: string | null,

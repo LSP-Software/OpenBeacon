@@ -18,6 +18,7 @@ import { groupMembershipRouter } from "./router/group/groupMembershipRouter.ts";
 import { groupPlacesRouter } from "./router/group/groupPlacesRouter.ts";
 import { groupSettingsRouter } from "./router/group/groupSettingsRouter.ts";
 import { groupTrackingRouter } from "./router/group/groupTrackingRouter.ts";
+import { driveAlertsRouter } from "./router/group/driveAlertsRouter.ts";
 import { placeAlertsRouter } from "./router/group/placeAlertsRouter.ts";
 import { placeSharingRouter } from "./router/group/placeSharingRouter.ts";
 import { placeTransitionsRouter } from "./router/group/placeTransitionsRouter.ts";
@@ -44,6 +45,7 @@ export const appRouter = createTRPCRouter({
   device: deviceRouter,
   deviceLink: deviceLinkRouter,
   crashAlerts: crashAlertsRouter,
+  driveAlerts: driveAlertsRouter,
   drives: drivesRouter,
   emailAlerts: emailAlertsRouter,
   feedback: feedbackRouter,

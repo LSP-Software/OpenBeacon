@@ -57,3 +57,13 @@ export const setPlaceAlertMuteSchema = z.object({
   mutedUserId: z.string().min(1).max(128).nullable(),
   muted: z.boolean(),
 });
+
+export const getDriveAlertMutesSchema = z.object({
+  groupId: z.string().min(1),
+});
+
+export const setDriveAlertMuteSchema = z.object({
+  groupId: z.string().min(1),
+  mutedUserId: z.string().min(1).max(128).nullable(),
+  muted: z.boolean(),
+});

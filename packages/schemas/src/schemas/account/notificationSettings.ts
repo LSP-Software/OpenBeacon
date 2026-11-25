@@ -47,6 +47,12 @@ export const notificationTypes = {
     hasEmail: false,
     defaultOn: true,
   },
+  DRIVES: {
+    section: "drives",
+    label: "Drive alerts",
+    hasEmail: false,
+    defaultOn: true,
+  },
   DELETION_SCHEDULED: {
     section: "security",
     label: "Account deletion scheduled",
@@ -56,7 +62,7 @@ export const notificationTypes = {
 } as const satisfies Record<
   NotificationType,
   {
-    section: "places" | "groups" | "crashes" | "security";
+    section: "places" | "groups" | "drives" | "crashes" | "security";
     label: string;
     hasEmail: boolean;
     defaultOn: boolean;

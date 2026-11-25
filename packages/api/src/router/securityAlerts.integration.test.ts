@@ -843,7 +843,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("notification set
         { type: "MEMBER_JOINED", email: null, phone: true },
         { type: "MEMBER_LEFT", email: null, phone: true },
         { type: "ROLE_CHANGED", email: null, phone: false },
-        ...securityTypes.map((type) => ({ type, email: true, phone: true })),
+        ...securityTypes
+          .filter((type) => type !== "DELETION_SCHEDULED")
+          .map((type) => ({ type, email: true, phone: true })),
+        { type: "CRASH_ALERTS", email: null, phone: true },
+        { type: "DRIVES", email: null, phone: true },
+        { type: "DELETION_SCHEDULED", email: true, phone: true },
       ],
     });
     expect(await prisma.notificationSetting.count({ where: { userId: account.userId } })).toBe(0);

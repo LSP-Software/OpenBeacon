@@ -1,5 +1,5 @@
 import type { DriveRecord } from "@openbeacon/encryption";
-import { CarIcon, FuelIcon, InfoIcon, SmartphoneIcon } from "lucide-react-native";
+import { CarIcon, FuelIcon, InfoIcon, type LucideIcon, SmartphoneIcon } from "lucide-react-native";
 import type { ReactNode } from "react";
 import { ActivityIndicator, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -156,10 +156,21 @@ export const DrivesList = <Drive extends { driveId: string; record: DriveRecord 
   );
 };
 
-export const DriveInfoBox = ({ text }: { text: string }) => (
+export const DriveInfoBox = ({
+  icon = InfoIcon,
+  text,
+  title,
+}: {
+  icon?: LucideIcon;
+  text: string;
+  title?: string;
+}) => (
   <View className="flex-row items-center gap-3 rounded-2xl bg-container px-4 py-3">
-    <Icon as={InfoIcon} size={18} className="text-secondary" />
-    <Text className="flex-1 text-sm text-foreground">{text}</Text>
+    <Icon as={icon} size={18} className="text-secondary" />
+    <Text className="flex-1 text-sm text-foreground">
+      {title ? <Text className="text-sm font-semibold text-foreground">{`${title} `}</Text> : null}
+      {text}
+    </Text>
   </View>
 );
 

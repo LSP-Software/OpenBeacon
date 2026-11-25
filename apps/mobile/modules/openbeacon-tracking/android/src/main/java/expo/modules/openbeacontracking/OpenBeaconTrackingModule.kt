@@ -14,6 +14,7 @@ import expo.modules.openbeacontracking.capture.SharingResumeWorker
 import expo.modules.openbeacontracking.capture.UploadTasks
 import expo.modules.openbeacontracking.crypto.DriveRecordCodec
 import expo.modules.openbeacontracking.crypto.GroupPayloadEncrypt
+import expo.modules.openbeacontracking.drives.DriveRecordedNotice
 import expo.modules.openbeacontracking.drives.PackRequest
 import expo.modules.openbeacontracking.drives.SpeedLimitPackWorker
 import expo.modules.openbeacontracking.keys.ProvisionedEpochKey
@@ -314,6 +315,26 @@ class OpenBeaconTrackingModule : Module() {
 
       Function("setCrashAlerts") { on: Boolean ->
         TrackingRuntime.setCrashAlerts(requireContext(), on)
+      }
+
+      Function("quietDriveGroups") {
+        TrackingRuntime.quietGroups(requireContext())
+      }
+
+      Function("setTellGroup") { groupId: String, tell: Boolean ->
+        TrackingRuntime.setTellGroup(requireContext(), groupId, tell)
+      }
+
+      Function("isDriveRecordedNoticeOn") {
+        DriveRecordedNotice.isOn(requireContext())
+      }
+
+      Function("setDriveRecordedNotice") { on: Boolean ->
+        DriveRecordedNotice.setOn(requireContext(), on)
+      }
+
+      Function("setDriveDistanceUnit") { unit: String ->
+        DriveRecordedNotice.setDistanceUnit(requireContext(), unit)
       }
 
       Function("setCrashAlertContext") { groups: Map<String, String>, speedUnit: String ->
