@@ -123,10 +123,11 @@ export const NativeMap = ({
       pins.groups.map((group) => ({
         latitude: group.latitude,
         longitude: group.longitude,
+        glides: group.members.flatMap((member) => pinGlides.get(member.deviceId) ?? []),
         memberDeviceIds: group.members.map((member) => member.deviceId),
         userId: group.id,
       })),
-    [pins.groups],
+    [pins.groups, pinGlides],
   );
   const pinPressAtRef = useRef(0);
   const [stackSheetDeviceIds, setStackSheetDeviceIds] = useState<readonly string[] | null>(null);

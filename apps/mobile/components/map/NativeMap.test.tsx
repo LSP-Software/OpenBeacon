@@ -1077,6 +1077,123 @@ describe("NativeMap over a fake MapLibre", () => {
     expect(getRenderedOutput()).not.toContain("Go to Alice");
   });
 
+  test("keeps a gliding pin on the map until the pin itself leaves the screen", async () => {
+    const alice = createLiveMapMarkerFixture({ userId: "alice" });
+    const aliceFarEast = createLiveMapMarkerFixture({
+      ...alice,
+      longitude: -0.09,
+      timestamp: "2026-07-19T10:00:10.000Z",
+    });
+    const aliceEdgePins = () =>
+      root?.container.queryAll(
+        (instance) =>
+          instance.type === "pressable" && instance.props["accessibilityLabel"] === "Go to Alice",
+      ) ?? [];
+    const alicePins = () =>
+      getNativeMapMountedAnnotationIds().filter((id) => id === "alice").length;
+    setSystemTime(new Date("2026-07-19T10:00:01.000Z"));
+    await renderNativeMap({ markers: [alice] });
+    const views =
+      root?.container.queryAll(
+        (instance) => instance.type === "view" && typeof instance.props["onLayout"] === "function",
+      ) ?? [];
+    await act(async () => {
+      (views[0]?.props["onLayout"] as ((event: unknown) => void) | undefined)?.({
+        nativeEvent: { layout: { width: 400, height: 600, x: 0, y: 0 } },
+      });
+      (views[1]?.props["onLayout"] as ((event: unknown) => void) | undefined)?.({
+        nativeEvent: { layout: { width: 44, height: 96, x: 344, y: 56 } },
+      });
+      emitNativeMapRegionIsChanging({
+        latitude: 51.5,
+        longitude: -0.12,
+        zoomLevel: 14,
+        visibleBounds: [
+          [-0.11, 51.505],
+          [-0.13, 51.495],
+        ],
+      });
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    });
+    expect(aliceEdgePins()).toHaveLength(0);
+
+    setSystemTime(new Date("2026-07-19T10:00:11.000Z"));
+    await renderNativeMap({ markers: [aliceFarEast] });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    });
+    expect(aliceEdgePins()).toHaveLength(0);
+    expect(alicePins()).toBe(1);
+
+    setSystemTime(new Date("2026-07-19T10:00:30.000Z"));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    });
+    expect(aliceEdgePins()).toHaveLength(1);
+    expect(alicePins()).toBe(0);
+  });
+
+  test("fits a tapped edge chip to where its gliding pins are drawn", async () => {
+    const people = [
+      createLiveMapMarkerFixture({ userId: "alice" }),
+      createLiveMapMarkerFixture({ latitude: 51.5005, name: "Bob", userId: "bob" }),
+    ];
+    setSystemTime(new Date("2026-07-19T10:00:01.000Z"));
+    await renderNativeMap({ markers: people });
+    const views =
+      root?.container.queryAll(
+        (instance) => instance.type === "view" && typeof instance.props["onLayout"] === "function",
+      ) ?? [];
+    await act(async () => {
+      (views[0]?.props["onLayout"] as ((event: unknown) => void) | undefined)?.({
+        nativeEvent: { layout: { width: 400, height: 600, x: 0, y: 0 } },
+      });
+      (views[1]?.props["onLayout"] as ((event: unknown) => void) | undefined)?.({
+        nativeEvent: { layout: { width: 44, height: 96, x: 344, y: 56 } },
+      });
+      emitNativeMapRegionIsChanging({
+        latitude: 51.5,
+        longitude: -0.21,
+        zoomLevel: 14,
+        visibleBounds: [
+          [-0.2, 51.505],
+          [-0.22, 51.495],
+        ],
+      });
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    });
+    setSystemTime(new Date("2026-07-19T10:00:11.000Z"));
+    await renderNativeMap({
+      markers: people.map((person) => ({
+        ...person,
+        longitude: -0.09,
+        timestamp: "2026-07-19T10:00:10.000Z",
+      })),
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    });
+    const [chip] =
+      root?.container.queryAll(
+        (instance) =>
+          instance.type === "pressable" &&
+          instance.props["accessibilityLabel"] === "Show 2 people off screen",
+      ) ?? [];
+    expect(chip).toBeDefined();
+    const fitsBefore = getNativeMapCameraCommands().length;
+    await act(async () => {
+      (chip?.props["onPress"] as (() => void) | undefined)?.();
+    });
+    const [fit] = getNativeMapCameraCommands()
+      .slice(fitsBefore)
+      .filter((command) => command.type === "fitBounds");
+    const fitLongitudes = fit?.type === "fitBounds" ? [fit.ne, fit.sw] : [];
+    expect(fitLongitudes).toHaveLength(2);
+    for (const corner of fitLongitudes) {
+      expect((corner as [number, number])[0]).toBeLessThan(-0.1);
+    }
+  });
+
   test("hides a tapped edge pin before the map camera reaches its person", async () => {
     const marker = createLiveMapMarkerFixture({ userId: "alice" });
     setNativeMapProjectedPoint([600, 300]);
