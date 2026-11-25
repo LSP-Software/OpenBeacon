@@ -265,14 +265,17 @@ final class DrivingEventFinder {
       if (from.speed ?? 0) >= Self.phoneUseSpeed && (to.speed ?? 0) >= Self.phoneUseSpeed { fast.append((from.timeMillis, to.timeMillis)) }
     }
     let mergedFast = Self.merge(fast)
-    let overlaps = Self.merge(uses.map { (max($0.0, start), min($0.1, end)) }).flatMap { use in
-      mergedFast.compactMap { stretch -> (Int64, Int64)? in
-        let overlap = (max(use.0, stretch.0), min(use.1, stretch.1))
-        return overlap.0 < overlap.1 ? overlap : nil
+    return Self.merge(uses.map { (max($0.0, start), min($0.1, end)) })
+      .compactMap { use -> (Int64, Int64)? in
+        let overlaps = mergedFast.compactMap { stretch -> (Int64, Int64)? in
+          let overlap = (max(use.0, stretch.0), min(use.1, stretch.1))
+          return overlap.0 < overlap.1 ? overlap : nil
+        }
+        guard let first = overlaps.first, let last = overlaps.last,
+          overlaps.reduce(0, { $0 + $1.1 - $1.0 }) > Self.minPhoneUseMillis
+        else { return nil }
+        return (first.0, last.1)
       }
-    }
-    return Self.merge(overlaps)
-      .filter { $0.1 - $0.0 > Self.minPhoneUseMillis }
       .map { from, to in
         let position = fixes.last { $0.timeMillis <= from } ?? fixes[0]
         let inside = fixes.filter { $0.timeMillis >= from && $0.timeMillis <= to }.map { $0.speed ?? 0 }

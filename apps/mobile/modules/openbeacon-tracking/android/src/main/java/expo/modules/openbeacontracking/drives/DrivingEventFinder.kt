@@ -236,14 +236,15 @@ class DrivingEventFinder {
       if (to.timeMillis - from.timeMillis > MAX_PHONE_USE_FIX_GAP_MILLIS) continue
       if ((from.speed ?: 0.0) >= PHONE_USE_SPEED && (to.speed ?: 0.0) >= PHONE_USE_SPEED) fast += from.timeMillis to to.timeMillis
     }
-    val overlaps =
-      merge(uses.map { max(it.first, start) to min(it.second, end) }).flatMap { use ->
-        merge(fast).mapNotNull { stretch ->
-          (max(use.first, stretch.first) to min(use.second, stretch.second)).takeIf { it.first < it.second }
-        }
+    val moving = merge(fast)
+    return merge(uses.map { max(it.first, start) to min(it.second, end) })
+      .mapNotNull { use ->
+        val overlaps =
+          moving.mapNotNull { stretch ->
+            (max(use.first, stretch.first) to min(use.second, stretch.second)).takeIf { it.first < it.second }
+          }
+        if (overlaps.sumOf { it.second - it.first } > MIN_PHONE_USE_MILLIS) overlaps.first().first to overlaps.last().second else null
       }
-    return merge(overlaps)
-      .filter { it.second - it.first > MIN_PHONE_USE_MILLIS }
       .map { (from, to) ->
         val position = fixes.lastOrNull { it.timeMillis <= from } ?: fixes.first()
         DrivingEvent(
