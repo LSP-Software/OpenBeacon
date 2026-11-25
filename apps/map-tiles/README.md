@@ -55,6 +55,17 @@ Before switching to a new map, the service checks that the uploaded size matches
 
 After a rollback the bad map is in the other slot. The manifest records its build as rolled back, so scheduled updates skip it until Protomaps publishes a newer build. `map-tiles update` installs it anyway. Publishing any build clears the record. The service's own switch to the other slot, when the map in use is missing from the bucket, doesn't record anything.
 
+## Speed limit packs
+
+The service also mirrors the Speed limit packs we publish at `https://cdn.openbeacon.net/speed-limits/manifest.json` (built by `apps/speed-limit-packs`). It checks once a day, from when it starts, and retries after 1 hour, doubling up to a day, when a check fails. There is no setting and no region list: it mirrors every region.
+
+- Each file is stored as `speed-limits/<region>-<sha256 prefix>.obsl` (and `speed-limits/boundaries-<sha256 prefix>.json`), so a live file is never overwritten. A file already in the bucket with the right size and SHA-256 is kept, so a mirror that stopped part-way resumes where it left off.
+- Each download is hashed as it streams into the bucket. A file that doesn't match the manifest is deleted and the check fails.
+- `speed-limits-manifest.json` in the bucket is written only after every file is in place, so the API keeps signing the previous files until then. The files the new manifest no longer uses are listed as retired and deleted a day later.
+- The API reads that manifest and signs every region in one call (`maps.getSignedSpeedLimitPackUrls`), so it never learns which pack a phone chose.
+
+The whole world needs roughly 15–25 GB of map storage.
+
 ## The `map-tiles` command
 
 The command talks to the running service over `127.0.0.1:8080`, so it only works while the service is up and never races an update the service is running. Nothing outside the container can reach that port, so it needs no key. The service refuses a POST that carries an `Origin` header or isn't `application/json`, so a web page open on the same machine can't start an update or a rollback.

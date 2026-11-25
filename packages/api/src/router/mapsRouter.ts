@@ -4,6 +4,7 @@ import {
   forceRefreshSignedPmtilesUrlForUser,
   getSignedPmtilesUrlForUser,
 } from "../lib/pmtilesUrl.ts";
+import { getSignedSpeedLimitPackUrls } from "../mapStorage.ts";
 import { protectedProcedure } from "../procedures/auth/runtime.ts";
 
 export const mapsRouter = {
@@ -53,4 +54,12 @@ export const mapsRouter = {
         url: signedUrl.url,
       };
     }),
+  getSignedSpeedLimitPackUrls: protectedProcedure
+    .meta({
+      rateLimit: {
+        limit: 10,
+        windowMs: 3_600_000,
+      },
+    })
+    .query(() => getSignedSpeedLimitPackUrls()),
 } satisfies TRPCRouterRecord;

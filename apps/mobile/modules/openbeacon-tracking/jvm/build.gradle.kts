@@ -67,6 +67,10 @@ sourceSets {
       srcDir("../test-cases")
       include("drive-detection-v1.json")
     }
+    resources {
+      srcDir("../../../../speed-limit-packs/testVectors")
+      include("speed-limit-pack-v1.json")
+    }
   }
 }
 

@@ -25,3 +25,18 @@ export {
   s3EndpointSchema,
   storageFailureHint,
 } from "./storage.ts";
+export {
+  getMirroredBoundariesKey,
+  getMirroredPackKey,
+  type MirroredSpeedLimitPacks,
+  mirroredSpeedLimitPacksSchema,
+  RETIRED_PACK_GRACE_PERIOD_MS,
+  readMirroredSpeedLimitPacks,
+  SPEED_LIMIT_PACKS_MANIFEST_KEY,
+  SPEED_LIMIT_PACKS_MANIFEST_URL,
+  SPEED_LIMIT_PACKS_PREFIX,
+  SPEED_LIMIT_PACKS_PUBLIC_URL,
+  type SpeedLimitPackManifest,
+  speedLimitPackManifestSchema,
+  writeMirroredSpeedLimitPacks,
+} from "./speedLimitPacks.ts";

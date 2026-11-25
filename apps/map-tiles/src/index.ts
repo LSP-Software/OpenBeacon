@@ -7,6 +7,7 @@ import { serverVersion } from "../../backend/src/version.ts";
 import { createMapTilesClient, formatStatus } from "./client.ts";
 import { publish, readMapStatus, repairManifest, rollback } from "./commands.ts";
 import { envSchema, getServiceUrl, parseEnv } from "./env.ts";
+import { mirrorSpeedLimitPacks, scheduleSpeedLimitMirror } from "./speedLimits.ts";
 import { checkBucketAccess, createStorageClients } from "./storage.ts";
 import { createMapTilesHandler } from "./server.ts";
 
@@ -85,12 +86,22 @@ const serve = async () => {
       `  Map storage bucket: ${env.MAP_S3_BUCKET_NAME}`,
       `  State directory: ${env.MAP_TILES_STATE_DIR}`,
       `Checking for a map update now and whenever the map is ${env.MAP_TILES_UPDATE_INTERVAL_DAYS} days old`,
+      "Mirroring speed limit packs now and once a day",
     ].join("\n"),
   );
   const stopUpdates = handler.scheduleUpdates(env.updateIntervalMs);
+  const stopSpeedLimitMirror = scheduleSpeedLimitMirror({
+    mirror: () =>
+      mirrorSpeedLimitPacks({
+        bucket: env.MAP_S3_BUCKET_NAME,
+        client: context.client,
+        uploadClient: context.partClient,
+      }),
+  });
 
   const shutdown = async () => {
     stopUpdates();
+    stopSpeedLimitMirror();
     await server.stop(true);
     console.log("Map tiles service stopped; an unfinished upload resumes on the next start");
     process.exit(0);
