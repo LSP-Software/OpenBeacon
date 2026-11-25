@@ -90,6 +90,7 @@ class OpenBeaconTrackingModule : Module() {
               latitude = place.doubleValue("latitude"),
               longitude = place.doubleValue("longitude"),
               radiusMeters = place.doubleValue("radiusMeters"),
+              sharesTransitions = place["sharesTransitions"] as? Boolean ?: true,
             )
           }
         synchronized(TrackingRuntime.captureLock) {
@@ -252,6 +253,22 @@ class OpenBeaconTrackingModule : Module() {
 
       Function("setLowPowerMode") { enabled: Boolean ->
         TrackingRuntime.setLowPowerMode(requireContext(), enabled)
+      }
+
+      Function("isDriveDetectionOn") {
+        TrackingRuntime.isDriveDetectionOn(requireContext())
+      }
+
+      Function("setDriveDetection") { on: Boolean ->
+        TrackingRuntime.setDriveDetection(requireContext(), on)
+      }
+
+      AsyncFunction("listDriveIds") { owner: String ->
+        TrackingRuntime.driveRecorder(requireContext()).driveIds(owner)
+      }
+
+      AsyncFunction("deleteDrives") { owner: String, driveIds: List<String> ->
+        TrackingRuntime.driveRecorder(requireContext()).deleteDrives(owner, driveIds)
       }
 
       Function("areNotificationsEnabled") {

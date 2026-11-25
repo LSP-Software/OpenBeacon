@@ -159,14 +159,13 @@ export const syncGroupPlaces = async ({
       placeOwner(userId),
       device.deviceId,
       groupId,
-      sharing.enabled
-        ? ready.map(({ geometry, id }) => ({
-            placeId: id,
-            latitude: geometry.latitude,
-            longitude: geometry.longitude,
-            radiusMeters: geometry.radiusMeters,
-          }))
-        : [],
+      ready.map(({ geometry, id }) => ({
+        placeId: id,
+        latitude: geometry.latitude,
+        longitude: geometry.longitude,
+        radiusMeters: geometry.radiusMeters,
+        sharesTransitions: sharing.enabled,
+      })),
     );
     if (!applied) return false;
   }

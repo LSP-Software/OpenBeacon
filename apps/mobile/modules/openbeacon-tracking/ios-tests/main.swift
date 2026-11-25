@@ -67,7 +67,8 @@ let encodePoint = { (point: [String: Any]) -> Data? in
     accuracyMeters: (point["accuracy"] as? NSNumber)?.doubleValue,
     speedMetersPerSecond: (point["speed"] as? NSNumber)?.doubleValue,
     batteryLevel: (battery["level"] as? NSNumber)?.intValue,
-    batteryCharging: battery["charging"] as! Bool
+    batteryCharging: battery["charging"] as! Bool,
+    driveDetectionOff: point["driveDetectionOff"] as? Bool ?? false
   )
 }
 let encodeVectors = pointVectors["encode"] as! [[String: Any]]

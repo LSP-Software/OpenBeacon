@@ -24,6 +24,7 @@ class CapturePipeline(
   private val sharingState: () -> SharingCaptureState = { SharingCaptureState() },
   private val historyShare: () -> CaptureHistoryShare = { CaptureHistoryShare() },
   private val historySettings: HistoryFilterSettings = HistoryFilterSettings(),
+  private val driveDetectionOff: () -> Boolean = { false },
   private val loadAllowance: (List<String>) -> HistoryAllowance? = { null },
   private val saveAllowance: (List<String>, HistoryAllowance) -> Unit = { _, _ -> },
   private val onRowFailure: (String, Exception) -> Unit = { _, _ -> },
@@ -96,6 +97,7 @@ class CapturePipeline(
       }
     }
     if (planned.isEmpty()) return 0
+    val drivesOff = driveDetectionOff()
 
     var currentFixEncoded = false
     val rows =
@@ -111,6 +113,7 @@ class CapturePipeline(
             speedMetersPerSecond = point.speedMetersPerSecond,
             batteryLevel = point.batteryLevel,
             batteryCharging = point.batteryCharging,
+            driveDetectionOff = drivesOff,
           ) ?: return@mapNotNull null
         try {
           val encrypted =

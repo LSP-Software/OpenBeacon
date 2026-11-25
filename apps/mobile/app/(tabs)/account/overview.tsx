@@ -10,6 +10,7 @@ import {
   BellIcon,
   BellOffIcon,
   BookOpenIcon,
+  CarIcon,
   ChevronRightIcon,
   EyeIcon,
   GaugeIcon,
@@ -64,6 +65,7 @@ import { getStoredDeviceId } from "../../../lib/deviceKeys.ts";
 import { historyLossRisk } from "../../../lib/historyLossRisk.ts";
 import { historyShareLabel } from "../../../lib/historyShare.ts";
 import { removePhoneRecoveryPrompt } from "../../../lib/keyRemovalWarnings.ts";
+import { useDriveDetection } from "../../../lib/driveDetection.ts";
 import { useLowPowerMode } from "../../../lib/lowPowerMode.ts";
 import {
   getLocationPermissionWarningDescription,
@@ -96,6 +98,7 @@ const AccountScreen = () => {
   const notifications = useNotificationSettings();
   const appLock = useAppLock();
   const lowPowerMode = useLowPowerMode();
+  const driveDetection = useDriveDetection();
   const historyShare = useHistoryShare();
   const { appThemePreference } = useTheme();
   const units = useUnits();
@@ -347,6 +350,13 @@ const AccountScreen = () => {
             value={
               historyShare.setting ? historyShareLabel(historyShare.setting.account) : undefined
             }
+          />
+          <ListRow
+            title="Drive detection"
+            icon={CarIcon}
+            iconColor="teal"
+            href="/account/drive-detection"
+            value={driveDetection ? "On" : "Off"}
           />
           <ListRow
             title="Save battery while moving"

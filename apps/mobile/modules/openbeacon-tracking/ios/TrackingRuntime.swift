@@ -127,6 +127,14 @@ enum TrackingRuntime {
     defaults.set(enabled, forKey: "openbeacon_tracking_low_power_mode")
   }
 
+  static func isDriveDetectionOn() -> Bool {
+    defaults.object(forKey: "openbeacon_tracking_drive_detection") as? Bool ?? true
+  }
+
+  static func setDriveDetection(_ on: Bool) {
+    defaults.set(on, forKey: "openbeacon_tracking_drive_detection")
+  }
+
   static func nowMillis() -> Int64 {
     Int64(Date().timeIntervalSince1970 * 1000)
   }

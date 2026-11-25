@@ -10,6 +10,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.location.Location
+import android.net.Uri
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
@@ -37,6 +38,7 @@ import expo.modules.openbeacontracking.NoticeSlot
 import expo.modules.openbeacontracking.Notices
 import expo.modules.openbeacontracking.R
 import expo.modules.openbeacontracking.TrackingRuntime
+import expo.modules.openbeacontracking.drives.DriveFix
 import expo.modules.openbeacontracking.queue.CiphertextQueueRow
 import java.util.Calendar
 import java.util.Date
@@ -83,6 +85,15 @@ class TrackingCaptureService : Service() {
     packageManager.getLaunchIntentForPackage(packageName)?.let { intent ->
       PendingIntent.getActivity(this, NOTIFICATION_ID, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
+  }
+
+  private val openDriveDetectionIntent by lazy {
+    PendingIntent.getActivity(
+      this,
+      NOTIFICATION_ID + 1,
+      Intent(Intent.ACTION_VIEW, Uri.parse(DRIVE_DETECTION_LINK)).setPackage(packageName),
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
   }
 
   override fun onBind(intent: Intent?): IBinder? = null
@@ -225,6 +236,7 @@ class TrackingCaptureService : Service() {
       Notices.dismiss(this, NoticeSlot.SHARING_CHANGED)
       currentIntervalMs = intervalMs
       watchConnectivity()
+      captureScope.launch { finishStaleDrive() }
       updateSharing()
     } catch (error: SecurityException) {
       Log.e(TAG, "Failed to start location capture.", error)
@@ -266,7 +278,7 @@ class TrackingCaptureService : Service() {
       LocationRequest
         .Builder(Priority.PRIORITY_HIGH_ACCURACY, intervalMs)
         .setMinUpdateIntervalMillis(intervalMs)
-        .setMaxUpdateDelayMillis(intervalMs)
+        .setMaxUpdateDelayMillis(if (intervalMs == DRIVE_INTERVAL_MS) DRIVE_BATCH_MS else intervalMs)
         .build()
 
     locationCallback?.let { fusedLocationClient.removeLocationUpdates(it) }
@@ -274,7 +286,9 @@ class TrackingCaptureService : Service() {
     val callback = object : LocationCallback() {
       override fun onLocationResult(result: LocationResult) {
         val location = result.lastLocation ?: return
+        val locations = result.locations
         captureScope.launch {
+          recordDrive(locations, generation)
           enqueueEncryptedFix(location, generation)
           if (isOnline()) requestUploadIfDue(generation)
         }
@@ -378,6 +392,7 @@ class TrackingCaptureService : Service() {
   }
 
   private fun stopCapture() {
+    interruptDrive()
     networkCallback?.let { getSystemService(ConnectivityManager::class.java)?.unregisterNetworkCallback(it) }
     networkCallback = null
     sharingHandler.removeCallbacks(resumeSharing)
@@ -405,6 +420,7 @@ class TrackingCaptureService : Service() {
       return
     }
     if (sharing.isPaused(System.currentTimeMillis())) {
+      interruptDrive()
       synchronized(captureStateLock) {
         locationCallback?.let { fusedLocationClient.removeLocationUpdates(it) }
         locationCallback = null
@@ -491,7 +507,12 @@ class TrackingCaptureService : Service() {
         confirmingPlace = isConfirmingPlace(location.time),
       )
 
-    val nextIntervalMs = decision.intervalMs.coerceAtLeast(MIN_INTERVAL_MS)
+    val nextIntervalMs =
+      if (TrackingRuntime.isDriveDetectionOn(this) && TrackingRuntime.driveRecorder(this).wantsFastFixes) {
+        DRIVE_INTERVAL_MS
+      } else {
+        decision.intervalMs.coerceAtLeast(MIN_INTERVAL_MS)
+      }
     if (nextIntervalMs != intervalMs) {
       try {
         synchronized(captureStateLock) {
@@ -581,12 +602,81 @@ class TrackingCaptureService : Service() {
           accuracyMeters = location.accuracy.toDouble().takeIf { location.hasAccuracy() },
           timestampMillis = location.time,
           speedMetersPerSecond = location.speed.toDouble().takeIf { location.hasSpeed() },
+          onArrive = { captureScope.launch { endDriveAtPlace() } },
         ) > 0
       }
     } catch (error: Exception) {
       Log.e(TAG, "Failed to check places.", error)
       false
     }
+
+  private fun recordDrive(locations: List<Location>, generation: Long) {
+    if (!TrackingRuntime.isDriveDetectionOn(this)) return
+    val owner = TrackingRuntime.queueOwner(this) ?: return
+    val captureCurrent = synchronized(captureStateLock) { TrackingRuntime.isCaptureRunning && TrackingRuntime.captureCommands.isCurrent(generation) }
+    if (!captureCurrent || TrackingRuntime.sharingState(this).isPaused(System.currentTimeMillis())) return
+    val recorder = TrackingRuntime.driveRecorder(this)
+    val wasRecording = recorder.recording
+    try {
+      if (TrackingRuntime.epochKeyStore(this).list().isEmpty()) {
+        recorder.interrupt(owner)
+      } else {
+        val batterySaver = CaptureSamplingPolicy.isBatterySaver(BatteryReader.read(this))
+        recorder.onFixes(
+          owner,
+          locations
+            .filter { it.elapsedRealtimeNanos > minimumFixElapsedRealtimeNanos }
+            .sortedBy { it.time }
+            .map { location ->
+              DriveFix(
+                timeMillis = location.time,
+                latitude = location.latitude,
+                longitude = location.longitude,
+                speed = location.speed.toDouble().takeIf { location.hasSpeed() },
+                accuracy = location.accuracy.toDouble().takeIf { location.hasAccuracy() },
+                batterySaver = batterySaver,
+              )
+            },
+        )
+      }
+    } catch (error: Exception) {
+      Log.e(TAG, "Failed to record a drive.", error)
+    }
+    if (recorder.recording != wasRecording) showNotice()
+  }
+
+  private fun endDriveAtPlace() {
+    if (!TrackingRuntime.isDriveDetectionOn(this)) return
+    val owner = TrackingRuntime.queueOwner(this) ?: return
+    val recorder = TrackingRuntime.driveRecorder(this)
+    if (!recorder.recording) return
+    try {
+      recorder.onPlaceArrive(owner)
+    } catch (error: Exception) {
+      Log.e(TAG, "Failed to end a drive at a place.", error)
+    }
+    showNotice()
+  }
+
+  private fun interruptDrive() {
+    val owner = TrackingRuntime.queueOwner(this) ?: return
+    val recorder = TrackingRuntime.driveRecorder(this)
+    if (!recorder.recording) return
+    try {
+      recorder.interrupt(owner)
+    } catch (error: Exception) {
+      Log.e(TAG, "Failed to end a drive.", error)
+    }
+  }
+
+  private fun finishStaleDrive() {
+    val owner = TrackingRuntime.queueOwner(this) ?: return
+    try {
+      TrackingRuntime.driveRecorder(this).tick(owner, System.currentTimeMillis())
+    } catch (error: Exception) {
+      Log.e(TAG, "Failed to finish a drive.", error)
+    }
+  }
 
   private fun isConfirmingPlace(nowMillis: Long): Boolean =
     try {
@@ -646,6 +736,7 @@ class TrackingCaptureService : Service() {
   private fun buildNotification(): Notification {
     val sharing = TrackingRuntime.sharingState(this)
     val paused = sharing.isPaused(System.currentTimeMillis())
+    val recordingDrive = !paused && TrackingRuntime.isDriveDetectionOn(this) && TrackingRuntime.driveRecorder(this).recording
     val pausedUntil = sharing.pausedUntil
     val body =
       when {
@@ -664,12 +755,20 @@ class TrackingCaptureService : Service() {
       }
     return NotificationCompat
       .Builder(this, CHANNEL_ID)
-      .setContentTitle(getString(if (paused) R.string.openbeacon_tracking_notification_paused_title else R.string.openbeacon_tracking_notification_title))
+      .setContentTitle(
+        getString(
+          when {
+            paused -> R.string.openbeacon_tracking_notification_paused_title
+            recordingDrive -> R.string.openbeacon_tracking_notification_drive_title
+            else -> R.string.openbeacon_tracking_notification_title
+          },
+        ),
+      )
       .setContentText(body)
       .setStyle(NotificationCompat.BigTextStyle().bigText(body))
       .setSmallIcon(R.drawable.openbeacon_notification_icon)
       .setColor(ContextCompat.getColor(this, R.color.openbeacon_notification_color))
-      .setContentIntent(openAppIntent)
+      .setContentIntent(if (recordingDrive) openDriveDetectionIntent else openAppIntent)
       .setDeleteIntent(showNoticeIntent)
       .setShowWhen(false)
       .setOngoing(true)
@@ -707,6 +806,9 @@ class TrackingCaptureService : Service() {
     const val EXTRA_LOCATE = "locate"
     const val DEFAULT_INTERVAL_MS = CaptureSamplingPolicy.DEFAULT_INTERVAL_MS
     const val MIN_INTERVAL_MS = 5_000L
+    private const val DRIVE_INTERVAL_MS = 1_000L
+    private const val DRIVE_BATCH_MS = 10_000L
+    private const val DRIVE_DETECTION_LINK = "openbeacon:///account/drive-detection"
     private const val TAG = "TrackingCapture"
     const val CHANNEL_ID = "openbeacon_tracking_capture"
     private const val NOTIFICATION_ID = 7260
@@ -719,6 +821,15 @@ class TrackingCaptureService : Service() {
         NotificationManagerCompat.from(context).areNotificationsEnabled() &&
           NotificationManagerCompat.from(context).getNotificationChannelCompat(CHANNEL_ID)?.importance != NotificationManagerCompat.IMPORTANCE_NONE
       return canShow && manager.activeNotifications.none { it.id == NOTIFICATION_ID }
+    }
+
+    fun showNoticeNow(context: Context) {
+      if (!TrackingRuntime.isCaptureRunning) return
+      try {
+        context.startService(Intent(context, TrackingCaptureService::class.java).apply { action = ACTION_SHOW_NOTICE })
+      } catch (error: IllegalStateException) {
+        Log.w(TAG, "Android didn't allow the sharing notice to be updated.", error)
+      }
     }
 
     fun showNoticeIfMissing(context: Context) {

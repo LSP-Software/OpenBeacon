@@ -14,11 +14,13 @@ export type TrackingPoint = {
     level: number | null;
     charging: boolean;
   };
+  driveDetectionOff?: true;
 };
 
 const UNKNOWN_UINT16 = 0xffff;
 const UNKNOWN_BATTERY_LEVEL = 127;
 const STAY_FLAG = 1;
+const DRIVE_DETECTION_OFF_FLAG = 2;
 const MINUTE_MS = 60_000;
 const UINT32 = 2 ** 32;
 
@@ -72,7 +74,10 @@ export const encodeTrackingPoint = (point: TrackingPoint) => {
   view.setUint16(17, encodeUint16(point.accuracy, 10));
   view.setUint16(19, encodeUint16(point.speed, 100));
   view.setUint8(21, (battery.charging ? 0x80 : 0) | level);
-  view.setUint8(22, stayUntil === null ? 0 : STAY_FLAG);
+  view.setUint8(
+    22,
+    (stayUntil === null ? 0 : STAY_FLAG) | (point.driveDetectionOff ? DRIVE_DETECTION_OFF_FLAG : 0),
+  );
 
   return bytes;
 };
@@ -96,8 +101,8 @@ export const decodeTrackingPoint = (bytes: Uint8Array): TrackingPoint => {
     Math.abs(latitude) > 900_000_000 ||
     Math.abs(longitude) > 1_800_000_000 ||
     (level > 100 && level !== UNKNOWN_BATTERY_LEVEL) ||
-    (flags & ~STAY_FLAG) !== 0 ||
-    (flags !== STAY_FLAG && stayMinutes !== 0)
+    (flags & ~(STAY_FLAG | DRIVE_DETECTION_OFF_FLAG)) !== 0 ||
+    ((flags & STAY_FLAG) === 0 && stayMinutes !== 0)
   ) {
     throw invalid();
   }
@@ -106,12 +111,13 @@ export const decodeTrackingPoint = (bytes: Uint8Array): TrackingPoint => {
     latitude: latitude / 1e7,
     longitude: longitude / 1e7,
     time,
-    stayUntil: flags === STAY_FLAG ? time + stayMinutes * MINUTE_MS : null,
+    stayUntil: (flags & STAY_FLAG) !== 0 ? time + stayMinutes * MINUTE_MS : null,
     accuracy: decodeUint16(view.getUint16(17), 10),
     speed: decodeUint16(view.getUint16(19), 100),
     battery: {
       level: level === UNKNOWN_BATTERY_LEVEL ? null : level,
       charging: (battery & 0x80) !== 0,
     },
+    ...((flags & DRIVE_DETECTION_OFF_FLAG) !== 0 ? { driveDetectionOff: true as const } : {}),
   };
 };

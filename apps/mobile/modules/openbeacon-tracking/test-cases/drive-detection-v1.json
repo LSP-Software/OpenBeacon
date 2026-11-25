@@ -1,0 +1,208 @@
+{
+  "about": "Fix sequences shared by the Kotlin and Swift Drive detector tests. Every case starts at startTime at origin. A move step adds count fixes, one every `every` seconds, each `speed` m/s times `every` seconds further east (lon += metres / (111320 * cos(lat))). speed 0 holds still. reportSpeed false leaves the fix's speed out. Expected start and end are seconds after startTime; distances are metres within 0.5% and speeds m/s within 0.05.",
+  "startTime": 1764000000000,
+  "origin": { "latitude": 51.5, "longitude": -0.1 },
+  "cases": [
+    {
+      "name": "back-dates the start to where the moving stretch began",
+      "steps": [
+        { "move": { "speed": 0, "every": 30, "count": 2 } },
+        { "move": { "speed": 3, "every": 10, "count": 6 } },
+        { "expect": { "fast": false, "recording": false } },
+        { "move": { "speed": 15, "every": 10, "count": 1 } },
+        { "expect": { "fast": true, "recording": false } },
+        { "move": { "speed": 15, "every": 1, "count": 2 } },
+        { "expect": { "fast": true, "recording": true } },
+        { "move": { "speed": 15, "every": 1, "count": 288 } },
+        { "move": { "speed": 0, "every": 1, "count": 300 } },
+        { "expect": { "fast": false, "recording": false } }
+      ],
+      "drives": [
+        { "start": 70, "end": 420, "distance": 4650, "checkedDistance": 4650, "topSpeed": 15 }
+      ]
+    },
+    {
+      "name": "drops an unconfirmed candidate back to the normal rate",
+      "steps": [
+        { "move": { "speed": 0, "every": 30, "count": 2 } },
+        { "move": { "speed": 8, "every": 10, "count": 1 } },
+        { "expect": { "fast": true, "recording": false } },
+        { "move": { "speed": 4, "every": 1, "count": 3 } },
+        { "expect": { "fast": false, "recording": false } },
+        { "interrupt": true }
+      ],
+      "drives": []
+    },
+    {
+      "name": "keeps a traffic queue inside one drive",
+      "steps": [
+        { "move": { "speed": 0, "every": 30, "count": 2 } },
+        { "move": { "speed": 15, "every": 1, "count": 200 } },
+        { "move": { "speed": 0, "every": 1, "count": 60 } },
+        { "move": { "speed": 4, "every": 1, "count": 10 } },
+        { "move": { "speed": 0, "every": 1, "count": 60 } },
+        { "move": { "speed": 4, "every": 1, "count": 10 } },
+        { "move": { "speed": 0, "every": 1, "count": 60 } },
+        { "expect": { "fast": true, "recording": true } },
+        { "move": { "speed": 15, "every": 1, "count": 200 } },
+        { "move": { "speed": 0, "every": 1, "count": 300 } }
+      ],
+      "drives": [
+        { "start": 61, "end": 660, "distance": 6065, "checkedDistance": 6065, "topSpeed": 15 }
+      ]
+    },
+    {
+      "name": "splits at a stop of 5 minutes",
+      "steps": [
+        { "move": { "speed": 0, "every": 30, "count": 2 } },
+        { "move": { "speed": 15, "every": 1, "count": 200 } },
+        { "move": { "speed": 0, "every": 1, "count": 300 } },
+        { "move": { "speed": 15, "every": 1, "count": 200 } },
+        { "move": { "speed": 0, "every": 1, "count": 300 } }
+      ],
+      "drives": [
+        { "start": 61, "end": 260, "distance": 2985, "checkedDistance": 2985, "topSpeed": 15 },
+        { "start": 561, "end": 760, "distance": 2985, "checkedDistance": 2985, "topSpeed": 15 }
+      ]
+    },
+    {
+      "name": "ends at a Place Arrive",
+      "steps": [
+        { "move": { "speed": 0, "every": 30, "count": 2 } },
+        { "move": { "speed": 15, "every": 1, "count": 200 } },
+        { "move": { "speed": 0, "every": 1, "count": 30 } },
+        { "arrive": true },
+        { "expect": { "fast": false, "recording": false } }
+      ],
+      "drives": [
+        { "start": 61, "end": 260, "distance": 2985, "checkedDistance": 2985, "topSpeed": 15 }
+      ]
+    },
+    {
+      "name": "ends when the driver walks away",
+      "steps": [
+        { "move": { "speed": 0, "every": 30, "count": 2 } },
+        { "move": { "speed": 15, "every": 1, "count": 200 } },
+        { "move": { "speed": 0, "every": 1, "count": 20 } },
+        { "move": { "speed": 1.4, "every": 1, "count": 20 } },
+        { "expect": { "fast": false, "recording": false } }
+      ],
+      "drives": [
+        { "start": 61, "end": 260, "distance": 2985, "checkedDistance": 2985, "topSpeed": 15 }
+      ]
+    },
+    {
+      "name": "drops a drive under 1 km",
+      "steps": [
+        { "move": { "speed": 0, "every": 30, "count": 2 } },
+        { "move": { "speed": 7.5, "every": 1, "count": 130 } },
+        { "move": { "speed": 0, "every": 1, "count": 300 } }
+      ],
+      "drives": []
+    },
+    {
+      "name": "drops a drive under 2 minutes",
+      "steps": [
+        { "move": { "speed": 0, "every": 30, "count": 2 } },
+        { "move": { "speed": 30, "every": 1, "count": 100 } },
+        { "move": { "speed": 0, "every": 1, "count": 300 } }
+      ],
+      "drives": []
+    },
+    {
+      "name": "drops sustained speed above 200 km/h",
+      "steps": [
+        { "move": { "speed": 0, "every": 30, "count": 2 } },
+        { "move": { "speed": 15, "every": 1, "count": 60 } },
+        { "move": { "speed": 60, "every": 1, "count": 120 } },
+        { "move": { "speed": 15, "every": 1, "count": 60 } },
+        { "move": { "speed": 0, "every": 1, "count": 300 } }
+      ],
+      "drives": []
+    },
+    {
+      "name": "keeps a drive with a brief speed spike",
+      "steps": [
+        { "move": { "speed": 0, "every": 30, "count": 2 } },
+        { "move": { "speed": 15, "every": 1, "count": 100 } },
+        { "move": { "speed": 70, "every": 1, "count": 5 } },
+        { "move": { "speed": 15, "every": 1, "count": 100 } },
+        { "move": { "speed": 0, "every": 1, "count": 300 } }
+      ],
+      "drives": [
+        { "start": 61, "end": 265, "distance": 3335, "checkedDistance": 3335, "topSpeed": 70 }
+      ]
+    },
+    {
+      "name": "keeps an interrupted drive that meets the minimum",
+      "steps": [
+        { "move": { "speed": 0, "every": 30, "count": 2 } },
+        { "move": { "speed": 15, "every": 1, "count": 200 } },
+        { "interrupt": true },
+        { "expect": { "fast": false, "recording": false } }
+      ],
+      "drives": [
+        { "start": 61, "end": 260, "distance": 2985, "checkedDistance": 2985, "topSpeed": 15 }
+      ]
+    },
+    {
+      "name": "drops an interrupted drive under the minimum",
+      "steps": [
+        { "move": { "speed": 0, "every": 30, "count": 2 } },
+        { "move": { "speed": 15, "every": 1, "count": 50 } },
+        { "interrupt": true }
+      ],
+      "drives": []
+    },
+    {
+      "name": "ends at the last fix when the phone went quiet",
+      "steps": [
+        { "move": { "speed": 0, "every": 30, "count": 2 } },
+        { "move": { "speed": 15, "every": 1, "count": 200 } },
+        { "move": { "speed": 0, "every": 3600, "count": 1 } },
+        { "expect": { "fast": false, "recording": false } }
+      ],
+      "drives": [
+        { "start": 61, "end": 260, "distance": 2985, "checkedDistance": 2985, "topSpeed": 15 }
+      ]
+    },
+    {
+      "name": "throws away the drive in progress when Drive detection is turned off",
+      "steps": [
+        { "move": { "speed": 0, "every": 30, "count": 2 } },
+        { "move": { "speed": 15, "every": 1, "count": 200 } },
+        { "discard": true },
+        { "expect": { "fast": false, "recording": false } },
+        { "move": { "speed": 0, "every": 1, "count": 300 } }
+      ],
+      "drives": []
+    },
+    {
+      "name": "leaves battery saver stretches out of the Checked distance",
+      "steps": [
+        { "move": { "speed": 0, "every": 30, "count": 2 } },
+        { "move": { "speed": 15, "every": 20, "count": 3, "batterySaver": true } },
+        { "expect": { "fast": false, "recording": true } },
+        { "move": { "speed": 15, "every": 20, "count": 17, "batterySaver": true } },
+        { "move": { "speed": 15, "every": 1, "count": 1 } },
+        { "expect": { "fast": true, "recording": true } },
+        { "move": { "speed": 15, "every": 1, "count": 99 } },
+        { "move": { "speed": 0, "every": 1, "count": 300 } }
+      ],
+      "drives": [
+        { "start": 80, "end": 560, "distance": 7200, "checkedDistance": 1485, "topSpeed": 15 }
+      ]
+    },
+    {
+      "name": "works out speed from positions when the fix has none",
+      "steps": [
+        { "move": { "speed": 0, "every": 30, "count": 2, "reportSpeed": false } },
+        { "move": { "speed": 15, "every": 1, "count": 200, "reportSpeed": false } },
+        { "move": { "speed": 0, "every": 1, "count": 300, "reportSpeed": false } }
+      ],
+      "drives": [
+        { "start": 61, "end": 260, "distance": 2985, "checkedDistance": 2985, "topSpeed": 15 }
+      ]
+    }
+  ]
+}

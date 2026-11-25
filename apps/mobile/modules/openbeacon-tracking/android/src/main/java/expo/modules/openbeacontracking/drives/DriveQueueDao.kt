@@ -34,4 +34,7 @@ interface DriveQueueDao {
 
   @Query("DELETE FROM drive_queue WHERE groupId IN (:groupIds)")
   fun deleteByGroups(groupIds: List<String>)
+
+  @Query("DELETE FROM drive_queue WHERE owner = :owner AND driveId IN (:driveIds)")
+  fun deleteByDrives(owner: String, driveIds: List<String>)
 }

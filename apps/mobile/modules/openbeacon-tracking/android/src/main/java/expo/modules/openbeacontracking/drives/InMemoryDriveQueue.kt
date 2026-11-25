@@ -29,4 +29,9 @@ class InMemoryDriveQueue : DriveQueue {
   override fun deleteByGroups(groupIds: List<String>) {
     rows.removeAll { it.groupId in groupIds }
   }
+
+  @Synchronized
+  override fun deleteByDrives(owner: String, driveIds: List<String>) {
+    rows.removeAll { it.owner == owner && it.driveId in driveIds }
+  }
 }

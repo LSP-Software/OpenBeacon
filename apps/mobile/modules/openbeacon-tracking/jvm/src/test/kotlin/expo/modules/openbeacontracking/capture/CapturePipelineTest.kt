@@ -37,6 +37,26 @@ class CapturePipelineTest {
   }
 
   @Test
+  fun membersCanTellWhenDriveDetectionIsOffFromTheLocationItself() {
+    val keys = InMemoryEpochKeyStore()
+    keys.replaceAll(listOf(ProvisionedEpochKey("group", "epoch", ByteArray(32), "tablet", "trackingPoint")))
+    val queue = InMemoryCiphertextQueue()
+    var off = false
+    val pipeline = CapturePipeline(epochKeyStore = keys, ciphertextQueue = queue, queueOwner = { "owner" }, driveDetectionOff = { off })
+    pipeline.onFix(51.5, 0.0, at("2026-07-13T18:45:00.000Z"), null, 80, false)
+    off = true
+    pipeline.onFix(51.5, 0.0, at("2026-07-13T18:46:00.000Z"), null, 80, false)
+    val flags =
+      queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).map { row ->
+        GroupPayloadEncrypt.decryptGroupPayload(
+          ByteArray(32),
+          EncryptedGroupPayload(row.algorithm, row.ciphertext, row.epochId, row.groupId, row.kind, row.nonce, row.senderDeviceId),
+        )[22].toInt()
+      }
+    assertEquals(listOf(0, 2), flags)
+  }
+
+  @Test
   fun aGroupWhoseKeyCannotEncryptDoesNotBlockTheOtherGroups() {
     val keys = InMemoryEpochKeyStore()
     keys.replaceAll(

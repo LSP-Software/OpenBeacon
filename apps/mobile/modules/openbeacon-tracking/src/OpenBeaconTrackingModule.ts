@@ -48,6 +48,7 @@ export type PlaceGeofenceInput = {
   latitude: number;
   longitude: number;
   radiusMeters: number;
+  sharesTransitions: boolean;
 };
 
 export type QueuedPlaceTransition = {
@@ -143,6 +144,10 @@ declare class OpenBeaconTrackingModule extends NativeModule<{
   isCaptureRunning(): boolean;
   isLowPowerMode(): boolean;
   setLowPowerMode(enabled: boolean): void;
+  isDriveDetectionOn(): boolean;
+  setDriveDetection(on: boolean): void;
+  listDriveIds(owner: string): Promise<string[]>;
+  deleteDrives(owner: string, driveIds: string[]): Promise<void>;
   countUnassignedCiphertexts(senderDeviceId: string): Promise<number>;
   assignUnassignedCiphertexts(senderDeviceId: string, owner: string): Promise<void>;
   listPendingCiphertexts(

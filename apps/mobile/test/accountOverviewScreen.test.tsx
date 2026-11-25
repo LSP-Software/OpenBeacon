@@ -50,6 +50,7 @@ mock.module("lucide-react-native", () =>
       "BellIcon",
       "BellOffIcon",
       "BookOpenIcon",
+      "CarIcon",
       "ChevronRightIcon",
       "EyeIcon",
       "GaugeIcon",
@@ -128,6 +129,7 @@ mock.module("../hooks/useUnits.ts", () => ({
 mock.module("../hooks/useHistoryShare.ts", () => ({ useHistoryShare: () => ({ setting: null }) }));
 mock.module("../lib/appLock.ts", () => ({ useAppLock: () => ({ enabled: false }) }));
 mock.module("../lib/lowPowerMode.ts", () => ({ useLowPowerMode: () => false }));
+mock.module("../lib/driveDetection.ts", () => ({ useDriveDetection: () => true }));
 mock.module("../lib/versions.ts", () => ({ appVersion: "1.0.0" }));
 mock.module("../providers/ThemeProvider.tsx", () => ({
   useTheme: () => ({ appThemePreference: "system" }),

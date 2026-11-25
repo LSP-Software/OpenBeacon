@@ -6,4 +6,5 @@ data class PlaceGeofence(
   val latitude: Double,
   val longitude: Double,
   val radiusMeters: Double,
+  val sharesTransitions: Boolean = true,
 )

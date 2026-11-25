@@ -52,6 +52,8 @@ sourceSets {
       exclude("**/DriveQueueDao.kt")
       exclude("**/DriveQueueDatabase.kt")
       exclude("**/RoomDriveQueue.kt")
+      exclude("**/SecureDriveLog.kt")
+      exclude("**/SecureDriveRecordStore.kt")
     }
   }
   test {
@@ -60,6 +62,10 @@ sourceSets {
       include("group-payload-interop-v1.json")
       include("tracking-point-v2.json")
       include("drive-record-v1.json")
+    }
+    resources {
+      srcDir("../test-cases")
+      include("drive-detection-v1.json")
     }
     resources {
       srcDir("../../../../speed-limit-packs/testVectors")

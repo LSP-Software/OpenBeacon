@@ -23,6 +23,7 @@ class PlaceDetectionTest {
     metersNorth: Double,
     atSeconds: Long,
     state: SharingCaptureState = sharing,
+    onArrive: () -> Unit = {},
   ) = onFix(
     owner = owner,
     deviceId = "device-1",
@@ -33,6 +34,7 @@ class PlaceDetectionTest {
     accuracyMeters = 10.0,
     timestampMillis = (atSeconds + 1) * 1_000,
     speedMetersPerSecond = null,
+    onArrive = onArrive,
   )
 
   private fun PlaceDetection.arriveAtHome(fromSeconds: Long): Int {
@@ -53,6 +55,18 @@ class PlaceDetectionTest {
     )
     assertTrue(detection.hasQueued(owner))
     detection.acknowledge(listOf("id-0"))
+    assertFalse(detection.hasQueued(owner))
+  }
+
+  @Test
+  fun aPlaceInAGroupWithPlaceSharingOffEndsDrivesButQueuesNothing() {
+    val detection = detection()
+    detection.setGroupPlaces("group-1", listOf(home.copy(sharesTransitions = false)))
+    var arrivals = 0
+    detection.fix(home, 1_000.0, 0)
+    val queued = (30L..300L step 30).sumOf { detection.fix(home, 0.0, it) { arrivals += 1 } }
+    assertEquals(0, queued)
+    assertEquals(1, arrivals)
     assertFalse(detection.hasQueued(owner))
   }
 

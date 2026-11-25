@@ -11,6 +11,8 @@ out="$(mktemp -d)"
 trap 'rm -rf "$out"' EXIT
 swiftc "$dir/../ios/Core/SpeedLimitPack.swift" "$dir/drives/main.swift" -o "$out/drives-tests"
 "$out/drives-tests" "$dir/../../../../speed-limit-packs/testVectors/speed-limit-pack-v1.json"
+swiftc "$dir/../ios/Core/DriveRecordCodec.swift" "$dir/../ios/Core/DriveDetector.swift" "$dir/DriveDetectorChecks.swift" "$dir/detector/main.swift" -o "$out/detector-tests"
+"$out/detector-tests" "$dir/../test-cases/drive-detection-v1.json"
 
 if [ "$(uname)" != "Darwin" ]; then
   echo "Skipping the CryptoKit checks: they need macOS."

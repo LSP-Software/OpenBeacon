@@ -246,7 +246,15 @@ describe("syncGroupPlaces", () => {
     expect(nativePlaces).toEqual([
       {
         groupId: "family",
-        places: [{ placeId: "home", latitude: 51.5, longitude: -0.12, radiusMeters: 250 }],
+        places: [
+          {
+            placeId: "home",
+            latitude: 51.5,
+            longitude: -0.12,
+            radiusMeters: 250,
+            sharesTransitions: true,
+          },
+        ],
       },
     ]);
     expect(notices).toEqual([
@@ -277,10 +285,23 @@ describe("syncGroupPlaces", () => {
     expect(notices.map(({ title }) => title)).toEqual(["Family moved 🏠 Home"]);
   });
 
-  test("with the switch off, native detection gets no places and nothing is announced", async () => {
+  test("with the switch off, native detection only ends drives at places and nothing is announced", async () => {
     sharingEnabled = false;
     await syncGroupPlaces({ groupId: "family", quietPlaceIds: [], userId: "user-1" });
-    expect(nativePlaces).toEqual([{ groupId: "family", places: [] }]);
+    expect(nativePlaces).toEqual([
+      {
+        groupId: "family",
+        places: [
+          {
+            placeId: "home",
+            latitude: 51.5,
+            longitude: -0.12,
+            radiusMeters: 250,
+            sharesTransitions: false,
+          },
+        ],
+      },
+    ]);
     expect(notices).toEqual([]);
   });
 

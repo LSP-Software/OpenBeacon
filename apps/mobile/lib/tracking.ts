@@ -101,7 +101,7 @@ let lastAccountSyncAt = 0;
 const observedGroupEpochs = new Map<string, string>();
 const lastCleanBackfills = new Map<string, { at: number; missingVersion: number | null }>();
 
-const getOwner = (userId: string) => JSON.stringify([getBaseUrl(), userId]);
+export const getOwner = (userId: string) => JSON.stringify([getBaseUrl(), userId]);
 
 const getPushScope = (device: { userId: string; deviceId: string }) =>
   JSON.stringify([getBaseUrl(), device.userId, device.deviceId]);

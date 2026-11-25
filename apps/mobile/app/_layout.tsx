@@ -90,6 +90,7 @@ const RootLayout = () => {
                       <Stack.Screen name="account/directions" />
                       <Stack.Screen name="account/location-history" />
                       <Stack.Screen name="account/save-battery" />
+                      <Stack.Screen name="account/drive-detection" />
                       <Stack.Screen name="account/who-can-see-me" />
                     </Stack.Protected>
                   </RootStack>

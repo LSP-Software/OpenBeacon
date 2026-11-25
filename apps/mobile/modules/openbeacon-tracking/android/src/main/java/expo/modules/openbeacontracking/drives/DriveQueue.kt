@@ -22,6 +22,8 @@ interface DriveQueue {
   fun deleteByOwner(owner: String?)
 
   fun deleteByGroups(groupIds: List<String>)
+
+  fun deleteByDrives(owner: String, driveIds: List<String>)
 }
 
 object DriveQueueLimits {
