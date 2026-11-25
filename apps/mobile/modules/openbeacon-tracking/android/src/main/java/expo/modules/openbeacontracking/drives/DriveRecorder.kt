@@ -19,12 +19,26 @@ class DriveRecorder(
   private var detector = DriveDetector()
   private var owner: String? = null
   private var startKeys = emptyList<ProvisionedEpochKey>()
+  private val events = DrivingEventFinder()
 
   val recording: Boolean
     @Synchronized get() = detector.recording
 
   val wantsFastFixes: Boolean
     @Synchronized get() = detector.wantsFastFixes
+
+  val wantsSensors: Boolean
+    @Synchronized get() = detector.watching
+
+  @Synchronized
+  fun onAccelerometer(samples: List<AccelerometerSample>) {
+    events.onAccelerometer(samples)
+  }
+
+  @Synchronized
+  fun onPhoneUse(change: PhoneUseChange) {
+    events.onPhoneUse(change)
+  }
 
   @Synchronized
   fun onFixes(owner: String, fixes: List<DriveFix>): List<DriveRecord> {
@@ -35,6 +49,7 @@ class DriveRecorder(
       step.finished?.let { drive -> finish(owner, drive)?.let { finished += it } }
       if (step.started) startKeys = epochKeys()
     }
+    (detector.retainedFixes.firstOrNull() ?: fixes.lastOrNull())?.let { events.trimBefore(it.timeMillis) }
     persist(owner)
     return finished
   }
@@ -105,6 +120,7 @@ class DriveRecorder(
     val keys = startKeys
     startKeys = emptyList()
     val speeding = findSpeeding(drive.fixes)
+    val found = events.find(drive.fixes)
     val built =
       DriveRecord(
         driveId = newDriveId(),
@@ -116,11 +132,11 @@ class DriveRecorder(
         topSpeed = drive.topSpeed,
         averageSpeed = drive.averageSpeed,
         utcOffsetMinutes = utcOffsetMinutes(drive.start.timeMillis),
-        counts = DrivingEventType.entries.associateWith { if (it == DrivingEventType.SPEEDING) speeding.events.size else 0 },
+        counts = found.counts + (DrivingEventType.SPEEDING to speeding.events.size),
         passenger = false,
         speedLimitsChecked = speeding.checked,
         tellGroup = true,
-        events = speeding.events,
+        events = DrivingEventFinder.mostSevereFirst(found.events + speeding.events),
       )
     val record = DriveRecordCodec.encode(built)?.let { DriveRecordCodec.decode(it) } ?: return null
     DriveUploads.enqueue(

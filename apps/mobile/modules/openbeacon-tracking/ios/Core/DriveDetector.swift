@@ -17,7 +17,7 @@ struct DetectedDrive: Equatable {
   var durationSeconds: Double
   var topSpeed: Double
   var averageSpeed: Double
-  var fixes: [DriveFix] = []
+  var fixes: [DriveFix]
 }
 
 struct DriveStep {
@@ -56,6 +56,10 @@ final class DriveDetector {
   private var walkingSince: Int64?
 
   private(set) var recording = false
+
+  var watching: Bool {
+    recording || candidate != nil
+  }
 
   var wantsFastFixes: Bool {
     (recording || candidate != nil) && previous?.batterySaver == false

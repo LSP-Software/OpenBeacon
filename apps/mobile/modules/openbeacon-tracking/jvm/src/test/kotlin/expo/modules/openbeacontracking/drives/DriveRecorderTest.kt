@@ -49,6 +49,26 @@ class DriveRecorderTest {
     DriveFix(time, 51.5, longitude, speed, 5.0, batterySaver = false)
   }
 
+  private fun driveWithSensors(
+    recorder: DriveRecorder,
+    speeds: List<Double>,
+  ): List<DriveRecord> {
+    var previous = speeds.first()
+    return speeds.chunked(10).flatMap { batch ->
+      val fixes = mutableListOf<DriveFix>()
+      val samples = mutableListOf<AccelerometerSample>()
+      for (speed in batch) {
+        samples += (0 until 10).map { AccelerometerSample(time + it * 100L, 0.0, speed - previous, 9.81) }
+        previous = speed
+        time += 1_000
+        longitude += speed / (111_320.0 * cos(Math.toRadians(51.5)))
+        fixes += DriveFix(time, 51.5, longitude, speed, 5.0, batterySaver = false)
+      }
+      recorder.onAccelerometer(samples)
+      recorder.onFixes("owner", fixes)
+    }
+  }
+
   private fun open(row: DriveQueueRow, epochId: String): DriveRecord? =
     DriveRecordCodec.open(
       SealedDriveRecord(row.driveId, row.startHour, row.nonce, row.ciphertext),
@@ -182,5 +202,73 @@ class DriveRecorderTest {
     recorder.deleteDrives("owner", listOf(driveId))
     assertEquals(emptyList(), recorder.driveIds("owner"))
     assertEquals(emptyList(), queue.list("owner", 10))
+  }
+
+  @Test
+  fun aFinishedDriveCarriesItsMostSevereEventsWithExactCounts() {
+    val recorder = recorder()
+    val speeds = MutableList(20) { 20.0 }
+    repeat(30) {
+      speeds += List(11) { 16.0 }
+      speeds += List(11) { 20.0 }
+    }
+    recorder.onPhoneUse(PhoneUseChange(startTime + 100_000, PhoneUseSignal.UNLOCKED))
+    recorder.onPhoneUse(PhoneUseChange(startTime + 110_000, PhoneUseSignal.SCREEN_OFF))
+    val record = (driveWithSensors(recorder, speeds) + driveWithSensors(recorder, List(300) { 0.0 })).single()
+
+    assertEquals(
+      mapOf(DrivingEventType.HARD_BRAKING to 30, DrivingEventType.RAPID_ACCELERATION to 30, DrivingEventType.SPEEDING to 0, DrivingEventType.PHONE_USE to 1),
+      record.counts,
+    )
+    assertEquals(48, record.events.size)
+    assertEquals(DrivingEventType.PHONE_USE, record.events.first().type)
+    assertEquals(99.0, record.events.first().timeOffsetSeconds)
+    assertEquals(10.0, record.events.first().durationSeconds)
+    queue.list("owner", 10).forEach { row -> assertEquals(record, open(row, row.epochId)) }
+  }
+
+  @Test
+  fun aDriveWithSpeedingAndSensorEventsKeepsBothRankedTypeByType() {
+    val road =
+      PackRoadPiece(
+        roadId = 1,
+        roadClass = 3,
+        oneway = false,
+        forward = RoadLimit(RoadLimitSource.Posted, 483),
+        backward = RoadLimit(RoadLimitSource.Posted, 483),
+        lonE5 = intArrayOf(-10_100, 50_000),
+        latE5 = intArrayOf(5_150_000, 5_150_000),
+      )
+    val recorder = recorder(SpeedLimitRoads { _, _, _ -> listOf(road) })
+    val speeds = MutableList(150) { 20.0 }
+    repeat(3) {
+      speeds += List(11) { 16.0 }
+      speeds += List(11) { 20.0 }
+    }
+    recorder.onPhoneUse(PhoneUseChange(startTime + 30_000, PhoneUseSignal.UNLOCKED))
+    recorder.onPhoneUse(PhoneUseChange(startTime + 40_000, PhoneUseSignal.SCREEN_OFF))
+    val record = (driveWithSensors(recorder, speeds) + driveWithSensors(recorder, List(300) { 0.0 })).single()
+
+    assertEquals(
+      mapOf(DrivingEventType.HARD_BRAKING to 3, DrivingEventType.RAPID_ACCELERATION to 3, DrivingEventType.SPEEDING to 1, DrivingEventType.PHONE_USE to 1),
+      record.counts,
+    )
+    assertTrue(record.speedLimitsChecked)
+    assertEquals(
+      listOf(DrivingEventType.PHONE_USE, DrivingEventType.SPEEDING) +
+        List(3) { listOf(DrivingEventType.HARD_BRAKING, DrivingEventType.RAPID_ACCELERATION) }.flatten(),
+      record.events.map { it.type },
+    )
+    queue.list("owner", 10).forEach { row -> assertEquals(record, open(row, row.epochId)) }
+  }
+
+  @Test
+  fun aDriveWithoutAccelerometerReadingsRecordsNoBrakingOrAcceleration() {
+    val recorder = recorder()
+    recorder.onFixes("owner", fixes(20.0, 20) + fixes(16.0, 60) + fixes(20.0, 60))
+    val record = recorder.onFixes("owner", fixes(0.0, 300)).single()
+    assertEquals(0, record.counts[DrivingEventType.HARD_BRAKING])
+    assertEquals(0, record.counts[DrivingEventType.RAPID_ACCELERATION])
+    assertTrue(record.events.isEmpty())
   }
 }
