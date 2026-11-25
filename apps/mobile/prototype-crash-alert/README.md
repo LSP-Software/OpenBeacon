@@ -22,3 +22,5 @@ Shared:
 - `N`: received notifications (alert, OK, late, two devices), driver's heads-up fallback and later notices, Group History, "Crash alerts are off"
 
 `common.css`, `parts.js`, `icons.js`, `render.sh` and the fonts come from `prototype/weekly-driving-report`. `crash.js` holds the crash parts.
+
+Sam picked on 25 Nov 2026: countdown **D-B** (dark header with the seconds left in big type, a sheet showing what the Groups will see, green I'm OK), received alert **R-A** (red block on top of the person card, green when they say they're OK), a **10-second** Try it, and the shared screens S and N as drawn. The full decision is in the resolution comment on OPE-393.
