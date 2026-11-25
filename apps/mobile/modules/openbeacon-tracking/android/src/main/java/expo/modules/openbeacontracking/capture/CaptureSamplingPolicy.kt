@@ -22,6 +22,8 @@ object CaptureSamplingPolicy {
   const val STATIONARY_DISTANCE_METERS = 25.0
   const val MAX_STATIONARY_SKIP_MS = 300_000L
   const val LOW_BATTERY_LEVEL = 15
+  const val DRIVE_INTERVAL_MS = 1_000L
+  const val DRIVE_BATCH_MS = 10_000L
 
   fun evaluate(
     battery: BatterySnapshot,
@@ -33,6 +35,7 @@ object CaptureSamplingPolicy {
     lowPowerMode: Boolean = false,
     confirmingPlace: Boolean = false,
     crashSharing: Boolean = false,
+    fastDriveFixes: Boolean = false,
   ): CaptureSamplingDecision {
     if (crashSharing) {
       return CaptureSamplingDecision(
@@ -56,6 +59,7 @@ object CaptureSamplingPolicy {
       }
     val intervalMs =
       when {
+        fastDriveFixes -> DRIVE_INTERVAL_MS
         batterySaver && (moving || confirmingPlace) -> BATTERY_SAVER_MOVING_INTERVAL_MS
         batterySaver -> BATTERY_SAVER_DEFAULT_INTERVAL_MS
         moving || confirmingPlace -> MOVING_INTERVAL_MS
@@ -83,6 +87,8 @@ object CaptureSamplingPolicy {
         },
     )
   }
+
+  fun maxUpdateDelayMs(intervalMs: Long): Long = if (intervalMs == DRIVE_INTERVAL_MS) DRIVE_BATCH_MS else intervalMs
 
   fun isBatterySaver(battery: BatterySnapshot): Boolean =
     battery.powerSaveMode ||

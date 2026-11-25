@@ -18,6 +18,7 @@ object CrashAlertNotices {
   const val TAG = "openbeacon_crash_alert"
   private const val ALERT_CHANNEL = "openbeacon_crash_alerts"
   private const val OK_CHANNEL = "openbeacon_crash_alert_follow_ups"
+  private const val GROUP = "openbeacon_crash_alerts"
 
   private fun createChannels(context: Context) {
     val manager = NotificationManagerCompat.from(context)
@@ -60,6 +61,7 @@ object CrashAlertNotices {
     val builder =
       NotificationCompat
         .Builder(context, if (ok) OK_CHANNEL else ALERT_CHANNEL)
+        .setGroup(GROUP)
         .setContentTitle(title)
         .setContentText(body)
         .setStyle(NotificationCompat.BigTextStyle().bigText(body))

@@ -285,7 +285,7 @@ class TrackingCaptureService : Service() {
       LocationRequest
         .Builder(Priority.PRIORITY_HIGH_ACCURACY, intervalMs)
         .setMinUpdateIntervalMillis(intervalMs)
-        .setMaxUpdateDelayMillis(if (intervalMs == DRIVE_INTERVAL_MS) DRIVE_BATCH_MS else intervalMs)
+        .setMaxUpdateDelayMillis(CaptureSamplingPolicy.maxUpdateDelayMs(intervalMs))
         .build()
 
     locationCallback?.let { fusedLocationClient.removeLocationUpdates(it) }
@@ -516,14 +516,11 @@ class TrackingCaptureService : Service() {
         lowPowerMode = TrackingRuntime.isLowPowerMode(this),
         confirmingPlace = isConfirmingPlace(location.time),
         crashSharing = TrackingRuntime.isCrashSharing(this, nowMs),
+        fastDriveFixes = TrackingRuntime.isDriveDetectionOn(this) && TrackingRuntime.driveRecorder(this).wantsFastFixes,
       )
 
     val nextIntervalMs =
-      if (TrackingRuntime.isDriveDetectionOn(this) && TrackingRuntime.driveRecorder(this).wantsFastFixes) {
-        DRIVE_INTERVAL_MS
-      } else {
-        decision.intervalMs.coerceAtLeast(MIN_INTERVAL_MS)
-      }
+      if (decision.intervalMs == CaptureSamplingPolicy.DRIVE_INTERVAL_MS) decision.intervalMs else decision.intervalMs.coerceAtLeast(MIN_INTERVAL_MS)
     if (nextIntervalMs != intervalMs) {
       try {
         synchronized(captureStateLock) {
@@ -854,8 +851,6 @@ class TrackingCaptureService : Service() {
     const val EXTRA_LOCATE = "locate"
     const val DEFAULT_INTERVAL_MS = CaptureSamplingPolicy.DEFAULT_INTERVAL_MS
     const val MIN_INTERVAL_MS = 5_000L
-    private const val DRIVE_INTERVAL_MS = 1_000L
-    private const val DRIVE_BATCH_MS = 10_000L
     private const val DRIVE_DETECTION_LINK = "openbeacon:///account/drive-detection"
     private const val TAG = "TrackingCapture"
     const val CHANNEL_ID = "openbeacon_tracking_capture"
