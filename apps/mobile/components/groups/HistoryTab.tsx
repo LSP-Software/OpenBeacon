@@ -21,7 +21,7 @@ import {
   UserPlusIcon,
   UserXIcon,
 } from "lucide-react-native";
-import { useRouter } from "expo-router";
+import { Link } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, View } from "react-native";
 import { LoadingIndicator } from "../LoadingIndicator.tsx";
@@ -104,7 +104,6 @@ const HistoryTab = ({
     subscribed: isFocused,
   });
 
-  const router = useRouter();
   const units = useUnits();
   const [driveWindowStart] = useState(
     () => new Date(Math.floor((Date.now() - 14 * 24 * HOUR_MS) / HOUR_MS) * HOUR_MS),
@@ -275,58 +274,57 @@ const HistoryTab = ({
                 const time = item.at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
                 if (item.kind === "drive") {
                   return (
-                    <Pressable
+                    <Link
                       key={item.id}
-                      accessibilityRole="link"
-                      accessibilityLabel={`${[item.title, ...item.chips, item.note ?? ""].filter(Boolean).join(", ")}, ${time}`}
-                      accessibilityHint="Opens this drive in Timeline"
-                      onPress={() =>
-                        router.push({
-                          pathname: "/timeline",
-                          params: { groupId, driveId: item.driveId },
-                        })
-                      }
-                      className={cn(
-                        "flex-row items-start gap-4 px-4 py-3",
-                        groupedRowClassName(index),
-                      )}
-                      style={groupedRowStyle(index, items.length)}
+                      href={{ pathname: "/timeline", params: { groupId, driveId: item.driveId } }}
+                      asChild
                     >
-                      <View
-                        className="size-11 items-center justify-center rounded-full"
-                        style={{ backgroundColor: "#7A1240" }}
+                      <Pressable
+                        accessibilityRole="link"
+                        accessibilityLabel={`${[item.title, ...item.chips, item.note ?? ""].filter(Boolean).join(", ")}, ${time}`}
+                        accessibilityHint="Opens this drive in Timeline"
+                        className={cn(
+                          "flex-row items-start gap-4 px-4 py-3",
+                          groupedRowClassName(index),
+                        )}
+                        style={groupedRowStyle(index, items.length)}
                       >
-                        <Icon as={CarIcon} size={22} className="text-white" />
-                      </View>
-                      <View className="flex-1 gap-1">
-                        <Text className="text-foreground">{item.title}</Text>
-                        {item.chips.length > 0 ? (
-                          <View className="flex-row flex-wrap gap-1">
-                            {item.chips.map((chip, chipIndex) => (
-                              <View
-                                key={chip}
-                                className="flex-row items-center gap-1 rounded-lg px-1.5 py-0.5"
-                                style={{ backgroundColor: "#F4DDE6" }}
-                              >
-                                {chipIcons[chipIndex] ? (
-                                  <Icon as={chipIcons[chipIndex]} size={13} color="#7A1240" />
-                                ) : null}
-                                <Text
-                                  className="text-sm font-semibold"
-                                  style={{ color: "#7A1240" }}
+                        <View
+                          className="size-11 items-center justify-center rounded-full"
+                          style={{ backgroundColor: "#7A1240" }}
+                        >
+                          <Icon as={CarIcon} size={22} className="text-white" />
+                        </View>
+                        <View className="flex-1 gap-1">
+                          <Text className="text-foreground">{item.title}</Text>
+                          {item.chips.length > 0 ? (
+                            <View className="flex-row flex-wrap gap-1">
+                              {item.chips.map((chip, chipIndex) => (
+                                <View
+                                  key={chip}
+                                  className="flex-row items-center gap-1 rounded-lg px-1.5 py-0.5"
+                                  style={{ backgroundColor: "#F4DDE6" }}
                                 >
-                                  {chip}
-                                </Text>
-                              </View>
-                            ))}
-                          </View>
-                        ) : null}
-                        {item.note ? (
-                          <Text className="text-sm text-secondary">{item.note}</Text>
-                        ) : null}
-                        <Text className="text-sm text-tertiary">{time}</Text>
-                      </View>
-                    </Pressable>
+                                  {chipIcons[chipIndex] ? (
+                                    <Icon as={chipIcons[chipIndex]} size={13} color="#7A1240" />
+                                  ) : null}
+                                  <Text
+                                    className="text-sm font-semibold"
+                                    style={{ color: "#7A1240" }}
+                                  >
+                                    {chip}
+                                  </Text>
+                                </View>
+                              ))}
+                            </View>
+                          ) : null}
+                          {item.note ? (
+                            <Text className="text-sm text-secondary">{item.note}</Text>
+                          ) : null}
+                          <Text className="text-sm text-tertiary">{time}</Text>
+                        </View>
+                      </Pressable>
+                    </Link>
                   );
                 }
                 if (item.kind === "crash") {

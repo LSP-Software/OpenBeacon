@@ -37,6 +37,14 @@ export const setCrashAlerts = async (next: boolean) => {
   for (const listener of listeners) listener();
 };
 
+export const localEmergencyNumber = () => {
+  try {
+    return OpenBeaconTracking.emergencyNumber();
+  } catch {
+    return null;
+  }
+};
+
 export const tryCrashCountdown = async () => {
   const started = await tryCatch((async () => OpenBeaconTracking.startCrashTest())());
   if (started.error) Alert.alert("Couldn’t start the test", "Try again.");

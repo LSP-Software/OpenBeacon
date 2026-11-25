@@ -309,6 +309,10 @@ class OpenBeaconTrackingModule : Module() {
         TrackingRuntime.setDriveDetection(requireContext(), on)
       }
 
+      Function("emergencyNumber") {
+        CrashCountdownController.emergencyNumber(requireContext())
+      }
+
       Function("isCrashAlertsOn") {
         TrackingRuntime.isCrashAlertsOn(requireContext())
       }

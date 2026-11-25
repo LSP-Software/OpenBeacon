@@ -213,6 +213,10 @@ public class OpenBeaconTrackingModule: Module {
       TrackingRuntime.setDriveDetection(on)
     }
 
+    Function("emergencyNumber") { () -> String? in
+      nil
+    }
+
     Function("isCrashAlertsOn") {
       TrackingRuntime.isCrashAlertsOn()
     }

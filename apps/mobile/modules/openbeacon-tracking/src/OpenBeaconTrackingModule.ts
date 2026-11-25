@@ -155,6 +155,7 @@ declare class OpenBeaconTrackingModule extends NativeModule<{
   setLowPowerMode(enabled: boolean): void;
   isDriveDetectionOn(): boolean;
   setDriveDetection(on: boolean): void;
+  emergencyNumber(): string | null;
   isCrashAlertsOn(): boolean;
   setCrashAlerts(on: boolean): void;
   quietDriveGroups(): string[];
