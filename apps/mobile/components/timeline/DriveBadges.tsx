@@ -45,7 +45,7 @@ export const DrivingEventIcon = ({
   );
 };
 
-const scoreColor = (score: number) =>
+export const scoreColor = (score: number) =>
   score >= 85 ? "#1E6B3A" : score >= 70 ? "#B26A00" : "#C2410C";
 
 export const DriveScoreBadge = ({

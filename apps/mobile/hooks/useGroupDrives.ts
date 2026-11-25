@@ -92,3 +92,53 @@ export const useGroupDrives = (groupId: string, windowStart: Date | null) => {
 
   return { query, remove, rewrite };
 };
+
+export const usePersonDrives = (userId: string | null, enabled: boolean) =>
+  useQuery({
+    enabled: enabled && userId !== null,
+    queryKey: ["groupDrives", "person", userId],
+    refetchInterval: 60_000,
+    queryFn: async ({ signal }) => {
+      if (!userId) throw new Error("No person is chosen.");
+      const { device, epochKeyFor } = await epochKeyReader();
+      const cache = caches.get(device.userId) ?? createDriveCache();
+      caches.set(device.userId, cache);
+      const groups = (await trpcClient.groupMembership.list.query(undefined, { signal })).filter(
+        (group) => group.members.some((member) => member.userId === userId),
+      );
+      const loaded = await Promise.all(
+        groups.map(async (group) => {
+          const days = await trpcClient.groupTracking.historyDays.query(
+            { groupId: group.id },
+            { signal },
+          );
+          const firstHour = days.senders.find((sender) => sender.userId === userId)?.firstHour;
+          const visibleFrom = Math.max(
+            days.windowStart.getTime(),
+            typeof firstHour === "number" ? firstHour * HOUR_MS : 0,
+          );
+          const drives = await loadGroupDrives({
+            cache,
+            epochKeyFor: (epochId) => epochKeyFor(group.id, epochId),
+            fetchDrives: (input) => trpcClient.groupTracking.drives.query(input, { signal }),
+            fromHour: Math.floor(days.windowStart.getTime() / HOUR_MS),
+            groupId: group.id,
+            toHour: Math.floor(Date.now() / HOUR_MS) + 1,
+          });
+          return {
+            drives: drives.filter((drive) => drive.senderUserId === userId),
+            visibleFrom,
+          };
+        }),
+      );
+      return {
+        drives: loaded.flatMap((group) => group.drives),
+        groups: groups.map((group) => ({
+          id: group.id,
+          members: group.members.length,
+          name: group.name,
+        })),
+        visibleFrom: Math.min(Date.now(), ...loaded.map((group) => group.visibleFrom)),
+      };
+    },
+  });
