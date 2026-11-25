@@ -43,6 +43,7 @@ dependencies {
   implementation "com.google.crypto.tink:tink-android:1.18.0"
   implementation "com.google.android.gms:play-services-location:21.0.1"
   implementation "com.google.firebase:firebase-messaging:26.0.2"
+  implementation "com.google.android.play:app-update:2.1.0"
   implementation "androidx.core:core-ktx:1.17.0"
   implementation "androidx.room:room-runtime:2.8.4"
   implementation "androidx.room:room-ktx:2.8.4"

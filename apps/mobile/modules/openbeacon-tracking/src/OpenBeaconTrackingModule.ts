@@ -174,6 +174,10 @@ declare class OpenBeaconTrackingModule extends NativeModule<{
   clearEventNotices(keepSecurityAlerts: boolean): Promise<void>;
   isPlaceSearchAvailable(): boolean;
   searchPlaces(query: string, box: PlaceSearchBox | null): Promise<PlaceSearchOutcome>;
+  checkAppUpdate(): Promise<
+    { status: "available" | "inProgress"; versionCode: number } | { status: "none" }
+  >;
+  startAppUpdate(): Promise<boolean>;
 }
 
 export default requireNativeModule<OpenBeaconTrackingModule>("OpenBeaconTracking");

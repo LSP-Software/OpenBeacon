@@ -4,6 +4,7 @@ import { Redirect } from "expo-router";
 import { NativeTabs } from "expo-router/unstable-native-tabs";
 import { Platform } from "react-native";
 import { useCallback, useEffect, useRef } from "react";
+import { AppUpdateSheet } from "../../components/AppUpdateSheet.tsx";
 import { HistoryShareNotice } from "../../components/HistoryShareNotice.tsx";
 import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
 import { useAppForeground } from "../../hooks/useAppForeground.ts";
@@ -126,6 +127,7 @@ const TabsLayout = () => {
         </NativeTabs.Trigger>
       </NativeTabs>
       <HistoryShareNotice userId={session.user.id} />
+      <AppUpdateSheet />
     </>
   );
 };

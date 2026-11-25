@@ -136,6 +136,19 @@ class OpenBeaconTrackingModule : Module() {
         PlaceSearch.search(requireContext(), query, parsed) { promise.resolve(it) }
       }
 
+      AsyncFunction("checkAppUpdate") { promise: Promise ->
+        AppUpdate.check(requireContext()) { promise.resolve(it) }
+      }
+
+      AsyncFunction("startAppUpdate") { promise: Promise ->
+        val activity = appContext.currentActivity
+        if (activity == null) {
+          promise.resolve(false)
+          return@AsyncFunction
+        }
+        AppUpdate.start(activity) { promise.resolve(it) }
+      }.runOnQueue(Queues.MAIN)
+
       Function("showEventNotice") { kind: String, key: String, title: String, body: String?, groupName: String?, link: String ->
         Notices.showEvent(requireContext(), EventNoticeKind.of(kind), key, title, body, groupName, link)
       }
