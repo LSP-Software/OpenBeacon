@@ -381,15 +381,8 @@ const MapScreen = () => {
 
   const selectedUserId =
     markers.find((marker) => marker.deviceId === selectedDeviceId)?.userId ?? null;
-  const crash = useActiveCrash(selfUserId || undefined, selectedUserId);
-
-  useEffect(() => {
-    if (!crashUserId) return;
-    const marker = markers.find((item) => item.userId === crashUserId && !item.isSelf);
-    if (!marker) return;
-    setSelectedDeviceId(marker.deviceId);
-    router.setParams({ crashUserId: undefined });
-  }, [crashUserId, markers, router]);
+  const crash = useActiveCrash(selfUserId || undefined, crashUserId ?? selectedUserId);
+  const clearFocusCrash = useCallback(() => router.setParams({ crashUserId: undefined }), [router]);
 
   useEffect(() => {
     if (selectedDeviceId && !markers.some((marker) => marker.deviceId === selectedDeviceId)) {
@@ -412,6 +405,8 @@ const MapScreen = () => {
             (item) => item.deviceId === device.deviceId && item.userId === device.userId,
           ),
         }))}
+        focusCrashUserId={crashUserId ?? null}
+        onFocusCrashHandled={clearFocusCrash}
         focusPlaceId={focusPlaceId ?? null}
         onFocusPlaceHandled={clearFocusPlace}
         places={placePins}

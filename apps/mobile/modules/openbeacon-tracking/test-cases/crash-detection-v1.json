@@ -1,5 +1,5 @@
 {
-  "about": "Fix and accelerometer series shared by the Kotlin and Swift crash detector tests. Every case starts at startTime at origin. A move step adds count fixes, one every `every` seconds, each `speed` m/s times `every` seconds further east (lon += metres / (111320 * cos(lat))). drive false marks the fixes as outside a confirmed Drive; batterySaver marks them as battery saver fixes. A jolt step adds one accelerometer reading of `g` times 9.80665 m/s² (total magnitude, gravity included) `after` seconds after the last fix, or `at` seconds after startTime when given (used to deliver a reading late, after later fixes). Expected suspicions give the jolt time and the speed just before in m/s (within 0.05).",
+  "about": "Fix and accelerometer series shared by the Kotlin and Swift crash detector tests. Every case starts at startTime at origin. A move step adds count fixes, one every `every` seconds, each `speed` m/s times `every` seconds further east (lon += metres / (111320 * cos(lat))). drive false marks the fixes as outside a confirmed Drive; batterySaver marks them as battery saver fixes. A jolt step adds one accelerometer reading of `g` times 9.80665 m/s² (total magnitude, gravity included) `after` seconds after the last fix, or `at` seconds after startTime when given (used to deliver a reading late, after later fixes). An alert step says whether a Crash alert is already counting down or sent from here on (false at the start). Expected suspicions give the jolt time and the speed just before in m/s (within 0.05).",
   "startTime": 1764000000000,
   "origin": { "latitude": 51.5, "longitude": -0.1 },
   "cases": [
@@ -154,6 +154,20 @@
         { "time": 60.5, "speedBefore": 15 },
         { "time": 400.5, "speedBefore": 15 }
       ]
+    },
+    {
+      "name": "a crash ignored while an alert is open doesn't stop the next one within 5 minutes",
+      "steps": [
+        { "alert": true },
+        { "move": { "speed": 15, "every": 1, "count": 60 } },
+        { "jolt": { "g": 8, "after": 0.5 } },
+        { "move": { "speed": 0, "every": 1, "count": 20 } },
+        { "alert": false },
+        { "move": { "speed": 15, "every": 1, "count": 60 } },
+        { "jolt": { "g": 8, "after": 0.5 } },
+        { "move": { "speed": 0, "every": 1, "count": 20 } }
+      ],
+      "suspicions": [{ "time": 140.5, "speedBefore": 15 }]
     }
   ]
 }

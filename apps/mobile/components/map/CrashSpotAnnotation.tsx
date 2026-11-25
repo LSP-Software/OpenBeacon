@@ -5,10 +5,12 @@ import { Platform, View } from "react-native";
 import { refreshViewAnnotation } from "./refreshViewAnnotation.ts";
 
 export const CrashSpotAnnotation = ({
+  besidePin,
   latitude,
   longitude,
   name,
 }: {
+  besidePin: boolean;
   latitude: number;
   longitude: number;
   name: string;
@@ -16,16 +18,18 @@ export const CrashSpotAnnotation = ({
   const annotationRef = useRef<ViewAnnotationRef>(null);
   const accessibilityLabel = `Where ${name}’s possible crash happened`;
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Android draws ViewAnnotation children into a bitmap that needs an explicit refresh when it moves above the pin
   useEffect(() => {
     refreshViewAnnotation(annotationRef);
-  }, []);
+  }, [besidePin]);
 
   return (
     <ViewAnnotation
       ref={annotationRef}
       id="crash-spot"
       lngLat={[longitude, latitude]}
-      anchor="center"
+      anchor={besidePin ? "bottom" : "center"}
+      offset={besidePin ? [0, -28] : [0, 0]}
       draggable={false}
       {...(Platform.OS === "ios" ? { title: accessibilityLabel } : {})}
     >

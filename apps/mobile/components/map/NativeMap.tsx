@@ -26,6 +26,7 @@ import { cn } from "../../lib/cn.ts";
 import type { MapGroupOption, MapMemberDevice, MapPeople } from "../../lib/mapPeopleTypes.ts";
 import {
   type MapPlace,
+  metersBetween,
   peopleAtPlace,
   placeCirclePolygon,
   zoomToFitPlace,
@@ -54,18 +55,20 @@ import { useLiveMapCamera } from "./useLiveMapCamera.ts";
 import { useLiveMapPinGroups } from "./useLiveMapPinGroups.ts";
 import { useLiveMapPinGlides } from "./useLiveMapPinGlides.ts";
 import { useNativeMapStyle } from "./useNativeMapStyle.ts";
-import type { CrashIncident } from "../../lib/crashAlertInbox.ts";
+import { type CrashIncident, crashFocusSpot } from "../../lib/crashAlertInbox.ts";
 
 export const NativeMap = ({
   awaitingLiveSelfFix = false,
   bottomInset = 0,
   crash = null,
   devices = [],
+  focusCrashUserId = null,
   focusPlaceId = null,
   groupOptions = null,
   locationsLoading = false,
   markers = [],
   now = 0,
+  onFocusCrashHandled,
   onFocusPlaceHandled,
   onPeopleTrayOpenChange,
   onDeletePlace,
@@ -82,11 +85,13 @@ export const NativeMap = ({
   bottomInset?: number;
   crash?: CrashIncident | null;
   devices?: readonly (MapMemberDevice & { paused: boolean; unreadable: boolean })[];
+  focusCrashUserId?: string | null;
   focusPlaceId?: string | null;
   groupOptions?: readonly MapGroupOption[] | null;
   locationsLoading?: boolean;
   markers?: readonly LiveMapMarker[];
   now?: number;
+  onFocusCrashHandled?: () => void;
   onFocusPlaceHandled?: () => void;
   onPeopleTrayOpenChange?: (open: boolean) => void;
   onDeletePlace?: (place: MapPlace, onDeleted: () => void) => void;
@@ -325,6 +330,14 @@ export const NativeMap = ({
     const pinDeviceId = personPinDeviceId({ markers, people, pinMarkers, userId: missingUserId });
     if (pinDeviceId) goToDevice(pinDeviceId);
   }, [goToDevice, markers, missingPerson, missingUserId, people, pinMarkers]);
+
+  useEffect(() => {
+    if (!focusCrashUserId || !mapStyle) return;
+    const marker = markers.find((item) => item.userId === focusCrashUserId && !item.isSelf);
+    if (!marker) return;
+    onFocusCrashHandled?.();
+    goToDevice(marker.deviceId, crash ? crashFocusSpot(crash, marker) : null);
+  }, [crash, focusCrashUserId, goToDevice, mapStyle, markers, onFocusCrashHandled]);
 
   useEffect(() => {
     if (!focusPlaceId) {
@@ -584,6 +597,7 @@ export const NativeMap = ({
           ) : null}
           {crash && selectedMarker && !selectedMarker.isSelf ? (
             <CrashSpotAnnotation
+              besidePin={metersBetween(crash.crash, selectedMarker) < 50}
               latitude={crash.crash.latitude}
               longitude={crash.crash.longitude}
               name={selectedMarker.name}

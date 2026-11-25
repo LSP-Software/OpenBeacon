@@ -30,10 +30,15 @@ final class CrashDetector {
     case crash(CrashSuspicion)
   }
 
+  private let isAlertOpen: () -> Bool
   private var fixes: [SeenFix] = []
   private var spikes: [Int64] = []
   private var quietUntilMillis = Int64.min
   private static let maxPendingSpikes = 32
+
+  init(isAlertOpen: @escaping () -> Bool = { false }) {
+    self.isAlertOpen = isAlertOpen
+  }
 
   func onFix(_ fix: DriveFix, inDrive: Bool) -> CrashSuspicion? {
     guard let accuracy = fix.accuracy, accuracy <= DriveDetector.maxAccuracyMeters, fix.speed != nil else { return nil }
@@ -67,6 +72,10 @@ final class CrashDetector {
       case .drop:
         spikes.removeAll { $0 == spike }
       case .crash(let suspicion):
+        if isAlertOpen() {
+          spikes.removeAll { $0 == spike }
+          continue
+        }
         spikes.removeAll()
         quietUntilMillis = spike + Self.quietAfterMillis
         return suspicion

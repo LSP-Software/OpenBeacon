@@ -24,12 +24,15 @@ class CrashDetectorTest {
     val latitude = origin.getDouble("latitude")
     var longitude = origin.getDouble("longitude")
     var time = startTime
-    val detector = CrashDetector()
+    var alertOpen = false
+    val detector = CrashDetector { alertOpen }
     val suspicions = mutableListOf<CrashSuspicion>()
     val steps = case.getJSONArray("steps")
     for (index in 0 until steps.length()) {
       val step = steps.getJSONObject(index)
-      if (step.has("move")) {
+      if (step.has("alert")) {
+        alertOpen = step.getBoolean("alert")
+      } else if (step.has("move")) {
         val move = step.getJSONObject("move")
         val speed = move.getDouble("speed")
         val every = move.getInt("every")

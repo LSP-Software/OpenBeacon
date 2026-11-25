@@ -82,12 +82,14 @@ object CrashCountdownController {
       }
     }
 
+  fun isAlertOpen() = current?.phase == CrashCountdownPhase.COUNTING || current?.phase == CrashCountdownPhase.SENT
+
   fun start(
     context: Context,
     suspicion: CrashSuspicion,
     test: Boolean,
   ) = onMain(context) {
-    if (current?.phase == CrashCountdownPhase.COUNTING || current?.phase == CrashCountdownPhase.SENT) return@onMain
+    if (isAlertOpen()) return@onMain
     update(CrashCountdown.start(suspicion, test, System.currentTimeMillis()))
     if (test) appContext.startActivity(CrashCountdownActivity.intent(appContext).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
   }

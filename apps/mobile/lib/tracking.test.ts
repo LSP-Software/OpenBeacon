@@ -911,21 +911,59 @@ describe("tracking service", () => {
         driveAlertsCursor: null,
       };
 
-      await syncBackgroundTracking("push");
+      await syncAccountNotices();
       expect(uploadCalls).toEqual([cursorOnly]);
       expect(uploadsBatchedWithSync).toEqual([true]);
 
-      await syncAccountNotices();
+      await syncBackgroundTracking("push");
       expect(uploadCalls).toEqual([cursorOnly, cursorOnly]);
       expect(uploadsBatchedWithSync).toEqual([true, true]);
       expect(accountSyncCalls).toHaveLength(2);
     });
 
-    test("coming to the foreground on a sharing phone leaves place alerts to its uploads", async () => {
+    const catchUp = {
+      groupId: "group-1",
+      points: [],
+      placeAlertsCursor: null,
+      noticesCursor: "2026-11-17T09:00:00.000Z|",
+      crashAlertsCursor: null,
+      driveAlertsCursor: null,
+    };
+
+    test("a sharing phone that isn't uploading catches up on Crash and Drive alerts when it syncs the account", async () => {
       expect(provisionedKeys.length).toBeGreaterThan(0);
       await syncAccountNotices();
-      expect(uploadCalls).toEqual([]);
+      expect(uploadCalls).toEqual([catchUp]);
+      expect(uploadsBatchedWithSync).toEqual([true]);
       expect(accountSyncCalls).toEqual([{ cursor: storedAccountCursor }]);
+    });
+
+    test("a paused phone still catches up on Crash alerts when it syncs the account", async () => {
+      storageValues.set(
+        `locationSharing.localPause.${JSON.stringify(["https://api.example.test", "user-1", "device-1"])}`,
+        "true",
+      );
+      await syncAccountNotices();
+      expect(uploadCalls).toEqual([catchUp]);
+    });
+
+    test("the account sync doesn't catch up again within 50 s of an upload round that did", async () => {
+      pendingCiphertexts = [createQueueItem({ clientPointId: "p1", groupId: "group-1", id: 1 })];
+      await flushPendingTrackingPoints();
+      expect(uploadCalls).toHaveLength(1);
+      await syncAccountNotices();
+      await syncAccountNotices();
+      expect(uploadCalls).toHaveLength(1);
+      expect(accountSyncCalls).toHaveLength(1);
+    });
+
+    test("the next account sync after 50 s catches up again", async () => {
+      await syncAccountNotices();
+      const later = Date.now() + 50_000;
+      const clock = spyOn(Date, "now").mockImplementation(() => later);
+      await syncAccountNotices();
+      clock.mockRestore();
+      expect(uploadCalls).toEqual([catchUp, catchUp]);
     });
 
     test("coming to the foreground checks account notices without a group", async () => {
