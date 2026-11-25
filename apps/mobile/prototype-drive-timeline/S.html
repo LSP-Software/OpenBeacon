@@ -1,0 +1,19 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="fonts.css"><link rel="stylesheet" href="common.css"><script src="icons.js"></script><script src="parts.js"></script></head><body><script>
+const detail=(body,{who='Work → Tesco Finchley',when='Tue, 24 Nov · 12:40–12:55 · Phone',ev=false}={})=>map({events:ev})+status+topbar('Timeline')+`<div class="sheet" style="height:470px"><div class="grab"></div><div style="padding:0 20px">
+<div class="row"><div style="flex:1"><div style="font-size:22px">${who}</div><div class="muted" style="font-size:14px;margin-top:2px">${when}</div></div>${ic('ellipsis-vertical',22)}</div>${body}</div></div>`;
+const pstats=`<div class="stats" style="margin:14px 0"><div class="stat"><b>3.2 mi</b><span>distance</span></div><div class="stat"><b>15 min</b><span>duration</span></div><div class="stat"><b>34 mph</b><span>top speed</span></div><div class="stat"><b>13 mph</b><span>average</span></div></div>`;
+document.body.innerHTML=[
+frame("S1 · The ⋮ menu on your own drive","Shared by every variant. Only on drives your account recorded.",
+phone(detail(`<div class="row" style="margin:16px 0 12px">${score(74).replace('score','score big')}<div class="muted" style="font-size:14px">4 Driving events in 23.0 mi</div></div>`,{who:'Work → Home',when:'Tue, 24 Nov · 17:30–18:12 · Phone',ev:true})+`<div class="menu" style="right:24px;top:500px"><div>${ic('user-round',20)}<span>I was a passenger<small>Hide the score and events from others</small></span></div><div style="color:#BA1A1A">${ic('trash-2',20,'#BA1A1A')}<span>Delete drive</span></div></div>`)),
+frame("S2 · Marking it a Passenger drive","Confirm says who stops seeing what, and that only this device can undo it.",
+phone(detail(`<div style="height:300px"></div>`,{who:'Work → Home',when:'Tue, 24 Nov · 17:30–18:12 · Phone',ev:true})+`<div class="scrim"></div><div class="dialog"><h3>Were you a passenger?</h3><p>Family and Friends will still see this drive, but not its score or Driving events. It won't count in your weekly driving report.</p><p>Only this phone can undo it.</p><div class="acts"><div class="btn text">Cancel</div><div class="btn text">I was a passenger</div></div></div>`)),
+frame("S3 · Your Passenger drive","On the phone that recorded it there's an undo. On Sam's tablet the same drive says only the phone can undo it.",
+phone(detail(`${pstats}<div class="info">${ic('user-round',18)}<div><b style="color:var(--on);font-weight:500">You were a passenger.</b> Others see this drive without a score or Driving events.</div></div>
+<div class="btn tonal" style="margin-top:14px">${ic('undo-2',18)}I was driving</div>
+<div class="info" style="margin-top:14px;background:transparent;border:1px dashed var(--ol)">${ic('tablet',18)}<div><b style="font-weight:500">On Sam's tablet instead:</b> "Marked as a passenger on Sam's Phone. Only that phone can undo it." No button.</div></div>`))),
+frame("S4 · Someone else's Passenger drive","What Jo sees for Sam's drive: the numbers, no score, no Driving events, no actions.",
+phone(detail(`${pstats}<div class="row" style="margin-top:4px">${score(null)}<div class="muted" style="font-size:14px;line-height:1.4">Sam was a passenger, so this drive has no Driving score or Driving events.</div></div>`).replace(ic('ellipsis-vertical',22),''))),
+frame("S5 · Deleting a drive","Hard delete, so the dialog is plain about it. Timeline keeps the route.",
+phone(detail(`<div style="height:300px"></div>`,{who:'Work → Home',when:'Tue, 24 Nov · 17:30–18:12 · Phone',ev:true})+`<div class="scrim"></div><div class="dialog"><h3>Delete this drive?</h3><p>It's removed for you and everyone in Family and Friends, for good. Your Timeline still shows where you went.</p><div class="acts"><div class="btn text">Cancel</div><div class="btn text" style="color:#BA1A1A">Delete</div></div></div>`)),
+].join("");
+</script></body></html>

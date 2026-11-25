@@ -1,0 +1,40 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="fonts.css"><link rel="stylesheet" href="common.css"><script src="icons.js"></script><script src="parts.js"></script></head><body><script>
+const listRow=(t,from,to,meta,sc,extra='')=>`<div class="item"><div style="width:44px;font-size:14px;font-weight:500;line-height:1.25">${t}</div><div class="t"><div style="font-weight:500">${from} → ${to}${extra}</div><small>${meta}</small></div>${score(sc)}</div>`;
+document.body.innerHTML=[
+frame("A1 · Timeline: a drive is a dark band","Drives show as dark bands on the scrubber, a passenger drive as an outline. Inside a drive the card adds a drive row that opens the detail.",
+phone(map({})+status+topbar('Timeline')+`<div class="card">
+<div class="row"><div class="clock">17:44</div><div><div style="font-size:17px;font-weight:500">Driving · 41 mph</div><div class="muted" style="font-size:14px">Tue, 24 Nov</div></div><div class="sp"></div>${av('Sa',36)}</div>
+${scrubber({segs:DAY})}
+<div class="row muted" style="font-size:12.5px;gap:14px;margin:2px 0 10px"><span class="row" style="gap:5px"><i style="width:16px;height:8px;border-radius:2px;background:var(--drive)"></i>Drive</span><span class="row" style="gap:5px"><i style="width:16px;height:8px;border-radius:2px;border:1.5px dashed var(--drive)"></i>Passenger</span><span class="row" style="gap:5px"><i style="width:16px;height:8px;border-radius:2px;background:#E6005C"></i>Moving</span><span class="row" style="gap:5px"><i style="width:16px;height:6px;border-radius:2px;background:#F8A5C2"></i>Stopped</span></div>
+<div class="row" style="background:var(--sc);border-radius:16px;padding:10px 12px;color:var(--onsc)">${ic('car',22)}<div class="sp"><div style="font-weight:500">Drive · Work → Home</div><div style="font-size:13px;opacity:.8">17:30–18:12 · 23.0 mi · 42 min · top 71 mph</div></div>${score(74)}${ic('chevron-right',20)}</div>
+<div class="row" style="justify-content:space-between;margin-top:12px;font-size:14px"><span class="muted">Showing Phone</span><b style="font-weight:500">Switch to Tablet</b></div>
+${controls}</div>`)),
+
+frame("A2 · Drives list: a second view of Timeline","A Day / Drives switch at the top of Timeline. The list covers everything this person shares with the Group and follows Timeline's device switch.",
+phone(status+topbar('Timeline')+`<div style="position:absolute;top:120px;left:12px;right:12px"><div class="seg"><div>${ic('calendar-days',18)}Day</div><div class="on">${ic('car',18)}Drives</div></div>
+<div class="row" style="margin:12px 2px 0;gap:8px"><div class="gchip" style="background:var(--sc);height:36px">${av('Sa',24)}Sam${ic('chevron-down',16)}</div><div class="gchip" style="height:36px;font-size:14px">${ic('smartphone',16)}Phone${ic('chevron-down',16)}</div></div></div>
+<div style="position:absolute;top:212px;left:0;right:0;bottom:0;overflow:hidden">
+<div class="day">TODAY</div><div class="grp">
+${listRow('17:30<br>18:12','Work','Home','23.0 mi · 42 min · top 71 mph',74)}
+${listRow('12:40<br>12:55','Work','Tesco Finchley','3.2 mi · 15 min · top 34 mph',null,' <span class="tag grey">Passenger</span>')}
+${listRow('08:29<br>08:58','Shell, Barnet Way','Work','12.1 mi · 29 min · top 68 mph',91)}
+<div class="conn">${ic('fuel',16)}Stopped 8 min at Shell, Barnet Way</div>
+${listRow('07:52<br>08:21','Home','Shell, Barnet Way','11.4 mi · 29 min · top 52 mph',86)}
+</div>
+<div class="info" style="margin:10px 12px 0">${ic('tablet',18)}<div>Sam's Tablet recorded 1 drive today too. Switch to Tablet to see it.</div></div>
+<div class="day">MONDAY, 23 NOV</div><div class="grp">
+${listRow('17:41<br>18:20','Work','Home','22.9 mi · 39 min · top 70 mph',88)}
+${listRow('08:05<br>08:44','Home','Work','23.4 mi · 39 min · top 66 mph',93)}
+</div></div>`)),
+
+frame("A3 · Drive detail: a sheet over the Timeline map","The map fits the drive and marks its Driving events. ⋮ holds the driver's actions (see the shared states sheet).",
+phone(map({unchecked:true})+status+topbar('Timeline')+`<div class="sheet" style="height:640px"><div class="grab"></div>
+<div style="padding:0 20px">
+<div class="row"><div style="flex:1"><div style="font-size:22px">Work → Home</div><div class="muted" style="font-size:14px;margin-top:2px">Tue, 24 Nov · 17:30–18:12 · ${ic('smartphone',13)} Phone</div></div>${ic('ellipsis-vertical',22)}</div>
+<div class="row" style="margin:16px 0 12px"><div class="score mid big">74</div><div style="font-size:14px;line-height:1.4" class="muted"><b style="color:var(--on);font-weight:500;font-size:16px">Driving score</b><br>4 Driving events in 23.0 mi.<br>Speeding counted most.</div></div>
+<div class="stats"><div class="stat"><b>23.0 mi</b><span>distance</span></div><div class="stat"><b>42 min</b><span>duration</span></div><div class="stat"><b>71 mph</b><span>top speed</span></div><div class="stat"><b>33 mph</b><span>average</span></div></div>
+<div style="margin-top:12px">${EVLIST}</div>
+<div style="margin-top:8px">${UNCHECKED}</div>
+</div></div>`)),
+].join("");
+</script></body></html>

@@ -1,0 +1,42 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="fonts.css"><link rel="stylesheet" href="common.css"><script src="icons.js"></script><script src="parts.js"></script></head><body><script>
+const dev=(d)=>`<span class="tag grey" style="margin-left:6px">${ic(d==='Phone'?'smartphone':'tablet',12)}${d}</span>`;
+const bRow=(from,to,time,meta,sc,extra='')=>`<div class="item"><div class="ic" style="background:var(--sc);color:var(--onsc)">${ic('car',20)}</div><div class="t"><div style="font-weight:500">${from} → ${to}</div><small>${time}${extra}</small><small>${meta}</small></div>${score(sc)}</div>`;
+document.body.innerHTML=[
+frame("B1 · Person card: a Drives button","The person card shows the last drive and a Drives button next to See today's route.",
+phone(`<div class="mapw"></div>`+status+`<div class="card" style="bottom:118px;padding:20px">
+<div class="row">${av('Sa',56)}<div><div style="font-size:22px">Sam</div><div class="muted" style="font-size:14px">Updated 1 minute ago · at Home</div></div></div>
+<div class="row" style="margin:16px 0;background:var(--scc);border-radius:16px;padding:10px 12px">${ic('car',22,'var(--onv)')}<div class="sp"><div style="font-weight:500">Last drive · Work → Home</div><div class="muted" style="font-size:13px">Ended 18:12 · 23.0 mi · 42 min · top 71 mph</div></div>${score(74)}</div>
+<div class="row" style="gap:10px"><div class="btn" style="flex:1">${ic('history',18)}Today's route</div><div class="btn tonal" style="flex:1">${ic('car',18)}Drives</div></div></div>
+<div style="position:absolute;left:0;right:0;bottom:0;height:104px;background:var(--scc);display:flex;justify-content:space-around;padding-top:12px;font-size:12px;font-weight:500;color:var(--onv)">${[['users','Groups'],['map','Map'],['user','Account']].map(([i,l],k)=>`<div style="display:flex;flex-direction:column;align-items:center;gap:4px"><div style="width:64px;height:32px;border-radius:16px;display:flex;align-items:center;justify-content:center;${k==1?'background:var(--sc)':''}">${ic(i,24)}</div>${l}</div>`).join('')}</div>`)),
+
+frame("B2 · Drives: its own screen","A full-screen list for one person, newest first, every device mixed in with a device tag. The fuel stop shows as two drives back to back.",
+phone(status+`<div class="row" style="padding:12px 16px 4px">${ic('chevron-left',24)}<div style="font-size:22px;flex:1;margin-left:8px">Sam's drives</div>${ic('info',22,'var(--onv)')}</div>
+<div class="row" style="padding:6px 16px 0;gap:8px"><div class="gchip" style="height:34px;font-size:14px">Family${ic('chevron-down',16)}</div><div class="gchip" style="height:34px;font-size:14px">All devices${ic('chevron-down',16)}</div></div>
+<div class="day">TODAY</div><div class="grp">
+${bRow('Work','Home','17:31–18:12'+dev('Tablet'),'22.8 mi · 41 min · top 71 mph',76)}
+${bRow('Work','Home','17:30–18:12'+dev('Phone'),'23.0 mi · 42 min · top 71 mph',74)}
+${bRow('Work','Tesco Finchley','12:40–12:55'+dev('Phone')+' <span class="tag grey">Passenger</span>','3.2 mi · 15 min · top 34 mph',null)}
+${bRow('Shell, Barnet Way','Work','08:29–08:58'+dev('Phone'),'12.1 mi · 29 min · top 68 mph',91)}
+${bRow('Home','Shell, Barnet Way','07:52–08:21'+dev('Phone'),'11.4 mi · 29 min · top 52 mph',86)}
+</div><div class="day">MONDAY, 23 NOV</div><div class="grp">
+${bRow('Work','Home','17:41–18:20'+dev('Phone'),'22.9 mi · 39 min · top 70 mph',88)}
+</div>`)),
+
+frame("B3 · Drive detail: a full screen","Small map at the top, then score, numbers and Driving events. The driver's two actions sit as buttons at the bottom, only on their own drives.",
+phone(`<div style="position:absolute;left:0;right:0;top:0;height:330px;overflow:hidden">${map({unchecked:true}).replace('class="mapw"','class="mapw" style="background-position:-70px -150px"').replace('viewBox="0 0 412 915"','viewBox="0 80 412 820" preserveAspectRatio="xMidYMid slice"')}</div>`+status+`<div style="position:absolute;top:48px;left:12px;width:44px;height:44px;border-radius:22px;background:var(--sc0);display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.2);z-index:6">${ic('chevron-left',22)}</div>
+<div style="position:absolute;top:310px;left:0;right:0;bottom:0;background:var(--s);border-radius:24px 24px 0 0;padding:18px 20px">
+<div class="row"><div class="sp"><div style="font-size:22px">Work → Home</div><div class="muted" style="font-size:14px">Tue, 24 Nov · 17:30–18:12 · Phone</div></div><div class="score mid big" style="width:60px;height:60px;font-size:24px">74</div></div>
+<div class="stats" style="margin:14px 0 6px"><div class="stat"><b>23.0 mi</b><span>distance</span></div><div class="stat"><b>42 min</b><span>duration</span></div><div class="stat"><b>71 mph</b><span>top</span></div><div class="stat"><b>33 mph</b><span>average</span></div></div>
+${EVLIST}<div style="margin-top:6px">${UNCHECKED}</div>
+<div class="row" style="gap:10px;margin-top:14px"><div class="btn out" style="flex:1">${ic('user-round',18)}I was a passenger</div><div class="btn danger" style="flex:1">${ic('trash-2',18)}Delete drive</div></div>
+</div>`)),
+
+frame("B4 · Timeline: a car above each drive","Timeline itself barely changes: a car icon sits over each drive on the scrubber, and an Open drive button appears while the scrubber is inside one.",
+phone(map({events:false})+status+topbar('Timeline')+`<div class="card">
+<div class="row"><div class="clock">17:44</div><div class="sp"><div style="font-size:17px;font-weight:500">41 mph</div><div class="muted" style="font-size:14px">Tue, 24 Nov</div></div><div class="btn tonal" style="height:40px;padding:0 14px">${ic('car',18)}Open drive</div></div>
+<div style="height:14px"></div>${scrubber({segs:DAY,style:'tick'})}
+<div class="stats" style="margin-top:10px"><div class="stat"><b>49.7 mi</b><span>travelled</span></div><div class="stat"><b>4</b><span>drives</span></div><div class="stat"><b>2 h 6 m</b><span>moving</span></div></div>
+<div class="row" style="justify-content:space-between;margin-top:12px;font-size:14px"><span class="muted">Showing Phone</span><b style="font-weight:500">Switch to Tablet</b></div>
+${controls}</div>`)),
+].join("");
+</script></body></html>

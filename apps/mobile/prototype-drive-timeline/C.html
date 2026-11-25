@@ -1,0 +1,44 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="fonts.css"><link rel="stylesheet" href="common.css"><script src="icons.js"></script><script src="parts.js"></script></head><body><script>
+const rail=(inner,kind='stop')=>`<div style="display:flex;gap:12px;padding:0 16px"><div style="width:28px;display:flex;flex-direction:column;align-items:center"><div style="width:${kind==='stop'?14:4}px;height:${kind==='stop'?'14px':'100%'};${kind==='stop'?'border-radius:7px;border:3px solid #E6005C;background:#fff;margin-top:14px':'background:var(--drive)'}"></div>${kind==='stop'?'<div style="flex:1;width:2px;background:#F8A5C2"></div>':''}</div><div style="flex:1;min-width:0">${inner}</div></div>`;
+const stop=(t,name,dur,icon='')=>rail(`<div class="row" style="padding:10px 0;font-size:15px"><b style="font-weight:500;width:46px">${t}</b><div class="sp">${icon}${name}</div><span class="muted" style="font-size:13px">${dur}</span></div>`);
+const drive=(meta,sc,extra='',open=false)=>rail(`<div style="background:${open?'var(--sc0)':'var(--scc)'};border-radius:16px;padding:10px 12px;margin:2px 0;${open?'box-shadow:0 1px 6px rgba(0,0,0,.12)':''}"><div class="row">${ic('car',20,'var(--drive)')}<div class="sp"><div style="font-weight:500;font-size:15px">Drive${extra}</div><div class="muted" style="font-size:13px">${meta}</div></div>${score(sc)}${ic(open?'chevron-down':'chevron-right',18,'var(--onv)')}</div>${open||''}</div>`,'drive');
+const storyTop=(title)=>`<div class="sheet" style="top:330px;padding-top:4px"><div class="grab"></div>
+<div class="row" style="padding:0 20px 8px"><div class="clock" style="font-size:26px">${title}</div><div class="sp"></div><div class="seg" style="width:170px;height:34px"><div class="on">Day</div><div>Drives only</div></div></div>`;
+document.body.innerHTML=[
+frame("C1 · Timeline: the day as a story","Timeline's card opens into a list of stops and drives. A drive is a card between two stops; tapping one fits the map to it.",
+phone(map({events:false})+status+topbar('Timeline')+storyTop('Tue, 24 Nov')+`
+${stop('00:00','Home','7 h 52 m','')}
+${drive('07:52–08:21 · 11.4 mi · 29 min · top 52 mph',86)}
+${stop('08:21','Shell, Barnet Way','8 min',ic('fuel',15,'var(--onv)')+' ')}
+${drive('08:29–08:58 · 12.1 mi · 29 min · top 68 mph',91)}
+${stop('08:58','Work','3 h 42 m')}
+${drive('12:40–12:55 · 3.2 mi · 15 min',null,' <span class="tag grey">Passenger</span>')}
+${stop('12:55','Tesco Finchley','15 min')}
+<div style="padding:4px 56px" class="muted">⋯</div>
+</div>`)),
+
+frame("C2 · A drive opened in the story","The card expands in place: numbers, Driving events, the not-checked note and the driver's actions as text buttons. One trip on two devices shows as one card with a Phone / Tablet switch.",
+phone(map({unchecked:true}).replace('class="mapw"','class="mapw" style="background-position:-70px -120px"')+status+topbar('Timeline')+storyTop('Tue, 24 Nov').replace('top:330px','top:250px')+`
+${stop('13:10','Work','4 h 20 m')}
+${drive('17:30–18:12 · 23.0 mi · 42 min · top 71 mph',74,'',`<div style="margin-top:10px"><div class="seg" style="height:34px;margin-bottom:8px"><div class="on">${ic('smartphone',15)}Phone · 74</div><div>${ic('tablet',15)}Tablet · 76</div></div>
+<div class="muted" style="font-size:13px;margin-bottom:4px">Average 33 mph · 4 Driving events</div>${EVLIST}
+<div style="margin-top:6px">${UNCHECKED}</div>
+<div class="row" style="margin-top:6px;gap:0"><div class="btn text" style="padding:0 10px">${ic('user-round',17)}I was a passenger</div><div class="sp"></div><div class="btn text" style="padding:0 10px;color:#BA1A1A">${ic('trash-2',17)}Delete</div></div></div>`)}
+${stop('18:12','Home','now')}
+</div>`)),
+
+frame("C3 · Drives only, across days","The same story with stops hidden, scrolling back through every day this person shares. Short stops between drives stay as one line.",
+phone(status+topbar('Timeline')+`<div style="position:absolute;top:124px;left:0;right:0;bottom:0;background:var(--s)">
+<div class="row" style="padding:4px 20px 8px"><div class="gchip" style="background:var(--sc);height:36px">${av('Sa',24)}Sam${ic('chevron-down',16)}</div><div class="sp"></div><div class="seg" style="width:170px;height:34px"><div>Day</div><div class="on">Drives only</div></div></div>
+<div class="day">TODAY · 4 DRIVES · 49.7 MI</div>
+${drive('Work → Home · 17:30–18:12 · 23.0 mi',74,' <span class="tag grey">Phone + Tablet</span>')}
+${drive('Work → Tesco Finchley · 12:40 · 3.2 mi',null,' <span class="tag grey">Passenger</span>')}
+${drive('Shell → Work · 08:29–08:58 · 12.1 mi',91)}
+${rail(`<div class="muted row" style="font-size:13px;padding:4px 0;gap:6px">${ic('fuel',14)}8 min at Shell, Barnet Way</div>`,'drive')}
+${drive('Home → Shell · 07:52–08:21 · 11.4 mi',86)}
+<div class="day">MONDAY, 23 NOV · 2 DRIVES · 46.3 MI</div>
+${drive('Work → Home · 17:41–18:20 · 22.9 mi',88)}
+${drive('Home → Work · 08:05–08:44 · 23.4 mi',93)}
+</div>`)),
+].join("");
+</script></body></html>
