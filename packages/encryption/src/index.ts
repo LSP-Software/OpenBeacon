@@ -542,3 +542,16 @@ export type {
   DrivingEventType,
   SealedDriveRecord,
 } from "./driveRecord.ts";
+export {
+  CRASH_ALERT_KIND,
+  CRASH_ALERT_LENGTH,
+  CRASH_ALERT_PLACE_LABEL_BYTES,
+  CRASH_ALERT_VERSION,
+  crashAlertAssociatedData,
+  decodeCrashAlert,
+  ENCRYPTED_CRASH_ALERT_LENGTH,
+  encodeCrashAlert,
+  openCrashAlert,
+  sealCrashAlert,
+} from "./crashAlert.ts";
+export type { CrashAlertMessage, SealedCrashAlert } from "./crashAlert.ts";
