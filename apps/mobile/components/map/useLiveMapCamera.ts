@@ -283,11 +283,14 @@ export const useLiveMapCamera = ({
 
   const goToDevice = (
     deviceId: string,
-    spot: { latitude: number; longitude: number } | null = null,
+    still: {
+      spot: { latitude: number; longitude: number } | null;
+      paddingBottom: number;
+    } | null = null,
   ) => {
     const pin = markersRef.current.find((item) => item.deviceId === deviceId);
     if (!pin) return;
-    edge.follow(spot ? null : deviceId);
+    edge.follow(still ? null : deviceId);
     if (selectedDeviceIdRef.current !== deviceId) onSelectDevice(deviceId);
     else setFollowRevision((revision) => revision + 1);
     clearLiveMapInitialFitTimer(initialFitTimerRef);
@@ -299,17 +302,17 @@ export const useLiveMapCamera = ({
       followSuspended: false,
       latitude: pin.latitude,
       longitude: pin.longitude,
-      padding: { ...cameraPaddingRef.current, paddingBottom: 220 },
+      padding: { ...cameraPaddingRef.current, paddingBottom: still?.paddingBottom ?? 220 },
       previousLatitude: null,
       previousLongitude: null,
       previouslyTrackedDeviceId: null,
       selectedDeviceId: deviceId,
     });
     if (!stop) return;
-    const aim = spot ?? shownPosition(pin, Date.now() + stop.animationDuration);
+    const aim = still?.spot ?? shownPosition(pin, Date.now() + stop.animationDuration);
     trackedDeviceIdRef.current = deviceId;
     trackedCoordinateRef.current = { latitude: aim.latitude, longitude: aim.longitude };
-    followSuspendedRef.current = spot !== null;
+    followSuspendedRef.current = still !== null;
     suppressUserCameraControlFor(suppressUserCameraControlUntilMsRef, stop.animationDuration);
     setCamera({ ...stop, centerCoordinate: [aim.longitude, aim.latitude] });
     preservedCameraRef.current = mapCameraFromRegionChange({

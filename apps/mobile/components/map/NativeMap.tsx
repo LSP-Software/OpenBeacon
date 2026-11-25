@@ -10,7 +10,7 @@ import {
   ScanIcon,
   UsersIcon,
 } from "lucide-react-native";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { AccessibilityInfo, ActivityIndicator, BackHandler, Platform, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLiveSpeedLabel } from "../../hooks/useLiveSpeedLabel.ts";
@@ -331,13 +331,37 @@ export const NativeMap = ({
     if (pinDeviceId) goToDevice(pinDeviceId);
   }, [goToDevice, markers, missingPerson, missingUserId, people, pinMarkers]);
 
+  const crashFocusDeviceIdRef = useRef<string | null>(null);
+  const personSheetHeightRef = useRef<number | null>(null);
+
+  const focusCrashAbovePersonSheet = useEffectEvent(() => {
+    const deviceId = crashFocusDeviceIdRef.current;
+    const sheetHeight = personSheetHeightRef.current;
+    if (!deviceId || deviceId !== selectedMarker?.deviceId || sheetHeight === null) return;
+    crashFocusDeviceIdRef.current = null;
+    goToDevice(deviceId, {
+      spot: crash ? crashFocusSpot(crash, selectedMarker) : null,
+      paddingBottom: sheetHeight + 24,
+    });
+  });
+
   useEffect(() => {
     if (!focusCrashUserId || !mapStyle) return;
     const marker = markers.find((item) => item.userId === focusCrashUserId && !item.isSelf);
     if (!marker) return;
     onFocusCrashHandled?.();
-    goToDevice(marker.deviceId, crash ? crashFocusSpot(crash, marker) : null);
-  }, [crash, focusCrashUserId, goToDevice, mapStyle, markers, onFocusCrashHandled]);
+    if (crashFocusDeviceIdRef.current === marker.deviceId) return;
+    crashFocusDeviceIdRef.current = marker.deviceId;
+    if (selectedDeviceId === marker.deviceId) focusCrashAbovePersonSheet();
+    else onSelectDeviceId?.(marker.deviceId);
+  }, [
+    focusCrashUserId,
+    mapStyle,
+    markers,
+    onFocusCrashHandled,
+    onSelectDeviceId,
+    selectedDeviceId,
+  ]);
 
   useEffect(() => {
     if (!focusPlaceId) {
@@ -914,6 +938,8 @@ export const NativeMap = ({
             unreadableGroup={selectedMarker.unreadableGroup}
             onHeightChange={(height) => {
               edge.onSheetHeightChange(height);
+              personSheetHeightRef.current = height;
+              focusCrashAbovePersonSheet();
             }}
             onDismiss={clearSelection}
             onRequestUpdate={
