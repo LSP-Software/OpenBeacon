@@ -419,6 +419,34 @@ class CaptureSamplingPolicyTest {
     assertEquals(120_000L, decision.uploadIntervalMs)
   }
 
+  @Test
+  fun anOpenDriveAsksForBatchedSecondFixesUntilACrashAlertNeedsAFixEveryTenSeconds() {
+    val driving =
+      CaptureSamplingPolicy.evaluate(
+        battery = battery(level = 80),
+        speedMetersPerSecond = 0.0,
+        accuracyMeters = 5.0,
+        distanceFromLastQueuedMeters = 0.0,
+        timeSinceLastQueuedMs = 1_000L,
+        fastDriveFixes = true,
+      )
+    val afterCrash =
+      CaptureSamplingPolicy.evaluate(
+        battery = battery(level = 80),
+        speedMetersPerSecond = 0.0,
+        accuracyMeters = 5.0,
+        distanceFromLastQueuedMeters = 0.0,
+        timeSinceLastQueuedMs = 1_000L,
+        fastDriveFixes = true,
+        crashSharing = true,
+      )
+
+    assertEquals(CaptureSamplingPolicy.DRIVE_INTERVAL_MS, driving.intervalMs)
+    assertEquals(CaptureSamplingPolicy.DRIVE_BATCH_MS, CaptureSamplingPolicy.maxUpdateDelayMs(driving.intervalMs))
+    assertEquals(10_000L, afterCrash.intervalMs)
+    assertEquals(10_000L, CaptureSamplingPolicy.maxUpdateDelayMs(afterCrash.intervalMs))
+  }
+
   private fun battery(
     level: Int,
     charging: Boolean = false,
