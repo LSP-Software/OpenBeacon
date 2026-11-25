@@ -59,6 +59,7 @@ const AboutScreen = () => {
   const speedLimitSize = useQuery({
     queryKey: ["speedLimitDataSize"],
     queryFn: readSpeedLimitDataSize,
+    refetchInterval: 5_000,
     enabled: Platform.OS === "android",
     gcTime: 0,
     networkMode: "always",

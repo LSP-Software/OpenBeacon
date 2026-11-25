@@ -11,6 +11,7 @@ import { storage } from "./storage.ts";
 
 const checkedAtKey = "speedLimits.checkedAt";
 const regionAtKey = "speedLimits.regionAt";
+const waitingForWifiKey = "speedLimits.waitingForWifi";
 const boundariesFile = () => new File(Paths.document, "speed-limit-boundaries.json");
 
 export const speedLimitPackBudgetMb = 500;
@@ -32,10 +33,12 @@ export const refreshSpeedLimitData = async () => {
     readState: () => ({
       checkedAt: storage.getNumber(checkedAtKey) ?? 0,
       regionAt: storage.getNumber(regionAtKey) ?? 0,
+      waitingForWifi: storage.getBoolean(waitingForWifiKey) ?? false,
     }),
-    writeState: ({ checkedAt, regionAt }) => {
+    writeState: ({ checkedAt, regionAt, waitingForWifi }) => {
       storage.set(checkedAtKey, checkedAt);
       storage.set(regionAtKey, regionAt);
+      storage.set(waitingForWifiKey, waitingForWifi);
     },
     readBoundaries: async () => {
       const file = boundariesFile();
@@ -67,6 +70,7 @@ export const readSpeedLimitDataSize = async () => {
 export const deleteSpeedLimitData = async () => {
   storage.remove(checkedAtKey);
   storage.remove(regionAtKey);
+  storage.remove(waitingForWifiKey);
   const file = boundariesFile();
   if (file.exists) file.delete();
   if (Platform.OS === "android") await OpenBeaconTracking.deleteSpeedLimitPacks();
