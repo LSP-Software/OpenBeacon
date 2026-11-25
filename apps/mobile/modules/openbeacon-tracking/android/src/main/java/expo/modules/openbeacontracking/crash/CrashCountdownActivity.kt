@@ -77,7 +77,7 @@ class CrashCountdownActivity : Activity() {
     super.onStop()
   }
 
-  private var shown: Pair<CrashCountdownPhase, Int>? = null
+  private var shown: Triple<CrashCountdownPhase, Int, String?>? = null
 
   private fun render() {
     val countdown = CrashCountdownController.current
@@ -86,7 +86,7 @@ class CrashCountdownActivity : Activity() {
       return
     }
     val seconds = countdown.secondsLeft(System.currentTimeMillis())
-    val key = countdown.phase to seconds
+    val key = Triple(countdown.phase, seconds, CrashCountdownController.placeName)
     if (key == shown) return
     shown = key
     root.removeAllViews()
@@ -139,7 +139,10 @@ class CrashCountdownActivity : Activity() {
         listOf(
           getString(R.string.openbeacon_crash_time) to DateFormat.getTimeFormat(this).format(Date(suspicion.timeMillis)),
           getString(R.string.openbeacon_crash_where) to
-            if (suspicion.latitude.isFinite()) coordinates(suspicion.latitude, suspicion.longitude) else getString(R.string.openbeacon_crash_test_where),
+            when {
+              !suspicion.latitude.isFinite() -> getString(R.string.openbeacon_crash_test_where)
+              else -> CrashCountdownController.placeName ?: coordinates(suspicion.latitude, suspicion.longitude)
+            },
           getString(R.string.openbeacon_crash_speed_before) to
             if (suspicion.speedBefore.isFinite()) {
               CrashCountdownController.formatSpeed(this, suspicion.speedBefore)

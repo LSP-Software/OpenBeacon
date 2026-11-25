@@ -48,6 +48,11 @@ object CrashCountdownController {
   var current: CrashCountdown? = null
     private set
 
+  @Volatile
+  var placeName: String? = null
+    private set
+  private var placeFor: Long? = null
+
   private val ticker =
     object : Runnable {
       override fun run() {
@@ -223,6 +228,7 @@ object CrashCountdownController {
   private fun update(next: CrashCountdown) {
     val previous = current
     current = next
+    if (placeFor != next.suspicion.timeMillis) lookUpPlace(next.suspicion)
     if (next.phase == CrashCountdownPhase.COUNTING && !next.test) {
       prefs().edit().putString(COUNTDOWN_KEY, next.save()).apply()
     } else {
@@ -242,6 +248,17 @@ object CrashCountdownController {
     }
     if (next.phase == CrashCountdownPhase.CANCELLED || next.phase == CrashCountdownPhase.SAID_OK) current = null
     notifyListeners()
+  }
+
+  private fun lookUpPlace(suspicion: CrashSuspicion) {
+    placeFor = suspicion.timeMillis
+    placeName = null
+    CrashPlaceLookup.name(appContext, suspicion.latitude, suspicion.longitude) { name ->
+      if (placeFor == suspicion.timeMillis && name != null) {
+        placeName = name
+        notifyListeners()
+      }
+    }
   }
 
   private fun notifyListeners() {
