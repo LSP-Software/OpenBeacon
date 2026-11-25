@@ -103,6 +103,7 @@ const executeRaw = mock(async (query: TemplateStringsArray | Prisma.Sql, ...args
     historyBacklog[historyTable] -= count;
     return count;
   }
+  if (strings.join("?").trimStart().startsWith('DELETE FROM "CrashAlert"')) return 0;
   if (strings.join("?").trimStart().startsWith('DELETE FROM "DriveCopy"')) {
     driveDeletes.push(values);
     return 0;
