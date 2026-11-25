@@ -54,6 +54,24 @@ class DriveDetectorTest {
             detector.onFix(fix).finished?.let { drives += it }
           }
         }
+        step.has("jitter") -> {
+          val jitter = step.getJSONObject("jitter")
+          val every = jitter.getInt("every")
+          val offset = jitter.getDouble("metres") / (111_320.0 * cos(Math.toRadians(latitude)))
+          for (count in 1..jitter.getInt("count")) {
+            time += every * 1_000L
+            val fix =
+              DriveFix(
+                timeMillis = time,
+                latitude = latitude,
+                longitude = if (count % 2 == 1) longitude + offset else longitude,
+                speed = if (jitter.has("speed")) jitter.getDouble("speed") else null,
+                accuracy = 5.0,
+                batterySaver = false,
+              )
+            detector.onFix(fix).finished?.let { drives += it }
+          }
+        }
         step.has("arrive") -> detector.onPlaceArrive()?.let { drives += it }
         step.has("interrupt") -> detector.interrupt()?.let { drives += it }
         step.has("discard") -> detector.discard()

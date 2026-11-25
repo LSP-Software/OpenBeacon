@@ -50,6 +50,8 @@ mock.module("react-native-reanimated", () => ({
 mock.module("../providers/ThemeProvider.tsx", () => ({ useTheme: () => ({ appTheme: "light" }) }));
 mock.module("expo-router", () => ({ Link: Passthrough }));
 mock.module("lucide-react-native", () => ({
+  CircleCheckIcon: () => null,
+  TriangleAlertIcon: () => null,
   GaugeIcon: () => null,
   HistoryIcon: () => null,
   RadioIcon: () => null,

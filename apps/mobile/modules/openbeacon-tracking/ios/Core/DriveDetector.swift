@@ -106,7 +106,9 @@ final class DriveDetector {
       } else if let stoppedAt = stop {
         let since = walkingSince ?? fix.timeMillis
         walkingSince = since
-        if Self.distanceMeters(stoppedAt, fix) >= Self.walkAwayMeters || fix.timeMillis - since >= Self.walkAwayMillis {
+        let away = Self.distanceMeters(stoppedAt, fix)
+        let walkingMillis = fix.timeMillis - since
+        if away >= Self.walkAwayMeters || (walkingMillis >= Self.walkAwayMillis && away >= Self.movingSpeed * Double(walkingMillis) / 1_000) {
           return DriveStep(started: false, finished: finished ?? finish())
         }
       } else {

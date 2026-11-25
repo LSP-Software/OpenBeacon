@@ -103,7 +103,9 @@ class DriveDetector {
             lastMovingIndex = stretch.lastIndex
           } else {
             val since = walkingSince ?: fix.timeMillis.also { walkingSince = it }
-            if (distanceMeters(stoppedAt, fix) >= WALK_AWAY_METERS || fix.timeMillis - since >= WALK_AWAY_MILLIS) {
+            val away = distanceMeters(stoppedAt, fix)
+            val walkingMillis = fix.timeMillis - since
+            if (away >= WALK_AWAY_METERS || (walkingMillis >= WALK_AWAY_MILLIS && away >= MOVING_SPEED * walkingMillis / 1_000.0)) {
               return DriveStep(started = false, finished = finished ?: finish())
             }
           }

@@ -102,6 +102,7 @@ mock.module("../lib/alert.ts", () => ({
 }));
 mock.module("../lib/notifications.ts", () => ({
   useNotificationSettings: () => ({ ...notificationsOn, turnOn: () => {}, turningOn: false }),
+  useCrashAlertSound: () => ({ duringDoNotDisturb: null, openSettings: () => {} }),
 }));
 mock.module("../lib/api.ts", () => ({
   trpc: {
@@ -155,6 +156,7 @@ test("with email, security types get an Email and a Phone switch and the rest on
 
   expect(switches.map(({ accessibilityLabel }) => accessibilityLabel)).toEqual([
     "Place arrivals and departures, phone",
+    "Crash alerts, phone",
     "Someone joined a group, phone",
     "Someone left or was removed, phone",
     "Role changed, phone",

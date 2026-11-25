@@ -54,6 +54,7 @@ import { resolveSelfDeviceLocationFallback } from "../../../lib/resolveSelfDevic
 import { storage } from "../../../lib/storage.ts";
 import { dismissTrackingQueueEviction, getTrackingQueueEviction } from "../../../lib/tracking.ts";
 import { thisDeviceNoun } from "../../../lib/thisDeviceNoun.ts";
+import { useActiveCrash } from "../../../lib/crashAlertSync.ts";
 
 const keyBannerDismissedKey = (userId: string, groupId: string) =>
   `map.keyBannerDismissed.${userId}.${groupId}`;
@@ -83,7 +84,10 @@ const MapScreen = () => {
     combine: (results) => results.map((result) => result.data),
     subscribed: isFocused,
   });
-  const { placeId: focusPlaceId } = useLocalSearchParams<{ placeId?: string }>();
+  const { placeId: focusPlaceId, crashUserId } = useLocalSearchParams<{
+    placeId?: string;
+    crashUserId?: string;
+  }>();
   const router = useRouter();
   const groupPlaces = useQueries({
     queries: (groups ?? []).map((group) => groupPlacesQueryOptions(group.id, userId)),
@@ -375,6 +379,18 @@ const MapScreen = () => {
     return () => clearInterval(timer);
   }, [appActive, isFocused, peopleTrayOpen]);
 
+  const selectedUserId =
+    markers.find((marker) => marker.deviceId === selectedDeviceId)?.userId ?? null;
+  const crash = useActiveCrash(selfUserId || undefined, selectedUserId);
+
+  useEffect(() => {
+    if (!crashUserId) return;
+    const marker = markers.find((item) => item.userId === crashUserId && !item.isSelf);
+    if (!marker) return;
+    setSelectedDeviceId(marker.deviceId);
+    router.setParams({ crashUserId: undefined });
+  }, [crashUserId, markers, router]);
+
   useEffect(() => {
     if (selectedDeviceId && !markers.some((marker) => marker.deviceId === selectedDeviceId)) {
       setSelectedDeviceId(null);
@@ -386,6 +402,7 @@ const MapScreen = () => {
       <NativeMap
         bottomInset={Platform.OS === "ios" ? insets.bottom + 56 : 0}
         awaitingLiveSelfFix={selfDeviceLocation?.cached !== false}
+        crash={crash}
         devices={memberDevices.map((device) => ({
           ...device,
           paused:

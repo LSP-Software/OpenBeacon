@@ -41,6 +41,7 @@ model User {
   receivedGroupMemberInvites GroupMemberInvite[] @relation("GroupMemberInviteRecipient")
   trackingStreams            TrackingStream[]
   driveCopies                DriveCopy[]
+  crashAlerts                CrashAlert[]
   groupEventsActed           GroupEvent[] @relation("GroupEventActor")
   groupEventsAbout           GroupEvent[] @relation("GroupEventSubject")
   createdSharedInvites       GroupSharedInvite[]
@@ -75,6 +76,7 @@ enum NotificationType {
   OTHER_SESSIONS_SIGNED_OUT
   DEVICE_REMOVED
   DELETION_SCHEDULED
+  CRASH_ALERTS
 }
 
 model NotificationSetting {
@@ -210,6 +212,7 @@ model Group {
   trackingStreams        TrackingStream[]
   latestTrackingPoints   TrackingLatestPoint[]
   driveCopies            DriveCopy[]
+  crashAlerts            CrashAlert[]
   places                 Place[]
 
   createdAt DateTime @default(now())
@@ -460,6 +463,7 @@ model UserDevice {
   trackingStreams        TrackingStream[]
   latestTrackingPoints   TrackingLatestPoint[]
   driveCopies            DriveCopy[]
+  crashAlerts            CrashAlert[]
   sentHistoryWraps       GroupEpochHistoryWrap[]
   deviceLink             DeviceLink?              @relation("DeviceLinkNewDevice")
   approvedDeviceLinks    DeviceLink[]             @relation("DeviceLinkApprover")
@@ -549,6 +553,7 @@ model GroupEpoch {
   historyWraps           GroupEpochHistoryWrap[]
   trackingStreams        TrackingStream[]
   driveCopies            DriveCopy[]
+  crashAlerts            CrashAlert[]
 
   @@unique([groupId, epochNumber])
   @@index([createdAt, id])
@@ -622,6 +627,28 @@ model DriveCopy {
   @@index([groupId, startHour])
   @@index([senderUserId, driveId])
   @@index([senderDeviceId])
+  @@index([epochId])
+}
+
+model CrashAlert {
+  id             String     @id @default(cuid())
+  groupId        String
+  group          Group      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  messageId      String
+  epochId        String
+  epoch          GroupEpoch @relation(fields: [epochId], references: [id], onDelete: Restrict)
+  senderDeviceId String
+  senderDevice   UserDevice @relation(fields: [senderDeviceId], references: [id], onDelete: Cascade)
+  senderUserId   String
+  senderUser     User       @relation(fields: [senderUserId], references: [id], onDelete: Cascade)
+  payload        Bytes
+  receivedAt     DateTime
+
+  @@unique([groupId, messageId])
+  @@index([groupId, receivedAt])
+  @@index([receivedAt])
+  @@index([senderDeviceId])
+  @@index([senderUserId])
   @@index([epochId])
 }
 

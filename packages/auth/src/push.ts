@@ -172,7 +172,33 @@ export const createPushSender = ({
     return devicesOf([notice.userId], notice.excludeDeviceId);
   };
 
+  const crashAlertRecipients = async (rowIds: string[]) => {
+    const alerts = await db.crashAlert.findMany({
+      where: { id: { in: rowIds } },
+      select: { groupId: true, senderUserId: true, receivedAt: true },
+    });
+    const recipients = new Set<string>();
+    for (const alert of alerts) {
+      const members = await db.groupMember.findMany({
+        where: {
+          groupId: alert.groupId,
+          userId: { not: alert.senderUserId },
+          createdAt: { lte: alert.receivedAt },
+        },
+        select: { userId: true },
+      });
+      for (const userId of await usersWithPhoneOn(
+        members.map(({ userId }) => userId),
+        "CRASH_ALERTS",
+      )) {
+        recipients.add(userId);
+      }
+    }
+    return devicesOf([...recipients]);
+  };
+
   const queued = new Map<string, WakeKind>();
+  const urgent = new Set<string>();
   const lastWokenAt = new Map<string, number>();
   const lastLocatedAt = new Map<string, number>();
   const followUps = new Set<string>();
@@ -209,7 +235,8 @@ export const createPushSender = ({
     );
   };
 
-  const queue = (deviceIds: string[], kind: WakeKind = "sync") => {
+  const queue = (deviceIds: string[], kind: WakeKind = "sync", isUrgent = false) => {
+    if (isUrgent) for (const deviceId of deviceIds) urgent.add(deviceId);
     const fresh = deviceIds.filter(
       (deviceId) => !queued.has(deviceId) || (kind === "locate" && queued.get(deviceId) === "sync"),
     );
@@ -228,6 +255,7 @@ export const createPushSender = ({
     }
     const due = [...queued].filter(([deviceId, kind]) => {
       if (kind === "locate" && !lastLocatedAt.has(deviceId)) return true;
+      if (urgent.has(deviceId)) return true;
       const wokenAt = lastWokenAt.get(deviceId);
       if (wokenAt === undefined) return true;
       if (!followUps.has(deviceId)) {
@@ -243,6 +271,7 @@ export const createPushSender = ({
       return false;
     });
     queued.clear();
+    urgent.clear();
     if (due.length === 0) return;
     for (const [deviceId, kind] of due) {
       lastWokenAt.set(deviceId, at);
@@ -284,6 +313,13 @@ export const createPushSender = ({
       if (eventIds.length > 0) wakeAfterSettle(() => groupEventRecipients(eventIds));
     },
     accountNotice: (noticeId: string) => wakeAfterSettle(() => accountNoticeRecipients(noticeId)),
+    crashAlerts: (rowIds: string[]) => {
+      if (!fcm || rowIds.length === 0) return;
+      background(
+        async () => queue(await crashAlertRecipients(rowIds), "sync", true),
+        "could not choose who to wake for a crash alert",
+      );
+    },
     requestLocation: (deviceIds: string[]) => {
       if (fcm && deviceIds.length > 0) queue(deviceIds, "locate");
     },

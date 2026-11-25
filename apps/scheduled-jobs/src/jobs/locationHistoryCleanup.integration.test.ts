@@ -141,6 +141,19 @@ const addDrive = async (groupId: string, epoch: number, startedAt: Date, driveId
   `;
 };
 
+const addCrashAlert = async (
+  groupId: string,
+  epoch: number,
+  receivedAt: Date,
+  messageId: string,
+) => {
+  await prisma.$executeRaw`
+    INSERT INTO "CrashAlert" ("id", "groupId", "messageId", "epochId", "senderDeviceId", "senderUserId", "payload", "receivedAt")
+    VALUES (${`${groupId}-${messageId}`}, ${groupId}, ${messageId}, ${`${groupId}-epoch-${epoch}`}, ${deviceId}, ${userId},
+      '\\x00'::bytea, (${receivedAt.toISOString()}::timestamptz AT TIME ZONE 'UTC'))
+  `;
+};
+
 const driveIds = async (groupId: string) =>
   (await prisma.driveCopy.findMany({ where: { groupId }, select: { driveId: true } }))
     .map(({ driveId }) => driveId)
@@ -546,6 +559,21 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history
     await createEpochCleanup()();
     expect(await epochNumbers(groupId)).toEqual([1, 2]);
     await prisma.driveCopy.deleteMany({ where: { groupId } });
+    await createEpochCleanup()();
+    expect(await epochNumbers(groupId)).toEqual([2]);
+  });
+
+  test("deletes Crash alerts past the history maximum and keeps their Epoch until then", async () => {
+    const groupId = await createGroup("crash-alerts", [200, 100]);
+    await addCrashAlert(groupId, 1, ago(15), "old");
+    await addCrashAlert(groupId, 1, ago(1), "recent");
+    await createGroupHistoryCleanup()();
+    expect(
+      (await prisma.crashAlert.findMany({ where: { groupId } })).map(({ messageId }) => messageId),
+    ).toEqual(["recent"]);
+    await createEpochCleanup()();
+    expect(await epochNumbers(groupId)).toEqual([1, 2]);
+    await prisma.crashAlert.deleteMany({ where: { groupId } });
     await createEpochCleanup()();
     expect(await epochNumbers(groupId)).toEqual([2]);
   });
