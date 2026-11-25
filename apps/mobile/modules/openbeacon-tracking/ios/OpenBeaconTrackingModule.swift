@@ -224,6 +224,27 @@ public class OpenBeaconTrackingModule: Module {
     Function("setCrashAlertContext") { (_: [String: String], _: String) in
     }
 
+    AsyncFunction("listQueuedCrashAlerts") { () -> [[String: Any]] in
+      []
+    }
+
+    AsyncFunction("markCrashAlertsSent") { (_: [[String: String]], _: Double) in
+    }
+
+    AsyncFunction("dropCrashAlerts") { (_: [[String: String]]) in
+    }
+
+    Function("showCrashAlertNotice") { (_: String, _: String, _: String, _: String, _: String) -> Bool in
+      false
+    }
+
+    Function("crashAlertsSoundDuringDoNotDisturb") { () -> Bool? in
+      nil
+    }
+
+    Function("openCrashAlertSoundSettings") {
+    }
+
     Function("startCrashTest") {
     }
 

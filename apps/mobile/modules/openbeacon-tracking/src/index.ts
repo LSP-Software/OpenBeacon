@@ -10,6 +10,7 @@ export {
   type PlaceSearchOutcome,
   type ProvisionedEpochKeyInfo,
   type ProvisionedEpochKeyInput,
+  type QueuedCrashAlert,
   type QueuedDrive,
   type QueuedPlaceTransition,
 } from "./OpenBeaconTrackingModule.ts";

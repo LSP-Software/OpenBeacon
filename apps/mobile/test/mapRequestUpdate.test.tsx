@@ -15,6 +15,8 @@ mock.module("react-native", () => ({
 }));
 mock.module("expo-router", () => ({ Link: Passthrough }));
 mock.module("lucide-react-native", () => ({
+  CircleCheckIcon: () => null,
+  TriangleAlertIcon: () => null,
   GaugeIcon: () => null,
   EyeIcon: () => null,
   HistoryIcon: () => null,

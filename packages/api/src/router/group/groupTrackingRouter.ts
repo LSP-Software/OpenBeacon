@@ -20,6 +20,7 @@ import {
   uploadGroupTrackingBatch,
 } from "../../lib/groupTracking.ts";
 import { readGroupNotices } from "../../lib/accountNotices.ts";
+import { readCrashAlertsSince } from "../../lib/crashAlerts.ts";
 import {
   DRIVES_PER_DEVICE_GROUP_DAY,
   readGroupDrives,
@@ -267,7 +268,9 @@ export const groupTrackingRouter = {
         });
       }
       const asksToCatchUp =
-        input.placeAlertsCursor !== undefined || input.noticesCursor !== undefined;
+        input.placeAlertsCursor !== undefined ||
+        input.noticesCursor !== undefined ||
+        input.crashAlertsCursor !== undefined;
       const catchUpBudget = asksToCatchUp
         ? await ctx.cache.rateLimits.consume(
             {
@@ -287,7 +290,8 @@ export const groupTrackingRouter = {
       }
       const placeAlertsCursor = catchUpBudget.allowed ? input.placeAlertsCursor : undefined;
       const noticesCursor = catchUpBudget.allowed ? input.noticesCursor : undefined;
-      const [placeUpdates, imageKeysNeedCatchUp, notices] = await Promise.all([
+      const crashAlertsCursor = catchUpBudget.allowed ? input.crashAlertsCursor : undefined;
+      const [placeUpdates, imageKeysNeedCatchUp, notices, crashAlerts] = await Promise.all([
         placeAlertsCursor === undefined
           ? null
           : tryCatch(
@@ -302,9 +306,13 @@ export const groupTrackingRouter = {
         noticesCursor === undefined
           ? null
           : tryCatch(readGroupNotices({ cursor: noticesCursor, db: ctx.db, userId })),
+        crashAlertsCursor === undefined
+          ? null
+          : tryCatch(readCrashAlertsSince({ cursor: crashAlertsCursor, db: ctx.db, userId })),
       ]);
       const catchUpFields = {
         ...(notices && !notices.error ? { notices: notices.data } : {}),
+        ...(crashAlerts && !crashAlerts.error ? { crashAlerts: crashAlerts.data } : {}),
         ...(placeUpdates && !placeUpdates.error
           ? { places: placeUpdates.data[0], placeAlerts: placeUpdates.data[1] }
           : {}),

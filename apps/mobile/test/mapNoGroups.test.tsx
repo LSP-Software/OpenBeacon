@@ -12,6 +12,12 @@ let mapProps: { markers: readonly LiveMapMarker[]; people: MapPeople | null } | 
 const passThrough = ({ children }: { children?: React.ReactNode }) =>
   React.createElement("view", null, children);
 
+mock.module("../lib/crashAlertSync.ts", () => ({
+  applyCrashAlerts: async () => {},
+  getCrashAlertsCursor: () => null,
+  sendQueuedCrashAlerts: async () => {},
+  useActiveCrash: () => null,
+}));
 mock.module("@tanstack/react-query", () => ({
   keepPreviousData: <T,>(previous: T) => previous,
   queryOptions: <T,>(options: T) => options,

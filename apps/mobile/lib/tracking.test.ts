@@ -44,6 +44,7 @@ const uploadCalls: Array<{
   placeTransitions?: { clientId: string; occurredAt?: Date }[];
   placeAlertsCursor?: string | null;
   noticesCursor?: string | null;
+  crashAlertsCursor?: string | null;
   drives?: { driveId: string }[];
 }> = [];
 let pendingPushToken: string | null = null;
@@ -188,6 +189,12 @@ let uploadGroup = async ({
 });
 
 const storedNoticesCursor: string | null = "2026-11-17T09:00:00.000Z|";
+mock.module("./crashAlertSync.ts", () => ({
+  applyCrashAlerts: async () => {},
+  getCrashAlertsCursor: () => null,
+  sendQueuedCrashAlerts: async () => {},
+  useActiveCrash: () => null,
+}));
 mock.module("./secretStorage.ts", () => ({
   secretOwner: (userId: string) => ({ userId, generation: 0 }),
   invalidateSecretWrites: async () => {},
@@ -549,6 +556,7 @@ mock.module("./api.ts", () => ({
             placeTransitions?: { clientId: string; occurredAt?: Date }[];
             placeAlertsCursor?: string | null;
             noticesCursor?: string | null;
+            crashAlertsCursor?: string | null;
           },
           options?: { context?: { accountRound?: { userId: string } } },
         ) => {
@@ -861,6 +869,7 @@ describe("tracking service", () => {
           points: [],
           placeAlertsCursor: null,
           noticesCursor: "2026-11-17T09:00:00.000Z|",
+          crashAlertsCursor: null,
         },
       ]);
       expect(uploadsBatchedWithSync).toEqual([true]);
@@ -891,6 +900,7 @@ describe("tracking service", () => {
         points: [],
         placeAlertsCursor: null,
         noticesCursor: "2026-11-17T09:00:00.000Z|",
+        crashAlertsCursor: null,
       };
 
       await syncBackgroundTracking("push");
@@ -1048,6 +1058,7 @@ describe("tracking service", () => {
       placeTransitions?: { clientId: string }[];
       placeAlertsCursor?: string | null;
       noticesCursor?: string | null;
+      crashAlertsCursor?: string | null;
     }) => ({
       accepted: input.points.map((point) => (point as { clientPointId: string }).clientPointId),
       duplicates: [],

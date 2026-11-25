@@ -52,10 +52,16 @@ mock.module("expo-router", () => ({
   useRouter: () => router,
 }));
 mock.module("react-native", () => createReactNativeTestModule());
+mock.module("../lib/crashAlertSync.ts", () => ({
+  crashWords: (name: (userId: string) => string) => ({ name, speed: () => "", time: () => "" }),
+  useGroupCrashAlerts: () => [],
+}));
 mock.module("react-native-safe-area-context", () => ({
   SafeAreaView: ({ children }: { children: React.ReactNode }) => children,
 }));
 mock.module("lucide-react-native", () => ({
+  CircleCheckIcon: () => null,
+  SirenIcon: () => null,
   ClockIcon: () => null,
   ImageIcon: () => null,
   LogInIcon: () => null,

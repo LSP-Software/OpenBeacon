@@ -23,6 +23,10 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import expo.modules.openbeacontracking.R
 import expo.modules.openbeacontracking.TrackingRuntime
+import expo.modules.openbeacontracking.capture.TrackingUploadService
+import expo.modules.openbeacontracking.drives.CrashAlertOutbox
+import expo.modules.openbeacontracking.drives.CrashNotice
+import expo.modules.openbeacontracking.drives.CrashNoticePolicy
 import expo.modules.openbeacontracking.drives.CrashCountdown
 import expo.modules.openbeacontracking.drives.CrashCountdownPhase
 import expo.modules.openbeacontracking.drives.CrashSuspicion
@@ -33,9 +37,14 @@ import org.json.JSONObject
 object CrashCountdownController {
   private const val TAG = "CrashCountdown"
   private const val CHANNEL_ID = "openbeacon_crash_countdown"
+  private const val QUIET_CHANNEL_ID = "openbeacon_crash_countdown_quiet"
+  private const val GROUP = "openbeacon_crash"
   private const val NOTIFICATION_ID = 7270
   private const val PREFS = "openbeacon_crash_alerts"
   private const val COUNTDOWN_KEY = "countdown"
+  private const val ALERT_KEY = "alertId"
+  private const val DROPPED_ID = 7272
+  private const val SENT_CHECK_MILLIS = 15_000L
   private val MPH_COUNTRIES = setOf("GB", "US", "LR", "MM", "PR", "VI", "GU", "AS", "MP", "BS", "BZ", "KY", "VG", "TC", "AG", "DM", "GD", "KN", "LC", "VC", "MS", "AI", "FK", "SH", "IM", "JE", "GG", "WS")
 
   private val handler = Handler(Looper.getMainLooper())
@@ -52,6 +61,17 @@ object CrashCountdownController {
   var placeName: String? = null
     private set
   private var placeFor: Long? = null
+  private var alertId: String? = null
+  private var screenVisible = false
+  private var shownNotice = CrashNotice.NONE
+
+  private val sentChecker =
+    object : Runnable {
+      override fun run() {
+        checkSent()
+        if (current?.phase == CrashCountdownPhase.SENT) handler.postDelayed(this, SENT_CHECK_MILLIS)
+      }
+    }
 
   private val ticker =
     object : Runnable {
@@ -122,11 +142,152 @@ object CrashCountdownController {
 
   private fun restoreSaved() {
     val saved = prefs().getString(COUNTDOWN_KEY, null)?.let { CrashCountdown.restore(it) } ?: return
-    if (saved.test || saved.phase != CrashCountdownPhase.COUNTING) {
-      prefs().edit().remove(COUNTDOWN_KEY).apply()
+    alertId = prefs().getString(ALERT_KEY, null)
+    val restorable =
+      !saved.test &&
+        (saved.phase == CrashCountdownPhase.COUNTING || (saved.phase == CrashCountdownPhase.SENT && alertId != null))
+    if (!restorable) {
+      prefs().edit().remove(COUNTDOWN_KEY).remove(ALERT_KEY).apply()
       return
     }
-    update(saved.tick(System.currentTimeMillis()))
+    val ticked = saved.tick(System.currentTimeMillis())
+    if (ticked.phase == saved.phase) update(ticked, previous = null) else update(ticked, previous = saved)
+  }
+
+  fun deliveries(context: Context): Map<String, Long?>? {
+    val id = alertId ?: return null
+    return TrackingRuntime.crashAlertOutbox(context).deliveries(id)
+  }
+
+  fun groupName(
+    context: Context,
+    groupId: String,
+  ): String? =
+    prefs(context).getString("groups", null)?.let { runCatching { JSONObject(it).optString(groupId) }.getOrNull() }?.takeIf { it.isNotBlank() }
+
+  fun expireQueued(context: Context) {
+    val now = System.currentTimeMillis()
+    val dropped = TrackingRuntime.crashAlertOutbox(context).expire(now)
+    if (dropped.isEmpty()) return
+    onMain(context) {
+      val countdown = current
+      val crashAt = countdown?.suspicion?.timeMillis?.takeIf { alertId in dropped }
+      showDroppedNotice(crashAt)
+      if (alertId in dropped) end()
+    }
+  }
+
+  fun onDelivered(context: Context) = onMain(context) { checkSent() }
+
+  private fun checkSent() {
+    val countdown = current ?: return
+    if (countdown.phase != CrashCountdownPhase.SENT) return
+    val now = System.currentTimeMillis()
+    val id = alertId
+    val outbox = TrackingRuntime.crashAlertOutbox(appContext)
+    if (id != null && id in outbox.expire(now)) {
+      showDroppedNotice(countdown.suspicion.timeMillis)
+      end()
+      return
+    }
+    val deliveries = id?.let { outbox.deliveries(it) }
+    val sharingUntil = TrackingRuntime.crashSharingUntil(appContext)
+    val sharingOver = sharingUntil == null || now >= sharingUntil
+    if (sharingOver && sharingUntil != null) TrackingRuntime.setCrashSharingUntil(appContext, null)
+    if (deliveries == null || (sharingOver && deliveries.values.none { it == null })) {
+      end()
+      return
+    }
+    refreshNotice()
+    notifyListeners()
+  }
+
+  private fun end() {
+    handler.removeCallbacks(sentChecker)
+    current = null
+    alertId = null
+    prefs().edit().remove(COUNTDOWN_KEY).remove(ALERT_KEY).apply()
+    refreshNotice()
+    notifyListeners()
+  }
+
+  fun screenShown(
+    context: Context,
+    visible: Boolean,
+  ) = onMain(context) {
+    screenVisible = visible
+    refreshNotice()
+  }
+
+  private fun refreshNotice() {
+    val countdown = current
+    val deliveries = alertId?.let { TrackingRuntime.crashAlertOutbox(appContext).deliveries(it) }
+    val notice = CrashNoticePolicy.of(countdown, screenVisible, alertQueued = deliveries != null, anyDelivered = deliveries?.values?.any { it != null } == true)
+    if (notice == CrashNotice.NONE || notice != shownNotice) NotificationManagerCompat.from(appContext).cancel(NOTIFICATION_ID)
+    shownNotice = notice
+    when (notice) {
+      CrashNotice.NONE -> Unit
+      CrashNotice.COUNTDOWN_ALARM, CrashNotice.COUNTDOWN_QUIET -> countdown?.let { showNotification(it, alarm = notice == CrashNotice.COUNTDOWN_ALARM) }
+      CrashNotice.SENT, CrashNotice.NOT_SENT -> showSentNotification(sent = notice == CrashNotice.SENT)
+    }
+  }
+
+  private fun onSent(countdown: CrashCountdown) {
+    val now = System.currentTimeMillis()
+    val deviceId = TrackingRuntime.queueDeviceId(appContext)
+    val keys = readKeys().filter { it.senderDeviceId == deviceId }
+    if (deviceId == null || keys.isEmpty() || TrackingRuntime.sharingState(appContext).isPaused(now)) {
+      alertId = null
+      return
+    }
+    val id = TrackingRuntime.crashAlertOutbox(appContext).queueCrash(countdown.suspicion, placeName, keys, deviceId, now)
+    alertId = id
+    prefs().edit().putString(ALERT_KEY, id).apply()
+    TrackingRuntime.setCrashSharingUntil(appContext, CrashAlertOutbox.sharingUntil(now))
+    TrackingUploadService.start(appContext, TrackingUploadService.REASON_UPLOAD)
+  }
+
+  private fun onSaidOk(countdown: CrashCountdown) {
+    val id = alertId ?: return
+    TrackingRuntime.crashAlertOutbox(appContext).queueOk(id, countdown.suspicion, placeName, readKeys(), System.currentTimeMillis())
+    TrackingRuntime.setCrashSharingUntil(appContext, null)
+    alertId = null
+    prefs().edit().remove(ALERT_KEY).apply()
+    TrackingUploadService.start(appContext, TrackingUploadService.REASON_UPLOAD)
+  }
+
+  private fun readKeys() =
+    try {
+      TrackingRuntime.epochKeyStore(appContext).list()
+    } catch (error: Exception) {
+      Log.w(TAG, "Couldn't read the keys for a Crash alert.", error)
+      emptyList()
+    }
+
+  private fun showDroppedNotice(crashAt: Long?) {
+    createDroppedChannel()
+    val body =
+      if (crashAt == null) {
+        appContext.getString(R.string.openbeacon_crash_dropped_body_no_time)
+      } else {
+        appContext.getString(R.string.openbeacon_crash_dropped_body, android.text.format.DateFormat.getTimeFormat(appContext).format(java.util.Date(crashAt)))
+      }
+    val notification =
+      NotificationCompat
+        .Builder(appContext, CHANNEL_ID)
+        .setGroup(GROUP)
+        .setContentTitle(appContext.getString(R.string.openbeacon_crash_dropped_title))
+        .setContentText(body)
+        .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+        .setSmallIcon(R.drawable.openbeacon_notification_icon)
+        .setColor(0xFF2A0A0C.toInt())
+        .setAutoCancel(true)
+        .build()
+    try {
+      NotificationManagerCompat.from(appContext).notify(DROPPED_ID, notification)
+    } catch (error: SecurityException) {
+      Log.w(TAG, "Couldn't say the Crash alert was dropped.", error)
+    }
   }
 
   fun addListener(listener: () -> Unit) {
@@ -225,11 +386,15 @@ object CrashCountdownController {
     }
   }
 
-  private fun update(next: CrashCountdown) {
-    val previous = current
+  private fun update(
+    next: CrashCountdown,
+    previous: CrashCountdown? = current,
+  ) {
     current = next
+    if (!next.test && previous?.phase == CrashCountdownPhase.COUNTING && next.phase == CrashCountdownPhase.SENT) onSent(next)
+    if (previous?.phase == CrashCountdownPhase.SENT && next.phase == CrashCountdownPhase.SAID_OK) onSaidOk(previous)
     if (placeFor != next.suspicion.timeMillis) lookUpPlace(next.suspicion)
-    if (next.phase == CrashCountdownPhase.COUNTING && !next.test) {
+    if ((next.phase == CrashCountdownPhase.COUNTING || (next.phase == CrashCountdownPhase.SENT && alertId != null)) && !next.test) {
       prefs().edit().putString(COUNTDOWN_KEY, next.save()).apply()
     } else {
       prefs().edit().remove(COUNTDOWN_KEY).apply()
@@ -240,13 +405,16 @@ object CrashCountdownController {
         handler.removeCallbacks(ticker)
         handler.post(ticker)
       }
-      showNotification(next)
     } else {
       handler.removeCallbacks(ticker)
       stopAlarm()
-      NotificationManagerCompat.from(appContext).cancel(NOTIFICATION_ID)
     }
     if (next.phase == CrashCountdownPhase.CANCELLED || next.phase == CrashCountdownPhase.SAID_OK) current = null
+    refreshNotice()
+    if (next.phase == CrashCountdownPhase.SENT && previous?.phase != CrashCountdownPhase.SENT) {
+      handler.removeCallbacks(sentChecker)
+      handler.post(sentChecker)
+    }
     notifyListeners()
   }
 
@@ -308,7 +476,84 @@ object CrashCountdownController {
     vibrator = null
   }
 
-  private fun showNotification(countdown: CrashCountdown) {
+  private fun createDroppedChannel() {
+    NotificationManagerCompat.from(appContext).createNotificationChannel(
+      NotificationChannelCompat
+        .Builder(CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_HIGH)
+        .setName(appContext.getString(R.string.openbeacon_crash_channel))
+        .setDescription(appContext.getString(R.string.openbeacon_crash_channel_description))
+        .setSound(null, null)
+        .setVibrationEnabled(false)
+        .setShowBadge(false)
+        .build(),
+    )
+  }
+
+  private fun createQuietChannel() {
+    NotificationManagerCompat.from(appContext).createNotificationChannel(
+      NotificationChannelCompat
+        .Builder(QUIET_CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_LOW)
+        .setName(appContext.getString(R.string.openbeacon_crash_channel))
+        .setDescription(appContext.getString(R.string.openbeacon_crash_channel_description))
+        .setShowBadge(false)
+        .build(),
+    )
+  }
+
+  private fun openScreen() =
+    PendingIntent.getActivity(
+      appContext,
+      NOTIFICATION_ID,
+      CrashCountdownActivity.intent(appContext).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+      PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+
+  private fun callIntent() =
+    PendingIntent.getActivity(
+      appContext,
+      NOTIFICATION_ID + 1,
+      Intent(Intent.ACTION_DIAL, Uri.parse("tel:${emergencyNumber(appContext)}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+      PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+
+  private fun showSentNotification(sent: Boolean) {
+    createQuietChannel()
+    val sharingUntil = TrackingRuntime.crashSharingUntil(appContext)
+    val body =
+      when {
+        !sent -> appContext.getString(R.string.openbeacon_crash_not_sent_body)
+        sharingUntil != null && sharingUntil > System.currentTimeMillis() ->
+          appContext.getString(R.string.openbeacon_crash_sent_body, android.text.format.DateFormat.getTimeFormat(appContext).format(java.util.Date(sharingUntil)))
+        else -> appContext.getString(R.string.openbeacon_crash_ok_tell_caption, groupsLabel(appContext).first.replaceFirstChar { it.titlecase(Locale.getDefault()) })
+      }
+    val builder =
+      NotificationCompat
+        .Builder(appContext, QUIET_CHANNEL_ID)
+        .setGroup(GROUP)
+        .setContentTitle(appContext.getString(if (sent) R.string.openbeacon_crash_sent_title else R.string.openbeacon_crash_not_sent_title))
+        .setContentText(body)
+        .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+        .setSmallIcon(R.drawable.openbeacon_notification_icon)
+        .setColor(0xFF2A0A0C.toInt())
+        .setCategory(NotificationCompat.CATEGORY_STATUS)
+        .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+        .setOngoing(true)
+        .setOnlyAlertOnce(true)
+        .setContentIntent(openScreen())
+        .addAction(0, appContext.getString(if (sent) R.string.openbeacon_crash_ok_tell else R.string.openbeacon_crash_im_ok), CrashCountdownReceiver.intent(appContext, CrashCountdownReceiver.ACTION_IM_OK))
+    if (!sent) builder.addAction(0, appContext.getString(R.string.openbeacon_crash_call, emergencyNumber(appContext)), callIntent())
+    try {
+      NotificationManagerCompat.from(appContext).notify(NOTIFICATION_ID, builder.build())
+    } catch (error: SecurityException) {
+      Log.w(TAG, "Couldn't show the Crash alert status.", error)
+    }
+  }
+
+  private fun showNotification(
+    countdown: CrashCountdown,
+    alarm: Boolean,
+  ) {
+    createQuietChannel()
     val manager = NotificationManagerCompat.from(appContext)
     manager.createNotificationChannel(
       NotificationChannelCompat
@@ -320,13 +565,7 @@ object CrashCountdownController {
         .setShowBadge(false)
         .build(),
     )
-    val open =
-      PendingIntent.getActivity(
-        appContext,
-        NOTIFICATION_ID,
-        CrashCountdownActivity.intent(appContext).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-      )
+    val open = openScreen()
     val seconds = countdown.secondsLeft(System.currentTimeMillis())
     val groups = groupsLabel(appContext).first
     val body =
@@ -337,7 +576,8 @@ object CrashCountdownController {
       }
     val builder =
       NotificationCompat
-        .Builder(appContext, CHANNEL_ID)
+        .Builder(appContext, if (alarm) CHANNEL_ID else QUIET_CHANNEL_ID)
+        .setGroup(GROUP)
         .setContentTitle(
           appContext.getString(
             if (countdown.test) R.string.openbeacon_crash_notification_test_title else R.string.openbeacon_crash_notification_title,
@@ -361,15 +601,10 @@ object CrashCountdownController {
       builder.addAction(
         0,
         appContext.getString(R.string.openbeacon_crash_call, emergencyNumber(appContext)),
-        PendingIntent.getActivity(
-          appContext,
-          NOTIFICATION_ID + 1,
-          Intent(Intent.ACTION_DIAL, Uri.parse("tel:${emergencyNumber(appContext)}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-          PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        ),
+        callIntent(),
       )
     }
-    if (canUseFullScreenIntent()) builder.setFullScreenIntent(open, true)
+    if (alarm && canUseFullScreenIntent()) builder.setFullScreenIntent(open, true)
     try {
       manager.notify(NOTIFICATION_ID, builder.build())
     } catch (error: SecurityException) {

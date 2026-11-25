@@ -32,7 +32,16 @@ object CaptureSamplingPolicy {
     forcedRefresh: Boolean = false,
     lowPowerMode: Boolean = false,
     confirmingPlace: Boolean = false,
+    crashSharing: Boolean = false,
   ): CaptureSamplingDecision {
+    if (crashSharing) {
+      return CaptureSamplingDecision(
+        shouldQueue = true,
+        intervalMs = MOVING_INTERVAL_MS,
+        forceUpload = forcedRefresh,
+        uploadIntervalMs = FASTEST_UPLOAD_INTERVAL_MS - NEAREST_FIX_SLACK_MS,
+      )
+    }
     val batterySaver = isBatterySaver(battery)
     val trustedSpeed = if (accuracyMeters != null && accuracyMeters <= MAX_SPEED_ACCURACY_METERS) speedMetersPerSecond else null
     val coveredMeters = distanceFromLastQueuedMeters?.let { it - (accuracyMeters ?: 0.0) }

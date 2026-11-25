@@ -144,6 +144,18 @@ export const createGroupHistoryCleanup =
       `,
     );
     await deleteBatches(
+      "Crash alert",
+      (limit) => services.db.$executeRaw`
+        DELETE FROM "CrashAlert"
+        WHERE id IN (
+          SELECT id FROM "CrashAlert"
+          WHERE "receivedAt" < (${cutoff}::timestamptz AT TIME ZONE 'UTC')
+          ORDER BY "receivedAt"
+          LIMIT ${limit}
+        )
+      `,
+    );
+    await deleteBatches(
       "Group event",
       (limit) => services.db.$executeRaw`
         DELETE FROM "GroupEvent"
@@ -193,6 +205,9 @@ export const createEpochCleanup =
               )
               AND NOT EXISTS (
                 SELECT 1 FROM "DriveCopy" d WHERE d."epochId" = e.id
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM "CrashAlert" c WHERE c."epochId" = e.id
               )
               AND NOT EXISTS (
                 SELECT 1 FROM "Group" g WHERE g."imageKeyEpochId" = e.id

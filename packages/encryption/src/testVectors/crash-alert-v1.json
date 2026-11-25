@@ -1,0 +1,302 @@
+{
+  "version": 1,
+  "length": 128,
+  "encryptedLength": 144,
+  "description": "Crash alert v1 vectors shared by TypeScript, Kotlin and Swift.",
+  "encode": [
+    {
+      "name": "crash",
+      "message": {
+        "type": "CRASH",
+        "messageId": "0123456789abcdef0123456789abcdef",
+        "alertId": "0123456789abcdef0123456789abcdef",
+        "crash": {
+          "time": 1795975440000,
+          "latitude": 51.6512345,
+          "longitude": -0.2001234,
+          "speedBefore": 18.78
+        },
+        "sharingUntil": 1795976400000,
+        "okAt": null,
+        "placeLabel": "Barnet Lane, EN5"
+      },
+      "hex": "01010123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01a2287a66801ec95a59ffe176ae075601a228890c80000000000000104261726e6574204c616e652c20454e3500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "decoded": {
+        "type": "CRASH",
+        "messageId": "0123456789abcdef0123456789abcdef",
+        "alertId": "0123456789abcdef0123456789abcdef",
+        "crash": {
+          "time": 1795975440000,
+          "latitude": 51.6512345,
+          "longitude": -0.2001234,
+          "speedBefore": 18.78
+        },
+        "sharingUntil": 1795976400000,
+        "okAt": null,
+        "placeLabel": "Barnet Lane, EN5"
+      }
+    },
+    {
+      "name": "ok",
+      "message": {
+        "type": "OK",
+        "messageId": "fedcba9876543210fedcba9876543210",
+        "alertId": "0123456789abcdef0123456789abcdef",
+        "crash": {
+          "time": 1795975440000,
+          "latitude": 51.6512345,
+          "longitude": -0.2001234,
+          "speedBefore": 18.78
+        },
+        "sharingUntil": 1795976400000,
+        "okAt": 1795975740000,
+        "placeLabel": "Barnet Lane, EN5"
+      },
+      "hex": "0102fedcba9876543210fedcba98765432100123456789abcdef0123456789abcdef01a2287a66801ec95a59ffe176ae075601a228890c8001a2287efa60104261726e6574204c616e652c20454e3500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "decoded": {
+        "type": "OK",
+        "messageId": "fedcba9876543210fedcba9876543210",
+        "alertId": "0123456789abcdef0123456789abcdef",
+        "crash": {
+          "time": 1795975440000,
+          "latitude": 51.6512345,
+          "longitude": -0.2001234,
+          "speedBefore": 18.78
+        },
+        "sharingUntil": 1795976400000,
+        "okAt": 1795975740000,
+        "placeLabel": "Barnet Lane, EN5"
+      }
+    },
+    {
+      "name": "no-label",
+      "message": {
+        "type": "CRASH",
+        "messageId": "0123456789abcdef0123456789abcdef",
+        "alertId": "0123456789abcdef0123456789abcdef",
+        "crash": {
+          "time": 1795975440000,
+          "latitude": -33.8688197,
+          "longitude": 151.2092955,
+          "speedBefore": 11.11
+        },
+        "sharingUntil": 1795976400000,
+        "okAt": null,
+        "placeLabel": null
+      },
+      "hex": "01010123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01a2287a6680ebd0073b5a20b51b045701a228890c80000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "decoded": {
+        "type": "CRASH",
+        "messageId": "0123456789abcdef0123456789abcdef",
+        "alertId": "0123456789abcdef0123456789abcdef",
+        "crash": {
+          "time": 1795975440000,
+          "latitude": -33.8688197,
+          "longitude": 151.2092955,
+          "speedBefore": 11.11
+        },
+        "sharingUntil": 1795976400000,
+        "okAt": null,
+        "placeLabel": null
+      }
+    },
+    {
+      "name": "long-label",
+      "message": {
+        "type": "CRASH",
+        "messageId": "0123456789abcdef0123456789abcdef",
+        "alertId": "0123456789abcdef0123456789abcdef",
+        "crash": {
+          "time": 1795975440000,
+          "latitude": 51.6512345,
+          "longitude": -0.2001234,
+          "speedBefore": 18.78
+        },
+        "sharingUntil": 1795976400000,
+        "okAt": null,
+        "placeLabel": "Rue de l’Église-Saint-Étienne-du-Mont, 75005 Paris, Île-de-France"
+      },
+      "hex": "01010123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01a2287a66801ec95a59ffe176ae075601a228890c8000000000000040527565206465206ce28099c389676c6973652d5361696e742dc3897469656e6e652d64752d4d6f6e742c2037353030352050617269732c20c38e6c652d64652d00",
+      "decoded": {
+        "type": "CRASH",
+        "messageId": "0123456789abcdef0123456789abcdef",
+        "alertId": "0123456789abcdef0123456789abcdef",
+        "crash": {
+          "time": 1795975440000,
+          "latitude": 51.6512345,
+          "longitude": -0.2001234,
+          "speedBefore": 18.78
+        },
+        "sharingUntil": 1795976400000,
+        "okAt": null,
+        "placeLabel": "Rue de l’Église-Saint-Étienne-du-Mont, 75005 Paris, Île-de-"
+      }
+    }
+  ],
+  "encodeReject": [
+    {
+      "name": "crash-with-ok-time",
+      "message": {
+        "type": "CRASH",
+        "messageId": "0123456789abcdef0123456789abcdef",
+        "alertId": "0123456789abcdef0123456789abcdef",
+        "crash": {
+          "time": 1795975440000,
+          "latitude": 51.6512345,
+          "longitude": -0.2001234,
+          "speedBefore": 18.78
+        },
+        "sharingUntil": 1795976400000,
+        "okAt": 1,
+        "placeLabel": "Barnet Lane, EN5"
+      }
+    },
+    {
+      "name": "ok-without-ok-time",
+      "message": {
+        "type": "OK",
+        "messageId": "fedcba9876543210fedcba9876543210",
+        "alertId": "0123456789abcdef0123456789abcdef",
+        "crash": {
+          "time": 1795975440000,
+          "latitude": 51.6512345,
+          "longitude": -0.2001234,
+          "speedBefore": 18.78
+        },
+        "sharingUntil": 1795976400000,
+        "okAt": null,
+        "placeLabel": "Barnet Lane, EN5"
+      }
+    },
+    {
+      "name": "crash-alert-id-differs",
+      "message": {
+        "type": "CRASH",
+        "messageId": "0123456789abcdef0123456789abcdef",
+        "alertId": "fedcba9876543210fedcba9876543210",
+        "crash": {
+          "time": 1795975440000,
+          "latitude": 51.6512345,
+          "longitude": -0.2001234,
+          "speedBefore": 18.78
+        },
+        "sharingUntil": 1795976400000,
+        "okAt": null,
+        "placeLabel": "Barnet Lane, EN5"
+      }
+    },
+    {
+      "name": "bad-message-id",
+      "message": {
+        "type": "CRASH",
+        "messageId": "xyz",
+        "alertId": "0123456789abcdef0123456789abcdef",
+        "crash": {
+          "time": 1795975440000,
+          "latitude": 51.6512345,
+          "longitude": -0.2001234,
+          "speedBefore": 18.78
+        },
+        "sharingUntil": 1795976400000,
+        "okAt": null,
+        "placeLabel": "Barnet Lane, EN5"
+      }
+    },
+    {
+      "name": "latitude-out-of-range",
+      "message": {
+        "type": "CRASH",
+        "messageId": "0123456789abcdef0123456789abcdef",
+        "alertId": "0123456789abcdef0123456789abcdef",
+        "crash": {
+          "time": 1795975440000,
+          "latitude": 91,
+          "longitude": -0.2001234,
+          "speedBefore": 18.78
+        },
+        "sharingUntil": 1795976400000,
+        "okAt": null,
+        "placeLabel": "Barnet Lane, EN5"
+      }
+    },
+    {
+      "name": "negative-speed",
+      "message": {
+        "type": "CRASH",
+        "messageId": "0123456789abcdef0123456789abcdef",
+        "alertId": "0123456789abcdef0123456789abcdef",
+        "crash": {
+          "time": 1795975440000,
+          "latitude": 51.6512345,
+          "longitude": -0.2001234,
+          "speedBefore": -1
+        },
+        "sharingUntil": 1795976400000,
+        "okAt": null,
+        "placeLabel": "Barnet Lane, EN5"
+      }
+    }
+  ],
+  "decodeReject": [
+    {
+      "name": "unknown-version",
+      "hex": "02010123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01a2287a66801ec95a59ffe176ae075601a228890c80000000000000104261726e6574204c616e652c20454e3500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "name": "unknown-type",
+      "hex": "01030123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01a2287a66801ec95a59ffe176ae075601a228890c80000000000000104261726e6574204c616e652c20454e3500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "name": "crash-with-ok-time",
+      "hex": "01010123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01a2287a66801ec95a59ffe176ae075601a228890c80000000000001104261726e6574204c616e652c20454e3500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "name": "crash-alert-id-differs",
+      "hex": "01010123456789abcdef0123456789abcdefff23456789abcdef0123456789abcdef01a2287a66801ec95a59ffe176ae075601a228890c80000000000000104261726e6574204c616e652c20454e3500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "name": "label-too-long",
+      "hex": "01010123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01a2287a66801ec95a59ffe176ae075601a228890c80000000000000414261726e6574204c616e652c20454e3500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "name": "non-zero-padding",
+      "hex": "01010123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01a2287a66801ec95a59ffe176ae075601a228890c80000000000000104261726e6574204c616e652c20454e3500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001"
+    },
+    {
+      "name": "invalid-utf8",
+      "hex": "01010123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01a2287a66801ec95a59ffe176ae075601a228890c8000000000000010ff61726e6574204c616e652c20454e3500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "name": "wrong-length",
+      "hex": "01010123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01a2287a66801ec95a59ffe176ae075601a228890c80000000000000104261726e6574204c616e652c20454e35000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+  ],
+  "sealed": {
+    "epochKeyHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "nonceHex": "202122232425262728292a2b2c2d2e2f3031323334353637",
+    "cases": [
+      {
+        "name": "crash",
+        "metadata": {
+          "epochId": "epoch_interop_1",
+          "groupId": "group_interop_1",
+          "senderDeviceId": "device_interop_1",
+          "messageId": "0123456789abcdef0123456789abcdef"
+        },
+        "aadJson": "{\"context\":\"openbeacon.group-epoch.v1\",\"epochId\":\"epoch_interop_1\",\"groupId\":\"group_interop_1\",\"kind\":\"crash\",\"messageId\":\"0123456789abcdef0123456789abcdef\",\"purpose\":\"payload\",\"senderDeviceId\":\"device_interop_1\"}",
+        "ciphertextBase64": "HFhM6D5QnSD1UVGeDSCIevC60B+a9I8eLI5dCkpeY6n8riHg6ZlAjkxtbxdCcECqboWsacRO8VTQkHIPfNgva0QlT5Y37k0SdU/hzPhNDa80Z+7WMvlbqZLSBFG4Im91+isvLkDVIaapTilPTnvZiYGGQPyDpl0DlqDO+gh0DFGJ4IHjB6871JrYCAVbdmwb"
+      },
+      {
+        "name": "ok",
+        "metadata": {
+          "epochId": "epoch_interop_1",
+          "groupId": "group_interop_1",
+          "senderDeviceId": "device_interop_1",
+          "messageId": "fedcba9876543210fedcba9876543210"
+        },
+        "aadJson": "{\"context\":\"openbeacon.group-epoch.v1\",\"epochId\":\"epoch_interop_1\",\"groupId\":\"group_interop_1\",\"kind\":\"crash\",\"messageId\":\"fedcba9876543210fedcba9876543210\",\"purpose\":\"payload\",\"senderDeviceId\":\"device_interop_1\"}",
+        "ciphertextBase64": "HFuzF8GvYt8Krq5h8t93hQ9F0B+a9I8eLI5dCkpeY6n8riHg6ZlAjkxtbxdCcECqboWsacRO8VTRMlpxhrgva0QlT5Y37k0SdU/hzPhNDa80Z+7WMvlbqZLSBFG4Im91+isvLkDVIaapTilPTnvZiYGGQPyDpl0DlqDO+gh0DFEpJ3we1I1LirPmkOLUJMmv"
+      }
+    ]
+  }
+}
