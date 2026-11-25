@@ -219,6 +219,11 @@ const TimelineView = ({
   const [chooserOpen, setChooserOpen] = useState(false);
   const [view, setView] = useState<"day" | "drives" | "week">("day");
   const [weekStep, setWeekStep] = useState(0);
+  const [weekPersonId, setWeekPersonId] = useState(initialPersonId);
+  if (weekPersonId !== personId) {
+    setWeekPersonId(personId);
+    setWeekStep(0);
+  }
   const [openDriveId, setOpenDriveId] = useState<string | null>(null);
   const [sheetHeight, setSheetHeight] = useState(0);
   const reduceMotion = useReducedMotion();
@@ -1155,7 +1160,7 @@ const TimelineView = ({
           title={driveLabel(openRecord)}
           units={units}
         />
-      ) : (
+      ) : view === "day" ? (
         <TimelinePlayerCard
           bottom={insets.bottom + 8}
           card={card}
@@ -1427,7 +1432,7 @@ const TimelineView = ({
             </View>
           )}
         </TimelinePlayerCard>
-      )}
+      ) : null}
 
       {view === "drives" ? (
         <DrivesList
@@ -1498,7 +1503,9 @@ const TimelineView = ({
           canGoForward={weekStep < 0}
           detectionOffText={
             selectedPerson && driveDetectionOff
-              ? `${deviceName(selectedPerson.device.deviceId)} isn’t recording drives. ${selectedPerson.isSelf ? "You can turn it on in Account on that device." : `Only ${selectedPerson.name} can turn it on.`}`
+              ? selectedPerson.isSelf
+                ? `${deviceName(selectedPerson.device.deviceId)} isn’t recording drives. You can turn it on in Account on that device.`
+                : `${selectedPerson.name}’s ${deviceName(selectedPerson.device.deviceId)} isn’t recording drives. Only ${selectedPerson.name} can turn it on.`
               : null
           }
           footer={

@@ -107,13 +107,16 @@ export const WeeklyDrivingReport = <Drive extends { driveId: string; record: Dri
     }
     if (report.drives.length === 0) {
       const { weekBefore } = report;
-      const until = report.current ? "so far" : `to ${weekDayDate(report.monday, 6)}`;
       return (
         <>
           <EmptyBox
             icon={CarIcon}
             title="No drives this week"
-            text={`${subject} didn’t record any drives from ${weekDayDate(report.monday, 0)} ${until}.`}
+            text={
+              report.current
+                ? `${subject} ${isOwn ? "haven’t" : "hasn’t"} recorded any drives since ${weekDayDate(report.monday, 0)}.`
+                : `${subject} didn’t record any drives from ${weekDayDate(report.monday, 0)} to ${weekDayDate(report.monday, 6)}.`
+            }
           />
           {weekBefore ? (
             <ListRow
@@ -145,7 +148,10 @@ export const WeeklyDrivingReport = <Drive extends { driveId: string; record: Dri
               {formatDistance(report.passenger.distance, units.distance)}
             </Text>
             <Text className="text-sm text-secondary">
-              Listed apart. They count towards nothing above.
+              Listed apart.{" "}
+              {report.passenger.count === 1
+                ? "It counts towards nothing above."
+                : "They count towards nothing above."}
             </Text>
           </View>
           <Icon as={ChevronRightIcon} size={20} className="text-secondary" />
@@ -158,7 +164,7 @@ export const WeeklyDrivingReport = <Drive extends { driveId: string; record: Dri
           <EmptyBox
             icon={CarIcon}
             title="No Driving score this week"
-            text={`${report.passenger.count === 1 ? `${isOwn ? "Your" : `${name}’s`} only drive was a Passenger drive, so it doesn’t count.` : `All ${report.passenger.count} of ${possessive} drives were Passenger drives, so none of them count.`}`}
+            text={`${report.passenger.count === 1 ? `${isOwn ? "Your" : `${name}’s`} only drive was a Passenger drive, so it doesn’t count.` : report.passenger.count === 2 ? `Both of ${possessive} drives were Passenger drives, so neither counts.` : `All ${report.passenger.count} of ${possessive} drives were Passenger drives, so none of them count.`}`}
           />
           {passengerLine}
         </>
@@ -185,9 +191,9 @@ export const WeeklyDrivingReport = <Drive extends { driveId: string; record: Dri
               checked this week. Fewer and milder events give a higher score.
             </Text>
             {scoreChange ? (
-              <ChangeChip change={scoreChange} label={`vs ${lastWeekLabel}`} />
+              <ChangeChip change={scoreChange} against={lastWeekLabel} />
             ) : (
-              <ChangeChip change={null} label="No drives last week to compare" />
+              <ChangeChip change={null} against={lastWeekLabel} />
             )}
           </View>
         </View>
@@ -200,7 +206,7 @@ export const WeeklyDrivingReport = <Drive extends { driveId: string; record: Dri
                 <Text className="text-secondary">· {weekTimesLabel(cost.count)}</Text>
               </Text>
               <Text className="font-semibold text-foreground">
-                {cost.points > 0 ? `−${cost.points}` : "—"}
+                {cost.points > 0 ? `−${cost.points}` : cost.count > 0 ? "0" : "—"}
               </Text>
             </View>
           ))}
@@ -228,8 +234,10 @@ export const WeeklyDrivingReport = <Drive extends { driveId: string; record: Dri
             label="distance"
             change={
               previous
-                ? amountChange(driving.distance - previous.distance, (meters) =>
-                    formatDistance(meters, units.distance),
+                ? amountChange(
+                    driving.distance - previous.distance,
+                    (meters) => formatDistance(meters, units.distance),
+                    lastWeekLabel,
                   )
                 : null
             }
@@ -239,7 +247,11 @@ export const WeeklyDrivingReport = <Drive extends { driveId: string; record: Dri
             label="driving"
             change={
               previous
-                ? amountChange(driving.duration - previous.duration, formatDriveDuration)
+                ? amountChange(
+                    driving.duration - previous.duration,
+                    formatDriveDuration,
+                    lastWeekLabel,
+                  )
                 : null
             }
           />
@@ -251,6 +263,7 @@ export const WeeklyDrivingReport = <Drive extends { driveId: string; record: Dri
                 ? amountChange(
                     driving.topSpeed - previous.topSpeed,
                     (speed) => formatSpeed(speed, units.speed),
+                    lastWeekLabel,
                     ["higher", "lower"],
                   )
                 : null
@@ -322,7 +335,7 @@ export const WeeklyDrivingReport = <Drive extends { driveId: string; record: Dri
                         now: count,
                         previous: before,
                       })}
-                      label={`vs ${lastWeekLabel}`}
+                      against={null}
                     />
                   )}
                 </View>
@@ -475,10 +488,11 @@ const moreOrFewer = (difference: number) =>
 const amountChange = (
   difference: number,
   format: (amount: number) => string,
+  against: string,
   [more, less]: [string, string] = ["more", "less"],
 ) => {
   const amount = format(Math.abs(difference));
-  return amount === format(0) ? "same as last week" : `${amount} ${difference > 0 ? more : less}`;
+  return amount === format(0) ? `same as ${against}` : `${amount} ${difference > 0 ? more : less}`;
 };
 
 const Heading = ({ text }: { text: string }) => (
@@ -506,11 +520,11 @@ const Stat = ({
 );
 
 const ChangeChip = ({
+  against,
   change,
-  label,
 }: {
+  against: string | null;
   change: ReturnType<typeof weekChange> | null;
-  label: string;
 }) => (
   <View
     className={cn(
@@ -537,10 +551,14 @@ const ChangeChip = ({
     ) : null}
     <Text className="text-xs text-foreground">
       {change === null
-        ? label
+        ? "No drives last week to compare"
         : change.direction === "same"
-          ? "same as last week"
-          : `${change.amount} ${label}`}
+          ? against === null
+            ? "same"
+            : `same as ${against}`
+          : against === null
+            ? String(change.amount)
+            : `${change.amount} vs ${against}`}
     </Text>
   </View>
 );
