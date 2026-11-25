@@ -28,3 +28,10 @@ export const localeUses24HourClock = () => {
   const { hourCycle } = new Intl.DateTimeFormat(undefined, { hour: "numeric" }).resolvedOptions();
   return hourCycle === "h23" || hourCycle === "h24";
 };
+
+export const formatTimelineDate = (time: number) =>
+  new Date(time).toLocaleDateString(undefined, {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
