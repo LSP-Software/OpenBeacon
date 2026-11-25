@@ -1,4 +1,5 @@
 import { tryCatch } from "@openbeacon/shared";
+import { getLocales } from "expo-localization";
 import { Linking, Platform } from "react-native";
 import { z } from "zod";
 import OpenBeaconTracking from "../modules/openbeacon-tracking/index.ts";
@@ -28,48 +29,65 @@ export const isNewerVersion = (candidate: string, installed: string) => {
 };
 
 const appStoreLookupSchema = z.object({
-  results: z.array(z.object({ trackId: z.number().int().positive(), version: z.string() })),
+  results: z.array(
+    z.object({
+      trackId: z.number().int().positive(),
+      version: z.string(),
+      minimumOsVersion: z.string().optional(),
+    }),
+  ),
 });
 
-export const appStoreUpdateFromLookup = (
-  response: unknown,
-  installed: string,
-): { version: string; trackId: number } | null => {
+export const appStoreUpdateFromLookup = ({
+  response,
+  installed,
+  osVersion,
+}: {
+  response: unknown;
+  installed: string;
+  osVersion: string;
+}): { version: string; trackId: number } | null => {
   const parsed = appStoreLookupSchema.safeParse(response);
   const app = parsed.success ? parsed.data.results[0] : undefined;
   if (!app || !isNewerVersion(app.version, installed)) return null;
+  if (app.minimumOsVersion && isNewerVersion(app.minimumOsVersion, osVersion)) return null;
   return { version: app.version, trackId: app.trackId };
 };
 
 const findAndroidUpdate = async (): Promise<AppUpdate | null> => {
   const check = await tryCatch(OpenBeaconTracking.checkAppUpdate());
   if (check.error || check.data.status === "none") return null;
-  const start = async () => {
-    const started = await tryCatch(OpenBeaconTracking.startAppUpdate());
-    if (!started.error) return started.data;
-    await openPlayStore();
-    return true;
-  };
-  if (check.data.status === "inProgress") {
-    await start();
-    return null;
-  }
   return {
     key: `android:${check.data.versionCode}`,
     latestVersion: null,
     store: "Google Play",
-    start,
+    start: async () => {
+      const started = await tryCatch(OpenBeaconTracking.startAppUpdate());
+      if (!started.error) return started.data;
+      await openPlayStore();
+      return true;
+    },
   };
 };
 
 const findIosUpdate = async (): Promise<AppUpdate | null> => {
+  const country = getLocales()[0]?.regionCode ?? "gb";
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15_000);
   const response = await tryCatch(
-    fetch(`https://itunes.apple.com/lookup?bundleId=net.openbeacon.app&_=${Date.now()}`, {
-      cache: "no-store",
-    }).then((result) => result.json()),
+    fetch(
+      `https://itunes.apple.com/lookup?bundleId=net.openbeacon.app&country=${encodeURIComponent(country.toLowerCase())}&_=${Date.now()}`,
+      { cache: "no-store", signal: controller.signal },
+    )
+      .then((result) => result.json())
+      .finally(() => clearTimeout(timer)),
   );
   if (response.error) return null;
-  const update = appStoreUpdateFromLookup(response.data, appVersion);
+  const update = appStoreUpdateFromLookup({
+    response: response.data,
+    installed: appVersion,
+    osVersion: String(Platform.Version),
+  });
   if (!update) return null;
   return {
     key: `ios:${update.version}`,

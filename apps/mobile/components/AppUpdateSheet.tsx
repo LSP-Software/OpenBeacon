@@ -54,7 +54,7 @@ export const AppUpdateSheet = () => {
     <BottomSheet
       visible={shown}
       onClose={() => {
-        if (shown) notNow();
+        if (shown && !starting) notNow();
       }}
     >
       {update ? (

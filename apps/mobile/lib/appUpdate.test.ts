@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 
 const stored = new Map<string, string>();
-const platform = { OS: "android" };
+const platform = { OS: "android", Version: "17.5" };
 let playCheck: { status: "available" | "inProgress"; versionCode: number } | { status: "none" } = {
   status: "none",
 };
@@ -16,6 +16,7 @@ mock.module("react-native-mmkv", () => ({
     },
   }),
 }));
+mock.module("expo-localization", () => ({ getLocales: () => [{ regionCode: "GB" }] }));
 mock.module("react-native", () => ({ Platform: platform, Linking: { openURL: async () => true } }));
 mock.module("../modules/openbeacon-tracking/index.ts", () => ({
   default: {
@@ -53,22 +54,29 @@ describe("isNewerVersion", () => {
 });
 
 describe("appStoreUpdateFromLookup", () => {
+  const lookup = (response: unknown) =>
+    appStoreUpdateFromLookup({ response, installed: "1.53.2", osVersion: "17.5" });
+
   test("offers the App Store version when it is newer", () => {
     expect(
-      appStoreUpdateFromLookup({ results: [{ trackId: 123, version: "1.54.0" }] }, "1.53.2"),
+      lookup({ results: [{ trackId: 123, version: "1.54.0", minimumOsVersion: "17.0" }] }),
     ).toEqual({ trackId: 123, version: "1.54.0" });
   });
 
   test("offers nothing when the app is not in the App Store or is up to date", () => {
-    expect(appStoreUpdateFromLookup({ resultCount: 0, results: [] }, "1.53.2")).toBeNull();
+    expect(lookup({ resultCount: 0, results: [] })).toBeNull();
+    expect(lookup({ results: [{ trackId: 123, version: "1.53.2" }] })).toBeNull();
+  });
+
+  test("offers nothing the phone's iOS version can't install", () => {
     expect(
-      appStoreUpdateFromLookup({ results: [{ trackId: 123, version: "1.53.2" }] }, "1.53.2"),
+      lookup({ results: [{ trackId: 123, version: "1.54.0", minimumOsVersion: "18.0" }] }),
     ).toBeNull();
   });
 
   test("offers nothing for a response it does not understand", () => {
-    expect(appStoreUpdateFromLookup("<html>", "1.53.2")).toBeNull();
-    expect(appStoreUpdateFromLookup({ results: [{ version: "9.0.0" }] }, "1.53.2")).toBeNull();
+    expect(lookup("<html>")).toBeNull();
+    expect(lookup({ results: [{ version: "9.0.0" }] })).toBeNull();
   });
 });
 
@@ -90,21 +98,34 @@ describe("findAppUpdate on Android", () => {
     expect(await findAppUpdate()).toMatchObject({ key: "android:121" });
   });
 
-  test("resumes an update the person already started instead of asking again", async () => {
+  test("offers to resume an update the person already started without starting it", async () => {
     playCheck = { status: "inProgress", versionCode: 120 };
-    expect(await findAppUpdate()).toBeNull();
+    const update = await findAppUpdate();
+    expect(update).toMatchObject({ key: "android:120" });
+    expect(playStarts).toBe(0);
+    await update?.start();
     expect(playStarts).toBe(1);
   });
 });
 
-describe("findAppUpdate elsewhere", () => {
-  test("never asks Google Play on iOS", async () => {
+describe("findAppUpdate on iOS", () => {
+  test("asks the App Store in the phone's region, never Google Play", async () => {
     platform.OS = "ios";
     playCheck = { status: "available", versionCode: 120 };
+    const requested: string[] = [];
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async () =>
-      new Response(JSON.stringify({ results: [] }))) as unknown as typeof fetch;
-    expect(await findAppUpdate()).toBeNull();
+    globalThis.fetch = (async (url: string) => {
+      requested.push(url);
+      return new Response(JSON.stringify({ results: [{ trackId: 7, version: "9.0.0" }] }));
+    }) as unknown as typeof fetch;
+    const update = await findAppUpdate();
     globalThis.fetch = originalFetch;
+    expect(update).toMatchObject({
+      key: "ios:9.0.0",
+      latestVersion: "9.0.0",
+      store: "the App Store",
+    });
+    expect(requested).toHaveLength(1);
+    expect(requested[0]).toContain("bundleId=net.openbeacon.app&country=gb&");
   });
 });
