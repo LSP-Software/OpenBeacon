@@ -59,6 +59,17 @@ export type QueuedPlaceTransition = {
   occurredAt: number;
 };
 
+export type QueuedDrive = {
+  id: number;
+  groupId: string;
+  driveId: string;
+  epochId: string;
+  senderDeviceId: string;
+  startHour: number;
+  nonce: string;
+  ciphertext: string;
+};
+
 export type PlaceSearchAddress = {
   addressLine: string | null;
   houseNumber: string | null;
@@ -163,6 +174,8 @@ declare class OpenBeaconTrackingModule extends NativeModule<{
   listPlaceGroups(owner: string, deviceId: string): string[] | null;
   listPlaceTransitions(owner: string): Promise<QueuedPlaceTransition[]>;
   deletePlaceTransitions(clientIds: string[]): Promise<void>;
+  listQueuedDrives(owner: string): Promise<QueuedDrive[]>;
+  deleteQueuedDrives(ids: number[]): Promise<void>;
   showEventNotice(
     kind: "alert" | "placesChanged" | "groupActivity" | "accountAlert",
     key: string,

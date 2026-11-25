@@ -1,4 +1,5 @@
 import {
+  groupTrackingDrivesSchema,
   groupTrackingGetLatestSchema,
   groupTrackingHistoryDaysSchema,
   groupTrackingHistoryRangeSchema,
@@ -19,6 +20,11 @@ import {
   uploadGroupTrackingBatch,
 } from "../../lib/groupTracking.ts";
 import { readGroupNotices } from "../../lib/accountNotices.ts";
+import {
+  DRIVES_PER_DEVICE_GROUP_DAY,
+  readGroupDrives,
+  uploadDriveCopies,
+} from "../../lib/drives.ts";
 import { lockGroupMemberForWrite } from "../../lib/groupWriteChecks.ts";
 import { readImageKeysNeedCatchUp } from "../../lib/imageKeys.ts";
 import {
@@ -120,6 +126,38 @@ export const groupTrackingRouter = {
         if (!allowance.unavailable) charged.set(senderDeviceId, allowance.granted);
         available.set(senderDeviceId, allowance.granted);
       }
+      const drives = input.drives ?? [];
+      const driveAllowance = (deviceId: string, cost: number) => ({
+        namespace: "groupTracking.driveAllowance",
+        identifier: { type: "deviceGroup" as const, deviceId, groupId: input.groupId },
+        limit: DRIVES_PER_DEVICE_GROUP_DAY,
+        windowMs: 86_400_000,
+        cost,
+      });
+      const driveCharged = new Map<string, number>();
+      const driveAvailable = new Map<string, number>();
+      const refundDriveAllowance = async (senderDeviceId: string, count: number) => {
+        const cost = Math.min(count, driveCharged.get(senderDeviceId) ?? 0);
+        if (cost <= 0) return;
+        driveCharged.set(senderDeviceId, (driveCharged.get(senderDeviceId) ?? 0) - cost);
+        const refunded = await tryCatch(
+          ctx.cache.rateLimits.refund(driveAllowance(senderDeviceId, cost)),
+        );
+        if (refunded.error) {
+          const code = errorCode(refunded.error);
+          console.error(
+            `[rate-limit] could not give back drive allowance${code ? ` (${code})` : ""}`,
+          );
+        }
+      };
+      for (const senderDeviceId of new Set(drives.map((drive) => drive.senderDeviceId))) {
+        const cost = drives.filter((drive) => drive.senderDeviceId === senderDeviceId).length;
+        const allowance = await ctx.cache.rateLimits.take(driveAllowance(senderDeviceId, cost), {
+          whenUnavailable: "allow",
+        });
+        if (!allowance.unavailable) driveCharged.set(senderDeviceId, allowance.granted);
+        driveAvailable.set(senderDeviceId, allowance.granted);
+      }
       const transaction = await tryCatch(
         ctx.db.$transaction(async (tx) => {
           const member = await lockGroupMemberForWrite(tx, {
@@ -151,9 +189,42 @@ export const groupTrackingRouter = {
                   },
                 })
               : { accepted: [], discarded: [], duplicates: [], expired: [] };
-          if (placeTransitions.length === 0) return points;
+          const withDrives =
+            drives.length === 0
+              ? points
+              : {
+                  ...points,
+                  drives: await uploadDriveCopies({
+                    db: tx,
+                    drives,
+                    groupId: input.groupId,
+                    joinedEpochNumber: member.joinedEpochNumber,
+                    userId,
+                    refundAllowance: async (senderDeviceId, count) => {
+                      driveAvailable.set(
+                        senderDeviceId,
+                        (driveAvailable.get(senderDeviceId) ?? 0) + count,
+                      );
+                    },
+                    takeAllowance: async (senderDeviceId, cost) => {
+                      const granted = Math.min(cost, driveAvailable.get(senderDeviceId) ?? 0);
+                      driveAvailable.set(
+                        senderDeviceId,
+                        (driveAvailable.get(senderDeviceId) ?? 0) - granted,
+                      );
+                      if (granted < cost) {
+                        console.warn("[rate-limit] drive allowance reached", {
+                          userId,
+                          discarded: cost - granted,
+                        });
+                      }
+                      return granted;
+                    },
+                  }),
+                };
+          if (placeTransitions.length === 0) return withDrives;
           return {
-            ...points,
+            ...withDrives,
             placeTransitions: transitionBudget.allowed
               ? await uploadPlaceTransitions({
                   db: tx,
@@ -172,14 +243,22 @@ export const groupTrackingRouter = {
         }),
       );
       if (transaction.error) {
-        await Promise.all(
-          [...charged].map(([senderDeviceId, cost]) => refundAllowance(senderDeviceId, cost)),
-        );
+        await Promise.all([
+          ...[...charged].map(([senderDeviceId, cost]) => refundAllowance(senderDeviceId, cost)),
+          ...[...driveCharged].map(([senderDeviceId, cost]) =>
+            refundDriveAllowance(senderDeviceId, cost),
+          ),
+        ]);
         throw transaction.error;
       }
-      await Promise.all(
-        [...available].map(([senderDeviceId, unused]) => refundAllowance(senderDeviceId, unused)),
-      );
+      await Promise.all([
+        ...[...available].map(([senderDeviceId, unused]) =>
+          refundAllowance(senderDeviceId, unused),
+        ),
+        ...[...driveAvailable].map(([senderDeviceId, unused]) =>
+          refundDriveAllowance(senderDeviceId, unused),
+        ),
+      ]);
       const result = transaction.data;
       if ("placeTransitions" in result) {
         ctx.push?.placeTransitions({
@@ -294,6 +373,20 @@ export const groupTrackingRouter = {
         groupId: input.groupId,
         joinedEpochNumber: ctx.groupMember.joinedEpochNumber,
         limit: input.limit ?? 1_000,
+        toHour: input.toHour,
+      });
+    }),
+  drives: groupMemberProcedure
+    .meta({ rateLimit: { limit: 240, windowMs: 60_000 } })
+    .input(groupTrackingDrivesSchema)
+    .query(async ({ ctx, input }) => {
+      return await readGroupDrives({
+        cursor: input.cursor,
+        db: ctx.db,
+        fromHour: input.fromHour,
+        groupId: input.groupId,
+        joinedEpochNumber: ctx.groupMember.joinedEpochNumber,
+        limit: input.limit ?? 200,
         toHour: input.toHour,
       });
     }),

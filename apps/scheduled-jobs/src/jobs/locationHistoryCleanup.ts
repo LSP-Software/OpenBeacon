@@ -3,6 +3,7 @@ import {
   effectiveHistoryShareSql,
   historyFirstHourSql,
 } from "@openbeacon/api/historyShare.ts";
+import { deleteExpiredDriveCopies } from "@openbeacon/api/drives.ts";
 import { deleteTrackingPointsInBatches } from "@openbeacon/api/trackingCleanup.ts";
 import { Prisma, readDatabaseTime } from "@openbeacon/database";
 import { errorCode, tryCatch } from "@openbeacon/shared";
@@ -54,6 +55,7 @@ export const createLocationHistoryCleanup =
                 limit: runLimit - deleted - outsideShare,
               })
             : 0;
+        await deleteExpiredDriveCopies({ db: services.db, nowHour });
         await services.db.$executeRaw`
           DELETE FROM "TrackingLatestPoint"
           WHERE "updatedAt" < (${cutoff}::timestamptz AT TIME ZONE 'UTC')
@@ -188,6 +190,9 @@ export const createEpochCleanup =
               )
               AND NOT EXISTS (
                 SELECT 1 FROM "Place" pl WHERE pl."epochId" = e.id
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM "DriveCopy" d WHERE d."epochId" = e.id
               )
               AND NOT EXISTS (
                 SELECT 1 FROM "Group" g WHERE g."imageKeyEpochId" = e.id

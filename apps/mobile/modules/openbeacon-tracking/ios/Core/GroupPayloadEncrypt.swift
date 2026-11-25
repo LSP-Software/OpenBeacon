@@ -34,6 +34,7 @@ enum GroupPayloadEncrypt {
     epochId: String,
     kind: String,
     senderDeviceId: String,
+    driveId: String? = nil,
     nonce: Data? = nil
   ) throws -> EncryptedGroupPayload {
     guard epochKey.count == epochKeyLength else { throw GroupPayloadError.invalidKeyLength }
@@ -45,7 +46,7 @@ enum GroupPayloadEncrypt {
       plaintext,
       using: key,
       nonce: innerNonce,
-      authenticating: associatedData(groupId: groupId, epochId: epochId, kind: kind, senderDeviceId: senderDeviceId)
+      authenticating: associatedData(groupId: groupId, epochId: epochId, kind: kind, senderDeviceId: senderDeviceId, driveId: driveId)
     )
 
     return EncryptedGroupPayload(
@@ -59,7 +60,7 @@ enum GroupPayloadEncrypt {
     )
   }
 
-  static func decrypt(epochKey: Data, payload: EncryptedGroupPayload) throws -> Data {
+  static func decrypt(epochKey: Data, payload: EncryptedGroupPayload, driveId: String? = nil) throws -> Data {
     guard epochKey.count == epochKeyLength else { throw GroupPayloadError.invalidKeyLength }
     guard payload.algorithm == algorithm else { throw GroupPayloadError.unsupportedAlgorithm }
     guard let nonce = Data(base64Encoded: payload.nonce), let combined = Data(base64Encoded: payload.ciphertext) else {
@@ -81,14 +82,15 @@ enum GroupPayloadEncrypt {
         groupId: payload.groupId,
         epochId: payload.epochId,
         kind: payload.kind,
-        senderDeviceId: payload.senderDeviceId
+        senderDeviceId: payload.senderDeviceId,
+        driveId: driveId
       )
     )
   }
 
-  static func associatedData(groupId: String, epochId: String, kind: String, senderDeviceId: String) -> Data {
+  static func associatedData(groupId: String, epochId: String, kind: String, senderDeviceId: String, driveId: String? = nil) -> Data {
     Data(
-      "{\"context\":\(jsonString(domainContext)),\"epochId\":\(jsonString(epochId)),\"groupId\":\(jsonString(groupId)),\"kind\":\(jsonString(kind)),\"purpose\":\(jsonString(purpose)),\"senderDeviceId\":\(jsonString(senderDeviceId))}".utf8
+      "{\"context\":\(jsonString(domainContext)),\(driveId.map { "\"driveId\":\(jsonString($0))," } ?? "")\"epochId\":\(jsonString(epochId)),\"groupId\":\(jsonString(groupId)),\"kind\":\(jsonString(kind)),\"purpose\":\(jsonString(purpose)),\"senderDeviceId\":\(jsonString(senderDeviceId))}".utf8
     )
   }
 

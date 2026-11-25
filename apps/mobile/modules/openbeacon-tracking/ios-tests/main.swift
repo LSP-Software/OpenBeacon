@@ -89,6 +89,21 @@ check(
   "stay point IDs are stable and 8 bytes"
 )
 
+let driveVectors = try runDriveRecordCodecChecks(vectorsPath: CommandLine.arguments[3]) { check($0, $1) }
+let driveSealed = driveVectors["sealed"] as! [String: Any]
+let driveKey = Data(stride(from: 0, to: 64, by: 2).map { UInt8(String(Array(driveSealed["epochKeyHex"] as! String)[$0..<$0 + 2]), radix: 16)! })
+let driveNonce = Data(stride(from: 0, to: 48, by: 2).map { UInt8(String(Array(driveSealed["nonceHex"] as! String)[$0..<$0 + 2]), radix: 16)! })
+for testCase in driveSealed["cases"] as! [[String: Any]] {
+  let metadata = testCase["metadata"] as! [String: String]
+  let hexRecord = (driveVectors["encode"] as! [[String: Any]]).first { $0["name"] as? String == testCase["name"] as? String }!["hex"] as! String
+  let source = DriveRecordCodec.decode(Data(stride(from: 0, to: hexRecord.count, by: 2).map { UInt8(String(Array(hexRecord)[$0..<$0 + 2]), radix: 16)! }))!
+  let sealed = try DriveRecordSeal.seal(record: source, epochKey: driveKey, groupId: metadata["groupId"]!, epochId: metadata["epochId"]!, senderDeviceId: metadata["senderDeviceId"]!, nonce: driveNonce)
+  check(sealed?.ciphertext == testCase["ciphertextBase64"] as? String, "sealed drive \(testCase["name"]!): ciphertext matches the shared vector")
+  check(sealed?.startHour == (testCase["startHour"] as! NSNumber).int64Value, "sealed drive \(testCase["name"]!): is filed by its start hour")
+  check(sealed.flatMap { DriveRecordSeal.open($0, epochKey: driveKey, groupId: metadata["groupId"]!, epochId: metadata["epochId"]!, senderDeviceId: metadata["senderDeviceId"]!) } == source, "sealed drive \(testCase["name"]!): opens back to the record")
+  check(sealed.flatMap { DriveRecordSeal.open($0, epochKey: driveKey, groupId: "another-group", epochId: metadata["epochId"]!, senderDeviceId: metadata["senderDeviceId"]!) } == nil, "sealed drive \(testCase["name"]!): is unreadable in another group")
+}
+
 let filterStart: Int64 = 1_783_965_600_000
 let northMeters = { (north: Double) in 51.5 + north / 111_195.0 }
 let eastMeters = { (east: Double) in -0.1 + east / (111_195.0 * cos(51.5 * Double.pi / 180)) }

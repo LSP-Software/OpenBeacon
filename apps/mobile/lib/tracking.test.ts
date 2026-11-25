@@ -44,6 +44,7 @@ const uploadCalls: Array<{
   placeTransitions?: { clientId: string; occurredAt?: Date }[];
   placeAlertsCursor?: string | null;
   noticesCursor?: string | null;
+  drives?: { driveId: string }[];
 }> = [];
 let pendingPushToken: string | null = null;
 const storedAccountCursor = "2026-11-17T08:00:00.000Z|";
@@ -69,6 +70,18 @@ let queuedTransitions: {
   occurredAt: number;
 }[] = [];
 const deletedTransitions: string[][] = [];
+type TestQueuedDrive = {
+  id: number;
+  groupId: string;
+  driveId: string;
+  epochId: string;
+  senderDeviceId: string;
+  startHour: number;
+  nonce: string;
+  ciphertext: string;
+};
+let queuedDrives: TestQueuedDrive[] = [];
+const deletedDrives: number[][] = [];
 const appliedPlaceUpdates: { updates: unknown; round: { userId: string } }[] = [];
 let storedPlaceCursor: string | null = null;
 const rotationChecks: string[] = [];
@@ -158,10 +171,12 @@ let uploadGroup = async ({
   points: unknown[];
   placeTransitions?: { clientId: string }[];
   placeAlertsCursor?: string | null;
+  drives?: { driveId: string }[];
 }): Promise<{
   accepted: string[];
   duplicates: string[];
   expired?: string[];
+  drives?: { accepted: string[]; duplicates: string[]; discarded: string[]; expired: string[] };
   keyState?: string;
   placeTransitions?: { accepted: string[]; duplicates: string[]; discarded: string[] };
   places?: { groupId: string; revision: number; needsCatchUp: boolean }[];
@@ -635,6 +650,11 @@ mock.module("../modules/openbeacon-tracking/index.ts", () => ({
       deletedTransitions.push(clientIds);
       queuedTransitions = queuedTransitions.filter(({ clientId }) => !clientIds.includes(clientId));
     },
+    listQueuedDrives: async () => queuedDrives,
+    deleteQueuedDrives: async (ids: number[]) => {
+      deletedDrives.push(ids);
+      queuedDrives = queuedDrives.filter(({ id }) => !ids.includes(id));
+    },
   },
 }));
 
@@ -775,6 +795,8 @@ describe("tracking service", () => {
       duplicates: [],
     });
     queuedTransitions = [];
+    queuedDrives = [];
+    deletedDrives.length = 0;
     deletedTransitions.length = 0;
     appliedPlaceUpdates.length = 0;
     storedPlaceCursor = null;
@@ -1022,12 +1044,23 @@ describe("tracking service", () => {
     });
     const placeAnswer = (input: {
       points: unknown[];
+      drives?: { driveId: string }[];
       placeTransitions?: { clientId: string }[];
       placeAlertsCursor?: string | null;
       noticesCursor?: string | null;
     }) => ({
       accepted: input.points.map((point) => (point as { clientPointId: string }).clientPointId),
       duplicates: [],
+      ...(input.drives
+        ? {
+            drives: {
+              accepted: input.drives.map(({ driveId }) => driveId),
+              duplicates: [],
+              discarded: [],
+              expired: [],
+            },
+          }
+        : {}),
       ...(input.placeTransitions
         ? {
             placeTransitions: {
@@ -1271,6 +1304,102 @@ describe("tracking service", () => {
       await flushPendingTrackingPoints();
       expect(deleted).toEqual([[1]]);
       expect(deletedTransitions).toEqual([[t1]]);
+    });
+
+    const queuedDrive = (id: number, groupId = "group-1", senderDeviceId = "device-1") => ({
+      id,
+      groupId,
+      driveId: id.toString(16).padStart(32, "0"),
+      epochId: `epoch-${groupId.slice(-1)}`,
+      senderDeviceId,
+      startHour: Math.floor(Date.now() / 3_600_000) - 1,
+      nonce: queuedNonce,
+      ciphertext: encodeBase64(new Uint8Array(1_024).fill(3)),
+    });
+
+    test("a finished Drive rides with its group's next point batch and leaves the queue once answered", async () => {
+      pendingCiphertexts = [createQueueItem({ clientPointId: "p1", groupId: "group-1", id: 1 })];
+      queuedDrives = [queuedDrive(7)];
+      await flushPendingTrackingPoints();
+      expect(uploadCalls).toEqual([
+        expect.objectContaining({
+          groupId: "group-1",
+          points: [expect.anything()],
+          drives: [
+            {
+              ciphertext: queuedDrive(7).ciphertext,
+              driveId: queuedDrive(7).driveId,
+              epochId: "epoch-1",
+              nonce: queuedNonce,
+              senderDeviceId: "device-1",
+              startHour: queuedDrive(7).startHour,
+            },
+          ],
+        }),
+      ]);
+      expect(deletedDrives).toEqual([[7]]);
+    });
+
+    test("a group with only a queued Drive gets an upload of its own", async () => {
+      queuedDrives = [queuedDrive(8, "group-2")];
+      await flushPendingTrackingPoints();
+      expect(uploadCalls).toEqual([
+        expect.objectContaining({ groupId: "group-2", points: [], drives: [expect.anything()] }),
+      ]);
+      expect(queuedDrives).toEqual([]);
+    });
+
+    test("Drives the server discards or whose Epoch is gone leave the queue", async () => {
+      queuedDrives = [queuedDrive(1), queuedDrive(2), queuedDrive(3)];
+      uploadGroup = async () => ({
+        accepted: [],
+        duplicates: [],
+        drives: {
+          accepted: [],
+          duplicates: [queuedDrive(1).driveId],
+          discarded: [queuedDrive(2).driveId],
+          expired: [queuedDrive(3).driveId],
+        },
+      });
+      await flushPendingTrackingPoints();
+      expect(queuedDrives).toEqual([]);
+    });
+
+    test("a failed upload keeps Drives queued", async () => {
+      pendingCiphertexts = [createQueueItem({ clientPointId: "p1", groupId: "group-1", id: 1 })];
+      queuedDrives = [queuedDrive(9)];
+      uploadGroup = async () => {
+        throw new Error("Network request failed");
+      };
+      await expect(flushPendingTrackingPoints()).rejects.toThrow();
+      expect(queuedDrives).toHaveLength(1);
+    });
+
+    test("a refused request with Drives retries the points alone, then drops Drives refused alone", async () => {
+      pendingCiphertexts = [createQueueItem({ clientPointId: "p1", groupId: "group-1", id: 1 })];
+      queuedDrives = [queuedDrive(4)];
+      uploadGroup = async (input) => {
+        if (input.drives) {
+          throw Object.assign(new Error("Bad request"), { data: { code: "BAD_REQUEST" } });
+        }
+        return placeAnswer(input);
+      };
+      await flushPendingTrackingPoints();
+      expect(deleted).toEqual([[1]]);
+      expect(queuedDrives).toEqual([]);
+    });
+
+    test("Drives from an earlier device or the server would refuse are dropped, never sent", async () => {
+      queuedDrives = [
+        queuedDrive(5, "group-1", "device-0"),
+        { ...queuedDrive(6), ciphertext: encodeBase64(new Uint8Array(1_000)) },
+        queuedDrive(10),
+      ];
+      await flushPendingTrackingPoints();
+      expect(deletedDrives[0]?.sort()).toEqual([5, 6]);
+      expect(
+        uploadCalls.flatMap((call) => call.drives ?? []).map(({ driveId }) => driveId),
+      ).toEqual([queuedDrive(10).driveId]);
     });
 
     test("a phone with no registered device sends no place fields", async () => {
