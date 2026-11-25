@@ -6,6 +6,7 @@ import android.os.Build
 import android.os.SystemClock
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import expo.modules.openbeacontracking.crash.CrashCountdownController
 import expo.modules.openbeacontracking.capture.TrackingCaptureService
 import expo.modules.openbeacontracking.capture.SharingCaptureState
 import expo.modules.openbeacontracking.capture.SharingResumeWorker
@@ -261,6 +262,22 @@ class OpenBeaconTrackingModule : Module() {
 
       Function("setDriveDetection") { on: Boolean ->
         TrackingRuntime.setDriveDetection(requireContext(), on)
+      }
+
+      Function("isCrashAlertsOn") {
+        TrackingRuntime.isCrashAlertsOn(requireContext())
+      }
+
+      Function("setCrashAlerts") { on: Boolean ->
+        TrackingRuntime.setCrashAlerts(requireContext(), on)
+      }
+
+      Function("setCrashAlertContext") { groups: Map<String, String>, speedUnit: String ->
+        CrashCountdownController.setContext(requireContext(), groups, speedUnit)
+      }
+
+      Function("startCrashTest") {
+        CrashCountdownController.startTest(requireContext())
       }
 
       AsyncFunction("listDriveIds") { owner: String ->

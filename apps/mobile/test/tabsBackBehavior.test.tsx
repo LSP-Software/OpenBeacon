@@ -41,6 +41,8 @@ mock.module("../components/HistoryShareNotice.tsx", () => ({ HistoryShareNotice:
 mock.module("../components/LoadingIndicator.tsx", () => ({ LoadingIndicator: () => null }));
 mock.module("../hooks/useAppForeground.ts", () => ({ useAppForeground: () => {} }));
 mock.module("../hooks/useRefetchWhileFocused.ts", () => ({ useRefetchWhileFocused: () => {} }));
+mock.module("../hooks/useUnits.ts", () => ({ useUnits: () => ({ speed: "mph" }) }));
+mock.module("../lib/crashAlerts.ts", () => ({ syncCrashAlertContext: () => {} }));
 mock.module("../hooks/useUnseenGroupHistory.ts", () => ({
   useUnseenGroupHistory: () => ({ unseenGroupIds: new Set() }),
 }));

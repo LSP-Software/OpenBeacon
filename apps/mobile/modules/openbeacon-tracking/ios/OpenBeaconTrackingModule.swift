@@ -213,6 +213,20 @@ public class OpenBeaconTrackingModule: Module {
       TrackingRuntime.setDriveDetection(on)
     }
 
+    Function("isCrashAlertsOn") {
+      TrackingRuntime.isCrashAlertsOn()
+    }
+
+    Function("setCrashAlerts") { (on: Bool) in
+      TrackingRuntime.setCrashAlerts(on)
+    }
+
+    Function("setCrashAlertContext") { (_: [String: String], _: String) in
+    }
+
+    Function("startCrashTest") {
+    }
+
     AsyncFunction("listDriveIds") { (_: String) -> [String] in
       []
     }

@@ -90,6 +90,68 @@
       }
     },
     {
+      "name": "crash-alerts-off",
+      "point": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "time": 1783968300000,
+        "stayUntil": null,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": 72,
+          "charging": false
+        },
+        "crashAlertsOff": true
+      },
+      "hex": "021eb367d0ffec7fd0019f5ccbfbe000000030008c4804",
+      "decoded": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "time": 1783968300000,
+        "stayUntil": null,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": 72,
+          "charging": false
+        },
+        "crashAlertsOff": true
+      }
+    },
+    {
+      "name": "drive-detection-and-crash-alerts-off",
+      "point": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "time": 1783968300000,
+        "stayUntil": null,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": 72,
+          "charging": false
+        },
+        "driveDetectionOff": true,
+        "crashAlertsOff": true
+      },
+      "hex": "021eb367d0ffec7fd0019f5ccbfbe000000030008c4806",
+      "decoded": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "time": 1783968300000,
+        "stayUntil": null,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": 72,
+          "charging": false
+        },
+        "driveDetectionOff": true,
+        "crashAlertsOff": true
+      }
+    },
+    {
       "name": "stay-with-drive-detection-off",
       "point": {
         "latitude": 51.5074,
@@ -671,7 +733,7 @@
     },
     {
       "name": "unknown-flag",
-      "hex": "021eb367d0ffec7fd0019f5ccbfbe000000030008c4804"
+      "hex": "021eb367d0ffec7fd0019f5ccbfbe000000030008c4808"
     },
     {
       "name": "stay-minutes-without-stay-flag",

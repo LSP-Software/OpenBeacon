@@ -23,6 +23,9 @@ import expo.modules.openbeacontracking.places.PlaceDetection
 import expo.modules.openbeacontracking.places.PlaceTransitionDatabase
 import expo.modules.openbeacontracking.places.RoomPlaceTransitionQueue
 import expo.modules.openbeacontracking.places.SecurePlaceStore
+import expo.modules.openbeacontracking.crash.CrashCountdownController
+import expo.modules.openbeacontracking.crash.CrashSensor
+import expo.modules.openbeacontracking.drives.CrashDetector
 import expo.modules.openbeacontracking.drives.DriveQueueDatabase
 import expo.modules.openbeacontracking.drives.DriveRecorder
 import expo.modules.openbeacontracking.drives.SecureDriveLog
@@ -52,6 +55,8 @@ object TrackingRuntime {
 
   @Volatile
   var isCaptureRunning: Boolean = false
+
+  val crashDetector = CrashDetector()
 
   fun epochKeyStore(context: Context): EpochKeyStore {
     epochKeyStore?.let {
@@ -111,8 +116,30 @@ object TrackingRuntime {
     on: Boolean,
   ) {
     check(context.getSharedPreferences("openbeacon_tracking_capture", Context.MODE_PRIVATE).edit().putBoolean("driveDetection", on).commit())
-    if (!on) driveRecorder(context).discard()
+    if (!on) {
+      driveRecorder(context).discard()
+      stopCrashWatch(context)
+    }
     TrackingCaptureService.showNoticeNow(context)
+  }
+
+  fun isCrashAlertsOn(context: Context): Boolean =
+    context.getSharedPreferences("openbeacon_tracking_capture", Context.MODE_PRIVATE).getBoolean("crashAlerts", true)
+
+  fun areCrashAlertsActive(context: Context): Boolean = isDriveDetectionOn(context) && isCrashAlertsOn(context)
+
+  fun setCrashAlerts(
+    context: Context,
+    on: Boolean,
+  ) {
+    check(context.getSharedPreferences("openbeacon_tracking_capture", Context.MODE_PRIVATE).edit().putBoolean("crashAlerts", on).commit())
+    if (!on) stopCrashWatch(context)
+  }
+
+  fun stopCrashWatch(context: Context) {
+    CrashSensor.stop(context)
+    crashDetector.reset()
+    CrashCountdownController.cancelIfCounting(context)
   }
 
   fun placeDetection(context: Context): PlaceDetection {
@@ -140,6 +167,7 @@ object TrackingRuntime {
       sharingState = { sharingState(context) },
       historyShare = { historyShare(context) },
       driveDetectionOff = { !isDriveDetectionOn(context) },
+      crashAlertsOff = { !areCrashAlertsActive(context) },
       loadAllowance = { group ->
         val parts = context.getSharedPreferences("openbeacon_tracking_history_allowance", Context.MODE_PRIVATE)
           .getString(org.json.JSONArray(group).toString(), null)

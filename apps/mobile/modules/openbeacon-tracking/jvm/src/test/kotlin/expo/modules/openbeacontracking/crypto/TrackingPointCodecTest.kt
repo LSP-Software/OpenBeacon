@@ -27,6 +27,7 @@ class TrackingPointCodecTest {
       batteryLevel = if (battery.isNull("level")) null else battery.getInt("level"),
       batteryCharging = battery.getBoolean("charging"),
       driveDetectionOff = point.optBoolean("driveDetectionOff", false),
+      crashAlertsOff = point.optBoolean("crashAlertsOff", false),
     )
   }
 
