@@ -22,7 +22,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "net.openbeacon.app",
-      "buildNumber": "121",
+      "buildNumber": "122",
       "infoPlist": {
         "LSApplicationQueriesSchemes": ["comgooglemaps", "waze"]
       },
@@ -47,7 +47,7 @@
       "predictiveBackGestureEnabled": false,
       "allowBackup": false,
       "package": "net.openbeacon.app",
-      "versionCode": 121,
+      "versionCode": 122,
       "blockedPermissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.READ_MEDIA_AUDIO",
