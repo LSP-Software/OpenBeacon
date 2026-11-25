@@ -11,12 +11,13 @@ import { Switch } from "../../components/ui/Switch.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { Alert } from "../../lib/alert.ts";
 import { trpc } from "../../lib/api.ts";
-import { useNotificationSettings } from "../../lib/notifications.ts";
+import { useCrashAlertSound, useNotificationSettings } from "../../lib/notifications.ts";
 import { userMessage } from "../../lib/userMessage.ts";
 import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 
 const sections = [
   { key: "places", title: "Places" },
+  { key: "crashes", title: "Crash alerts" },
   { key: "groups", title: "Groups" },
   { key: "security", title: "Security" },
 ] as const;
@@ -25,12 +26,14 @@ const descriptions: Partial<Record<keyof typeof notificationTypes, string>> = {
   PLACE_ALERTS:
     "When someone arrives at or leaves a place. You can still mute people at each place.",
   ROLE_CHANGED: "When someone becomes an owner, admin or member.",
+  CRASH_ALERTS: "When someone’s phone sends a Crash alert. Sounds an alarm.",
   NEW_SIGN_IN: "When a new phone or tablet signs in to your account.",
 };
 
 const NotificationsScreen = () => {
   const queryClient = useQueryClient();
   const notifications = useNotificationSettings();
+  const crashAlertSound = useCrashAlertSound();
   const settings = useQuery(trpc.notificationSettings.get.queryOptions());
   const settingsKey = trpc.notificationSettings.get.queryKey();
   const mutationKey = trpc.notificationSettings.set.mutationKey();
@@ -140,7 +143,9 @@ const NotificationsScreen = () => {
                 footer={
                   section.key === "security" && showEmail
                     ? "Turning any of these off sends an email to your account’s address."
-                    : undefined
+                    : section.key === "crashes"
+                      ? "Crash alerts can’t be muted for one person."
+                      : undefined
                 }
               >
                 {rows.map((row) => {
@@ -184,6 +189,14 @@ const NotificationsScreen = () => {
                     />
                   );
                 })}
+                {section.key === "crashes" && crashAlertSound.duringDoNotDisturb !== null ? (
+                  <ListRow
+                    title="Sound during Do Not Disturb"
+                    subtitle={crashAlertSound.duringDoNotDisturb ? "Allowed" : "Not allowed"}
+                    accessibilityHint={`Opens this ${thisDeviceNoun()}’s settings for Crash alerts`}
+                    onPress={crashAlertSound.openSettings}
+                  />
+                ) : null}
               </ListSection>
             );
           })}

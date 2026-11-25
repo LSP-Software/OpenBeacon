@@ -25,6 +25,8 @@ import expo.modules.openbeacontracking.places.RoomPlaceTransitionQueue
 import expo.modules.openbeacontracking.places.SecurePlaceStore
 import expo.modules.openbeacontracking.crash.CrashCountdownController
 import expo.modules.openbeacontracking.crash.CrashSensor
+import expo.modules.openbeacontracking.crash.PrefsCrashAlertStore
+import expo.modules.openbeacontracking.drives.CrashAlertOutbox
 import expo.modules.openbeacontracking.drives.CrashDetector
 import expo.modules.openbeacontracking.drives.DriveQueueDatabase
 import expo.modules.openbeacontracking.drives.DriveRecorder
@@ -59,6 +61,9 @@ object TrackingRuntime {
 
   @Volatile
   private var speedLimitPackStore: SpeedLimitPackStore? = null
+
+  @Volatile
+  private var crashAlertOutbox: CrashAlertOutbox? = null
 
   @Volatile
   var isCaptureRunning: Boolean = false
@@ -161,6 +166,27 @@ object TrackingRuntime {
   ) {
     check(context.getSharedPreferences("openbeacon_tracking_capture", Context.MODE_PRIVATE).edit().putBoolean("crashAlerts", on).commit())
     if (!on) stopCrashWatch(context)
+  }
+
+  fun crashAlertOutbox(context: Context): CrashAlertOutbox =
+    crashAlertOutbox ?: synchronized(this) {
+      crashAlertOutbox ?: CrashAlertOutbox(PrefsCrashAlertStore(context.applicationContext)).also { crashAlertOutbox = it }
+    }
+
+  fun crashSharingUntil(context: Context): Long? =
+    context.getSharedPreferences("openbeacon_crash_alerts", Context.MODE_PRIVATE).getLong("sharingUntil", 0L).takeIf { it > 0L }
+
+  fun isCrashSharing(
+    context: Context,
+    nowMillis: Long,
+  ): Boolean = CrashAlertOutbox.isSharing(crashSharingUntil(context), nowMillis)
+
+  fun setCrashSharingUntil(
+    context: Context,
+    untilMillis: Long?,
+  ) {
+    context.getSharedPreferences("openbeacon_crash_alerts", Context.MODE_PRIVATE).edit().putLong("sharingUntil", untilMillis ?: 0L).apply()
+    TrackingCaptureService.refreshNow(context)
   }
 
   fun stopCrashWatch(context: Context) {
@@ -316,6 +342,8 @@ object TrackingRuntime {
         epochKeyStore(context).revoke(null)
         placeDetection(context).removeGroups(null)
         driveQueue(context).deleteByOwner(null)
+        crashAlertOutbox(context).clear()
+        setCrashSharingUntil(context, null)
       }
       if (previousOwner != null && previousOwner != owner) clearHistoryAllowance(context, previousOwner)
       if (previousOwner != owner || previousDeviceId != deviceId) {

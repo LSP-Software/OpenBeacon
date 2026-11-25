@@ -71,6 +71,7 @@ import {
   recordTrackingKeyCheck,
   rememberCursorGroup,
 } from "./trackingKeyCheck.ts";
+import { getCrashAlertsCursor, sendQueuedCrashAlerts } from "./crashAlertSync.ts";
 import { loadTrackingModule } from "./trackingModule.ts";
 import { recordTrackingUpload } from "./trackingUploadTime.ts";
 import { notifyGroupEpochChange } from "./trackingEvents.ts";
@@ -738,7 +739,13 @@ const placeUploadFields = (
         ),
       }
     : {}),
-  ...(cursor ? { placeAlertsCursor: cursor.placeAlerts, noticesCursor: cursor.notices } : {}),
+  ...(cursor
+    ? {
+        placeAlertsCursor: cursor.placeAlerts,
+        noticesCursor: cursor.notices,
+        crashAlertsCursor: cursor.crashAlerts,
+      }
+    : {}),
 });
 
 const settlePlaceResponse = async (
@@ -766,13 +773,15 @@ const settlePlaceResponse = async (
     response.places !== undefined ||
     response.placeAlerts !== undefined ||
     response.imageKeysNeedCatchUp !== undefined ||
-    response.notices !== undefined
+    response.notices !== undefined ||
+    response.crashAlerts !== undefined
   ) {
     round.updates = {
       places: response.places,
       placeAlerts: response.placeAlerts,
       imageKeysNeedCatchUp: response.imageKeysNeedCatchUp,
       notices: response.notices,
+      crashAlerts: response.crashAlerts,
     };
   }
 };
@@ -1009,7 +1018,7 @@ type PlaceRound = {
   account: AccountRound | null;
   accountDevice: { deviceId: string; userId: string } | null;
   accountSync: ReturnType<typeof startAccountSync> | null;
-  cursor: { placeAlerts: string | null; notices: string | null } | null;
+  cursor: { placeAlerts: string | null; notices: string | null; crashAlerts: string | null } | null;
   deviceId: string;
   drives: Map<string, QueuedDrive[]>;
   retryAlone: Map<string, QueuedPlaceTransition[]>;
@@ -1082,6 +1091,7 @@ const startPlaceRound = async (
       ? {
           placeAlerts: getPlaceAlertsCursor(device.userId),
           notices: getNoticesCursor(device.userId),
+          crashAlerts: getCrashAlertsCursor(device.userId),
         }
       : null,
     deviceId: device.deviceId,
@@ -1108,6 +1118,9 @@ const flushPendingTrackingPointsInternal = async (
   if (device && hasPendingSharingChange(device.userId)) return;
   const owner = await getQueueOwner(signal);
   const round = await startPlaceRound(trackingModule, owner, device);
+  if (round.account && device) {
+    await tryCatch(sendQueuedCrashAlerts({ deviceId: device.deviceId, round: round.account }));
+  }
   let afterId = 0;
   let failed = false;
   while (true) {
@@ -1262,6 +1275,7 @@ const pollPlaceUpdates = ({ onlyWithoutKeys = false }: { onlyWithoutKeys?: boole
               points: [],
               placeAlertsCursor: getPlaceAlertsCursor(device.userId),
               noticesCursor: getNoticesCursor(device.userId),
+              crashAlertsCursor: getCrashAlertsCursor(device.userId),
             },
             accountRequest(account),
           ),
@@ -1279,6 +1293,7 @@ const pollPlaceUpdates = ({ onlyWithoutKeys = false }: { onlyWithoutKeys?: boole
         placeAlerts: response.placeAlerts,
         imageKeysNeedCatchUp: response.imageKeysNeedCatchUp,
         notices: response.notices,
+        crashAlerts: response.crashAlerts,
       },
       round: account,
     });

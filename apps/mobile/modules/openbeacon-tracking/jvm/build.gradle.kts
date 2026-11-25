@@ -65,6 +65,7 @@ sourceSets {
       include("group-payload-interop-v1.json")
       include("tracking-point-v2.json")
       include("drive-record-v1.json")
+      include("crash-alert-v1.json")
     }
     resources {
       srcDir("../test-cases")

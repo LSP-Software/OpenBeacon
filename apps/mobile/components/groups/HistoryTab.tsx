@@ -1,6 +1,7 @@
 import { useIsFocused } from "@react-navigation/native";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import {
+  CircleCheckIcon,
   ImageIcon,
   LogInIcon,
   LogOutIcon,
@@ -10,6 +11,7 @@ import {
   PencilIcon,
   RefreshCwIcon,
   ShieldIcon,
+  SirenIcon,
   SparklesIcon,
   UserMinusIcon,
   UserPlusIcon,
@@ -27,6 +29,8 @@ import { useMemberNameList } from "../../hooks/useMemberNames.ts";
 import { type RouterInputs, trpcClient } from "../../lib/api.ts";
 import { authClient } from "../../lib/auth-client.ts";
 import { describeGroupEvent, groupByDay, markGroupHistorySeen } from "../../lib/groupHistory.ts";
+import { crashHistoryItems } from "../../lib/crashAlertInbox.ts";
+import { crashWords, useGroupCrashAlerts } from "../../lib/crashAlertSync.ts";
 import { ownedDeviceName } from "../../lib/ownedDeviceName.ts";
 
 const eventIcons = {
@@ -87,6 +91,12 @@ const HistoryTab = ({
       }),
     getNextPageParam: (page) => page.nextBefore,
     subscribed: isFocused,
+  });
+
+  const crashAlerts = useGroupCrashAlerts({
+    enabled: category === null && isFocused,
+    groupId,
+    userId,
   });
 
   const loadedItems = history.data?.pages.flatMap((page) => page.items) ?? [];
@@ -176,10 +186,25 @@ const HistoryTab = ({
     );
   }
 
+  const serverItems = history.data.pages
+    .flatMap((page) => page.items)
+    .filter((item) => item.kind !== "group" || Object.hasOwn(eventIcons, item.type));
+  const oldestShown = history.hasNextPage ? serverItems.at(-1)?.at.getTime() : undefined;
+  const crashItems =
+    category === null
+      ? crashHistoryItems(
+          crashAlerts,
+          crashWords((personId) => memberName(personId) ?? "Someone"),
+          (personId, deviceName) =>
+            ownedDeviceName({
+              deviceName,
+              ownerNames: memberNames(personId),
+              isYou: personId === userId,
+            }),
+        ).filter((item) => oldestShown === undefined || item.at.getTime() >= oldestShown)
+      : [];
   const sections = groupByDay({
-    items: history.data.pages
-      .flatMap((page) => page.items)
-      .filter((item) => item.kind !== "group" || Object.hasOwn(eventIcons, item.type)),
+    items: [...serverItems, ...crashItems].sort((a, b) => b.at.getTime() - a.at.getTime()),
     now: new Date(),
   });
 
@@ -209,7 +234,8 @@ const HistoryTab = ({
       {sections.map((section) => {
         const items = section.items.filter(
           (item) =>
-            item.kind !== "group" || describeGroupEvent({ event: item, memberName, userId }),
+            item.kind !== "group" ||
+            Boolean(describeGroupEvent({ event: item, memberName, userId })),
         );
         return (
           <View key={section.key} className="gap-2">
@@ -219,6 +245,35 @@ const HistoryTab = ({
             <View className={groupedListClassName}>
               {items.map((item, index) => {
                 const time = item.at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+                if (item.kind === "crash") {
+                  return (
+                    <View
+                      key={item.id}
+                      accessible
+                      accessibilityLabel={`${item.text}, ${time}`}
+                      className={cn(
+                        "flex-row items-center gap-4 px-4 py-3",
+                        groupedRowClassName(index),
+                      )}
+                      style={groupedRowStyle(index, items.length)}
+                    >
+                      <View
+                        className="size-11 items-center justify-center rounded-full"
+                        style={{ backgroundColor: item.ok ? "#1E6B3A" : "#B3261E" }}
+                      >
+                        <Icon
+                          as={item.ok ? CircleCheckIcon : SirenIcon}
+                          size={22}
+                          className="text-white"
+                        />
+                      </View>
+                      <View className="flex-1 gap-0.5">
+                        <Text className="text-foreground">{item.text}</Text>
+                        <Text className="text-sm text-tertiary">{time}</Text>
+                      </View>
+                    </View>
+                  );
+                }
                 if (item.kind === "group") {
                   const text = describeGroupEvent({ event: item, memberName, userId });
                   if (!text) return null;

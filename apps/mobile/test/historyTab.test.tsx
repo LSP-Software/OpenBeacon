@@ -22,8 +22,14 @@ mock.module("@tanstack/react-query", () => ({
 }));
 mock.module("@react-navigation/native", () => ({ useIsFocused: () => true }));
 mock.module("react-native", () => createReactNativeTestModule());
+mock.module("../lib/crashAlertSync.ts", () => ({
+  crashWords: (name: (userId: string) => string) => ({ name, speed: () => "", time: () => "" }),
+  useGroupCrashAlerts: () => [],
+}));
 mock.module("nativewind", () => ({ cssInterop: () => {} }));
 mock.module("lucide-react-native", () => ({
+  CircleCheckIcon: () => null,
+  SirenIcon: () => null,
   ImageIcon: icon("Image"),
   LogInIcon: icon("LogIn"),
   LogOutIcon: icon("LogOut"),

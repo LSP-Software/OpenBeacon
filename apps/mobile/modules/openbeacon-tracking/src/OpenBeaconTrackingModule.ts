@@ -71,6 +71,15 @@ export type QueuedDrive = {
   ciphertext: string;
 };
 
+export type QueuedCrashAlert = {
+  messageId: string;
+  groupId: string;
+  epochId: string;
+  senderDeviceId: string;
+  nonce: string;
+  ciphertext: string;
+};
+
 export type PlaceSearchAddress = {
   addressLine: string | null;
   houseNumber: string | null;
@@ -206,6 +215,21 @@ declare class OpenBeaconTrackingModule extends NativeModule<{
   deletePlaceTransitions(clientIds: string[]): Promise<void>;
   listQueuedDrives(owner: string): Promise<QueuedDrive[]>;
   deleteQueuedDrives(ids: number[]): Promise<void>;
+  listQueuedCrashAlerts(): Promise<QueuedCrashAlert[]>;
+  markCrashAlertsSent(
+    copies: { messageId: string; groupId: string }[],
+    sentAt: number,
+  ): Promise<void>;
+  dropCrashAlerts(copies: { messageId: string; groupId: string }[]): Promise<void>;
+  showCrashAlertNotice(
+    kind: "crash" | "ok",
+    key: string,
+    title: string,
+    body: string,
+    link: string,
+  ): boolean;
+  crashAlertsSoundDuringDoNotDisturb(): boolean | null;
+  openCrashAlertSoundSettings(): void;
   showEventNotice(
     kind: "alert" | "placesChanged" | "groupActivity" | "accountAlert",
     key: string,
