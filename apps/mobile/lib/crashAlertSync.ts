@@ -1,5 +1,4 @@
 import { type CrashAlertMessage, openCrashAlert } from "@openbeacon/encryption";
-import { alertsCursorSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState, useSyncExternalStore } from "react";
@@ -16,11 +15,11 @@ import {
   formatClock,
   receiveCrashAlerts,
 } from "./crashAlertInbox.ts";
-import { getBaseUrl } from "./currentServer.ts";
 import { resolveEpochKey } from "./epochKeys.ts";
 import { nicknamesByGroup } from "./nicknamesByGroup.ts";
 import { parseJson } from "./parseJson.ts";
 import { storage } from "./storage.ts";
+import { alertStorageKey, readAlertsCursor } from "./alertStorage.ts";
 import { loadTrackingModule } from "./trackingModule.ts";
 import { storedUnits } from "./storedUnits.ts";
 import { formatSpeed } from "./units.ts";
@@ -50,8 +49,7 @@ const incidentSchema = z.object({
 });
 const inboxSchema = z.object({ incidents: z.array(incidentSchema) });
 
-const storageKey = (userId: string, name: string) =>
-  `crashAlerts.${name}.${JSON.stringify([getBaseUrl(), userId])}`;
+const storageKey = (userId: string, name: string) => alertStorageKey("crashAlerts", userId, name);
 
 const listeners = new Set<() => void>();
 
@@ -61,10 +59,7 @@ const readInbox = (userId: string): CrashInbox => {
   return parsed.success ? parsed.data : emptyCrashInbox;
 };
 
-export const getCrashAlertsCursor = (userId: string) => {
-  const parsed = alertsCursorSchema.safeParse(storage.getString(storageKey(userId, "cursor")));
-  return parsed.success ? parsed.data : null;
-};
+export const getCrashAlertsCursor = (userId: string) => readAlertsCursor("crashAlerts", userId);
 
 export const crashWords = (name: (userId: string) => string) => ({
   name,

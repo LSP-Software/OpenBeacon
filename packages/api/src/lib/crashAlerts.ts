@@ -15,11 +15,8 @@ import {
   historyFirstHourSql,
   LAST_LOCATION_CRASH_ALERT_MS,
 } from "./historyShare.ts";
-import { decodeAlertsCursor, encodeAlertsCursor } from "./placeTransitions.ts";
+import { readAlertCatchUp } from "./alertCatchUp.ts";
 
-const CATCH_UP_OVERLAP_MS = 60_000;
-const CATCH_UP_LOOKBACK_MS = 24 * 3_600_000;
-const CATCH_UP_LIMIT = 100;
 const NONCE_LENGTH = 24;
 const HOUR_MS = 3_600_000;
 
@@ -230,61 +227,53 @@ export const readCrashAlertsSince = async ({
   db: PrismaClient;
   userId: string;
 }) => {
-  const now = await readDatabaseTime(db);
-  const caughtUp = encodeAlertsCursor({ createdAt: now, id: "" });
-  if (cursor === null) return { alerts: [], cursor: caughtUp, notify: true };
-  const setting = await db.notificationSetting.findUnique({
-    where: { userId_type: { userId, type: "CRASH_ALERTS" } },
-    select: { email: true, phone: true },
-  });
-  const notify = effectiveNotificationSetting("CRASH_ALERTS", setting ?? undefined).phone;
-  const memberships = await db.groupMember.findMany({
-    where: { userId },
-    select: { groupId: true, createdAt: true },
-  });
-  if (memberships.length === 0) return { alerts: [], cursor: caughtUp, notify };
-  const since = Math.max(
-    decodeAlertsCursor(cursor).createdAt.getTime() - CATCH_UP_OVERLAP_MS,
-    now.getTime() - CATCH_UP_LOOKBACK_MS,
-  );
-  const windows = await readSenderWindows(
+  let notify = true;
+  const { rows, cursor: next } = await readAlertCatchUp({
+    cursor,
     db,
-    memberships.map(({ groupId }) => groupId),
-    now,
-  );
-  const rows = await db.crashAlert.findMany({
-    where: {
-      OR: windows.flatMap((window) => {
-        const membership = memberships.find(({ groupId }) => groupId === window.groupId);
-        return membership && window.senderUserId !== userId
-          ? [
-              {
-                groupId: window.groupId,
-                senderUserId: window.senderUserId,
-                receivedAt: {
-                  gte: new Date(Math.max(since, membership.createdAt.getTime(), window.from)),
-                },
-              },
-            ]
-          : [];
-      }),
+    lookbackMs: 24 * 3_600_000,
+    read: async ({ now, since, limit }) => {
+      const setting = await db.notificationSetting.findUnique({
+        where: { userId_type: { userId, type: "CRASH_ALERTS" } },
+        select: { email: true, phone: true },
+      });
+      notify = effectiveNotificationSetting("CRASH_ALERTS", setting ?? undefined).phone;
+      const memberships = await db.groupMember.findMany({
+        where: { userId },
+        select: { groupId: true, createdAt: true },
+      });
+      if (memberships.length === 0) return [];
+      const windows = await readSenderWindows(
+        db,
+        memberships.map(({ groupId }) => groupId),
+        now,
+      );
+      return db.crashAlert.findMany({
+        where: {
+          OR: windows.flatMap((window) => {
+            const membership = memberships.find(({ groupId }) => groupId === window.groupId);
+            return membership && window.senderUserId !== userId
+              ? [
+                  {
+                    groupId: window.groupId,
+                    senderUserId: window.senderUserId,
+                    receivedAt: {
+                      gte: new Date(
+                        Math.max(since.getTime(), membership.createdAt.getTime(), window.from),
+                      ),
+                    },
+                  },
+                ]
+              : [];
+          }),
+        },
+        orderBy: [{ receivedAt: "asc" }, { id: "asc" }],
+        take: limit,
+        select: crashAlertSelect,
+      });
     },
-    orderBy: [{ receivedAt: "asc" }, { id: "asc" }],
-    take: CATCH_UP_LIMIT,
-    select: crashAlertSelect,
   });
-  const last = rows.at(-1);
-  return {
-    alerts: rows.map(toCrashAlertView),
-    cursor:
-      last && rows.length === CATCH_UP_LIMIT
-        ? encodeAlertsCursor({
-            createdAt: new Date(last.receivedAt.getTime() + CATCH_UP_OVERLAP_MS),
-            id: "",
-          })
-        : caughtUp,
-    notify,
-  };
+  return { alerts: rows.map(toCrashAlertView), cursor: next, notify };
 };
 
 export const readGroupCrashAlerts = async ({

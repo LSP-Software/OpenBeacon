@@ -1,52 +1,23 @@
 import { tryCatch } from "@openbeacon/shared";
-import { useSyncExternalStore } from "react";
 import { Platform } from "react-native";
 import OpenBeaconTracking from "../modules/openbeacon-tracking/index.ts";
 import { Alert } from "./alert.ts";
+import { createNativeSetting } from "./nativeSetting.ts";
 import type { DistanceUnit } from "./units.ts";
 
-const listeners = new Set<() => void>();
-let quietGroups: readonly string[] | null = null;
-let recordedNoticeOn: boolean | null = null;
 const noQuietGroups: readonly string[] = [];
+const quietGroups = createNativeSetting<readonly string[]>(
+  () => OpenBeaconTracking.quietDriveGroups() ?? noQuietGroups,
+  noQuietGroups,
+);
+const recordedNoticeOn = createNativeSetting(
+  () => OpenBeaconTracking.isDriveRecordedNoticeOn() !== false,
+  true,
+);
 
-const subscribe = (listener: () => void) => {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-};
+export const useTellsGroup = (groupId: string) => !quietGroups.use().includes(groupId);
 
-const changed = () => {
-  for (const listener of listeners) listener();
-};
-
-const readQuietGroups = () => {
-  if (quietGroups === null) {
-    try {
-      quietGroups = OpenBeaconTracking.quietDriveGroups() ?? noQuietGroups;
-    } catch {
-      quietGroups = noQuietGroups;
-    }
-  }
-  return quietGroups;
-};
-
-const readRecordedNotice = () => {
-  if (recordedNoticeOn === null) {
-    try {
-      recordedNoticeOn = OpenBeaconTracking.isDriveRecordedNoticeOn() !== false;
-    } catch {
-      recordedNoticeOn = true;
-    }
-  }
-  return recordedNoticeOn;
-};
-
-export const useTellsGroup = (groupId: string) =>
-  !useSyncExternalStore(subscribe, readQuietGroups).includes(groupId);
-
-export const useQuietDriveGroups = () => useSyncExternalStore(subscribe, readQuietGroups);
+export const useQuietDriveGroups = quietGroups.use;
 
 export const setTellGroup = async (groupId: string, tell: boolean) => {
   const saved = await tryCatch((async () => OpenBeaconTracking.setTellGroup(groupId, tell))());
@@ -54,11 +25,10 @@ export const setTellGroup = async (groupId: string, tell: boolean) => {
     Alert.alert("Couldn’t change Drive alerts", "Try again.");
     return;
   }
-  quietGroups = null;
-  changed();
+  quietGroups.update(null);
 };
 
-export const useDriveRecordedNotice = () => useSyncExternalStore(subscribe, readRecordedNotice);
+export const useDriveRecordedNotice = recordedNoticeOn.use;
 
 export const setDriveRecordedNotice = async (on: boolean) => {
   const saved = await tryCatch((async () => OpenBeaconTracking.setDriveRecordedNotice(on))());
@@ -66,8 +36,7 @@ export const setDriveRecordedNotice = async (on: boolean) => {
     Alert.alert("Couldn’t change this notice", "Try again.");
     return;
   }
-  recordedNoticeOn = on;
-  changed();
+  recordedNoticeOn.update(on);
 };
 
 export const syncDriveDistanceUnit = (unit: DistanceUnit) => {

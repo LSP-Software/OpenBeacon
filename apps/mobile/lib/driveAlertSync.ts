@@ -1,29 +1,24 @@
 import { openDriveRecord } from "@openbeacon/encryption";
-import { alertsCursorSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import z from "zod";
 import { type AccountRound, isRoundCurrent } from "./accountSession.ts";
 import type { RouterOutputs } from "./api.ts";
 import { driveAlertsToShow } from "./driveAlerts.ts";
-import { getBaseUrl } from "./currentServer.ts";
 import { resolveEpochKey } from "./epochKeys.ts";
 import { nicknamesByGroup } from "./nicknamesByGroup.ts";
 import { showEventNotice } from "./notifications.ts";
 import { parseJson } from "./parseJson.ts";
 import { storage } from "./storage.ts";
+import { alertStorageKey, readAlertsCursor } from "./alertStorage.ts";
 import { storedUnits } from "./storedUnits.ts";
 
 const SHOWN_KEPT_MS = 2 * 3_600_000;
 
-const storageKey = (userId: string, name: string) =>
-  `driveAlerts.${name}.${JSON.stringify([getBaseUrl(), userId])}`;
+const storageKey = (userId: string, name: string) => alertStorageKey("driveAlerts", userId, name);
 
 const shownSchema = z.record(z.string(), z.number());
 
-export const getDriveAlertsCursor = (userId: string) => {
-  const parsed = alertsCursorSchema.safeParse(storage.getString(storageKey(userId, "cursor")));
-  return parsed.success ? parsed.data : null;
-};
+export const getDriveAlertsCursor = (userId: string) => readAlertsCursor("driveAlerts", userId);
 
 export const timelineDriveLink = ({
   driveId,

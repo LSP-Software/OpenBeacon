@@ -1,26 +1,17 @@
 import { tryCatch } from "@openbeacon/shared";
-import { useSyncExternalStore } from "react";
 import OpenBeaconTracking from "../modules/openbeacon-tracking/index.ts";
 import { Alert } from "./alert.ts";
 import { deleteDrivesEverywhere } from "./deleteDrives.ts";
 import { trpcClient } from "./api.ts";
 import { thisDeviceNoun } from "./thisDeviceNoun.ts";
+import { createNativeSetting } from "./nativeSetting.ts";
 import { deleteSpeedLimitData } from "./speedLimitPacks.ts";
 import { getOwner } from "./tracking.ts";
 
-let on: boolean | null = null;
-const listeners = new Set<() => void>();
-
-const readOn = () => {
-  if (on === null) {
-    try {
-      on = OpenBeaconTracking.isDriveDetectionOn() !== false;
-    } catch {
-      on = true;
-    }
-  }
-  return on;
-};
+const driveDetectionOn = createNativeSetting(
+  () => OpenBeaconTracking.isDriveDetectionOn() !== false,
+  true,
+);
 
 const offerToDeleteDrives = async (userId: string) => {
   const owner = getOwner(userId);
@@ -58,16 +49,9 @@ export const setDriveDetection = async (next: boolean, userId: string | undefine
     Alert.alert("Couldn’t change Drive detection", "Try again.");
     return;
   }
-  on = next;
-  for (const listener of listeners) listener();
+  driveDetectionOn.update(next);
   if (!next) await tryCatch(deleteSpeedLimitData());
   if (!next && userId) await offerToDeleteDrives(userId);
 };
 
-export const useDriveDetection = () =>
-  useSyncExternalStore((listener) => {
-    listeners.add(listener);
-    return () => {
-      listeners.delete(listener);
-    };
-  }, readOn);
+export const useDriveDetection = driveDetectionOn.use;
