@@ -88,12 +88,7 @@ export const useLiveMapEdgeMarkers = ({
       controls: controls && { ...controls, y: controls.y - top },
       width: mapSizeRef.current.width,
       height: edgeViewportHeight(),
-    }).map((edge) => ({
-      ...edge,
-      angle: Math.round(edge.angle),
-      x: Math.round(edge.x),
-      y: Math.round(edge.y + top),
-    }));
+    }).map((edge) => ({ ...edge, y: edge.y + top }));
     setEdgeMarkers((current) =>
       current.length === next.length &&
       current.every((edge, index) => {
@@ -101,9 +96,9 @@ export const useLiveMapEdgeMarkers = ({
         return (
           candidate?.userId === edge.userId &&
           candidate.memberIds.join() === edge.memberIds.join() &&
-          candidate.x === edge.x &&
-          candidate.y === edge.y &&
-          candidate.angle === edge.angle
+          Math.round(candidate.x) === Math.round(edge.x) &&
+          Math.round(candidate.y) === Math.round(edge.y) &&
+          Math.round(candidate.angle) === Math.round(edge.angle)
         );
       })
         ? current
