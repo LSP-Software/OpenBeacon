@@ -88,7 +88,12 @@ export const useLiveMapEdgeMarkers = ({
       controls: controls && { ...controls, y: controls.y - top },
       width: mapSizeRef.current.width,
       height: edgeViewportHeight(),
-    }).map((edge) => ({ ...edge, y: edge.y + top }));
+    }).map((edge) => ({
+      ...edge,
+      angle: Math.round(edge.angle),
+      x: Math.round(edge.x),
+      y: Math.round(edge.y + top),
+    }));
     setEdgeMarkers((current) =>
       current.length === next.length &&
       current.every((edge, index) => {

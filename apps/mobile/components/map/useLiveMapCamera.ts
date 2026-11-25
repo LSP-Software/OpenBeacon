@@ -278,7 +278,11 @@ export const useLiveMapCamera = ({
     followSuspendedRef.current = false;
     onClearSelection();
     suppressUserCameraControlFor(suppressUserCameraControlUntilMsRef, 600);
-    fitMarkersAndPreserveCamera({ markersToFit, padding: fitEveryonePadding });
+    const fitEndsAtMs = Date.now() + 600;
+    fitMarkersAndPreserveCamera({
+      markersToFit: markersToFit.map((item) => ({ ...item, ...shownPosition(item, fitEndsAtMs) })),
+      padding: fitEveryonePadding,
+    });
   };
 
   const goToDevice = (deviceId: string) => {
