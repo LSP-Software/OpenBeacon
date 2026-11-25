@@ -3,6 +3,7 @@ import { HISTORY_SHARES, historyShareFirstHour, type HistoryShare } from "@openb
 import { deleteTrackingPointsInBatches } from "./trackingCleanup.ts";
 
 export const HISTORY_RETENTION_MS = 14 * 24 * 60 * 60_000;
+export const LAST_LOCATION_CRASH_ALERT_MS = 3_600_000;
 
 export const effectiveHistoryShareSql = Prisma.sql`COALESCE("member"."historyShare", "account"."historyShare")`;
 
@@ -58,6 +59,15 @@ export const deleteHistoryOutsideShare = async ({
     DELETE FROM "DriveCopy"
     WHERE "senderUserId" = ${userId} AND "groupId" IN (${Prisma.join(groupIds)})
       AND "startHour" < ${firstHour}
+  `);
+  await db.$executeRaw(Prisma.sql`
+    DELETE FROM "CrashAlert"
+    WHERE "senderUserId" = ${userId} AND "groupId" IN (${Prisma.join(groupIds)})
+      AND "receivedAt" < ${
+        historyShare === "LAST_LOCATION"
+          ? Prisma.sql`(now() AT TIME ZONE 'UTC') - ${LAST_LOCATION_CRASH_ALERT_MS} * interval '1 millisecond'`
+          : Prisma.sql`(to_timestamp(${firstHour}::bigint * 3600) AT TIME ZONE 'UTC')`
+      }
   `);
   return deleteTrackingPointsInBatches({
     db,

@@ -3,6 +3,7 @@ import {
   effectiveHistoryShareSql,
   historyFirstHourSql,
 } from "@openbeacon/api/historyShare.ts";
+import { deleteCrashAlertsOutsideShare } from "@openbeacon/api/crashAlerts.ts";
 import { deleteExpiredDriveCopies } from "@openbeacon/api/drives.ts";
 import { deleteTrackingPointsInBatches } from "@openbeacon/api/trackingCleanup.ts";
 import { Prisma, readDatabaseTime } from "@openbeacon/database";
@@ -56,6 +57,7 @@ export const createLocationHistoryCleanup =
               })
             : 0;
         await deleteExpiredDriveCopies({ db: services.db, nowHour });
+        await deleteCrashAlertsOutsideShare({ db: services.db, now });
         await services.db.$executeRaw`
           DELETE FROM "TrackingLatestPoint"
           WHERE "updatedAt" < (${cutoff}::timestamptz AT TIME ZONE 'UTC')

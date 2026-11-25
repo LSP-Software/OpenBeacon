@@ -12,7 +12,10 @@ import {
 } from "@openbeacon/encryption";
 import { withDeviceActive } from "../lib/deviceContext.testUtil.ts";
 import { createTRPCRouter } from "../trpcRuntime.ts";
+import { encodeAlertsCursor } from "../lib/placeTransitions.ts";
 import { crashAlertsRouter } from "./crashAlertsRouter.ts";
+import { groupMembershipRouter } from "./group/groupMembershipRouter.ts";
+import { groupSettingsRouter } from "./group/groupSettingsRouter.ts";
 import { groupTrackingRouter } from "./group/groupTrackingRouter.ts";
 import { notificationSettingsRouter } from "./notificationSettingsRouter.ts";
 
@@ -42,6 +45,8 @@ const epochKeys = new Map(
 const cache = createIntegrationTestCache(() => 0);
 const router = createTRPCRouter({
   crashAlerts: crashAlertsRouter,
+  groupMembership: groupMembershipRouter,
+  groupSettings: groupSettingsRouter,
   groupTracking: groupTrackingRouter,
   notificationSettings: notificationSettingsRouter,
 });
@@ -98,6 +103,13 @@ const crashMessage = (): CrashAlertMessage => {
     placeLabel: "Barnet Lane, EN5",
   };
 };
+
+const okMessage = (crash: CrashAlertMessage): CrashAlertMessage => ({
+  ...crash,
+  type: "OK",
+  messageId: randomId(),
+  okAt: Date.now(),
+});
 
 const copy = (
   message: CrashAlertMessage,
@@ -162,9 +174,15 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             name: groupId,
             groupMembers: {
               create: [
-                { userId: driverId, role: "OWNER", joinedEpochNumber: 1 },
-                { userId: viewerId, role: "MEMBER", joinedEpochNumber: 1 },
-                { userId: quietId, role: "MEMBER", joinedEpochNumber: 1 },
+                ...[
+                  { userId: driverId, role: "OWNER" as const },
+                  { userId: viewerId, role: "MEMBER" as const },
+                  { userId: quietId, role: "MEMBER" as const },
+                ].map((member) => ({
+                  ...member,
+                  joinedEpochNumber: 1,
+                  createdAt: new Date(Date.now() - 2 * 86_400_000),
+                })),
                 ...(groupId === familyId
                   ? [
                       {
@@ -196,6 +214,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
 
     beforeEach(async () => {
       await prisma.crashAlert.deleteMany({ where: { groupId: { in: groupIds } } });
+      await prisma.groupMember.updateMany({
+        where: { groupId: { in: groupIds } },
+        data: { historyShare: null },
+      });
       await prisma.user.updateMany({ where: { id: driverId }, data: { sharingPaused: false } });
       await runTimers();
       woken.splice(0);
@@ -325,6 +347,128 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       ).toEqual([message.messageId]);
       expect((await catchUp(devices.driverTablet, start.cursor)).alerts).toEqual([]);
       expect((await catchUp(devices.latePhone, lateStart.cursor)).alerts).toEqual([]);
+    });
+    const listed = async (device = devices.viewerPhone) =>
+      (await caller(device).crashAlerts.group({ groupId: familyId })).alerts.map(
+        ({ messageId }) => messageId,
+      );
+    const caughtUp = async (device = devices.viewerPhone) =>
+      (
+        await catchUp(
+          device,
+          encodeAlertsCursor({ createdAt: new Date(Date.now() - 20 * 3_600_000), id: "" }),
+        )
+      ).alerts.map(({ messageId }) => messageId);
+    const receivedHoursAgo = (messageId: string, hours: number) =>
+      prisma.crashAlert.updateMany({
+        where: { messageId },
+        data: { receivedAt: new Date(Date.now() - hours * 3_600_000) },
+      });
+    const stored = async () =>
+      (
+        await prisma.crashAlert.findMany({
+          where: { groupId: { in: groupIds } },
+          orderBy: { receivedAt: "asc" },
+        })
+      ).map(({ messageId }) => messageId);
+    const setShare = (historyShare: "LAST_LOCATION" | "HOURS_6" | "DAY_1" | "MAXIMUM") =>
+      caller(devices.driverPhone).groupSettings.setHistoryShare({
+        groupId: familyId,
+        historyShare,
+      });
+
+    test("the sender's history setting withholds Crash alerts sent before it", async () => {
+      const older = crashMessage();
+      const recent = crashMessage();
+      await send([copy(older)]);
+      await send([copy(recent)]);
+      await receivedHoursAgo(older.messageId, 8);
+      await receivedHoursAgo(recent.messageId, 2);
+      expect(await listed()).toEqual([recent.messageId, older.messageId]);
+
+      await prisma.groupMember.updateMany({
+        where: { groupId: familyId, userId: driverId },
+        data: { historyShare: "HOURS_6" },
+      });
+      expect(await listed()).toEqual([recent.messageId]);
+      expect(await caughtUp()).toEqual([recent.messageId]);
+    });
+
+    test("shortening the history setting deletes Crash alerts sent before it", async () => {
+      const older = crashMessage();
+      const recent = crashMessage();
+      await send([copy(older), copy(older, { groupId: workId })]);
+      await send([copy(recent)]);
+      await receivedHoursAgo(older.messageId, 30);
+      await receivedHoursAgo(recent.messageId, 2);
+
+      await setShare("DAY_1");
+      expect(await stored()).toEqual([older.messageId, recent.messageId]);
+      expect(
+        (await prisma.crashAlert.findMany({ where: { groupId: familyId } })).map(
+          ({ messageId }) => messageId,
+        ),
+      ).toEqual([recent.messageId]);
+    });
+
+    test("with last location only, the alert is kept until the OK follow-up", async () => {
+      await setShare("LAST_LOCATION");
+      const crash = crashMessage();
+      await send([copy(crash)]);
+      expect(await listed()).toEqual([crash.messageId]);
+      expect(await caughtUp()).toEqual([crash.messageId]);
+
+      const ok = okMessage(crash);
+      await send([copy(ok)]);
+      expect(await listed()).toEqual([ok.messageId]);
+      expect(await caughtUp()).toEqual([ok.messageId]);
+      expect(await stored()).toEqual([ok.messageId]);
+    });
+
+    test("with last location only, an alert with no OK lasts an hour", async () => {
+      await setShare("LAST_LOCATION");
+      const stale = crashMessage();
+      const fresh = crashMessage();
+      await send([copy(stale)], devices.driverTablet);
+      await send([copy(fresh)]);
+      await receivedHoursAgo(stale.messageId, 1.1);
+      await receivedHoursAgo(fresh.messageId, 0.5);
+
+      expect(await listed()).toEqual([fresh.messageId]);
+      expect(await caughtUp()).toEqual([fresh.messageId]);
+    });
+
+    test("switching to last location only deletes alerts older than an hour", async () => {
+      const older = crashMessage();
+      const recent = crashMessage();
+      await send([copy(older)], devices.driverTablet);
+      await send([copy(recent)]);
+      await receivedHoursAgo(older.messageId, 1.1);
+
+      await setShare("LAST_LOCATION");
+      expect(await stored()).toEqual([recent.messageId]);
+    });
+
+    test("leaving a Group deletes the alerts the leaver sent there", async () => {
+      const message = crashMessage();
+      const viewerAlert = crashMessage();
+      await send(
+        [copy(message, { groupId: workId, senderDeviceId: devices.quietPhone.id })],
+        devices.quietPhone,
+      );
+      await send(
+        [copy(viewerAlert, { groupId: workId, senderDeviceId: devices.viewerPhone.id })],
+        devices.viewerPhone,
+      );
+      const member = await prisma.groupMember.findUniqueOrThrow({
+        where: { userId_groupId: { userId: quietId, groupId: workId } },
+      });
+
+      await caller(devices.quietPhone).groupMembership.remove({
+        groupId: workId,
+        memberId: member.id,
+      });
+      expect(await stored()).toEqual([viewerAlert.messageId]);
     });
   },
 );
