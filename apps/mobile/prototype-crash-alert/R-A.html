@@ -1,0 +1,11 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="fonts.css"><link rel="stylesheet" href="common.css"><script src="icons.js"></script><script src="parts.js"></script><script src="crash.js"></script></head><body><script>
+const base=(card)=>phone(plainMap+status.replace('18:20','18:06')+mapTop+crashAt(196,470)+pinAt(232,505)+`<div class="card">${card}</div>`);
+const block=(bg,fg,icon,t,s)=>`<div style="background:${bg};color:${fg};border-radius:18px;padding:12px 14px;margin-bottom:14px;display:flex;gap:12px"><div style="flex:none;margin-top:2px">${ic(icon,22,fg)}</div><div><div style="font-size:16.5px;font-weight:600">${t}</div><div style="font-size:14px;line-height:1.4;margin-top:3px;opacity:.95">${s}</div></div></div>`;
+const help=`<div class="muted" style="font-size:12.5px;line-height:1.4;margin-top:12px">OpenBeacon hasn't contacted emergency services. Call 999 if you think Sam needs help. Crash alerts may help, but they can go off when nothing happened.</div>`;
+document.body.innerHTML=[
+frame("RA1 · Tapped the Crash alert","The person card opens with a red Crash alert block on top. The red diamond marks where it happened; Sam's pin is where they are now.",
+base(block(REDC,'#410002','triangle-alert','Possible crash at 18:04','Barnet Lane · 42 mph just before. Sam\'s phone is sharing every 10 s until 18:19.')+personHead()+btnRow(updBtns)+help)),
+frame("RA2 · Sam says they're OK","The block turns green and keeps the crash time. The red diamond stays on the map until the card is closed.",
+base(block(GREENC,GREEN,'circle-check',"Sam says they're OK",'18:09 · after a possible crash at 18:04 on Barnet Lane')+personHead()+btnRow(updBtns))),
+].join("");
+</script></body></html>
