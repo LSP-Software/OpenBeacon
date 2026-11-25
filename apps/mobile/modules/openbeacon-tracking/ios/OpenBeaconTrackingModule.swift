@@ -231,6 +231,10 @@ public class OpenBeaconTrackingModule: Module {
       []
     }
 
+    AsyncFunction("readDriveRecord") { (_: String, _: String) -> [Int]? in
+      nil
+    }
+
     AsyncFunction("deleteDrives") { (_: String, _: [String]) in
     }
 

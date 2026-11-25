@@ -28,6 +28,7 @@ const TICK_MAX_FONT_SCALE = 2;
 
 type Lane = {
   color: string;
+  drives: ReadonlyArray<{ end: number; passenger: boolean; start: number }>;
   historyStart: number;
   id: string;
   initials: string;
@@ -68,17 +69,28 @@ export const TimelineScrubber = ({
   const date = new Date(day.start);
   const tickScale = Math.min(useWindowDimensions().fontScale, TICK_MAX_FONT_SCALE);
   const tickWidth = Math.ceil((uses24HourClock ? 16 : 40) * tickScale);
-  const ticks = timelineHourTicks({ labelWidth: tickWidth, trackWidth: width }).map((hour) => ({
+  const ticks = timelineHourTicks({
+    labelWidth: tickWidth,
+    trackWidth: width,
+  }).map((hour) => ({
     hour,
     at: new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour).getTime(),
   }));
   const xOf = (value: number) => ((value - day.start) / (day.end - day.start)) * width;
-  const handleStyle = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }] }));
+  const handleStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: x.value }],
+  }));
 
   return (
     <View>
       <View className="flex-row">
-        <View style={{ width: AVATAR_WIDTH, gap: LANE_GAP - 2, paddingTop: KNOB_SIZE / 2 + 5 }}>
+        <View
+          style={{
+            width: AVATAR_WIDTH,
+            gap: LANE_GAP - 2,
+            paddingTop: KNOB_SIZE / 2 + 5,
+          }}
+        >
           {lanes.map((lane) => (
             <View
               key={lane.id}
@@ -98,7 +110,11 @@ export const TimelineScrubber = ({
         <GestureDetector gesture={gesture}>
           <View
             className="flex-1"
-            style={{ minHeight: 44, paddingBottom: 8, paddingTop: KNOB_SIZE / 2 + 6 }}
+            style={{
+              minHeight: 44,
+              paddingBottom: 8,
+              paddingTop: KNOB_SIZE / 2 + 6,
+            }}
             {...trackProps}
           >
             {width > 0 ? (
@@ -116,11 +132,20 @@ export const TimelineScrubber = ({
                 >
                   <View
                     className="absolute bg-foreground"
-                    style={{ left: -1, top: KNOB_SIZE / 2, width: 2, height: height + 12 }}
+                    style={{
+                      left: -1,
+                      top: KNOB_SIZE / 2,
+                      width: 2,
+                      height: height + 12,
+                    }}
                   />
                   <View
                     className="absolute rounded-full border-2 border-card bg-foreground"
-                    style={{ left: -KNOB_SIZE / 2, width: KNOB_SIZE, height: KNOB_SIZE }}
+                    style={{
+                      left: -KNOB_SIZE / 2,
+                      width: KNOB_SIZE,
+                      height: KNOB_SIZE,
+                    }}
                   />
                 </Animated.View>
               </View>
@@ -156,8 +181,12 @@ export const TimelineScrubber = ({
 
 export const TimelineMiniScrubber = (scrub: Scrub) => {
   const { gesture, trackProps, width, x } = useScrubTrack(scrub);
-  const fillStyle = useAnimatedStyle(() => ({ transform: [{ translateX: x.value - width }] }));
-  const knobStyle = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }] }));
+  const fillStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: x.value - width }],
+  }));
+  const knobStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: x.value }],
+  }));
   return (
     <GestureDetector gesture={gesture}>
       <View className="h-11 justify-center" {...trackProps}>
@@ -283,6 +312,18 @@ const TimelineLanes = memo(
                 />
               );
             }),
+            ...lane.drives.map((drive) => {
+              const x = xOf(drive.start);
+              return (
+                <DriveShape
+                  key={`${lane.id}:drive:${drive.start}`}
+                  passenger={drive.passenger}
+                  width={Math.max(xOf(drive.end) - x, 2)}
+                  x={x}
+                  y={y}
+                />
+              );
+            }),
           ];
         })}
         {shadedWidth > 0 ? (
@@ -387,11 +428,42 @@ const RunShape = ({
   );
 };
 
+const DriveShape = ({
+  passenger,
+  width,
+  x,
+  y,
+}: {
+  passenger: boolean;
+  width: number;
+  x: number;
+  y: number;
+}) => {
+  const colors = useColors();
+  if (passenger) {
+    return (
+      <Rect
+        x={x + 0.75}
+        y={y + 0.75}
+        width={Math.max(width - 1.5, 0.5)}
+        height={LANE_HEIGHT - 1.5}
+        fill="none"
+        stroke={colors.text}
+        strokeWidth={1.5}
+        strokeDasharray="3 2"
+      />
+    );
+  }
+  return <Rect x={x} y={y} width={width} height={LANE_HEIGHT} rx={2} fill={colors.text} />;
+};
+
 export const TimelineKey = ({
   color,
+  showDrives,
   showNotAvailable,
 }: {
   color?: string | undefined;
+  showDrives: boolean;
   showNotAvailable: boolean;
 }) => {
   const colors = useColors();
@@ -413,6 +485,19 @@ export const TimelineKey = ({
           <Text className="text-xs text-secondary">{item.label}</Text>
         </View>
       ))}
+      {showDrives
+        ? [
+            { label: "Drive", passenger: false },
+            { label: "Passenger", passenger: true },
+          ].map((item) => (
+            <View key={item.label} className="flex-row items-center gap-1.5">
+              <Svg width={18} height={LANE_HEIGHT}>
+                <DriveShape passenger={item.passenger} width={18} x={0} y={0} />
+              </Svg>
+              <Text className="text-xs text-secondary">{item.label}</Text>
+            </View>
+          ))
+        : null}
       {showNotAvailable ? (
         <View className="flex-row items-center gap-1.5">
           <Svg width={18} height={LANE_HEIGHT}>
