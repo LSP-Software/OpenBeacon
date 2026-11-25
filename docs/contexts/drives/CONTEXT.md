@@ -5,7 +5,7 @@ This context covers trips by vehicle that a phone records and shares with its Gr
 ## Language
 
 **Drive**:
-One trip by vehicle, recorded by the device that made it and shared with the Groups that device's account shares location history with. It runs from when the vehicle set off until it stopped for good, arrived at a Place, or the device stopped recording; short stops in traffic or to drop someone off stay inside it. Walking and cycling are never Drives. Buses, trains and taxis can be, until they are marked as a Passenger drive or deleted. Each device records its own Drives, so a phone and a tablet in the same car make two.
+One trip by vehicle, recorded by the device that made it and shared with the Groups that device's account shares location history with. It runs from when the vehicle set off until it stopped for good, arrived at a Place, or the device stopped recording; short stops in traffic or to drop someone off stay inside it. Walking and cycling are never Drives. Buses, trains and taxis can be, until they are marked as a Passenger drive or deleted. Each device records its own Drives, so a phone and a tablet in the same car make two. Any device on the account can delete a Drive, which removes it for every Group for good.
 _Avoid_: Trip, journey, ride, drive record
 
 **Passenger drive**:
