@@ -75,6 +75,7 @@ class DriveSensors(
     sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let { sensor ->
       sensorManager.registerListener(this, sensor, SAMPLING_PERIOD_US, MAX_REPORT_LATENCY_US, handler)
     }
+    // SystemUI, not the system uid, sends ACTION_USER_PRESENT, so a not-exported receiver never hears an unlock. All three actions are protected broadcasts that other apps can't send.
     ContextCompat.registerReceiver(
       context,
       screenReceiver,
@@ -83,7 +84,7 @@ class DriveSensors(
         addAction(Intent.ACTION_SCREEN_OFF)
         addAction(Intent.ACTION_USER_PRESENT)
       },
-      ContextCompat.RECEIVER_NOT_EXPORTED,
+      ContextCompat.RECEIVER_EXPORTED,
     )
     val now = System.currentTimeMillis()
     val interactive = context.getSystemService(PowerManager::class.java)?.isInteractive == true
