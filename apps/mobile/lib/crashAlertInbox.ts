@@ -179,3 +179,8 @@ export const crashHistoryItems = (
             }${receivedAt - message.crash.time > LATE_MS ? ` (arrived ${words.time(receivedAt)}, after no signal)` : ""}`,
     }))
     .sort((a, b) => b.at.getTime() - a.at.getTime());
+
+export const crashFocusSpot = (incident: CrashIncident, person: { timestamp: string | null }) =>
+  person.timestamp !== null && Date.parse(person.timestamp) >= incident.crash.time
+    ? null
+    : { latitude: incident.crash.latitude, longitude: incident.crash.longitude };

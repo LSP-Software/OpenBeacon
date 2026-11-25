@@ -11,10 +11,13 @@ func runCrashChecks(casesPath: String, check: (Bool, String) -> Void) throws {
     let name = testCase["name"] as! String
     var longitude = origin["longitude"]!.doubleValue
     var time = startTime
-    let detector = CrashDetector()
+    var alertOpen = false
+    let detector = CrashDetector(isAlertOpen: { alertOpen })
     var suspicions: [CrashSuspicion] = []
     for step in testCase["steps"] as! [[String: Any]] {
-      if let move = step["move"] as? [String: Any] {
+      if let alert = step["alert"] as? Bool {
+        alertOpen = alert
+      } else if let move = step["move"] as? [String: Any] {
         let speed = (move["speed"] as! NSNumber).doubleValue
         let every = (move["every"] as! NSNumber).int64Value
         for _ in 0..<(move["count"] as! NSNumber).intValue {

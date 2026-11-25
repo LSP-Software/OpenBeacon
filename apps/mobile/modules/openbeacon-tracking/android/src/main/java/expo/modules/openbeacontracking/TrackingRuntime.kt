@@ -70,7 +70,7 @@ object TrackingRuntime {
   @Volatile
   var isCaptureRunning: Boolean = false
 
-  val crashDetector = CrashDetector()
+  val crashDetector = CrashDetector { CrashCountdownController.isAlertOpen() }
 
   fun epochKeyStore(context: Context): EpochKeyHistory {
     epochKeyStore?.let {

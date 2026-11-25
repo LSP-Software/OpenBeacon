@@ -9,7 +9,9 @@ data class CrashSuspicion(
   val speedBefore: Double,
 )
 
-class CrashDetector {
+class CrashDetector(
+  private val isAlertOpen: () -> Boolean = { false },
+) {
   private data class SeenFix(
     val fix: DriveFix,
     val inDrive: Boolean,
@@ -59,7 +61,7 @@ class CrashDetector {
       val outcome = judge(spike, latest)
       if (outcome == Outcome.WAIT) continue
       spikes.remove(spike)
-      if (outcome is Outcome.Crash) {
+      if (outcome is Outcome.Crash && !isAlertOpen()) {
         spikes.clear()
         quietUntilMillis = spike + QUIET_AFTER_MILLIS
         return outcome.suspicion

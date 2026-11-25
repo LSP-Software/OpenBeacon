@@ -206,15 +206,17 @@ export const TrackingProvider = ({
     }
 
     const interval = setInterval(() => {
-      if (AppState.currentState === "active") {
-        void runTrackingCycle();
-      }
+      if (AppState.currentState !== "active") return;
+      void (async () => {
+        await runTrackingCycle();
+        if (sessionReadyRef.current) await tryCatch(service.syncAccountNotices());
+      })();
     }, 60_000);
 
     return () => {
       clearInterval(interval);
     };
-  }, [runTrackingCycle, userId]);
+  }, [runTrackingCycle, service, userId]);
 
   useEffect(() => {
     if (!userId) {

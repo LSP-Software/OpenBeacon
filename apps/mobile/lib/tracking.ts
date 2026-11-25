@@ -1090,8 +1090,7 @@ const startPlaceRound = async (
     const group = drives.get(drive.groupId) ?? [];
     if (group.length < 10) drives.set(drive.groupId, [...group, drive]);
   }
-  const sinceAccountSync = Date.now() - lastAccountSyncAt;
-  const accountSyncDue = !trackingPaused && (sinceAccountSync < 0 || sinceAccountSync >= 50_000);
+  const accountSyncDue = isAccountSyncDue();
   return {
     account: startAccountRound(device.userId),
     accountDevice: accountSyncDue ? device : null,
@@ -1263,18 +1262,21 @@ const showApiCompatibilityNotice = async () => {
   if (shown) markApiCompatibilityNotified();
 };
 
-const pollPlaceUpdates = ({ onlyWithoutKeys = false }: { onlyWithoutKeys?: boolean } = {}) =>
+const isAccountSyncDue = () => {
+  const sinceAccountSync = Date.now() - lastAccountSyncAt;
+  return !trackingPaused && (sinceAccountSync < 0 || sinceAccountSync >= 50_000);
+};
+
+const pollPlaceUpdates = ({ onlyWhenDue = false }: { onlyWhenDue?: boolean } = {}) =>
   inPlaceRound(async () => {
-    if (trackingPaused) return;
+    if (trackingPaused || (onlyWhenDue && !isAccountSyncDue())) return;
     const trackingModule = await loadTrackingModule();
     const device = await getRegisteredDeviceKey();
     if (!trackingModule || !device) return;
     const account = startAccountRound(device.userId);
-    const keyGroupId = trackingModule.listProvisionedEpochKeys()[0]?.groupId;
     const groupId =
-      keyGroupId && onlyWithoutKeys
-        ? null
-        : (keyGroupId ?? readCursorGroup(getOwner(device.userId)));
+      trackingModule.listProvisionedEpochKeys()[0]?.groupId ??
+      readCursorGroup(getOwner(device.userId));
     const accountSync = startAccountSync(trackingModule, device, account);
     lastAccountSyncAt = Date.now();
     const upload = groupId
@@ -1313,7 +1315,7 @@ const pollPlaceUpdates = ({ onlyWithoutKeys = false }: { onlyWithoutKeys?: boole
 
 export const syncAccountNotices = async () => {
   if (getApiCompatibility()) return;
-  await pollPlaceUpdates({ onlyWithoutKeys: true });
+  await pollPlaceUpdates({ onlyWhenDue: true });
 };
 
 export const syncGroupNotices = async () => {

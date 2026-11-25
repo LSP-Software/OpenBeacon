@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { CrashAlertMessage } from "@openbeacon/encryption";
 import {
   activeCrashFor,
+  crashFocusSpot,
   crashHistoryItems,
   describeCrashNotice,
   emptyCrashInbox,
@@ -169,5 +170,30 @@ describe("receiving Crash alerts", () => {
         text: "Sam Phone sent a Crash alert: possible crash at 18:04 near Barnet Lane, EN5",
       },
     ]);
+  });
+});
+
+describe("crashFocusSpot", () => {
+  const incident = receiveCrashAlerts(emptyCrashInbox, [received(crash(), crashAt + minute)]).inbox
+    .incidents[0];
+  if (!incident) throw new Error("no incident");
+
+  test("a person last seen before the crash is shown at the crash spot", () => {
+    expect(
+      crashFocusSpot(incident, { timestamp: new Date(crashAt - minute).toISOString() }),
+    ).toEqual({ latitude: 51.65, longitude: -0.2 });
+  });
+
+  test("a person seen since the crash is shown where they are", () => {
+    expect(crashFocusSpot(incident, { timestamp: new Date(crashAt + 10_000).toISOString() })).toBe(
+      null,
+    );
+  });
+
+  test("a person with no known time is shown at the crash spot", () => {
+    expect(crashFocusSpot(incident, { timestamp: null })).toEqual({
+      latitude: 51.65,
+      longitude: -0.2,
+    });
   });
 });

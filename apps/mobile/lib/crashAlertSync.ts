@@ -1,6 +1,6 @@
 import { type CrashAlertMessage, openCrashAlert } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import z from "zod";
 import type { QueuedCrashAlert } from "../modules/openbeacon-tracking/index.ts";
@@ -231,10 +231,24 @@ export const useGroupCrashAlerts = ({
   enabled: boolean;
   groupId: string;
   userId: string | undefined;
-}) =>
-  useQuery({
-    queryKey: ["groupCrashAlerts", groupId, userId],
-    queryFn: async () =>
-      openCrashAlerts((await trpcClient.crashAlerts.group.query({ groupId })).alerts),
-    enabled: enabled && userId !== undefined,
-  }).data ?? [];
+}) => {
+  const queryClient = useQueryClient();
+  const inbox = useSyncExternalStore(subscribe, () =>
+    userId ? (storage.getString(storageKey(userId, "inbox")) ?? null) : null,
+  );
+  useEffect(() => {
+    void inbox;
+    void queryClient.invalidateQueries(
+      { queryKey: ["groupCrashAlerts", groupId, userId] },
+      { cancelRefetch: false },
+    );
+  }, [groupId, inbox, queryClient, userId]);
+  return (
+    useQuery({
+      queryKey: ["groupCrashAlerts", groupId, userId],
+      queryFn: async () =>
+        openCrashAlerts((await trpcClient.crashAlerts.group.query({ groupId })).alerts),
+      enabled: enabled && userId !== undefined,
+    }).data ?? []
+  );
+};
