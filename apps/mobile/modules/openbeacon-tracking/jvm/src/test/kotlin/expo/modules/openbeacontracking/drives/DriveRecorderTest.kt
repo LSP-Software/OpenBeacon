@@ -194,6 +194,15 @@ class DriveRecorderTest {
   }
 
   @Test
+  fun theRecordingDeviceKeepsTheFullRecordForItsOwnerOnly() {
+    val recorder = recorder()
+    recorder.onFixes("owner", fixes(15.0, 200))
+    val finished = recorder.onFixes("owner", fixes(0.0, 300)).single()
+    assertEquals(finished, recorder.record("owner", finished.driveId))
+    assertEquals(null, recorder.record("someone-else", finished.driveId))
+  }
+
+  @Test
   fun deletingOwnDrivesRemovesTheLocalRecordAndAnyQueuedCopies() {
     val recorder = recorder()
     recorder.onFixes("owner", fixes(15.0, 200))
