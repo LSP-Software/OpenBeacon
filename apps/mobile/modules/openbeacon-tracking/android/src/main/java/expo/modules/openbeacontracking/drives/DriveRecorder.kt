@@ -11,6 +11,7 @@ class DriveRecorder(
   private val records: DriveRecordStore,
   private val queue: DriveQueue,
   private val epochKeys: () -> List<ProvisionedEpochKey>,
+  private val epochKeysAt: (Long) -> List<ProvisionedEpochKey>,
   private val historyShare: () -> CaptureHistoryShare,
   private val utcOffsetMinutes: (Long) -> Int,
   private val newDriveId: () -> String = { DriveRecordCodec.newDriveId() },
@@ -49,7 +50,7 @@ class DriveRecorder(
     for (fix in fixes) {
       val step = detector.onFix(fix)
       step.finished?.let { drive -> finish(owner, drive)?.let { finished += it } }
-      if (step.started) startKeys = epochKeys()
+      if (step.started) startKeys = detector.retainedFixes.firstOrNull()?.let { epochKeysAt(it.timeMillis) } ?: emptyList()
     }
     (detector.retainedFixes.firstOrNull() ?: fixes.lastOrNull())?.let { events.trimBefore(it.timeMillis) }
     persist(owner)
@@ -99,6 +100,11 @@ class DriveRecorder(
     queue.deleteByDrives(owner, driveIds)
   }
 
+  @Synchronized
+  fun clearRecords() {
+    records.clear(null)
+  }
+
   private fun restore(owner: String) {
     if (this.owner == owner) return
     detector = DriveDetector()
@@ -110,7 +116,7 @@ class DriveRecorder(
       return
     }
     entry.fixes.forEach { detector.onFix(it) }
-    startKeys = epochKeys().filter { entry.startEpochs[it.groupId] == it.epochId }
+    startKeys = entry.fixes.firstOrNull()?.let { start -> epochKeysAt(start.timeMillis).filter { entry.startEpochs[it.groupId] == it.epochId } } ?: emptyList()
   }
 
   private fun persist(owner: String) {

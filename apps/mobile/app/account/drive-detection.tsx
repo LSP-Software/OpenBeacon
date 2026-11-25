@@ -19,6 +19,7 @@ import { trpc } from "../../lib/api.ts";
 import { authClient } from "../../lib/auth-client.ts";
 import {
   joinGroupNames,
+  localEmergencyNumber,
   openPhoneSafetySettings,
   setCrashAlerts,
   tryCrashCountdown,
@@ -56,6 +57,7 @@ const DriveDetectionScreen = () => {
   const slowServer = push.data ? push.data.serverPush === false || !push.data.builtIn : false;
   const groupNames = joinGroupNames((groups.data ?? []).map((group) => group.name));
   const noun = thisDeviceNoun();
+  const emergencyNumber = localEmergencyNumber();
   const crashOn = on && crashAlerts;
   const changeCrashAlerts = (next: boolean) => void setCrashAlerts(next);
   const crashSubtitle = !on
@@ -161,7 +163,7 @@ const DriveDetectionScreen = () => {
             <View className="flex-row gap-3">
               <Icon as={ServerIcon} size={20} className="mt-0.5 text-warning-text" />
               <Text className="flex-1 text-warning-text">
-                {`Your server doesn’t send push notifications, so a Crash alert can take several minutes to reach others. Your ${noun} may have its own crash detection that can call 999 for you (Pixel Safety or iPhone Crash Detection).`}
+                {`Your server doesn’t send push notifications, so a Crash alert can take several minutes to reach others. Your ${noun} may have its own crash detection that can call ${emergencyNumber ?? "emergency services"} for you (Pixel Safety or iPhone Crash Detection).`}
               </Text>
             </View>
             {Platform.OS === "android" ? (
@@ -179,8 +181,7 @@ const DriveDetectionScreen = () => {
         <View className="flex-row gap-3 rounded-2xl bg-card p-4">
           <Icon as={InfoIcon} size={20} className="mt-0.5 text-secondary" />
           <Text className="flex-1 text-secondary">
-            Crash alerts may help, but they can miss a crash or go off when nothing happened.
-            OpenBeacon never contacts emergency services. It doesn’t replace calling 999.
+            {`Crash alerts may help, but they can miss a crash or go off when nothing happened. OpenBeacon never contacts emergency services. It doesn’t replace calling ${emergencyNumber ?? "your local emergency number"}.`}
           </Text>
         </View>
 

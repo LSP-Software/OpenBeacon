@@ -649,7 +649,7 @@ model DriveCopy {
 }
 
 model CrashAlert {
-  id             String     @id @default(cuid())
+  id             String     @id @default(uuid(7))
   groupId        String
   group          Group      @relation(fields: [groupId], references: [id], onDelete: Cascade)
   messageId      String

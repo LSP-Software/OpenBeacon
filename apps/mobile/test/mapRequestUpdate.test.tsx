@@ -14,6 +14,7 @@ mock.module("react-native", () => ({
   View: Passthrough,
 }));
 mock.module("expo-router", () => ({ Link: Passthrough }));
+mock.module("../lib/crashAlerts.ts", () => ({ localEmergencyNumber: () => "999" }));
 mock.module("lucide-react-native", () => ({
   CircleCheckIcon: () => null,
   TriangleAlertIcon: () => null,

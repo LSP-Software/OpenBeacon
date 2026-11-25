@@ -66,7 +66,9 @@ mock.module("../components/ui/Button.tsx", () => ({
 mock.module("../components/ui/Text.tsx", () => ({
   Text: ({ children }: { children: React.ReactNode }) => children,
 }));
-mock.module("expo-router", () => ({ useRouter: () => ({ push: () => {} }) }));
+mock.module("expo-router", () => ({
+  Link: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+}));
 mock.module("../hooks/useGroupDrives.ts", () => ({
   useGroupDrives: () => ({ query: { data: undefined } }),
 }));

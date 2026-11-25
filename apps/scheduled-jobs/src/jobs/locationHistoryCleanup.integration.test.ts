@@ -553,6 +553,38 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history
     expect(await driveIds(departed)).toEqual([]);
   });
 
+  test("deletes Crash alerts past each sender's window, an hour after last location only, or after they left", async () => {
+    const maximum = await createGroup("crashes-maximum", [200]);
+    const shortened = await createGroup("crashes-shortened", [200]);
+    const lastLocation = await createGroup("crashes-last-location", [200]);
+    const departed = await createGroup("crashes-departed", [200]);
+    await prisma.groupMember.update({
+      where: { userId_groupId: { userId, groupId: shortened } },
+      data: { historyShare: "HOURS_6" },
+    });
+    await prisma.groupMember.update({
+      where: { userId_groupId: { userId, groupId: lastLocation } },
+      data: { historyShare: "LAST_LOCATION" },
+    });
+    for (const groupId of [maximum, shortened, lastLocation, departed]) {
+      await addCrashAlert(groupId, 1, ago(3), "3d");
+      await addCrashAlert(groupId, 1, ago(2 / 24), "2h");
+      await addCrashAlert(groupId, 1, ago(0.5 / 24), "30m");
+    }
+    await prisma.groupMember.delete({ where: { userId_groupId: { userId, groupId: departed } } });
+
+    await createLocationHistoryCleanup()();
+
+    const messageIds = async (groupId: string) =>
+      (await prisma.crashAlert.findMany({ where: { groupId } }))
+        .map(({ messageId }) => messageId)
+        .sort();
+    expect(await messageIds(maximum)).toEqual(["2h", "30m", "3d"]);
+    expect(await messageIds(shortened)).toEqual(["2h", "30m"]);
+    expect(await messageIds(lastLocation)).toEqual(["30m"]);
+    expect(await messageIds(departed)).toEqual([]);
+  });
+
   test("keeps an epoch that a stored Drive uses and deletes it once the Drive is gone", async () => {
     const groupId = await createGroup("drive-epoch", [200, 100]);
     await addDrive(groupId, 1, ago(1), "drive");

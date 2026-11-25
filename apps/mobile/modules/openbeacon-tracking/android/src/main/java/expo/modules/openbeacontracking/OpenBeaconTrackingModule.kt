@@ -309,6 +309,10 @@ class OpenBeaconTrackingModule : Module() {
         TrackingRuntime.setDriveDetection(requireContext(), on)
       }
 
+      Function("emergencyNumber") {
+        CrashCountdownController.emergencyNumber(requireContext())
+      }
+
       Function("isCrashAlertsOn") {
         TrackingRuntime.isCrashAlertsOn(requireContext())
       }
@@ -358,6 +362,10 @@ class OpenBeaconTrackingModule : Module() {
 
       AsyncFunction("deleteDrives") { owner: String, driveIds: List<String> ->
         TrackingRuntime.driveRecorder(requireContext()).deleteDrives(owner, driveIds)
+      }
+
+      AsyncFunction("clearDriveRecords") {
+        TrackingRuntime.driveRecorder(requireContext()).clearRecords()
       }
 
       Function("isDriveRecording") {

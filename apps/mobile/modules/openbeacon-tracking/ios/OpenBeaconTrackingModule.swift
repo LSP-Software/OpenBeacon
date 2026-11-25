@@ -213,6 +213,10 @@ public class OpenBeaconTrackingModule: Module {
       TrackingRuntime.setDriveDetection(on)
     }
 
+    Function("emergencyNumber") { () -> String? in
+      nil
+    }
+
     Function("isCrashAlertsOn") {
       TrackingRuntime.isCrashAlertsOn()
     }
@@ -274,6 +278,9 @@ public class OpenBeaconTrackingModule: Module {
     }
 
     AsyncFunction("deleteDrives") { (_: String, _: [String]) in
+    }
+
+    AsyncFunction("clearDriveRecords") {
     }
 
     Function("isDriveRecording") {

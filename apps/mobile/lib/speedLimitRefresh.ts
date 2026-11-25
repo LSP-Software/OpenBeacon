@@ -82,8 +82,8 @@ export const refreshSpeedLimitPacks = async (deps: {
   recording: () => boolean;
   onWifi: () => Promise<boolean>;
   position: () => Promise<Position | null>;
-  readState: () => { checkedAt: number; regionAt: number };
-  writeState: (state: { checkedAt: number; regionAt: number }) => void;
+  readState: () => { checkedAt: number; regionAt: number; waitingForWifi: boolean };
+  writeState: (state: { checkedAt: number; regionAt: number; waitingForWifi: boolean }) => void;
   readBoundaries: () => Promise<string | null>;
   writeBoundaries: (text: string) => Promise<void>;
   fetchSignedPacks: () => Promise<{
@@ -106,23 +106,28 @@ export const refreshSpeedLimitPacks = async (deps: {
   if (!deps.detectionOn()) return;
   const now = deps.now();
   const state = deps.readState();
-  if (now - state.regionAt < REGION_EVERY_MS) return;
+  if (now - state.regionAt < REGION_EVERY_MS) {
+    if (!state.waitingForWifi || deps.recording() || !(await deps.onWifi())) return;
+  }
   const position = await deps.position();
   if (!position) return;
-  deps.writeState({ ...state, regionAt: now });
+  deps.writeState({ ...state, regionAt: now, waitingForWifi: false });
 
   const cachedText = await deps.readBoundaries();
   let boundaries = parseBoundaries(cachedText);
   let region = boundaries ? regionAt(boundaries, position) : null;
   if (region) await deps.noteRegion(region);
 
-  if (deps.recording() || !(await deps.onWifi())) return;
   const installed = await deps.installed();
   const current = installed.find(({ regionId }) => regionId === region);
   if (current && now - state.checkedAt < CHECK_EVERY_MS) return;
+  if (deps.recording() || !(await deps.onWifi())) {
+    deps.writeState({ ...state, regionAt: now, waitingForWifi: true });
+    return;
+  }
 
   const signed = await deps.fetchSignedPacks();
-  const checked = () => deps.writeState({ checkedAt: now, regionAt: now });
+  const checked = () => deps.writeState({ checkedAt: now, regionAt: now, waitingForWifi: false });
   if (!signed) return checked();
 
   if (!boundaries || (await deps.sha256(cachedText ?? "")) !== signed.boundaries.sha256) {

@@ -37,6 +37,7 @@ sourceSets {
       exclude("**/DriveRecordedNotice.kt")
       exclude("**/PlaceSearch.kt")
       exclude("**/SecureEpochKeyStore.kt")
+      exclude("**/SecureTimedEpochKeyStore.kt")
       exclude("**/Base64Codec.kt")
       exclude("**/CiphertextQueueEntity.kt")
       exclude("**/CiphertextQueueDao.kt")

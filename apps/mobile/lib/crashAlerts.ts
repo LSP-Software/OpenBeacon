@@ -1,31 +1,16 @@
 import { tryCatch } from "@openbeacon/shared";
-import { useSyncExternalStore } from "react";
 import { Linking, Platform } from "react-native";
 import OpenBeaconTracking from "../modules/openbeacon-tracking/index.ts";
 import { Alert } from "./alert.ts";
+import { createNativeSetting } from "./nativeSetting.ts";
 import type { SpeedUnit } from "./units.ts";
 
-let on: boolean | null = null;
-const listeners = new Set<() => void>();
+const crashAlertsOn = createNativeSetting(
+  () => OpenBeaconTracking.isCrashAlertsOn() !== false,
+  true,
+);
 
-const readOn = () => {
-  if (on === null) {
-    try {
-      on = OpenBeaconTracking.isCrashAlertsOn() !== false;
-    } catch {
-      on = true;
-    }
-  }
-  return on;
-};
-
-export const useCrashAlerts = () =>
-  useSyncExternalStore((listener) => {
-    listeners.add(listener);
-    return () => {
-      listeners.delete(listener);
-    };
-  }, readOn);
+export const useCrashAlerts = crashAlertsOn.use;
 
 export const setCrashAlerts = async (next: boolean) => {
   const saved = await tryCatch((async () => OpenBeaconTracking.setCrashAlerts(next))());
@@ -33,8 +18,15 @@ export const setCrashAlerts = async (next: boolean) => {
     Alert.alert("Couldn’t change Crash alerts", "Try again.");
     return;
   }
-  on = next;
-  for (const listener of listeners) listener();
+  crashAlertsOn.update(next);
+};
+
+export const localEmergencyNumber = () => {
+  try {
+    return OpenBeaconTracking.emergencyNumber();
+  } catch {
+    return null;
+  }
 };
 
 export const tryCrashCountdown = async () => {

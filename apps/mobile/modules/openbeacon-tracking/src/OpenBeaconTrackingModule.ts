@@ -155,6 +155,7 @@ declare class OpenBeaconTrackingModule extends NativeModule<{
   setLowPowerMode(enabled: boolean): void;
   isDriveDetectionOn(): boolean;
   setDriveDetection(on: boolean): void;
+  emergencyNumber(): string | null;
   isCrashAlertsOn(): boolean;
   setCrashAlerts(on: boolean): void;
   quietDriveGroups(): string[];
@@ -167,6 +168,7 @@ declare class OpenBeaconTrackingModule extends NativeModule<{
   listDriveIds(owner: string): Promise<string[]>;
   readDriveRecord(owner: string, driveId: string): Promise<number[] | null>;
   deleteDrives(owner: string, driveIds: string[]): Promise<void>;
+  clearDriveRecords(): Promise<void>;
   isDriveRecording(): boolean;
   speedLimitPacks(): Promise<{
     currentRegion: string | null;

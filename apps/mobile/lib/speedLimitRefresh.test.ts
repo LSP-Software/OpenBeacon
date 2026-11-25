@@ -70,7 +70,8 @@ const rig = ({
   position = london as { latitude: number; longitude: number } | null,
   cachedBoundaries = null as string | null,
   installed = [] as { regionId: string; sha256: string }[],
-  state = { checkedAt: 0, regionAt: 0 },
+  state = { checkedAt: 0, regionAt: 0, waitingForWifi: false },
+  now = 10 * day,
   served = signed() as ReturnType<typeof signed> | null,
   servedBoundaries = boundariesText,
 } = {}) => {
@@ -78,13 +79,13 @@ const rig = ({
   const downloads: unknown[] = [];
   const saved = { boundaries: cachedBoundaries, state: { ...state } };
   const deps = {
-    now: () => 10 * day,
+    now: () => now,
     detectionOn: () => detectionOn,
     recording: () => recording,
     onWifi: async () => onWifi,
     position: async () => position,
     readState: () => saved.state,
-    writeState: (next: { checkedAt: number; regionAt: number }) => {
+    writeState: (next: { checkedAt: number; regionAt: number; waitingForWifi: boolean }) => {
       saved.state = next;
     },
     readBoundaries: async () => saved.boundaries,
@@ -153,10 +154,43 @@ describe("refreshSpeedLimitPacks", () => {
     expect(downloads).toEqual([]);
   });
 
+  test("a round off Wi-Fi doesn't hold back the download once Wi-Fi is back", async () => {
+    const offline = rig({ onWifi: false, cachedBoundaries: boundariesText });
+    await refreshSpeedLimitPacks(offline.deps);
+    const online = rig({
+      cachedBoundaries: boundariesText,
+      state: offline.saved.state,
+      now: 10 * day + 60_000,
+    });
+    await refreshSpeedLimitPacks(online.deps);
+    expect(online.downloads).toEqual([
+      expect.objectContaining({ regionId: "europe/great-britain" }),
+    ]);
+  });
+
+  test("off Wi-Fi with an up-to-date pack, the next round still waits 30 minutes", async () => {
+    const installed = [{ regionId: "europe/great-britain", sha256: "a".repeat(64) }];
+    const offline = rig({
+      onWifi: false,
+      cachedBoundaries: boundariesText,
+      installed,
+      state: { checkedAt: 10 * day - 60_000, regionAt: 0, waitingForWifi: false },
+    });
+    await refreshSpeedLimitPacks(offline.deps);
+    const online = rig({
+      cachedBoundaries: boundariesText,
+      installed,
+      state: offline.saved.state,
+      now: 10 * day + 60_000,
+    });
+    await refreshSpeedLimitPacks(online.deps);
+    expect(online.calls).toEqual([]);
+  });
+
   test("checks again only after 30 minutes", async () => {
     const { calls, deps } = rig({
       cachedBoundaries: boundariesText,
-      state: { checkedAt: 0, regionAt: 10 * day - 29 * 60 * 1000 },
+      state: { checkedAt: 0, regionAt: 10 * day - 29 * 60 * 1000, waitingForWifi: false },
     });
     await refreshSpeedLimitPacks(deps);
     expect(calls).toEqual([]);
@@ -203,7 +237,7 @@ describe("refreshSpeedLimitPacks", () => {
     const next = rig({
       cachedBoundaries: boundariesText,
       installed,
-      state: { checkedAt: 10 * day - day + 60_000, regionAt: 0 },
+      state: { checkedAt: 10 * day - day + 60_000, regionAt: 0, waitingForWifi: false },
     });
     await refreshSpeedLimitPacks(next.deps);
     expect(next.calls).toEqual(["note europe/great-britain"]);
@@ -213,7 +247,7 @@ describe("refreshSpeedLimitPacks", () => {
     const { deps, downloads } = rig({
       cachedBoundaries: boundariesText,
       installed: [{ regionId: "europe/great-britain", sha256: "c".repeat(64) }],
-      state: { checkedAt: 9 * day, regionAt: 0 },
+      state: { checkedAt: 9 * day, regionAt: 0, waitingForWifi: false },
     });
     await refreshSpeedLimitPacks(deps);
     expect(downloads).toEqual([expect.objectContaining({ sha256: "a".repeat(64) })]);

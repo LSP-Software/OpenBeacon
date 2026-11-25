@@ -49,6 +49,7 @@ mock.module("react-native-reanimated", () => ({
 }));
 mock.module("../providers/ThemeProvider.tsx", () => ({ useTheme: () => ({ appTheme: "light" }) }));
 mock.module("expo-router", () => ({ Link: Passthrough }));
+mock.module("../lib/crashAlerts.ts", () => ({ localEmergencyNumber: () => "999" }));
 mock.module("lucide-react-native", () => ({
   CircleCheckIcon: () => null,
   TriangleAlertIcon: () => null,

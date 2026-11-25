@@ -11,6 +11,7 @@ import { Pressable, View } from "react-native";
 import { useLiveSpeedLabel } from "../../hooks/useLiveSpeedLabel.ts";
 import { useUnits } from "../../hooks/useUnits.ts";
 import { type CrashIncident, formatClock } from "../../lib/crashAlertInbox.ts";
+import { localEmergencyNumber } from "../../lib/crashAlerts.ts";
 import { formatSpeed } from "../../lib/units.ts";
 import { useTimeSince } from "../../hooks/useTimeSince.ts";
 import { shortTimeSince } from "../../lib/timeSince.ts";
@@ -209,8 +210,7 @@ export const LiveMapPersonSheet = ({
           ) : null}
           {crash && !isSelf && !crash.ok ? (
             <Text className="text-secondary mt-3 text-sm">
-              OpenBeacon hasn’t contacted emergency services. Call 999 if you think {name} needs
-              help. Crash alerts may help, but they can go off when nothing happened.
+              {`OpenBeacon hasn’t contacted emergency services. Call ${localEmergencyNumber() ?? "your local emergency number"} if you think ${name} needs help. Crash alerts may help, but they can go off when nothing happened.`}
             </Text>
           ) : null}
           {driveAlerts && !isSelf ? (
