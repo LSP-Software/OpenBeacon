@@ -36,6 +36,21 @@ func runDriveDetectorChecks(casesPath: String, check: (Bool, String) -> Void) th
           )
           if let drive = detector.onFix(fix).finished { drives.append(drive) }
         }
+      } else if let jitter = step["jitter"] as? [String: NSNumber] {
+        let every = jitter["every"]!.int64Value
+        let offset = jitter["metres"]!.doubleValue / (111_320.0 * cos(latitude * .pi / 180))
+        for count in 1...jitter["count"]!.intValue {
+          time += every * 1_000
+          let fix = DriveFix(
+            timeMillis: time,
+            latitude: latitude,
+            longitude: count % 2 == 1 ? longitude + offset : longitude,
+            speed: jitter["speed"]?.doubleValue,
+            accuracy: 5,
+            batterySaver: false
+          )
+          if let drive = detector.onFix(fix).finished { drives.append(drive) }
+        }
       } else if step["arrive"] != nil {
         if let drive = detector.onPlaceArrive() { drives.append(drive) }
       } else if step["interrupt"] != nil {
