@@ -93,7 +93,7 @@ export const WeeklyDrivingReport = <Drive extends { driveId: string; record: Dri
   const possessive = isOwn ? "your" : `${name}’s`;
   const subject = isOwn ? "You" : name;
   const covered = report !== null && report.firstVisibleDay > 0;
-  const partialWeek = report !== null && report.current && report.lastDay < 6;
+  const partialWeek = report?.current === true && report.lastDay < 6;
   const lastWeekLabel =
     report && partialWeek ? `${weekDaysLabel(0, report.lastDay)} last week` : "last week";
 
