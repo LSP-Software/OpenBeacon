@@ -2,13 +2,17 @@ import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import {
   checkMapArchive,
-  type MapTilesManifest,
   readManifest,
+  readMirroredSpeedLimitPacks,
   resolveArchive,
   runStorageCheck,
 } from "@openbeacon/map-tiles";
 import { tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
+import {
+  createSpeedLimitPackUrls,
+  SPEED_LIMIT_PACK_URL_EXPIRES_IN_SECONDS,
+} from "./lib/speedLimitPackUrls.ts";
 import { mapEnv } from "./mapEnv.ts";
 import { createStorageClient } from "./s3client.ts";
 
@@ -41,15 +45,15 @@ export const checkMapStorage = () =>
 export const PM_TILES_URL_EXPIRES_IN_SECONDS = 60 * 10;
 export const MAP_TILES_MANIFEST_CACHE_MS = 60_000;
 
-export const createManifestCache = ({
+export const createManifestCache = <Manifest>({
   now = Date.now,
   read,
 }: {
   now?: () => number;
-  read: () => Promise<MapTilesManifest | null>;
+  read: () => Promise<Manifest | null>;
 }) => {
-  let cached: { expiresAt: number; manifest: MapTilesManifest | null } | null = null;
-  let pending: Promise<MapTilesManifest | null> | null = null;
+  let cached: { expiresAt: number; manifest: Manifest | null } | null = null;
+  let pending: Promise<Manifest | null> | null = null;
 
   const refresh = async () => {
     const result = await tryCatch(read());
@@ -114,3 +118,25 @@ export const createSignedPmtilesUrl = async (key: string) => {
 
   return { url, expiresAt };
 };
+
+export const getSignedSpeedLimitPackUrls = createSpeedLimitPackUrls({
+  readManifest: createManifestCache({
+    read: async () =>
+      (
+        await readMirroredSpeedLimitPacks({
+          bucket: mapEnv.MAP_S3_BUCKET_NAME,
+          client: mapStorageClient,
+        })
+      )?.manifest ?? null,
+  }),
+  sign: (key) =>
+    getSignedUrl(
+      mapStoragePresignClient,
+      new GetObjectCommand({
+        Bucket: mapEnv.MAP_S3_BUCKET_NAME,
+        Key: key,
+        ResponseCacheControl: "private, max-age=31536000, immutable",
+      }),
+      { expiresIn: SPEED_LIMIT_PACK_URL_EXPIRES_IN_SECONDS },
+    ),
+});

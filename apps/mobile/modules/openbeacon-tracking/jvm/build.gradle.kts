@@ -61,6 +61,10 @@ sourceSets {
       include("tracking-point-v2.json")
       include("drive-record-v1.json")
     }
+    resources {
+      srcDir("../../../../speed-limit-packs/testVectors")
+      include("speed-limit-pack-v1.json")
+    }
   }
 }
 
