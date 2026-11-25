@@ -29,7 +29,7 @@ The road speed limits for one region (a country, or part of one when a country i
 _Avoid_: Speed limit tiles, limit data, speed map, region download
 
 **Weekly driving report**:
-One person's Drives from Monday to Sunday in that person's time zone: how many, how far, how long, top speed, Driving score and Driving events, compared only with their own previous week. Each viewer sees the part of the week that person shares with them. Passenger drives are listed apart and count towards nothing.
+One person's Drives from Monday to Sunday in that person's time zone: how many, how far, how long, top speed, Driving score and Driving events, compared only with their own previous week; a week still under way is compared with the same days of the previous week. Each viewer sees the part of the week that person shares with them. Passenger drives are listed apart and count towards nothing.
 _Avoid_: Weekly summary, driver report, weekly digest
 
 **Drive detection**:
