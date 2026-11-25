@@ -69,11 +69,13 @@ class CrashCountdownActivity : Activity() {
   override fun onStart() {
     super.onStart()
     CrashCountdownController.addListener(refresh)
+    CrashCountdownController.screenShown(this, true)
     window.decorView.post(ticker)
   }
 
   override fun onStop() {
     CrashCountdownController.removeListener(refresh)
+    CrashCountdownController.screenShown(this, false)
     window.decorView.removeCallbacks(ticker)
     super.onStop()
   }
