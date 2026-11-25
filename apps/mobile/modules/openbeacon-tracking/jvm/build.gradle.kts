@@ -56,6 +56,10 @@ sourceSets {
       include("group-payload-interop-v1.json")
       include("tracking-point-v2.json")
     }
+    resources {
+      srcDir("../../../../speed-limit-packs/testVectors")
+      include("speed-limit-pack-v1.json")
+    }
   }
 }
 

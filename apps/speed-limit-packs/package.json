@@ -1,0 +1,16 @@
+{
+  "name": "@openbeacon/speed-limit-packs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "publish-packs": "bun run src/publish.ts",
+    "typecheck": "bun check",
+    "test": "bun test --isolate && cd builder && ./gradlew test --no-daemon -q"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1164.0",
+    "@openbeacon/map-tiles": "workspace:*",
+    "@openbeacon/shared": "workspace:*",
+    "zod": "^4.6.7"
+  }
+}

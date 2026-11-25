@@ -1,0 +1,272 @@
+{
+  "description": "Speed limit pack format 1. 'roads' is what the builder adds, before orientation and simplification. 'tiles' is what a reader decodes from 'packBase64', tile by tile in file order. Each query returns the road IDs of every piece, in tile order then file order, whose tile and own bounding box overlap the box latitude \u00b1 radius/111320 degrees, longitude \u00b1 radius/(111320 cos latitude) degrees. Each invalid pack must be rejected when opened or when its tiles are read.",
+  "pack": {
+    "regionId": "test/vectors",
+    "build": 20261201,
+    "tileSizeE5": 10000
+  },
+  "roads": [
+    {
+      "roadClass": 1,
+      "oneway": "forward",
+      "forward": {
+        "source": 1,
+        "tenthsKmh": 1127
+      },
+      "backward": {
+        "source": 1,
+        "tenthsKmh": 1127
+      },
+      "points": [
+        [-10050, 5150000],
+        [-9950, 5150000]
+      ]
+    },
+    {
+      "roadClass": 7,
+      "oneway": "reverse",
+      "forward": {
+        "source": 2,
+        "tenthsKmh": 966
+      },
+      "backward": {
+        "source": 0,
+        "tenthsKmh": 0
+      },
+      "points": [
+        [-9900, 5150500],
+        [-9850, 5150500],
+        [-9800, 5150500],
+        [-9700, 5150600]
+      ]
+    },
+    {
+      "roadClass": 12,
+      "oneway": "no",
+      "forward": {
+        "source": 1,
+        "tenthsKmh": 0
+      },
+      "backward": {
+        "source": 1,
+        "tenthsKmh": 483
+      },
+      "points": [
+        [-9500, 5151000],
+        [-9400, 5151200],
+        [-9300, 5151000]
+      ]
+    },
+    {
+      "roadClass": 14,
+      "oneway": "no",
+      "forward": {
+        "source": 0,
+        "tenthsKmh": 0
+      },
+      "backward": {
+        "source": 0,
+        "tenthsKmh": 0
+      },
+      "points": [[-9000, 5152000]]
+    },
+    {
+      "roadClass": 5,
+      "oneway": "no",
+      "forward": {
+        "source": 2,
+        "tenthsKmh": 500
+      },
+      "backward": {
+        "source": 2,
+        "tenthsKmh": 500
+      },
+      "points": [
+        [100, 5160000],
+        [200, 5160100]
+      ]
+    }
+  ],
+  "packBase64": "T0JTTAEANgBRKTUBECcAAAQAAAADAAAAvtj//zCVTgDIAAAApLxOAAwAdGVzdC92ZWN0b3Jz/v///wMCAABmAAAAFAAAAP////8DAgAAegAAAD0AAAAAAAAABAIAALcAAAAUAAAAAQEBAecIAecIAQAAArybAQDIAQADAQEB5wgB5wgHAQAAAsYHDAABAAHjAwMAAAJjAMgBAAEBA/QDsAnHAccBxwEAAQIDoAboB8gBkAPIAY8DAQUAAvQDAvQDAQMAAsgBAMgByAE=",
+  "header": {
+    "formatVersion": 1,
+    "regionId": "test/vectors",
+    "build": 20261201,
+    "tileSizeE5": 10000,
+    "roadCount": 4,
+    "tileCount": 3,
+    "bounds": {
+      "minLonE5": -10050,
+      "minLatE5": 5150000,
+      "maxLonE5": 200,
+      "maxLatE5": 5160100
+    }
+  },
+  "tiles": [
+    {
+      "x": -2,
+      "y": 515,
+      "pieces": [
+        {
+          "roadId": 0,
+          "roadClass": 1,
+          "oneway": true,
+          "forward": {
+            "source": 1,
+            "tenthsKmh": 1127
+          },
+          "backward": {
+            "source": 1,
+            "tenthsKmh": 1127
+          },
+          "points": [
+            [-10050, 5150000],
+            [-9950, 5150000]
+          ]
+        }
+      ]
+    },
+    {
+      "x": -1,
+      "y": 515,
+      "pieces": [
+        {
+          "roadId": 0,
+          "roadClass": 1,
+          "oneway": true,
+          "forward": {
+            "source": 1,
+            "tenthsKmh": 1127
+          },
+          "backward": {
+            "source": 1,
+            "tenthsKmh": 1127
+          },
+          "points": [
+            [-10050, 5150000],
+            [-9950, 5150000]
+          ]
+        },
+        {
+          "roadId": 1,
+          "roadClass": 7,
+          "oneway": true,
+          "forward": {
+            "source": 0,
+            "tenthsKmh": 0
+          },
+          "backward": {
+            "source": 2,
+            "tenthsKmh": 966
+          },
+          "points": [
+            [-9700, 5150600],
+            [-9800, 5150500],
+            [-9900, 5150500]
+          ]
+        },
+        {
+          "roadId": 2,
+          "roadClass": 12,
+          "oneway": false,
+          "forward": {
+            "source": 1,
+            "tenthsKmh": 0
+          },
+          "backward": {
+            "source": 1,
+            "tenthsKmh": 483
+          },
+          "points": [
+            [-9500, 5151000],
+            [-9400, 5151200],
+            [-9300, 5151000]
+          ]
+        }
+      ]
+    },
+    {
+      "x": 0,
+      "y": 516,
+      "pieces": [
+        {
+          "roadId": 3,
+          "roadClass": 5,
+          "oneway": false,
+          "forward": {
+            "source": 2,
+            "tenthsKmh": 500
+          },
+          "backward": {
+            "source": 2,
+            "tenthsKmh": 500
+          },
+          "points": [
+            [100, 5160000],
+            [200, 5160100]
+          ]
+        }
+      ]
+    }
+  ],
+  "queries": [
+    {
+      "latitude": 51.5,
+      "longitude": -0.1,
+      "radiusMeters": 50,
+      "roadIds": [0, 0]
+    },
+    {
+      "latitude": 51.505,
+      "longitude": -0.0985,
+      "radiusMeters": 20,
+      "roadIds": [1]
+    },
+    {
+      "latitude": 51.6,
+      "longitude": 0.0015,
+      "radiusMeters": 100,
+      "roadIds": [3]
+    },
+    {
+      "latitude": 0,
+      "longitude": 0,
+      "radiusMeters": 100,
+      "roadIds": []
+    }
+  ],
+  "invalid": [
+    {
+      "name": "wrong magic",
+      "packBase64": "WEJTTAEANgBRKTUBECcAAAQAAAADAAAAvtj//zCVTgDIAAAApLxOAAwAdGVzdC92ZWN0b3Jz/v///wMCAABmAAAAFAAAAP////8DAgAAegAAAD0AAAAAAAAABAIAALcAAAAUAAAAAQEBAecIAecIAQAAArybAQDIAQADAQEB5wgB5wgHAQAAAsYHDAABAAHjAwMAAAJjAMgBAAEBA/QDsAnHAccBxwEAAQIDoAboB8gBkAPIAY8DAQUAAvQDAvQDAQMAAsgBAMgByAE="
+    },
+    {
+      "name": "unsupported format version",
+      "packBase64": "T0JTTAIANgBRKTUBECcAAAQAAAADAAAAvtj//zCVTgDIAAAApLxOAAwAdGVzdC92ZWN0b3Jz/v///wMCAABmAAAAFAAAAP////8DAgAAegAAAD0AAAAAAAAABAIAALcAAAAUAAAAAQEBAecIAecIAQAAArybAQDIAQADAQEB5wgB5wgHAQAAAsYHDAABAAHjAwMAAAJjAMgBAAEBA/QDsAnHAccBxwEAAQIDoAboB8gBkAPIAY8DAQUAAvQDAvQDAQMAAsgBAMgByAE="
+    },
+    {
+      "name": "header length shorter than the fixed header",
+      "packBase64": "T0JTTAEAFABRKTUBECcAAAQAAAADAAAAvtj//zCVTgDIAAAApLxOAAwAdGVzdC92ZWN0b3Jz/v///wMCAABmAAAAFAAAAP////8DAgAAegAAAD0AAAAAAAAABAIAALcAAAAUAAAAAQEBAecIAecIAQAAArybAQDIAQADAQEB5wgB5wgHAQAAAsYHDAABAAHjAwMAAAJjAMgBAAEBA/QDsAnHAccBxwEAAQIDoAboB8gBkAPIAY8DAQUAAvQDAvQDAQMAAsgBAMgByAE="
+    },
+    {
+      "name": "cut off inside the tile directory",
+      "packBase64": "T0JTTAEANgBRKTUBECcAAAQAAAADAAAAvtj//zCVTgDIAAAApLxOAAwAdGVzdC92ZWN0b3Jz/v///wMCAABmAAAAFAAAAP////8="
+    },
+    {
+      "name": "tile runs past the end of the file",
+      "packBase64": "T0JTTAEANgBRKTUBECcAAAQAAAADAAAAvtj//zCVTgDIAAAApLxOAAwAdGVzdC92ZWN0b3Jz/v///wMCAABmAAAAywAAAP////8DAgAAegAAAD0AAAAAAAAABAIAALcAAAAUAAAAAQEBAecIAecIAQAAArybAQDIAQADAQEB5wgB5wgHAQAAAsYHDAABAAHjAwMAAAJjAMgBAAEBA/QDsAnHAccBxwEAAQIDoAboB8gBkAPIAY8DAQUAAvQDAvQDAQMAAsgBAMgByAE="
+    },
+    {
+      "name": "cut off inside the last tile",
+      "packBase64": "T0JTTAEANgBRKTUBECcAAAQAAAADAAAAvtj//zCVTgDIAAAApLxOAAwAdGVzdC92ZWN0b3Jz/v///wMCAABmAAAAFAAAAP////8DAgAAegAAAD0AAAAAAAAABAIAALcAAAAUAAAAAQEBAecIAecIAQAAArybAQDIAQADAQEB5wgB5wgHAQAAAsYHDAABAAHjAwMAAAJjAMgBAAEBA/QDsAnHAccBxwEAAQIDoAboB8gBkAPIAY8DAQUAAvQDAvQDAQMAAsgBAMg="
+    },
+    {
+      "name": "piece runs past the end of its tile",
+      "packBase64": "T0JTTAEANgBRKTUBECcAAAQAAAADAAAAvtj//zCVTgDIAAAApLxOAAwAdGVzdC92ZWN0b3Jz/v///wMCAABmAAAAFAAAAP////8DAgAAegAAAD0AAAAAAAAABAIAALcAAAAUAAAAAQEBAecIAecIAQAAArybAQDIAQADAQEB5wgB5wgHAQAAAsYHDAABAAHjAwMAAAJjAMgBAAEBA/QDsAnHAccBxwEAAQIDoAboB8gBkAPIAY8DAQUAAvQDAvQDAQMAZMgBAMgByAE="
+    },
+    {
+      "name": "unknown road class",
+      "packBase64": "T0JTTAEANgBRKTUBECcAAAQAAAADAAAAvtj//zCVTgDIAAAApLxOAAwAdGVzdC92ZWN0b3Jz/v///wMCAABmAAAAFAAAAP////8DAgAAegAAAD0AAAAAAAAABAIAALcAAAAUAAAAAQEBAecIAecIAQAAArybAQDIAQADYwEB5wgB5wgHAQAAAsYHDAABAAHjAwMAAAJjAMgBAAEBA/QDsAnHAccBxwEAAQIDoAboB8gBkAPIAY8DAQUAAvQDAvQDAQMAAsgBAMgByAE="
+    }
+  ]
+}
