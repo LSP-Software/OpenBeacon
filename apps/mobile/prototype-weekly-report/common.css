@@ -64,3 +64,11 @@ body{font-family:'Roboto',sans-serif;background:#e9e4e6;padding:24px;display:fle
 .info{background:var(--scc);color:var(--onv);border-radius:14px;padding:10px 12px;font-size:13.5px;line-height:1.4;display:flex;gap:10px}
 .day{font-size:13px;font-weight:600;color:var(--onv);padding:14px 24px 6px;letter-spacing:.2px}
 .conn{margin:0 12px;padding:6px 0 6px 34px;font-size:13px;color:var(--onv);display:flex;align-items:center;gap:8px;background:var(--sc0)}
+.nb{width:40px;height:40px;border-radius:20px;background:var(--scc);display:flex;align-items:center;justify-content:center}
+.dl{display:inline-flex;align-items:center;gap:3px;font-size:12.5px;font-weight:500;border-radius:8px;padding:2px 7px;white-space:nowrap}
+.dl.good{background:#E8F5E9;color:#1B5E20}.dl.bad{background:var(--warnc);color:var(--warn)}.dl.same{background:var(--sch);color:var(--onv)}
+.lost{background:var(--sc0);border-radius:16px;padding:6px 14px 10px;margin-top:12px}
+.lost .d{width:26px;height:26px;border-radius:13px;display:flex;align-items:center;justify-content:center;flex:none}
+.sg{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.scroll{position:absolute;left:0;right:0;bottom:0;overflow:hidden;padding:0 16px}
+.tall{height:1500px}

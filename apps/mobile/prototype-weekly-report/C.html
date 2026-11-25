@@ -1,0 +1,19 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="fonts.css"><link rel="stylesheet" href="common.css"><script src="icons.js"></script><script src="parts.js"></script><script src="week.js"></script></head><body><script>
+const pbtn=(i,t)=>`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;font-size:13px;font-weight:500"><div style="width:52px;height:52px;border-radius:26px;background:var(--sc);display:flex;align-items:center;justify-content:center;color:var(--onsc)">${ic(i,22)}</div>${t}</div>`;
+document.body.innerHTML=[
+frame("C1 · The person card shows this week's driving","A \"Driving this week\" row on the person card on the map, next to Timeline. It opens the report on its own screen, outside Timeline.",
+phone(map({route:false})+status+`<div class="card" style="padding-bottom:20px">
+<div class="row">${av('Sa',52)}<div class="sp"><div style="font-size:20px;font-weight:500">Sam</div><div class="muted" style="font-size:14px">At Home · since 18:12 · 82%</div></div>${ic('x',22)}</div>
+<div class="row" style="margin:16px 0 14px">${pbtn('history','Timeline')}${pbtn('route','Directions')}${pbtn('smartphone','Update now')}</div>
+<div class="row" style="background:var(--sc);border-radius:16px;padding:10px 12px;color:var(--onsc)">${ic('car',22)}<div class="sp"><div style="font-weight:500">Driving this week</div><div style="font-size:13px;opacity:.85">4 drives · 70.6 mi · so far Mon–Tue</div></div>${score(84)}${ic('chevron-right',20)}</div>
+</div>`)),
+frame("C2 · The report is its own screen","Full screen with its own back button. \"See drives on Timeline\" jumps to the Drives list for that week.",
+phone(status+`<div class="topbar" style="position:absolute"><div class="bk">${ic('chevron-left',22)}</div><b>Sam's driving</b><div class="gchip" style="font-size:14px">${ic('smartphone',16)}Phone${ic('chevron-down',16)}</div></div>
+<div style="position:absolute;top:122px;left:16px;right:16px">${weekNav('Mon 16 – Sun 22 Nov','Last week')}<div style="margin-top:14px">${report({list:false})}</div>
+<div class="btn tonal" style="margin-top:14px">${ic('history',18)}See drives on Timeline</div></div>`,'height:1660px')),
+frame("C3 · Your own report from Account","The driver finds their own report under Account › Drive detection, as well as on their own person card.",
+phone(status+`<div style="padding:14px 16px 0;font-size:28px">Drive detection</div>
+<div class="sh">This phone</div><div class="grp"><div class="item"><div class="t">Drive detection<small>Records drives and shares them with your Groups</small></div><div style="width:52px;height:32px;border-radius:16px;background:var(--p);position:relative"><i style="position:absolute;right:4px;top:4px;width:24px;height:24px;border-radius:12px;background:#fff"></i></div></div><div class="item"><div class="t">Crash alerts<small>On</small></div>${ic('chevron-right',20)}</div></div>
+<div class="sh">Your drives</div><div class="grp"><div class="item"><div class="ic">${ic('chart-column',20)}</div><div class="t">Weekly driving report<small>This week so far · 4 drives · score 84</small></div>${ic('chevron-right',20)}</div><div class="item"><div class="ic">${ic('history',20)}</div><div class="t">All drives<small>Opens Timeline</small></div>${ic('chevron-right',20)}</div></div>`)),
+].join("");
+</script></body></html>

@@ -1,0 +1,25 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="fonts.css"><link rel="stylesheet" href="common.css"><script src="icons.js"></script><script src="parts.js"></script><script src="week.js"></script></head><body><script>
+const listRow=(t,from,to,meta,sc,extra='')=>`<div class="item"><div style="width:44px;font-size:14px;font-weight:500;line-height:1.25">${t}</div><div class="t"><div style="font-weight:500">${from} → ${to}${extra}</div><small>${meta}</small></div>${score(sc)}</div>`;
+const weekHead=(range,n,prev,meta,sub='')=>`<div class="row" style="margin:16px 12px 8px;background:var(--sc);border-radius:20px;padding:12px 14px;gap:12px;color:var(--onsc)">${score(n)}<div class="sp"><div style="font-weight:500">${range}${sub}</div><div style="font-size:13px;opacity:.85">${meta}</div><div style="margin-top:4px">${prev}</div></div><div class="row" style="gap:2px;font-weight:500;font-size:14px;color:var(--p)">Report${ic('chevron-right',18)}</div></div>`;
+const WEEKROUTES=["M70 800 C110 740 120 700 150 650 S210 560 205 500 S240 400 280 360 S320 260 330 210 S350 150 360 120","M60 300 C120 320 200 330 260 420 S330 600 380 640","M90 520 C150 500 220 470 300 470 S360 420 390 380"];
+const weekMap=`<div class="mapw"><svg viewBox="0 0 412 915">${WEEKROUTES.map(r=>`<path d="${r}" stroke="#fff" stroke-width="9" fill="none" stroke-linecap="round"/><path d="${r}" stroke="var(--drive)" stroke-width="5" fill="none" stroke-linecap="round" opacity=".85"/>`).join('')}${EVENTS.map(([x,y,k])=>`<circle cx="${x}" cy="${y}" r="13" fill="${EV[k][0]}" stroke="#fff" stroke-width="3"/>${ic(EV[k][1],14,'#fff',2.4).replace('<svg',`<svg x="${x-7}" y="${y-7}"`)}`).join('')}</svg></div>`;
+document.body.innerHTML=[
+frame("B1 · Each week in the Drives list starts with its report","No new Timeline view. The Drives list is grouped by week, and each week's header gives its score and change. Tapping it opens the report.",
+phone(status+topbar('Timeline')+`<div style="position:absolute;top:120px;left:12px;right:12px"><div class="seg"><div>${ic('calendar-days',18)}Day</div><div class="on">${ic('car',18)}Drives</div></div>
+<div class="row" style="margin:12px 2px 0;gap:8px"><div class="gchip" style="background:var(--sc);height:36px">${av('Sa',24)}Sam${ic('chevron-down',16)}</div><div class="gchip" style="height:36px;font-size:14px">${ic('smartphone',16)}Phone${ic('chevron-down',16)}</div></div></div>
+<div style="position:absolute;top:200px;left:0;right:0;bottom:0;overflow:hidden">
+${weekHead('This week so far',84,neutral('Mon–Tue · finishes Sunday'),'4 drives · 70.6 mi · 2 h 19')}
+<div class="grp">${listRow('17:30<br>18:12','Work','Home','23.0 mi · 42 min · top 71 mph',74)}${listRow('12:40<br>12:55','Work','Tesco Finchley','3.2 mi · 15 min · top 34 mph',null,' <span class="tag grey">Passenger</span>')}${listRow('08:29<br>08:58','Shell, Barnet Way','Work','12.1 mi · 29 min',91)}<div class="item" style="justify-content:center;color:var(--p);font-weight:500;min-height:44px">2 more drives</div></div>
+${weekHead('Mon 16 – Sun 22 Nov',86,delta(86,82,false),'11 drives · 187 mi · 5 h 40')}
+<div class="grp">${listRow('Sun<br>—','No drives','','',null).replace(/<div class="t">.*?<\/div><div class="score none">—<\/div>/s,'<div class="t muted">No drives on Sunday</div>')}${listRow('Sat<br>10:14','Home','Garden centre','8.9 mi · 22 min · top 48 mph',90)}</div>
+</div>`)),
+frame("B2 · The report is a sheet over the Timeline map","The map draws the whole week's drives and their Driving events. Pulled up, the sheet shows the full report (B3).",
+phone(weekMap+status+topbar('Timeline')+`<div class="sheet" style="height:470px"><div class="grab"></div><div style="padding:0 20px">
+<div class="row"><div style="flex:1"><div style="font-size:22px">Sam's week</div><div class="muted" style="font-size:14px;margin-top:2px">Mon 16 – Sun 22 Nov · ${ic('smartphone',13)} Phone</div></div><div class="nb">${ic('chevron-left',20)}</div><div class="nb">${ic('chevron-right',20)}</div></div>
+<div style="margin-top:14px">${scoreBlock()}</div></div></div>`)),
+frame("B3 · The sheet pulled up","The same contents as A, without the day-by-day bars (the map already shows where).",
+phone(status+`<div class="sheet" style="top:44px;bottom:0;border-radius:28px 28px 0 0"><div class="grab"></div><div style="padding:0 20px">
+<div class="row"><div style="flex:1"><div style="font-size:22px">Sam's week</div><div class="muted" style="font-size:14px;margin-top:2px">Mon 16 – Sun 22 Nov · ${ic('smartphone',13)} Phone</div></div><div class="nb">${ic('x',20)}</div></div>
+<div style="margin-top:6px">${h('Totals')}${fixStats()}${h('Driving events')}${evTable()}<div style="margin-top:10px">${checked()}</div>${h('Not counted')}${passLine()}<div style="margin-top:14px">${seeAlso('Sam sees the same report. It only compares Sam with Sam’s own previous week.')}</div></div></div></div>`,'height:1010px')),
+].join("");
+</script></body></html>

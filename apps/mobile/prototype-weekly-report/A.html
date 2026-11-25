@@ -1,0 +1,9 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="fonts.css"><link rel="stylesheet" href="common.css"><script src="icons.js"></script><script src="parts.js"></script><script src="week.js"></script></head><body><script>
+const seg3=`<div class="seg"><div>${ic('calendar-days',18)}Day</div><div>${ic('car',18)}Drives</div><div class="on">${ic('chart-column',18)}Week</div></div>`;
+document.body.innerHTML=[
+frame("A1 · A third Timeline view: Day / Drives / Week","The report sits next to the drive list, inside Timeline. It follows the person and device pickers, and ‹ › steps a week at a time. Opened on the last full week.",
+phone(status+topbar('Timeline')+`<div style="position:absolute;top:120px;left:12px;right:12px">${seg3}
+<div class="row" style="margin:12px 2px 0;gap:8px"><div class="gchip" style="background:var(--sc);height:36px">${av('Sa',24)}Sam${ic('chevron-down',16)}</div><div class="gchip" style="height:36px;font-size:14px">${ic('smartphone',16)}Phone${ic('chevron-down',16)}</div></div>
+<div style="margin:14px 0 14px">${weekNav('Mon 16 – Sun 22 Nov','Last week')}</div>${report({})}</div>`,'height:1790px')),
+].join("");
+</script></body></html>
