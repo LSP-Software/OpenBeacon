@@ -2,6 +2,7 @@ import type { MapRef } from "@maplibre/maplibre-react-native";
 import { tryCatch } from "@openbeacon/shared";
 import { useEffect, useRef, useState } from "react";
 import type { LayoutRectangle } from "react-native";
+import { type LiveMapPinGlide, liveMapPinGlideOffsetPosition } from "../../lib/liveMapPinGlide.ts";
 import { MAP_CONTROL_CLEARANCE, mapEdgePoint } from "../../lib/mapEdgePoint.ts";
 import { mapViewportPoint } from "../../lib/mapViewportPoint.ts";
 import { mergeMapEdgePoints } from "../../lib/mergeMapEdgePoints.ts";
@@ -16,6 +17,7 @@ export const useLiveMapEdgeMarkers = ({
   topInset,
 }: {
   markers: readonly {
+    glides: readonly LiveMapPinGlide[];
     latitude: number;
     longitude: number;
     memberDeviceIds: readonly string[];
@@ -123,10 +125,16 @@ export const useLiveMapEdgeMarkers = ({
       edgeDirtyRef.current = false;
       const next: MapEdgeCandidate[] = [];
       const occupied: Array<{ x: number; y: number }> = [];
+      const nowMs = Date.now();
       for (const marker of markersRef.current) {
+        const shown = liveMapPinGlideOffsetPosition({
+          base: marker,
+          glides: marker.glides,
+          nowMs,
+        });
         const point = mapViewportPoint({
           bounds,
-          coordinate: [marker.longitude, marker.latitude],
+          coordinate: [shown.longitude, shown.latitude],
           width,
           height,
         });
@@ -155,11 +163,17 @@ export const useLiveMapEdgeMarkers = ({
       const selectionRevision = edgeSelectionRevisionRef.current;
       const layoutRevision = edgeLayoutRevisionRef.current;
       const cameraRevision = edgeCameraRevisionRef.current;
+      const nowMs = Date.now();
       void (async () => {
         const result = await tryCatch(
           Promise.all(
             markersRef.current.map(async (marker) => {
-              const point = await map.project([marker.longitude, marker.latitude]);
+              const shown = liveMapPinGlideOffsetPosition({
+                base: marker,
+                glides: marker.glides,
+                nowMs,
+              });
+              const point = await map.project([shown.longitude, shown.latitude]);
               const edge = edgePointBelowStatusBar(point, width);
               return {
                 memberDeviceIds: marker.memberDeviceIds,
@@ -251,6 +265,22 @@ export const useLiveMapEdgeMarkers = ({
   // biome-ignore lint/correctness/useExhaustiveDependencies: updateEdgeMarkers reads markers through a ref, so it reruns when they change
   useEffect(() => {
     updateEdgeMarkers();
+    const glideEndsAtMs = Math.max(
+      0,
+      ...markers.flatMap((marker) =>
+        marker.glides.map((glide) => glide.startedAtMs + glide.durationMs),
+      ),
+    );
+    if (glideEndsAtMs <= Date.now()) return;
+    const interval = setInterval(updateEdgeMarkers, 250);
+    const timer = setTimeout(() => {
+      clearInterval(interval);
+      updateEdgeMarkers();
+    }, glideEndsAtMs - Date.now());
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timer);
+    };
   }, [markers]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: the sheet layout is measured through refs, so this reruns when the sheet changes
   useEffect(() => {
