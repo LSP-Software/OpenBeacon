@@ -17,6 +17,7 @@ struct DetectedDrive: Equatable {
   var durationSeconds: Double
   var topSpeed: Double
   var averageSpeed: Double
+  var fixes: [DriveFix] = []
 }
 
 struct DriveStep {
@@ -191,7 +192,8 @@ final class DriveDetector {
       checkedDistanceMeters: checked,
       durationSeconds: duration,
       topSpeed: fixes.map { $0.speed ?? 0 }.max() ?? 0,
-      averageSpeed: distance / duration
+      averageSpeed: distance / duration,
+      fixes: fixes
     )
   }
 

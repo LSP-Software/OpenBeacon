@@ -72,6 +72,12 @@ export const formatSpeed = (metersPerSecond: number, unit: SpeedUnit) =>
     ? `${Math.round(metersPerSecond * 2.2369362920544)} mph`
     : `${Math.round(metersPerSecond * 3.6)} km/h`;
 
+export const describeSpeedLimit = (
+  limit: { speed: number; source: "POSTED" | "ROAD_TYPE" },
+  unit: SpeedUnit,
+) =>
+  `${limit.source === "POSTED" ? "posted limit" : "limit for this road type"} ${formatSpeed(limit.speed, unit)}`;
+
 export const formatDistance = (meters: number, unit: DistanceUnit) => {
   const metres = Math.round(meters);
   const feet = Math.round(meters * 3.28084);

@@ -1334,6 +1334,9 @@ const syncBackgroundTrackingInternal = async (reason: UploadReason) => {
   if (uploadRejectedKeys) {
     await tryCatch(reconcileTrackingKeys({ startCapture: true, onlyIfRunning: true }));
   }
+  await tryCatch(
+    import("./speedLimitPacks.ts").then(({ refreshSpeedLimitData }) => refreshSpeedLimitData()),
+  );
   if (result.error && !(await isDeviceOffline())) {
     throw result.error;
   }

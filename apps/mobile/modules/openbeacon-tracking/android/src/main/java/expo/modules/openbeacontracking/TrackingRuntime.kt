@@ -28,6 +28,10 @@ import expo.modules.openbeacontracking.drives.DriveRecorder
 import expo.modules.openbeacontracking.drives.SecureDriveLog
 import expo.modules.openbeacontracking.drives.SecureDriveRecordStore
 import expo.modules.openbeacontracking.drives.RoomDriveQueue
+import expo.modules.openbeacontracking.drives.SpeedLimitPackStore
+import expo.modules.openbeacontracking.drives.SpeedLimitPackWorker
+import expo.modules.openbeacontracking.drives.SpeedingFinder
+import java.io.File
 import expo.modules.openbeacontracking.queue.CiphertextQueueDatabase
 import expo.modules.openbeacontracking.queue.RoomCiphertextQueue
 import java.util.TimeZone
@@ -49,6 +53,9 @@ object TrackingRuntime {
 
   @Volatile
   private var driveRecorder: DriveRecorder? = null
+
+  @Volatile
+  private var speedLimitPackStore: SpeedLimitPackStore? = null
 
   @Volatile
   var isCaptureRunning: Boolean = false
@@ -99,8 +106,27 @@ object TrackingRuntime {
           epochKeys = { epochKeyStore(context).list() },
           historyShare = { historyShare(context) },
           utcOffsetMinutes = { TimeZone.getDefault().getOffset(it) / 60_000 },
+          findSpeeding = { fixes -> speedLimitPackStore(context).withPacks { SpeedingFinder.find(fixes, it) } },
         ).also { driveRecorder = it }
     }
+  }
+
+  fun speedLimitPackStore(context: Context): SpeedLimitPackStore {
+    speedLimitPackStore?.let {
+      return it
+    }
+
+    return synchronized(this) {
+      speedLimitPackStore
+        ?: SpeedLimitPackStore(File(context.applicationContext.noBackupFilesDir, "speed_limit_packs")).also {
+          speedLimitPackStore = it
+        }
+    }
+  }
+
+  fun deleteSpeedLimitPacks(context: Context) {
+    SpeedLimitPackWorker.cancel(context)
+    speedLimitPackStore(context).clear()
   }
 
   fun isDriveDetectionOn(context: Context): Boolean =
@@ -111,7 +137,10 @@ object TrackingRuntime {
     on: Boolean,
   ) {
     check(context.getSharedPreferences("openbeacon_tracking_capture", Context.MODE_PRIVATE).edit().putBoolean("driveDetection", on).commit())
-    if (!on) driveRecorder(context).discard()
+    if (!on) {
+      driveRecorder(context).discard()
+      deleteSpeedLimitPacks(context)
+    }
     TrackingCaptureService.showNoticeNow(context)
   }
 

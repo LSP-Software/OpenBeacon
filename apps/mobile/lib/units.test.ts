@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   defaultUnits,
+  describeSpeedLimit,
   formatDistance,
   formatSpeed,
   liveSpeedHidesAt,
@@ -207,5 +208,19 @@ describe("parseDistancePreference", () => {
     expect(parseDistancePreference(undefined, "kmh")).toBe("km");
     expect(parseDistancePreference(undefined, undefined)).toBe("auto");
     expect(parseDistancePreference("yards", "knots")).toBe("auto");
+  });
+});
+
+describe("describeSpeedLimit", () => {
+  test("names where the limit came from in the viewer's units", () => {
+    expect(describeSpeedLimit({ speed: 13.42, source: "POSTED" }, "mph")).toBe(
+      "posted limit 30 mph",
+    );
+    expect(describeSpeedLimit({ speed: 31.31, source: "ROAD_TYPE" }, "mph")).toBe(
+      "limit for this road type 70 mph",
+    );
+    expect(describeSpeedLimit({ speed: 13.89, source: "POSTED" }, "kmh")).toBe(
+      "posted limit 50 km/h",
+    );
   });
 });

@@ -220,6 +220,23 @@ public class OpenBeaconTrackingModule: Module {
     AsyncFunction("deleteDrives") { (_: String, _: [String]) in
     }
 
+    Function("isDriveRecording") {
+      false
+    }
+
+    AsyncFunction("speedLimitPacks") { () -> [String: Any?] in
+      ["currentRegion": nil, "packs": [[String: Any]]()]
+    }
+
+    AsyncFunction("noteSpeedLimitRegion") { (_: String) in
+    }
+
+    Function("downloadSpeedLimitPack") { (_: [String: Any]) in
+    }
+
+    AsyncFunction("deleteSpeedLimitPacks") {
+    }
+
     Function("areNotificationsEnabled") {
       Notices.areEnabled()
     }

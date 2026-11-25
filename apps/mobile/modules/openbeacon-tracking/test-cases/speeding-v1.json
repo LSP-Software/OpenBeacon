@@ -1,0 +1,565 @@
+{
+  "about": "Drives and roads shared by the Kotlin and Swift speeding checks. Positions are metres east (x) and north (y) of origin, turned into degrees with lat = origin.latitude + y / 111320 and lon = origin.longitude + x / (111320 * cos(origin.latitude)); road points are then rounded to 1e-5 degrees. Each case starts at `start` at startTime. A move step adds count fixes, one every `every` seconds (default 1): time goes up by every seconds, the position moves speed * every metres along `heading` (degrees clockwise from north, default 90), and the fix reports speed. A pause step adds seconds without fixes. Every fix has 5 m accuracy. Limits are tenths of km/h with source 0 unknown, 1 posted, 2 road type. noPack means no Speed limit pack covers the drive. Expected events are in record order: offset and duration in seconds, peak in m/s within 0.01, limit as tenths of km/h and source. Mph speeds: 29 = 12.964, 34 = 15.1994, 35 = 15.6464, 40 = 17.8816, 50 = 22.352, 70 = 31.2928, 78 = 34.8691, 79 = 35.3162.",
+  "startTime": 1764000000000,
+  "origin": {
+    "latitude": 51.5,
+    "longitude": -0.1
+  },
+  "cases": [
+    {
+      "name": "counts 35 in a posted 30 held for 15 s",
+      "roads": [
+        {
+          "oneway": false,
+          "forward": [1, 483],
+          "backward": [1, 483],
+          "points": [
+            [-100, 0],
+            [3000, 0]
+          ]
+        }
+      ],
+      "start": [0, 0],
+      "steps": [
+        {
+          "move": {
+            "speed": 12.964,
+            "count": 20
+          }
+        },
+        {
+          "move": {
+            "speed": 15.6464,
+            "count": 16
+          }
+        },
+        {
+          "move": {
+            "speed": 12.964,
+            "count": 20
+          }
+        }
+      ],
+      "checked": true,
+      "events": [
+        {
+          "offset": 20,
+          "duration": 15,
+          "peak": 15.6464,
+          "limit": 483,
+          "source": "POSTED"
+        }
+      ]
+    },
+    {
+      "name": "ignores 35 in a posted 30 held for 14 s",
+      "roads": [
+        {
+          "oneway": false,
+          "forward": [1, 483],
+          "backward": [1, 483],
+          "points": [
+            [-100, 0],
+            [3000, 0]
+          ]
+        }
+      ],
+      "start": [0, 0],
+      "steps": [
+        {
+          "move": {
+            "speed": 12.964,
+            "count": 20
+          }
+        },
+        {
+          "move": {
+            "speed": 15.6464,
+            "count": 15
+          }
+        },
+        {
+          "move": {
+            "speed": 12.964,
+            "count": 20
+          }
+        }
+      ],
+      "checked": true,
+      "events": []
+    },
+    {
+      "name": "ignores 34 in a posted 30",
+      "roads": [
+        {
+          "oneway": false,
+          "forward": [1, 483],
+          "backward": [1, 483],
+          "points": [
+            [-100, 0],
+            [3000, 0]
+          ]
+        }
+      ],
+      "start": [0, 0],
+      "steps": [
+        {
+          "move": {
+            "speed": 15.1994,
+            "count": 60
+          }
+        }
+      ],
+      "checked": true,
+      "events": []
+    },
+    {
+      "name": "counts 79 in a road-type 70 and keeps the limit's source",
+      "roads": [
+        {
+          "oneway": true,
+          "forward": [2, 1127],
+          "backward": [2, 1127],
+          "points": [
+            [-100, 0],
+            [5000, 0]
+          ]
+        }
+      ],
+      "start": [0, 0],
+      "steps": [
+        {
+          "move": {
+            "speed": 31.2928,
+            "count": 20
+          }
+        },
+        {
+          "move": {
+            "speed": 35.3162,
+            "count": 16
+          }
+        },
+        {
+          "move": {
+            "speed": 31.2928,
+            "count": 10
+          }
+        }
+      ],
+      "checked": true,
+      "events": [
+        {
+          "offset": 20,
+          "duration": 15,
+          "peak": 35.3162,
+          "limit": 1127,
+          "source": "ROAD_TYPE"
+        }
+      ]
+    },
+    {
+      "name": "ignores 78 in a road-type 70",
+      "roads": [
+        {
+          "oneway": true,
+          "forward": [2, 1127],
+          "backward": [2, 1127],
+          "points": [
+            [-100, 0],
+            [5000, 0]
+          ]
+        }
+      ],
+      "start": [0, 0],
+      "steps": [
+        {
+          "move": {
+            "speed": 34.8691,
+            "count": 40
+          }
+        }
+      ],
+      "checked": true,
+      "events": []
+    },
+    {
+      "name": "never counts a road whose limit is unknown",
+      "roads": [
+        {
+          "oneway": false,
+          "forward": [0, 483],
+          "backward": [0, 483],
+          "points": [
+            [-100, 0],
+            [5000, 0]
+          ]
+        }
+      ],
+      "start": [0, 0],
+      "steps": [
+        {
+          "move": {
+            "speed": 31.2928,
+            "count": 40
+          }
+        }
+      ],
+      "checked": false,
+      "events": []
+    },
+    {
+      "name": "leaves a drive with no pack unchecked",
+      "noPack": true,
+      "roads": [],
+      "start": [0, 0],
+      "steps": [
+        {
+          "move": {
+            "speed": 31.2928,
+            "count": 40
+          }
+        }
+      ],
+      "checked": false,
+      "events": []
+    },
+    {
+      "name": "leaves a parallel road with another limit unchecked",
+      "roads": [
+        {
+          "oneway": false,
+          "forward": [1, 483],
+          "backward": [1, 483],
+          "points": [
+            [-100, 0],
+            [3000, 0]
+          ]
+        },
+        {
+          "oneway": false,
+          "forward": [1, 1127],
+          "backward": [1, 1127],
+          "points": [
+            [-100, 12],
+            [3000, 12]
+          ]
+        }
+      ],
+      "start": [0, 0],
+      "steps": [
+        {
+          "move": {
+            "speed": 25,
+            "count": 40
+          }
+        }
+      ],
+      "checked": false,
+      "events": []
+    },
+    {
+      "name": "leaves a drive beside a slip road unchecked",
+      "roads": [
+        {
+          "oneway": true,
+          "forward": [2, 1127],
+          "backward": [2, 1127],
+          "points": [
+            [-100, 0],
+            [3000, 0]
+          ]
+        },
+        {
+          "oneway": true,
+          "forward": [1, 644],
+          "backward": [1, 644],
+          "points": [
+            [0, -8],
+            [400, -14],
+            [800, -60],
+            [1200, -300]
+          ]
+        }
+      ],
+      "start": [0, -6],
+      "steps": [
+        {
+          "move": {
+            "speed": 21,
+            "count": 25
+          }
+        }
+      ],
+      "checked": false,
+      "events": []
+    },
+    {
+      "name": "uses the limit for the direction of travel on a two-way road",
+      "roads": [
+        {
+          "oneway": false,
+          "forward": [1, 483],
+          "backward": [1, 805],
+          "points": [
+            [-100, 0],
+            [3000, 0]
+          ]
+        }
+      ],
+      "start": [2000, 0],
+      "steps": [
+        {
+          "move": {
+            "speed": 17.8816,
+            "heading": 270,
+            "count": 40
+          }
+        }
+      ],
+      "checked": true,
+      "events": []
+    },
+    {
+      "name": "counts the forward limit when driving the road's way",
+      "roads": [
+        {
+          "oneway": false,
+          "forward": [1, 483],
+          "backward": [1, 805],
+          "points": [
+            [-100, 0],
+            [3000, 0]
+          ]
+        }
+      ],
+      "start": [0, 0],
+      "steps": [
+        {
+          "move": {
+            "speed": 17.8816,
+            "count": 40
+          }
+        }
+      ],
+      "checked": true,
+      "events": [
+        {
+          "offset": 0,
+          "duration": 39,
+          "peak": 17.8816,
+          "limit": 483,
+          "source": "POSTED"
+        }
+      ]
+    },
+    {
+      "name": "ignores the oncoming carriageway",
+      "roads": [
+        {
+          "oneway": true,
+          "forward": [1, 805],
+          "backward": [1, 805],
+          "points": [
+            [-100, 0],
+            [3000, 0]
+          ]
+        },
+        {
+          "oneway": true,
+          "forward": [1, 483],
+          "backward": [1, 483],
+          "points": [
+            [3000, 15],
+            [-100, 15]
+          ]
+        }
+      ],
+      "start": [0, 0],
+      "steps": [
+        {
+          "move": {
+            "speed": 17.8816,
+            "count": 40
+          }
+        }
+      ],
+      "checked": true,
+      "events": []
+    },
+    {
+      "name": "leaves battery saver stretches unchecked",
+      "roads": [
+        {
+          "oneway": false,
+          "forward": [1, 483],
+          "backward": [1, 483],
+          "points": [
+            [-100, 0],
+            [3000, 0]
+          ]
+        }
+      ],
+      "start": [0, 0],
+      "steps": [
+        {
+          "move": {
+            "speed": 20,
+            "count": 40,
+            "batterySaver": true
+          }
+        }
+      ],
+      "checked": false,
+      "events": []
+    },
+    {
+      "name": "leaves a drive away from every road unchecked",
+      "roads": [
+        {
+          "oneway": false,
+          "forward": [1, 483],
+          "backward": [1, 483],
+          "points": [
+            [-100, 200],
+            [3000, 200]
+          ]
+        }
+      ],
+      "start": [0, 0],
+      "steps": [
+        {
+          "move": {
+            "speed": 20,
+            "count": 40
+          }
+        }
+      ],
+      "checked": false,
+      "events": []
+    },
+    {
+      "name": "checks a road with no limit but never counts it",
+      "roads": [
+        {
+          "oneway": true,
+          "forward": [1, 0],
+          "backward": [1, 0],
+          "points": [
+            [-100, 0],
+            [5000, 0]
+          ]
+        }
+      ],
+      "start": [0, 0],
+      "steps": [
+        {
+          "move": {
+            "speed": 50,
+            "count": 40
+          }
+        }
+      ],
+      "checked": true,
+      "events": []
+    },
+    {
+      "name": "splits a speeding stretch at a gap of more than 5 s",
+      "roads": [
+        {
+          "oneway": false,
+          "forward": [1, 483],
+          "backward": [1, 483],
+          "points": [
+            [-100, 0],
+            [3000, 0]
+          ]
+        }
+      ],
+      "start": [0, 0],
+      "steps": [
+        {
+          "move": {
+            "speed": 15.6464,
+            "count": 10
+          }
+        },
+        {
+          "pause": 6
+        },
+        {
+          "move": {
+            "speed": 15.6464,
+            "count": 10
+          }
+        }
+      ],
+      "checked": true,
+      "events": []
+    },
+    {
+      "name": "puts the most severe speeding first",
+      "roads": [
+        {
+          "oneway": false,
+          "forward": [1, 483],
+          "backward": [1, 483],
+          "points": [
+            [-100, 0],
+            [5000, 0]
+          ]
+        }
+      ],
+      "start": [0, 0],
+      "steps": [
+        {
+          "move": {
+            "speed": 12.964,
+            "count": 20
+          }
+        },
+        {
+          "move": {
+            "speed": 15.6464,
+            "count": 16
+          }
+        },
+        {
+          "move": {
+            "speed": 12.964,
+            "count": 20
+          }
+        },
+        {
+          "move": {
+            "speed": 20,
+            "count": 30
+          }
+        },
+        {
+          "move": {
+            "speed": 12.964,
+            "count": 10
+          }
+        }
+      ],
+      "checked": true,
+      "events": [
+        {
+          "offset": 56,
+          "duration": 29,
+          "peak": 20,
+          "limit": 483,
+          "source": "POSTED"
+        },
+        {
+          "offset": 20,
+          "duration": 15,
+          "peak": 15.6464,
+          "limit": 483,
+          "source": "POSTED"
+        }
+      ]
+    }
+  ]
+}
