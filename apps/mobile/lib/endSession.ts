@@ -231,6 +231,11 @@ export const endSession = async ({
   }
   if (clears.credentials !== "keep") {
     await tryCatch(import("./speedLimitPacks.ts").then((packs) => packs.deleteSpeedLimitData()));
+    await tryCatch(
+      import("../modules/openbeacon-tracking/index.ts").then((tracking) =>
+        tracking.default.clearDriveRecords(),
+      ),
+    );
   }
   if (clears.pendingJoinCodes) clearPendingJoinCodes();
   queryClient.clear();

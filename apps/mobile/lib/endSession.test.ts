@@ -11,6 +11,7 @@ let signOuts = 0;
 let picturesAtSignOut = -1;
 let trackingRevocations = 0;
 let pushTokenForgets = 0;
+let driveRecordClears = 0;
 let eventNoticeClears: { keepSecurityAlerts: boolean }[] = [];
 const registeredAtEventNoticeClears: boolean[] = [];
 let googleSignInForgets = 0;
@@ -143,6 +144,15 @@ mock.module("./tracking.ts", () => ({
   forgetPushToken: async () => {
     pushTokenForgets += 1;
     return null;
+  },
+}));
+
+mock.module("../modules/openbeacon-tracking/index.ts", () => ({
+  default: {
+    clearDriveRecords: async () => {
+      driveRecordClears += 1;
+    },
+    deleteSpeedLimitPacks: async () => {},
   },
 }));
 
@@ -538,6 +548,7 @@ describe("ending a session", () => {
     signOuts = 0;
     trackingRevocations = 0;
     pushTokenForgets = 0;
+    driveRecordClears = 0;
     sessionUserId = "user-a";
     providersError = null;
     providerRequests.length = 0;
@@ -686,6 +697,23 @@ describe("ending a session", () => {
       ...expected,
     });
   });
+
+  test.each([
+    ["signedOut", true],
+    ["phoneRemoved", true],
+    ["accountDeleted", true],
+    ["serverChanged", true],
+    ["sessionLost", false],
+  ] as const)(
+    "%s deletes the full records of drives this phone recorded: %p",
+    async (reason, cleared) => {
+      await seedSignedInPhone();
+
+      await endSession({ reason });
+
+      expect(driveRecordClears > 0).toBe(cleared);
+    },
+  );
 
   test.each([
     ["signedOut", false],

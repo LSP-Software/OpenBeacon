@@ -6,6 +6,9 @@ import expo.modules.openbeacontracking.crypto.DriveRecordCodec
 import expo.modules.openbeacontracking.crypto.DrivingEventType
 import expo.modules.openbeacontracking.crypto.SpeedLimitSource
 import expo.modules.openbeacontracking.crypto.SealedDriveRecord
+import expo.modules.openbeacontracking.keys.EpochKeyHistory
+import expo.modules.openbeacontracking.keys.InMemoryEpochKeyStore
+import expo.modules.openbeacontracking.keys.InMemoryTimedEpochKeyStore
 import expo.modules.openbeacontracking.keys.ProvisionedEpochKey
 import kotlin.math.cos
 import kotlin.test.Test
@@ -18,11 +21,18 @@ class DriveRecorderTest {
   private val startTime = 1_795_594_440_000L
   private var time = startTime
   private var longitude = -0.1
-  private var keys = listOf(key("family", "family-epoch-1"), key("work", "work-epoch-1"))
+  private val keyStore = EpochKeyHistory(InMemoryEpochKeyStore(), InMemoryTimedEpochKeyStore(), nowMillis = { time })
+  private var keys: List<ProvisionedEpochKey>
+    get() = keyStore.list()
+    set(value) = keyStore.replaceAll(value)
   private val queue = InMemoryDriveQueue()
   private val log = InMemoryDriveLog()
   private val records = InMemoryDriveRecordStore()
   private var share = CaptureHistoryShare()
+
+  init {
+    keys = listOf(key("family", "family-epoch-1"), key("work", "work-epoch-1"))
+  }
 
   private fun key(
     groupId: String,
@@ -35,6 +45,7 @@ class DriveRecorderTest {
       records = records,
       queue = queue,
       epochKeys = { keys },
+      epochKeysAt = { keyStore.keysAt(it) },
       historyShare = { share },
       utcOffsetMinutes = { 60 },
       findSpeeding = { fixes -> SpeedingFinder.find(fixes, roads) },
@@ -87,6 +98,7 @@ class DriveRecorderTest {
         records = records,
         queue = queue,
         epochKeys = { keys },
+      epochKeysAt = { keyStore.keysAt(it) },
         historyShare = { share },
         utcOffsetMinutes = { 60 },
         tellGroup = { groupId -> groupId != "work" },
@@ -118,6 +130,20 @@ class DriveRecorderTest {
     assertTrue(record.counts.values.all { it == 0 } && record.events.isEmpty() && !record.speedLimitsChecked && !record.passenger)
     assertEquals(listOf(record), records.list("owner"))
     assertNull(log.read())
+  }
+
+  @Test
+  fun aMemberWhoJoinedAfterTheBackDatedStartCannotReadTheDrive() {
+    val recorder = recorder()
+    recorder.onFixes("owner", fixes(4.0, 120))
+    keys = listOf(key("family", "family-epoch-22"), key("work", "work-epoch-1"))
+    recorder.onFixes("owner", fixes(4.0, 60) + fixes(15.0, 100))
+    val record = recorder.onFixes("owner", fixes(0.0, 300)).single()
+
+    assertEquals(startTime + 1_000, record.start.timeMillis)
+    val family = queue.list("owner", 10).single { it.groupId == "family" }
+    assertEquals("family-epoch-1", family.epochId)
+    assertEquals(record, open(family, "family-epoch-1"))
   }
 
   @Test
@@ -181,6 +207,8 @@ class DriveRecorderTest {
   fun aRestoredDriveSkipsGroupsWhoseStartEpochIsGone() {
     recorder().onFixes("owner", fixes(15.0, 200))
     keys = listOf(key("family", "family-epoch-2"), key("work", "work-epoch-1"))
+    time += EpochKeyHistory.KEEP_MILLIS + 1
+    keys = keys
     val restarted = recorder()
     restarted.interrupt("owner")
     assertEquals(listOf("work"), queue.list("owner", 10).map { it.groupId })
@@ -233,6 +261,18 @@ class DriveRecorderTest {
     recorder.deleteDrives("owner", listOf(driveId))
     assertEquals(emptyList(), recorder.driveIds("owner"))
     assertEquals(emptyList(), queue.list("owner", 10))
+  }
+
+  @Test
+  fun signingOutForgetsTheFullRecordsOfEveryAccount() {
+    val recorder = recorder()
+    recorder.onFixes("owner", fixes(15.0, 200))
+    recorder.onFixes("owner", fixes(0.0, 300))
+    recorder.onFixes("other", fixes(15.0, 200))
+    recorder.onFixes("other", fixes(0.0, 300))
+    recorder.clearRecords()
+    assertEquals(emptyList(), recorder.driveIds("owner"))
+    assertEquals(emptyList(), recorder.driveIds("other"))
   }
 
   @Test

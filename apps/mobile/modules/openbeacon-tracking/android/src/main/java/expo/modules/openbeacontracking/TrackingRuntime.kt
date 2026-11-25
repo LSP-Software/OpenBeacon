@@ -17,8 +17,9 @@ import expo.modules.openbeacontracking.capture.BootRestartPolicy
 import expo.modules.openbeacontracking.capture.SharingResumeWorker
 import expo.modules.openbeacontracking.capture.TrackingCaptureService
 import expo.modules.openbeacontracking.keys.CachedEpochKeyStore
-import expo.modules.openbeacontracking.keys.EpochKeyStore
+import expo.modules.openbeacontracking.keys.EpochKeyHistory
 import expo.modules.openbeacontracking.keys.SecureEpochKeyStore
+import expo.modules.openbeacontracking.keys.SecureTimedEpochKeyStore
 import expo.modules.openbeacontracking.places.PlaceDetection
 import expo.modules.openbeacontracking.places.PlaceTransitionDatabase
 import expo.modules.openbeacontracking.places.RoomPlaceTransitionQueue
@@ -46,7 +47,7 @@ object TrackingRuntime {
   val captureLock = Any()
   val captureCommands = CaptureCommandState()
   @Volatile
-  private var epochKeyStore: EpochKeyStore? = null
+  private var epochKeyStore: EpochKeyHistory? = null
 
   @Volatile
   private var ciphertextQueue: RoomCiphertextQueue? = null
@@ -71,14 +72,17 @@ object TrackingRuntime {
 
   val crashDetector = CrashDetector()
 
-  fun epochKeyStore(context: Context): EpochKeyStore {
+  fun epochKeyStore(context: Context): EpochKeyHistory {
     epochKeyStore?.let {
       return it
     }
 
     return synchronized(this) {
       epochKeyStore
-        ?: CachedEpochKeyStore(SecureEpochKeyStore(context.applicationContext)).also { epochKeyStore = it }
+        ?: EpochKeyHistory(
+          CachedEpochKeyStore(SecureEpochKeyStore(context.applicationContext)),
+          SecureTimedEpochKeyStore(context.applicationContext),
+        ).also { epochKeyStore = it }
     }
   }
 
@@ -115,6 +119,7 @@ object TrackingRuntime {
           records = SecureDriveRecordStore(context.applicationContext),
           queue = driveQueue(context),
           epochKeys = { epochKeyStore(context).list() },
+          epochKeysAt = { epochKeyStore(context).keysAt(it) },
           historyShare = { historyShare(context) },
           utcOffsetMinutes = { TimeZone.getDefault().getOffset(it) / 60_000 },
           findSpeeding = { fixes -> speedLimitPackStore(context).withPacks { SpeedingFinder.find(fixes, it) } },
@@ -381,6 +386,7 @@ object TrackingRuntime {
         epochKeyStore(context).revoke(null)
         placeDetection(context).removeGroups(null)
         driveQueue(context).deleteByOwner(null)
+        driveRecorder(context).clearRecords()
         crashAlertOutbox(context).clear()
         setCrashSharingUntil(context, null)
       }

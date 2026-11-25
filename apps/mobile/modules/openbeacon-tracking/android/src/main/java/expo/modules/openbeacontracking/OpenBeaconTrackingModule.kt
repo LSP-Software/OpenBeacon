@@ -360,6 +360,10 @@ class OpenBeaconTrackingModule : Module() {
         TrackingRuntime.driveRecorder(requireContext()).deleteDrives(owner, driveIds)
       }
 
+      AsyncFunction("clearDriveRecords") {
+        TrackingRuntime.driveRecorder(requireContext()).clearRecords()
+      }
+
       Function("isDriveRecording") {
         TrackingRuntime.driveRecorder(requireContext()).recording
       }

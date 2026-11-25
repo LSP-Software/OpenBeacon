@@ -276,6 +276,9 @@ public class OpenBeaconTrackingModule: Module {
     AsyncFunction("deleteDrives") { (_: String, _: [String]) in
     }
 
+    AsyncFunction("clearDriveRecords") {
+    }
+
     Function("isDriveRecording") {
       false
     }
