@@ -9,6 +9,7 @@ object TrackingPointCodec {
   private const val UNKNOWN_BATTERY_LEVEL = 127
   private const val STAY_FLAG = 1
   private const val DRIVE_DETECTION_OFF_FLAG = 2
+  private const val CRASH_ALERTS_OFF_FLAG = 4
   private const val MAX_TIME_MILLIS = (1L shl 48) - 1
 
   fun encode(
@@ -21,6 +22,7 @@ object TrackingPointCodec {
     batteryLevel: Int?,
     batteryCharging: Boolean,
     driveDetectionOff: Boolean = false,
+    crashAlertsOff: Boolean = false,
   ): ByteArray? {
     if (!latitude.isFinite() || latitude < -90.0 || latitude > 90.0) return null
     if (!longitude.isFinite() || longitude < -180.0 || longitude > 180.0) return null
@@ -40,7 +42,13 @@ object TrackingPointCodec {
       .putShort(encodeUint16(accuracyMeters, 10.0).toShort())
       .putShort(encodeUint16(speedMetersPerSecond, 100.0).toShort())
       .put(((if (batteryCharging) 0x80 else 0) or level).toByte())
-      .put(((if (stayUntilMillis == null) 0 else STAY_FLAG) or (if (driveDetectionOff) DRIVE_DETECTION_OFF_FLAG else 0)).toByte())
+      .put(
+        (
+          (if (stayUntilMillis == null) 0 else STAY_FLAG) or
+            (if (driveDetectionOff) DRIVE_DETECTION_OFF_FLAG else 0) or
+            (if (crashAlertsOff) CRASH_ALERTS_OFF_FLAG else 0)
+        ).toByte(),
+      )
       .array()
   }
 

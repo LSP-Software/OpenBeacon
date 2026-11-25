@@ -1,0 +1,159 @@
+{
+  "about": "Fix and accelerometer series shared by the Kotlin and Swift crash detector tests. Every case starts at startTime at origin. A move step adds count fixes, one every `every` seconds, each `speed` m/s times `every` seconds further east (lon += metres / (111320 * cos(lat))). drive false marks the fixes as outside a confirmed Drive; batterySaver marks them as battery saver fixes. A jolt step adds one accelerometer reading of `g` times 9.80665 m/s² (total magnitude, gravity included) `after` seconds after the last fix, or `at` seconds after startTime when given (used to deliver a reading late, after later fixes). Expected suspicions give the jolt time and the speed just before in m/s (within 0.05).",
+  "startTime": 1764000000000,
+  "origin": { "latitude": 51.5, "longitude": -0.1 },
+  "cases": [
+    {
+      "name": "a large jolt above 40 km/h followed by the phone staying still is a suspected crash",
+      "steps": [
+        { "move": { "speed": 15, "every": 1, "count": 60 } },
+        { "jolt": { "g": 8, "after": 0.5 } },
+        { "move": { "speed": 0, "every": 1, "count": 20 } }
+      ],
+      "suspicions": [{ "time": 60.5, "speedBefore": 15 }]
+    },
+    {
+      "name": "the same jolt below 40 km/h is ignored",
+      "steps": [
+        { "move": { "speed": 10, "every": 1, "count": 60 } },
+        { "jolt": { "g": 8, "after": 0.5 } },
+        { "move": { "speed": 0, "every": 1, "count": 20 } }
+      ],
+      "suspicions": []
+    },
+    {
+      "name": "a jolt outside a confirmed Drive is ignored",
+      "steps": [
+        { "move": { "speed": 15, "every": 1, "count": 60, "drive": false } },
+        { "jolt": { "g": 8, "after": 0.5 } },
+        { "move": { "speed": 0, "every": 1, "count": 20, "drive": false } }
+      ],
+      "suspicions": []
+    },
+    {
+      "name": "a phone dropped while the car stands in a queue is ignored",
+      "steps": [
+        { "move": { "speed": 15, "every": 1, "count": 60 } },
+        { "move": { "speed": 0, "every": 1, "count": 30 } },
+        { "jolt": { "g": 10, "after": 0.5 } },
+        { "move": { "speed": 0, "every": 1, "count": 30 } }
+      ],
+      "suspicions": []
+    },
+    {
+      "name": "a speed bump jolt while the car keeps moving is ignored",
+      "steps": [
+        { "move": { "speed": 15, "every": 1, "count": 60 } },
+        { "jolt": { "g": 6, "after": 0.5 } },
+        { "move": { "speed": 13, "every": 1, "count": 30 } }
+      ],
+      "suspicions": []
+    },
+    {
+      "name": "a hard stop without a jolt is ignored",
+      "steps": [
+        { "move": { "speed": 15, "every": 1, "count": 60 } },
+        { "move": { "speed": 0, "every": 1, "count": 60 } }
+      ],
+      "suspicions": []
+    },
+    {
+      "name": "a small jolt is not a spike",
+      "steps": [
+        { "move": { "speed": 15, "every": 1, "count": 60 } },
+        { "jolt": { "g": 2.5, "after": 0.5 } },
+        { "move": { "speed": 0, "every": 1, "count": 20 } }
+      ],
+      "suspicions": []
+    },
+    {
+      "name": "the car pulling away again before the phone has been still long enough is ignored",
+      "steps": [
+        { "move": { "speed": 15, "every": 1, "count": 60 } },
+        { "jolt": { "g": 8, "after": 0.5 } },
+        { "move": { "speed": 0, "every": 1, "count": 8 } },
+        { "move": { "speed": 9, "every": 1, "count": 20 } }
+      ],
+      "suspicions": []
+    },
+    {
+      "name": "in battery saver the 20 s fix before the jolt is the speed gate",
+      "steps": [
+        { "move": { "speed": 15, "every": 20, "count": 6, "batterySaver": true } },
+        { "jolt": { "g": 8, "after": 12 } },
+        { "move": { "speed": 0, "every": 20, "count": 3, "batterySaver": true } }
+      ],
+      "suspicions": [{ "time": 132, "speedBefore": 15 }]
+    },
+    {
+      "name": "at 1 Hz a fix 10 s before the jolt is too old to be the speed gate",
+      "steps": [
+        { "move": { "speed": 15, "every": 1, "count": 60 } },
+        { "jolt": { "g": 8, "after": 10 } },
+        { "move": { "speed": 0, "every": 11, "count": 1 } },
+        { "move": { "speed": 0, "every": 1, "count": 20 } }
+      ],
+      "suspicions": []
+    },
+    {
+      "name": "a jolt delivered after the fixes that followed it still counts",
+      "steps": [
+        { "move": { "speed": 15, "every": 1, "count": 60 } },
+        { "move": { "speed": 0, "every": 1, "count": 20 } },
+        { "jolt": { "g": 8, "at": 60.5 } },
+        { "move": { "speed": 0, "every": 1, "count": 2 } }
+      ],
+      "suspicions": [{ "time": 60.5, "speedBefore": 15 }]
+    },
+    {
+      "name": "a jolt delivered before the fixes around it still counts",
+      "steps": [
+        { "move": { "speed": 15, "every": 1, "count": 55 } },
+        { "jolt": { "g": 8, "at": 60.5 } },
+        { "move": { "speed": 15, "every": 1, "count": 5 } },
+        { "move": { "speed": 0, "every": 1, "count": 20 } }
+      ],
+      "suspicions": [{ "time": 60.5, "speedBefore": 15 }]
+    },
+    {
+      "name": "a jolt delivered early is still checked against the speed gate",
+      "steps": [
+        { "move": { "speed": 15, "every": 1, "count": 55 } },
+        { "jolt": { "g": 8, "at": 60.5 } },
+        { "move": { "speed": 0, "every": 1, "count": 25 } }
+      ],
+      "suspicions": []
+    },
+    {
+      "name": "the readings of one impact make one suspicion",
+      "steps": [
+        { "move": { "speed": 15, "every": 1, "count": 60 } },
+        { "jolt": { "g": 8, "after": 0.5 } },
+        { "jolt": { "g": 9, "after": 0.52 } },
+        { "jolt": { "g": 7, "after": 0.54 } },
+        { "move": { "speed": 0, "every": 1, "count": 20 } },
+        { "jolt": { "g": 8, "after": 0.5 } },
+        { "move": { "speed": 0, "every": 1, "count": 20 } }
+      ],
+      "suspicions": [{ "time": 60.5, "speedBefore": 15 }]
+    },
+    {
+      "name": "no second suspicion follows within 5 minutes",
+      "steps": [
+        { "move": { "speed": 15, "every": 1, "count": 60 } },
+        { "jolt": { "g": 8, "after": 0.5 } },
+        { "move": { "speed": 0, "every": 1, "count": 20 } },
+        { "move": { "speed": 15, "every": 1, "count": 60 } },
+        { "jolt": { "g": 8, "after": 0.5 } },
+        { "move": { "speed": 0, "every": 1, "count": 20 } },
+        { "move": { "speed": 15, "every": 1, "count": 240 } },
+        { "jolt": { "g": 8, "after": 0.5 } },
+        { "move": { "speed": 0, "every": 1, "count": 20 } }
+      ],
+      "suspicions": [
+        { "time": 60.5, "speedBefore": 15 },
+        { "time": 400.5, "speedBefore": 15 }
+      ]
+    }
+  ]
+}

@@ -9,8 +9,10 @@ import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
 import { useAppForeground } from "../../hooks/useAppForeground.ts";
 import { useRefetchWhileFocused } from "../../hooks/useRefetchWhileFocused.ts";
 import { useUnseenGroupHistory } from "../../hooks/useUnseenGroupHistory.ts";
+import { useUnits } from "../../hooks/useUnits.ts";
 import { queryClient, trpc } from "../../lib/api.ts";
 import { authClient } from "../../lib/auth-client.ts";
+import { syncCrashAlertContext } from "../../lib/crashAlerts.ts";
 import { groupColorSyncQueryOptions } from "../../lib/groupColorSync.ts";
 import { checkImageKeys } from "../../lib/imageKeySelfCheck.ts";
 import { useColors } from "../../lib/theme.ts";
@@ -52,6 +54,10 @@ const TabsLayout = () => {
     ...trpc.groupMembership.list.queryOptions(),
     enabled: false,
   });
+  const { speed: speedUnit } = useUnits();
+  useEffect(() => {
+    if (groups) syncCrashAlertContext(groups, speedUnit);
+  }, [groups, speedUnit]);
   const userImage = session?.user.image ?? null;
   const userImageKeySealed = session?.user.imageKeySealed ?? null;
   const checkKeys = useCallback(() => {

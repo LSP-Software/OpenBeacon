@@ -135,6 +135,14 @@ enum TrackingRuntime {
     defaults.set(on, forKey: "openbeacon_tracking_drive_detection")
   }
 
+  static func isCrashAlertsOn() -> Bool {
+    defaults.object(forKey: "openbeacon_tracking_crash_alerts") as? Bool ?? true
+  }
+
+  static func setCrashAlerts(_ on: Bool) {
+    defaults.set(on, forKey: "openbeacon_tracking_crash_alerts")
+  }
+
   static func nowMillis() -> Int64 {
     Int64(Date().timeIntervalSince1970 * 1000)
   }

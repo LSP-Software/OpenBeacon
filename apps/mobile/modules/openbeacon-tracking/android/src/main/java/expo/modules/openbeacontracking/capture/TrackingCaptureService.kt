@@ -38,6 +38,8 @@ import expo.modules.openbeacontracking.NoticeSlot
 import expo.modules.openbeacontracking.Notices
 import expo.modules.openbeacontracking.R
 import expo.modules.openbeacontracking.TrackingRuntime
+import expo.modules.openbeacontracking.crash.CrashCountdownController
+import expo.modules.openbeacontracking.crash.CrashSensor
 import expo.modules.openbeacontracking.drives.DriveFix
 import expo.modules.openbeacontracking.drives.DriveSensors
 import expo.modules.openbeacontracking.queue.CiphertextQueueRow
@@ -239,6 +241,7 @@ class TrackingCaptureService : Service() {
       currentIntervalMs = intervalMs
       watchConnectivity()
       captureScope.launch { finishStaleDrive() }
+      CrashCountdownController.resume(this)
       updateSharing()
     } catch (error: SecurityException) {
       Log.e(TAG, "Failed to start location capture.", error)
@@ -627,8 +630,7 @@ class TrackingCaptureService : Service() {
         recorder.interrupt(owner)
       } else {
         val batterySaver = CaptureSamplingPolicy.isBatterySaver(BatteryReader.read(this))
-        recorder.onFixes(
-          owner,
+        val fixes =
           locations
             .filter { it.elapsedRealtimeNanos > minimumFixElapsedRealtimeNanos }
             .sortedBy { it.time }
@@ -641,8 +643,9 @@ class TrackingCaptureService : Service() {
                 accuracy = location.accuracy.toDouble().takeIf { location.hasAccuracy() },
                 batterySaver = batterySaver,
               )
-            },
-        )
+            }
+        recorder.onFixes(owner, fixes)
+        watchForCrash(fixes, wasRecording || recorder.recording, recorder.recording)
       }
     } catch (error: Exception) {
       Log.e(TAG, "Failed to record a drive.", error)
@@ -659,6 +662,21 @@ class TrackingCaptureService : Service() {
     driveSensors.update(watching)
   }
 
+  private fun watchForCrash(
+    fixes: List<DriveFix>,
+    inDrive: Boolean,
+    recording: Boolean,
+  ) {
+    if (!TrackingRuntime.areCrashAlertsActive(this)) {
+      CrashSensor.stop(this)
+      return
+    }
+    fixes.forEach { fix ->
+      TrackingRuntime.crashDetector.onFix(fix, inDrive)?.let { CrashCountdownController.start(this, it, test = false) }
+    }
+    CrashSensor.watch(this, recording)
+  }
+
   private fun endDriveAtPlace() {
     if (!TrackingRuntime.isDriveDetectionOn(this)) return
     val owner = TrackingRuntime.queueOwner(this) ?: return
@@ -673,6 +691,7 @@ class TrackingCaptureService : Service() {
   }
 
   private fun interruptDrive() {
+    CrashSensor.stop(this)
     val owner = TrackingRuntime.queueOwner(this) ?: return
     val recorder = TrackingRuntime.driveRecorder(this)
     if (!recorder.recording) return
