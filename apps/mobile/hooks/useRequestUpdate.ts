@@ -45,7 +45,8 @@ export const useRequestUpdate = ({
             : null;
 
   useEffect(() => {
-    if (Platform.OS === "ios" && message) AccessibilityInfo.announceForAccessibility(message);
+    if (Platform.OS === "ios" && message)
+      AccessibilityInfo.announceForAccessibilityWithOptions(message, { queue: true });
   }, [message]);
 
   return {
