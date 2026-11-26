@@ -1,6 +1,7 @@
 import { tryCatch } from "@openbeacon/shared";
 import { TRPCClientError } from "@trpc/client";
 import { useEffect, useState } from "react";
+import { AccessibilityInfo, Platform } from "react-native";
 
 export const useRequestUpdate = ({
   hasLocation,
@@ -42,6 +43,10 @@ export const useRequestUpdate = ({
           : state === "failed"
             ? "Couldn’t ask for an update. Check your connection and try again."
             : null;
+
+  useEffect(() => {
+    if (Platform.OS === "ios" && message) AccessibilityInfo.announceForAccessibility(message);
+  }, [message]);
 
   return {
     asked: state === "asked",

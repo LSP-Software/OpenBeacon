@@ -196,14 +196,9 @@ export const LiveMapPersonSheet = ({
               ) : null}
               {timeline ? (
                 <Link href={{ pathname: "/timeline", params: timeline }} asChild>
-                  <Button
-                    variant="secondary"
-                    size="tile"
-                    accessibilityRole="link"
-                    accessibilityLabel="See today’s route"
-                  >
+                  <Button variant="secondary" size="tile" accessibilityRole="link">
                     <Icon as={HistoryIcon} size={18} className="text-foreground" />
-                    <Text>Today’s route</Text>
+                    <Text maxFontSizeMultiplier={1.3}>Today’s route</Text>
                   </Button>
                 </Link>
               ) : null}

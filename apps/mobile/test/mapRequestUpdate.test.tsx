@@ -9,6 +9,7 @@ import { createRoot, type Root } from "test-renderer";
 
 const Passthrough = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
 mock.module("react-native", () => ({
+  AccessibilityInfo: { announceForAccessibility: () => {} },
   Platform: { OS: "android" },
   Pressable: Passthrough,
   View: Passthrough,

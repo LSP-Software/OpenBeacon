@@ -5,33 +5,24 @@ import { Button } from "../ui/Button.tsx";
 import { Icon } from "../ui/Icon.tsx";
 import { Text } from "../ui/Text.tsx";
 
-export const RequestUpdateButton = ({
-  update,
-  size,
-}: {
-  update: ReturnType<typeof useRequestUpdate>;
-  size?: "tile";
-}) => (
+type RequestUpdate = ReturnType<typeof useRequestUpdate>;
+
+export const RequestUpdateButton = ({ update, size }: { update: RequestUpdate; size?: "tile" }) => (
   <Button
     variant="secondary"
     size={size}
     disabled={update.asked}
     loading={update.asking}
-    accessibilityLabel={update.asked ? "Update requested" : "Update now"}
     onPress={() => void update.request()}
   >
     <Icon as={RefreshCwIcon} size={18} className="text-foreground" />
-    <Text>
+    <Text maxFontSizeMultiplier={size === "tile" ? 1.3 : undefined}>
       {update.asked ? (size === "tile" ? "Requested" : "Update requested") : "Update now"}
     </Text>
   </Button>
 );
 
-export const RequestUpdateMessage = ({
-  update,
-}: {
-  update: ReturnType<typeof useRequestUpdate>;
-}) =>
+export const RequestUpdateMessage = ({ update }: { update: RequestUpdate }) =>
   update.message ? (
     <Text
       accessibilityLiveRegion="polite"

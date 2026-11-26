@@ -10,6 +10,7 @@ import type { LiveMapMarker } from "../lib/buildLiveMapMarkers.ts";
 const Passthrough = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
 const testPlatform = { OS: "ios" as "ios" | "android" };
 mock.module("react-native", () => ({
+  AccessibilityInfo: { announceForAccessibility: () => {} },
   AppState: { currentState: "active", addEventListener: () => ({ remove: () => {} }) },
   Platform: testPlatform,
   Pressable: ({

@@ -92,7 +92,7 @@ export const DirectionsButton = ({
       }}
     >
       <Icon as={NavigationIcon} size={18} className="text-foreground" />
-      <Text>Directions</Text>
+      <Text maxFontSizeMultiplier={size === "tile" ? 1.3 : undefined}>Directions</Text>
     </Button>
   );
 };
