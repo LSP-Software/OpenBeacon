@@ -158,7 +158,7 @@ test("asking waits for a newer location, then lets you ask again", async () => {
   expect(updateButton()?.props["loading"]).toBe(true);
   await act(async () => finishRequest());
   expect(updateButton()?.props["disabled"]).toBe(true);
-  expect(rendered()).toContain("Update requested");
+  expect(rendered()).toContain("Requested");
   expect(rendered()).toContain("should update in a minute or so");
 
   await renderSheet({

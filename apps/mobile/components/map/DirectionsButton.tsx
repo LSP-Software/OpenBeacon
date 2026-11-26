@@ -17,10 +17,12 @@ export const DirectionsButton = ({
   destination,
   name,
   outOfDateAge,
+  size,
 }: {
   destination: { latitude: number; longitude: number };
   name: string;
   outOfDateAge: string | null;
+  size?: "tile";
 }) => {
   const open = async (app: DirectionsApp) => {
     if (await openDirections(app, destination)) return;
@@ -70,7 +72,8 @@ export const DirectionsButton = ({
   return (
     <Button
       variant="secondary"
-      className="mt-4"
+      size={size}
+      className={size === "tile" ? "" : "mt-4"}
       accessibilityLabel={`Directions to ${name}`}
       accessibilityHint="Opens your maps app"
       onPress={() => {

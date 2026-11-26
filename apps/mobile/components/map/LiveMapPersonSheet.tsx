@@ -15,7 +15,8 @@ import { Button } from "../ui/Button.tsx";
 import { Icon } from "../ui/Icon.tsx";
 import { Text } from "../ui/Text.tsx";
 import { LiveMapBottomSheet } from "./LiveMapBottomSheet.tsx";
-import { RequestUpdateButton } from "./RequestUpdateButton.tsx";
+import { RequestUpdateButton, RequestUpdateMessage } from "./RequestUpdateButton.tsx";
+import { useRequestUpdate } from "../../hooks/useRequestUpdate.ts";
 import { DirectionsButton } from "./DirectionsButton.tsx";
 import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 
@@ -82,6 +83,15 @@ export const LiveMapPersonSheet = ({
   const speedLabel = isMultiDevice ? null : liveSpeed;
   const [, setLiveEnded] = useState(0);
   const isLive = !isMultiDevice && !isSelf && liveUntilMs !== undefined && Date.now() < liveUntilMs;
+  const canRequestUpdate = onRequestUpdate !== undefined && !isSelf;
+  const canGetDirections = destination !== undefined && !isSelf;
+  const update = useRequestUpdate({
+    hasLocation: true,
+    locationsKey: [timestamp, ...(devices ?? []).map((device) => device.timestamp)].join(),
+    name,
+    onRequestUpdate,
+    phones: isMultiDevice ? "devices" : "phone",
+  });
 
   useEffect(() => {
     if (liveUntilMs === undefined || liveUntilMs <= Date.now()) return;
@@ -173,32 +183,36 @@ export const LiveMapPersonSheet = ({
               Also in {otherSharedGroupNames.join(", ")}
             </Text>
           ) : null}
-          {onRequestUpdate && !isSelf ? (
-            <RequestUpdateButton
-              locationsKey={[
-                timestamp,
-                ...(devices ?? []).map((device) => device.timestamp),
-              ].join()}
-              hasLocation
-              name={name}
-              onRequestUpdate={onRequestUpdate}
-              phones={isMultiDevice ? "devices" : "phone"}
-            />
+          {canRequestUpdate || canGetDirections || timeline ? (
+            <View className="mt-4 flex-row gap-2">
+              {canRequestUpdate ? <RequestUpdateButton update={update} size="tile" /> : null}
+              {canGetDirections ? (
+                <DirectionsButton
+                  destination={destination}
+                  name={name}
+                  outOfDateAge={isOutOfDate || unreadableGroup ? updatedAge : null}
+                  size="tile"
+                />
+              ) : null}
+              {timeline ? (
+                <Link href={{ pathname: "/timeline", params: timeline }} asChild>
+                  <Button
+                    variant="secondary"
+                    size="tile"
+                    accessibilityRole="link"
+                    accessibilityLabel="See today’s route"
+                  >
+                    <Icon as={HistoryIcon} size={18} className="text-foreground" />
+                    <Text>Today’s route</Text>
+                  </Button>
+                </Link>
+              ) : null}
+            </View>
           ) : null}
-          {destination && !isSelf ? (
-            <DirectionsButton
-              destination={destination}
-              name={name}
-              outOfDateAge={isOutOfDate || unreadableGroup ? updatedAge : null}
-            />
-          ) : null}
-          {timeline ? (
-            <Link href={{ pathname: "/timeline", params: timeline }} asChild>
-              <Button variant="secondary" className="mt-4" accessibilityRole="link">
-                <Icon as={HistoryIcon} size={18} className="text-foreground" />
-                <Text>See today’s route</Text>
-              </Button>
-            </Link>
+          {canRequestUpdate && update.message ? (
+            <View className="mt-2">
+              <RequestUpdateMessage update={update} />
+            </View>
           ) : null}
         </>
       }
