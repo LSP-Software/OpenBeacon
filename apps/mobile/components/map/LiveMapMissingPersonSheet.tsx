@@ -16,7 +16,7 @@ import { Button } from "../ui/Button.tsx";
 import { Icon } from "../ui/Icon.tsx";
 import { Text } from "../ui/Text.tsx";
 import { LiveMapBottomSheet } from "./LiveMapBottomSheet.tsx";
-import { RequestUpdateButton } from "./RequestUpdateButton.tsx";
+import { RequestUpdateSection } from "./RequestUpdateButton.tsx";
 import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 
 export const LiveMapMissingPersonSheet = ({
@@ -192,7 +192,7 @@ export const LiveMapMissingPersonSheet = ({
         </View>
       )}
       {onRequestUpdate && !person.isSelf && !paused && !hidden ? (
-        <RequestUpdateButton
+        <RequestUpdateSection
           hasLocation={false}
           locationsKey={[status, unreadable?.reason, unreadable?.groupId].join()}
           name={person.name}

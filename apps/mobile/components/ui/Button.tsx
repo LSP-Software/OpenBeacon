@@ -23,6 +23,7 @@ const buttonVariants = cva(
       size: {
         default: ios ? "min-h-[50px] px-6 py-2" : "min-h-12 px-6 py-2",
         sm: ios ? "min-h-9 gap-1.5 px-4 py-1" : "min-h-10 gap-1.5 px-4 py-1",
+        tile: "min-h-16 flex-1 flex-col gap-1 rounded-2xl px-2 py-2.5",
       },
     },
     defaultVariants: {
@@ -49,6 +50,7 @@ const buttonTextVariants = cva(
       size: {
         default: "",
         sm: ios ? "text-[15px]" : "text-sm",
+        tile: ios ? "text-[13px]" : "text-xs",
       },
     },
     defaultVariants: {
@@ -109,7 +111,9 @@ function Button({
       >
         {loading ? (
           <>
-            <View className="flex-row items-center gap-2 opacity-0">
+            <View
+              className={cn("items-center opacity-0", size === "tile" ? "gap-1" : "flex-row gap-2")}
+            >
               {typeof props.children === "function" ? null : props.children}
             </View>
             <View className="absolute inset-0 items-center justify-center">
